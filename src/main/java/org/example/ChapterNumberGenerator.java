@@ -1,9 +1,5 @@
 package org.example;
 
-import java.io.File;
-import java.util.Arrays;
-import java.util.Comparator;
-
 /**
  * 章节序号生成器（中文全汉字实现，支持1-9999）
  * 已修复：
@@ -88,23 +84,4 @@ public class ChapterNumberGenerator {
         return result.toString();
     }
 
-    /**
-     * 生成指定文件列表的章节名序列
-     * @param files MHT文件列表（未排序）
-     * @return 按文件名排序后，每个文件对应的章节名数组
-     */
-    public static String[] generateChapterNames(File[] files) {
-        if (files == null || files.length == 0) {
-            return new String[0];
-        }
-
-        File[] sortedFiles = files.clone();
-        Arrays.sort(sortedFiles, Comparator.comparing(File::getName, String.CASE_INSENSITIVE_ORDER));
-
-        String[] chapterNames = new String[sortedFiles.length];
-        for (int i = 0; i < sortedFiles.length; i++) {
-            chapterNames[i] = generateChapterName(i);
-        }
-        return chapterNames;
-    }
 }
