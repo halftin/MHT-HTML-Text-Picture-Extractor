@@ -1,0 +1,12 @@
+<configuration debug="false" scan="false">
+
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener" />
+
+    <appender name="TEXTAREA" class="org.example.TextAreaAppender">
+
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="TEXTAREA" />
+    </root>
+</configuration>

@@ -4,8 +4,6 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.io.*;
-import jakarta.mail.*;
-import jakarta.mail.internet.*;
 
 public class MhtExtractorGUI extends JFrame {
 
@@ -25,7 +23,7 @@ public class MhtExtractorGUI extends JFrame {
     private JPanel panelBasic;
     private JPanel panelAdvanced;
 
-    // [新增] 控制台组件
+    // 控制台组件
     private JTextArea consoleArea;
     private JScrollPane consoleScrollPane;
 
@@ -34,13 +32,11 @@ public class MhtExtractorGUI extends JFrame {
     private JTextField txtStartMarker;
     private JTextField txtEndMarker;
     private JCheckBox chkUseRegex;
-    private JButton btnTestMatch;
 
     // 自定义模板组件
     private JCheckBox chkEnableCustomTemplate;
     private JTextArea txtStartTemplate;
     private JTextArea txtEndTemplate;
-    private JButton btnResetTemplate;
     private JLabel lblTemplateVars;
 
     // 章节名组件
@@ -57,8 +53,8 @@ public class MhtExtractorGUI extends JFrame {
     }
 
     private void initUI() throws UnsupportedEncodingException {
-        setTitle("MHT 文本提取器 v2.0");
-        setSize(750, 850); // 稍微增加高度以适应所有内容
+        setTitle("MHT 资源提取器 ");
+        setSize(750, 850);
         setLocationRelativeTo(null);
         setResizable(true);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -70,34 +66,17 @@ public class MhtExtractorGUI extends JFrame {
         tabbedPane.setFont(new Font("微软雅黑", Font.PLAIN, 13));
 
         panelBasic = createBasicPanel();
-        tabbedPane.addTab("基本设置", panelBasic);
+        tabbedPane.addTab("提取操作", panelBasic);
 
         panelAdvanced = createAdvancedPanel();
         JScrollPane advancedScrollPane = new JScrollPane(panelAdvanced);
         advancedScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         advancedScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        tabbedPane.addTab("高级设置", advancedScrollPane);
+        tabbedPane.addTab("文本提取配置", advancedScrollPane);
 
         mainContainer.add(tabbedPane, BorderLayout.CENTER);
 
-        // ================= 底部操作区 =================
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
-
-        btnExecute = new JButton("开始执行");
-        btnExecute.setFont(new Font("微软雅黑", Font.BOLD, 15));
-        btnExecute.setPreferredSize(new Dimension(160, 45));
-        btnExecute.setBackground(new Color(0, 153, 76));
-        btnExecute.setForeground(Color.WHITE);
-        btnExecute.setOpaque(true);
-        btnExecute.setBorderPainted(false);
-        btnExecute.addActionListener(this::executeProcess);
-        bottomPanel.add(btnExecute);
-
-        btnExit = new JButton("退出");
-        btnExit.setFont(new Font("微软雅黑", Font.PLAIN, 14));
-        btnExit.setPreferredSize(new Dimension(100, 45));
-        btnExit.addActionListener(e -> System.exit(0));
-        bottomPanel.add(btnExit);
 
         mainContainer.add(bottomPanel, BorderLayout.SOUTH);
         add(mainContainer);
@@ -106,7 +85,6 @@ public class MhtExtractorGUI extends JFrame {
         toggleLimitSettings();
         toggleTemplateSettings();
         toggleTitleSettings();
-        resetToDefaultTemplate();
 
         redirectSystemOut();
     }
@@ -138,7 +116,7 @@ public class MhtExtractorGUI extends JFrame {
         inputPanel.add(btnBrowseInput, gbc);
 
         gbc.gridy = 1; gbc.gridx = 0; gbc.gridwidth = 3; gbc.weightx = 1.0;
-        chkSeparateFiles = new JCheckBox("将每个 MHT 文件提取到单独的文本文件中");
+        chkSeparateFiles = new JCheckBox("单独输出模式(将每个 MHT 文件提取到单独的文本文件中)");
         chkSeparateFiles.setFont(new Font("微软雅黑", Font.PLAIN, 13));
         chkSeparateFiles.addActionListener(e -> updateUIForMode());
         inputPanel.add(chkSeparateFiles, gbc);
@@ -176,7 +154,30 @@ public class MhtExtractorGUI extends JFrame {
         consoleScrollPane.setPreferredSize(new Dimension(350, 300));
         consolePanel.add(consoleScrollPane, BorderLayout.CENTER);
 
-        panel.add(consolePanel, BorderLayout.SOUTH);
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
+        btnExecute = new JButton("开始执行");
+        btnExecute.setFont(new Font("微软雅黑", Font.BOLD, 15));
+        btnExecute.setPreferredSize(new Dimension(160, 45));
+        btnExecute.setBackground(new Color(0, 153, 76));
+        btnExecute.setForeground(Color.WHITE);
+        btnExecute.setOpaque(true);
+        btnExecute.setBorderPainted(false);
+        btnExecute.addActionListener(this::executeProcess);
+        buttonPanel.add(btnExecute);
+
+        btnExit = new JButton("退出");
+        btnExit.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+        btnExit.setPreferredSize(new Dimension(100, 45));
+        btnExit.addActionListener(e -> System.exit(0));
+        buttonPanel.add(btnExit);
+
+
+        JPanel southContainer = new JPanel(new BorderLayout());
+        southContainer.add(consolePanel, BorderLayout.CENTER);
+        southContainer.add(buttonPanel, BorderLayout.SOUTH);
+
+        panel.add(inputPanel, BorderLayout.CENTER);
+        panel.add(southContainer, BorderLayout.SOUTH);
 
         return panel;
     }
@@ -189,19 +190,19 @@ public class MhtExtractorGUI extends JFrame {
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
         // --- 内容限定区域 ---
-        gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
-        JLabel lblLimitTitle = new JLabel("内容提取限定");
+        gbc.gridx = 0; gbc.gridy = 7; gbc.gridwidth = 2;
+        JLabel lblLimitTitle = new JLabel("正文内容提取限定");
         lblLimitTitle.setFont(new Font("微软雅黑", Font.BOLD, 13));
         lblLimitTitle.setForeground(new Color(0, 102, 204));
         panel.add(lblLimitTitle, gbc);
 
-        gbc.gridy = 1;
+        gbc.gridy = 8;
         chkEnableLimit = new JCheckBox("启用内容限定（只提取指定区域的内容）");
         chkEnableLimit.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         chkEnableLimit.addActionListener(e -> toggleLimitSettings());
         panel.add(chkEnableLimit, gbc);
 
-        gbc.gridy = 2; gbc.gridwidth = 1; gbc.weightx = 0;
+        gbc.gridy = 9; gbc.gridwidth = 1; gbc.weightx = 0;
         JLabel lblStartMarker = new JLabel("起始标记：");
         lblStartMarker.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         panel.add(lblStartMarker, gbc);
@@ -211,7 +212,7 @@ public class MhtExtractorGUI extends JFrame {
         txtStartMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
         panel.add(txtStartMarker, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0;
+        gbc.gridx = 0; gbc.gridy = 10; gbc.weightx = 0;
         JLabel lblEndMarker = new JLabel("结束标记：");
         lblEndMarker.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         panel.add(lblEndMarker, gbc);
@@ -221,7 +222,7 @@ public class MhtExtractorGUI extends JFrame {
         txtEndMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
         panel.add(txtEndMarker, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2; gbc.weightx = 1.0;
+        gbc.gridx = 0; gbc.gridy = 11; gbc.gridwidth = 2; gbc.weightx = 1.0;
         JPanel limitBottomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 5));
         limitBottomPanel.setOpaque(false);
 
@@ -230,41 +231,36 @@ public class MhtExtractorGUI extends JFrame {
         limitBottomPanel.add(chkUseRegex);
         limitBottomPanel.add(Box.createHorizontalStrut(20));
 
-        btnTestMatch = new JButton("测试匹配");
-        btnTestMatch.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        btnTestMatch.setPreferredSize(new Dimension(90, 26));
-        btnTestMatch.addActionListener(this::testMatch);
-        limitBottomPanel.add(btnTestMatch);
         panel.add(limitBottomPanel, gbc);
 
         // --- 分隔线 1 ---
-        gbc.gridy = 5; gbc.gridwidth = 2;
+        gbc.gridy = 12; gbc.gridwidth = 2;
         JSeparator separator1 = new JSeparator();
         panel.add(separator1, gbc);
 
         // --- 自定义模板区域 ---
-        gbc.gridy = 6;
+        gbc.gridy = 0;
         JLabel lblTemplateTitle = new JLabel("自定义文件开头/结尾模板");
         lblTemplateTitle.setFont(new Font("微软雅黑", Font.BOLD, 13));
         lblTemplateTitle.setForeground(new Color(0, 102, 204));
         panel.add(lblTemplateTitle, gbc);
 
-        gbc.gridy = 7;
+        gbc.gridy = 1;
         chkAddChapterNumber = new JCheckBox("为每个 MHT 文件添加章节名（仅合并模式有效）");
         chkAddChapterNumber.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         chkAddChapterNumber.setToolTipText("选中后生成“第一章”、“第二章”等序号");
         chkAddChapterNumber.addActionListener(e -> toggleTitleSettings());
         panel.add(chkAddChapterNumber, gbc);
 
-        gbc.gridy = 8;
+        gbc.gridy = 2;
         chkEnableTitleExtract = new JCheckBox("启用隐藏章节标题提取（从源码固定位置提取标题）");
         chkEnableTitleExtract.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         chkEnableTitleExtract.setToolTipText("可独立使用！若提取到标题，将直接作为章节头；若同时勾选上方选项，则格式为“序号 标题”");
         chkEnableTitleExtract.addActionListener(e -> toggleTitleSettings());
         panel.add(chkEnableTitleExtract, gbc);
 
-        // --- [修复] 标题提取标记输入区 (逻辑重写) ---
-        gbc.gridy = 9; gbc.gridwidth = 1; gbc.weightx = 0;
+        // ---  标题提取标记输入区  ---
+        gbc.gridy = 3; gbc.gridwidth = 1; gbc.weightx = 0;
         JLabel lblTitleStart = new JLabel("标题起始标记：");
         lblTitleStart.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         panel.add(lblTitleStart, gbc);
@@ -274,7 +270,7 @@ public class MhtExtractorGUI extends JFrame {
         txtTitleStartMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
         panel.add(txtTitleStartMarker, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 10; gbc.weightx = 0;
+        gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0;
         JLabel lblTitleEnd = new JLabel("标题结束标记："); // 明确定义新变量
         lblTitleEnd.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         panel.add(lblTitleEnd, gbc);
@@ -284,7 +280,7 @@ public class MhtExtractorGUI extends JFrame {
         txtTitleEndMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
         panel.add(txtTitleEndMarker, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 11; gbc.gridwidth = 2; gbc.weightx = 1.0;
+        gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 2; gbc.weightx = 1.0;
         JPanel titleBottomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 5));
         titleBottomPanel.setOpaque(false);
         chkTitleUseRegex = new JCheckBox("使用正则表达式匹配标题");
@@ -293,7 +289,7 @@ public class MhtExtractorGUI extends JFrame {
         panel.add(titleBottomPanel, gbc);
 
         // --- 分隔线 2 ---
-        gbc.gridy = 12; gbc.gridwidth = 2;
+        gbc.gridy = 6; gbc.gridwidth = 2;
         JSeparator separator2 = new JSeparator();
         panel.add(separator2, gbc);
 
@@ -321,13 +317,10 @@ public class MhtExtractorGUI extends JFrame {
         txtStartTemplate.setLineWrap(true);
         txtStartTemplate.setWrapStyleWord(true);
         txtStartTemplate.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200), 1));
+        txtStartTemplate.setText(MhtBatchProcessor.DEFAULT_START_TEMPLATE);
         JScrollPane startTemplateScroll = new JScrollPane(txtStartTemplate);
-        startTemplateScroll.setPreferredSize(new Dimension(350, 100));
         panel.add(startTemplateScroll, gbc);
-        /*gbc.gridx = 1; gbc.weightx = 1.0;
-        txtStartMarker = new JTextField(txtStartTemplate, 40);
-        txtStartMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
-        panel.add(txtStartMarker, gbc);*/
+
         gbc.gridx = 0; gbc.gridy = 16; gbc.weightx = 0;
         JLabel lblEndTemplate = new JLabel("结尾模板：");
         lblEndTemplate.setFont(new Font("微软雅黑", Font.PLAIN, 12));
@@ -339,44 +332,20 @@ public class MhtExtractorGUI extends JFrame {
         txtEndTemplate.setLineWrap(true);
         txtEndTemplate.setWrapStyleWord(true);
         txtEndTemplate.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200), 1));
+        txtEndTemplate.setText(MhtBatchProcessor.DEFAULT_END_TEMPLATE);
         JScrollPane endTemplateScroll = new JScrollPane(txtEndTemplate);
-        endTemplateScroll.setPreferredSize(new Dimension(350, 100));
         panel.add(endTemplateScroll, gbc);
-        /*gbc.gridx = 1; gbc.weightx = 1.0;
-        txtStartMarker = new JTextField(txtEndTemplate, 40);
-        txtStartMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
-        panel.add(txtStartMarker, gbc);*/
-        gbc.gridx = 0; gbc.gridy = 17; gbc.gridwidth = 2; gbc.weightx = 1.0;
-        JPanel templateBottomPanel = new JPanel(new BorderLayout(10, 0));
-        templateBottomPanel.setOpaque(false);
 
+        gbc.gridx = 0; gbc.gridy = 17; gbc.gridwidth = 2; gbc.weightx = 1.0;
         lblTemplateVars = new JLabel("可用变量：{filename} | {datetime} | {date} | {time} | \\n");
         lblTemplateVars.setFont(new Font("微软雅黑", Font.ITALIC, 11));
         lblTemplateVars.setForeground(new Color(100, 100, 200));
-        templateBottomPanel.add(lblTemplateVars, BorderLayout.CENTER);
-
-        btnResetTemplate = new JButton("重置为默认");
-        btnResetTemplate.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        btnResetTemplate.setPreferredSize(new Dimension(100, 26));
-        btnResetTemplate.addActionListener(e -> resetToDefaultTemplate());
-        templateBottomPanel.add(btnResetTemplate, BorderLayout.EAST);
-        panel.add(templateBottomPanel, gbc);
-
-        gbc.gridy = 18; gbc.weighty = 1.0;
-        panel.add(new JLabel(), gbc);
+        panel.add(lblTemplateVars, gbc);
 
         return panel;
     }
 
-    private void resetToDefaultTemplate() {
-        txtStartTemplate.setText(MhtBatchProcessor.DEFAULT_START_TEMPLATE);
-        txtEndTemplate.setText(MhtBatchProcessor.DEFAULT_END_TEMPLATE);
-        chkEnableCustomTemplate.setSelected(false);
-        toggleTemplateSettings();
-        if (btnResetTemplate != null && btnResetTemplate.isVisible()) {
-            JOptionPane.showMessageDialog(this, "已重置为默认模板", "提示", JOptionPane.INFORMATION_MESSAGE);
-        }
-    }
+
 
     private void updateUIForMode() {
         boolean isSeparate = chkSeparateFiles.isSelected();
@@ -401,14 +370,12 @@ public class MhtExtractorGUI extends JFrame {
         txtStartMarker.setEnabled(enabled);
         txtEndMarker.setEnabled(enabled);
         chkUseRegex.setEnabled(enabled);
-        btnTestMatch.setEnabled(enabled);
     }
 
     private void toggleTemplateSettings() {
         boolean enabled = chkEnableCustomTemplate.isSelected();
         txtStartTemplate.setEnabled(enabled);
         txtEndTemplate.setEnabled(enabled);
-        btnResetTemplate.setEnabled(enabled);
         lblTemplateVars.setEnabled(enabled);
     }
 
@@ -434,20 +401,6 @@ public class MhtExtractorGUI extends JFrame {
             chkEnableTitleExtract.setToolTipText("已禁用");
         }
     }
-
-    private void testMatch(ActionEvent e) {
-        String startMarker = txtStartMarker.getText().trim();
-        String endMarker = txtEndMarker.getText().trim();
-        if (startMarker.isEmpty() || endMarker.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "请输入起始标记和结束标记！", "提示", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        JOptionPane.showMessageDialog(this, "测试匹配功能代码未完全展示，请保留原文件中的 testMatch 方法实现。", "提示", JOptionPane.INFORMATION_MESSAGE);
-    }
-
-    private String extractHtmlContentForTest(MimeMessage message) throws Exception { return null; }
-    private String extractHtmlContentFromMultipartForTest(Multipart multipart) throws Exception { return null; }
-    private String extractHtmlFromPartForTest(MimePart part) throws Exception { return null; }
 
     private void browseInputFolder(ActionEvent e) {
         JFileChooser fileChooser = new JFileChooser();
@@ -553,15 +506,13 @@ public class MhtExtractorGUI extends JFrame {
             endMarker = txtEndMarker.getText().trim();
             useRegex = chkUseRegex.isSelected();
             if (startMarker.isEmpty() || endMarker.isEmpty()) {
-                int confirm = JOptionPane.showConfirmDialog(this, "已启用内容限定但未填写标记，是否继续？", "提示", JOptionPane.YES_NO_OPTION);
-                if (confirm != JOptionPane.YES_OPTION) return;
+                System.out.println("[警告] 已启用内容限定但标记为空，将忽略内容限定功能。");
                 enableLimit = false;
             }
         }
 
         if (enableTitleExtract && (titleStartMarker.isEmpty() || titleEndMarker.isEmpty())) {
-            int confirm = JOptionPane.showConfirmDialog(this, "已启用标题提取但未填写标记，是否继续？", "提示", JOptionPane.YES_NO_OPTION);
-            if (confirm != JOptionPane.YES_OPTION) return;
+            System.out.println("[警告] 已启用标题提取但标记为空，将忽略标题提取功能。");
             enableTitleExtract = false;
         }
 
@@ -631,7 +582,6 @@ public class MhtExtractorGUI extends JFrame {
                     MhtBatchProcessor.ProcessStats stats = get();
                     if (stats != null && stats.successCount > 0) {
                         consoleArea.append("\n处理完成！成功：" + stats.successCount + ", 失败：" + stats.failCount + "\n");
-                        JOptionPane.showMessageDialog(MhtExtractorGUI.this, "处理完成！\n成功：" + stats.successCount + " 个文件", "完成", JOptionPane.INFORMATION_MESSAGE);
                         if (!finalIsSeparate) {
                             int openConfirm = JOptionPane.showConfirmDialog(MhtExtractorGUI.this, "是否立即打开输出文件？", "提示", JOptionPane.YES_NO_OPTION);
                             if (openConfirm == JOptionPane.YES_OPTION) {
@@ -672,12 +622,10 @@ public class MhtExtractorGUI extends JFrame {
         txtStartMarker.setEnabled(limitEnabled);
         txtEndMarker.setEnabled(limitEnabled);
         chkUseRegex.setEnabled(limitEnabled);
-        btnTestMatch.setEnabled(limitEnabled);
 
         boolean templateEnabled = enabled && chkEnableCustomTemplate.isSelected();
         txtStartTemplate.setEnabled(templateEnabled);
         txtEndTemplate.setEnabled(templateEnabled);
-        btnResetTemplate.setEnabled(templateEnabled);
         lblTemplateVars.setEnabled(templateEnabled);
 
         boolean chapterEnabled = enabled && !chkSeparateFiles.isSelected();
@@ -706,7 +654,7 @@ public class MhtExtractorGUI extends JFrame {
             private void flushBuffer() {
                 if (baos.size() == 0) return;
                 try {
-                    // 【关键修改】使用系统默认字符集进行解码，而不是硬编码 "GBK"
+
                     String text = baos.toString(defaultCharset);
 
                     SwingUtilities.invokeLater(() -> {
@@ -737,7 +685,7 @@ public class MhtExtractorGUI extends JFrame {
         System.setOut(printStream);
         System.setErr(printStream);
 
-        consoleArea.append("系统就绪。日志输出已重定向至此窗口 (自动检测编码：" + defaultCharset + ")。\n");
+        consoleArea.append("欢迎使用 MHT 资源提取器！\n请选择 MHT 文件所在文件夹，然后点击“开始执行”。\n");
     }
     public static void main(String[] args) {
         try {

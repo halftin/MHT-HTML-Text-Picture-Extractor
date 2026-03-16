@@ -2,8 +2,7 @@ package org.example;
 
 
 import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.util.regex.*;
+
 import jakarta.mail.*;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimePart;
@@ -14,30 +13,14 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * MHT文件文字提取工具类（增强版，支持多种编码修复 + 内容区域限定）
  */
 public class MhtToHtmlExtractor {
-
-    /**
-     * 从指定路径的MHT文件中提取文字内容（自动修复编码，不限定内容区域）
-     * @param filePath MHT文件的路径
-     * @return 提取到的文字内容，如果提取失败则返回null
-     */
-    public static String extractTextFromMht(String filePath) {
-        return extractTextFromMht(filePath, true, null, null, false);
-    }
-
-    /**
-     * 从指定路径的MHT文件中提取文字内容（自动修复编码）
-     * @param filePath MHT文件的路径
-     * @param autoFixEncoding 是否自动修复编码乱码
-     * @return 提取到的文字内容，如果提取失败则返回null
-     */
-    public static String extractTextFromMht(String filePath, boolean autoFixEncoding) {
-        return extractTextFromMht(filePath, autoFixEncoding, null, null, false);
-    }
+    private static final Logger logger = LoggerFactory.getLogger(MhtToHtmlExtractor.class);
 
     /**
      * 从指定路径的MHT文件中提取文字内容（支持内容区域限定）
@@ -78,7 +61,7 @@ public class MhtToHtmlExtractor {
                         }
                     }
 
-                    // 【新增】根据标记截取内容区域
+                    // 根据标记截取内容区域
                     if (startMarker != null && !startMarker.trim().isEmpty() &&
                             endMarker != null && !endMarker.trim().isEmpty()) {
                         htmlContent = extractContentByMarker(htmlContent, startMarker.trim(), endMarker.trim(), useRegex);
@@ -105,7 +88,7 @@ public class MhtToHtmlExtractor {
     }
 
     /**
-     * 【新增】根据起始和结束标记截取HTML内容
+     * 根据起始和结束标记截取HTML内容
      * @param html 原始HTML内容
      * @param startMarker 起始标记
      * @param endMarker 结束标记
@@ -146,7 +129,7 @@ public class MhtToHtmlExtractor {
     }
 
     /**
-     * 【新增】使用字符串匹配方式截取内容
+     * 使用字符串匹配方式截取内容
      * @param html 原始HTML内容
      * @param startMarker 起始标记
      * @param endMarker 结束标记
@@ -179,7 +162,7 @@ public class MhtToHtmlExtractor {
     }
 
     /**
-     * 【新增】使用正则表达式匹配方式截取内容
+     * 使用正则表达式匹配方式截取内容
      * @param html 原始HTML内容
      * @param startMarker 起始标记（正则表达式）
      * @param endMarker 结束标记（正则表达式）
@@ -210,7 +193,7 @@ public class MhtToHtmlExtractor {
     }
 
     /**
-     * 【新增】快速测试方法，用于验证截取逻辑
+     * 快速测试方法，用于验证截取逻辑
      * @param html 测试HTML内容
      * @param startMarker 起始标记
      * @param endMarker 结束标记
@@ -320,7 +303,7 @@ public class MhtToHtmlExtractor {
 
 
     /**
-     * 【新增】从 MHT 文件的 HTML 源码中提取隐藏的章节标题
+     * 从 MHT 文件的 HTML 源码中提取隐藏的章节标题
      */
     public static String extractChapterTitle(String mhtPath, String startMarker, String endMarker, boolean useRegex) {
         try {
@@ -412,25 +395,5 @@ public class MhtToHtmlExtractor {
             }
         }
         return null;
-    }
-
-    /**
-     * 【新增】简易测试入口，用于验证截取功能
-     */
-    public static void main(String[] args) {
-        // 测试字符串匹配
-        String testHtml = "<html><body><div class='header'>广告</div><div class='main-content'>这是小说正文内容</div><div class='view_ad_incontent'>底部广告</div></body></html>";
-
-        System.out.println("========== 测试字符串匹配 ==========");
-        String result1 = testExtractContent(testHtml, "<div class='main-content'>", "<div class='view_ad_incontent'>", false);
-        System.out.println("截取结果: " + result1);
-
-        System.out.println("\n========== 测试正则匹配 ==========");
-        String result2 = testExtractContent(testHtml, "class=\"main-content\">", "class=\"view_ad_incontent\">", true);
-        System.out.println("截取结果: " + result2);
-
-        System.out.println("\n========== 测试标记不存在 ==========");
-        String result3 = testExtractContent(testHtml, "<div class='not-exist'>", "<div class='end'>", false);
-        System.out.println("截取结果: " + (result3 != null ? "返回原始HTML" : "null"));
     }
 }

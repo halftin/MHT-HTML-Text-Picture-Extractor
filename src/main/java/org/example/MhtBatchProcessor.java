@@ -10,7 +10,6 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * MHT 批量处理工具类
@@ -46,59 +45,7 @@ public class MhtBatchProcessor {
     // ==================== 合并模式（所有文件输出到一个 TXT） ====================
 
     /**
-     * 处理文件夹下所有 MHT 文件（合并模式）- 旧版本，保持兼容
-     */
-    public static ProcessStats processFolder(String inputFolder, String outputTxtPath) {
-        return processFolder(inputFolder, outputTxtPath, true, null, null, false,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE, false, false, null, null, false);
-    }
-
-    /**
-     * 处理文件夹下所有 MHT 文件（合并模式）- 旧版本，保持兼容
-     */
-    public static ProcessStats processFolder(String inputFolder, String outputTxtPath,
-                                             boolean autoFixEncoding) {
-        return processFolder(inputFolder, outputTxtPath, autoFixEncoding, null, null, false,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE, false, false, null, null, false);
-    }
-
-    /**
-     * 处理文件夹下所有 MHT 文件（合并模式）- 支持内容区域限定
-     */
-    public static ProcessStats processFolder(String inputFolder, String outputTxtPath,
-                                             boolean autoFixEncoding,
-                                             String startMarker, String endMarker, boolean useRegex) {
-        return processFolder(inputFolder, outputTxtPath, autoFixEncoding, startMarker, endMarker, useRegex,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE, false, false, null, null, false);
-    }
-
-    /**
-     * 处理文件夹下所有 MHT 文件（合并模式）- 支持内容区域限定 + 自定义开头结尾模板
-     * 保持兼容，默认不添加章节名
-     */
-    public static ProcessStats processFolder(String inputFolder, String outputTxtPath,
-                                             boolean autoFixEncoding,
-                                             String startMarker, String endMarker, boolean useRegex,
-                                             String startTemplate, String endTemplate) {
-        return processFolder(inputFolder, outputTxtPath, autoFixEncoding, startMarker, endMarker, useRegex,
-                startTemplate, endTemplate, false, false, null, null, false);
-    }
-
-    /**
-     * 处理文件夹下所有 MHT 文件（合并模式）- 支持内容区域限定 + 自定义开头结尾模板 + 自动添加章节名
-     * 保持兼容，默认不提取隐藏标题
-     */
-    public static ProcessStats processFolder(String inputFolder, String outputTxtPath,
-                                             boolean autoFixEncoding,
-                                             String startMarker, String endMarker, boolean useRegex,
-                                             String startTemplate, String endTemplate,
-                                             boolean addChapterNumber) {
-        return processFolder(inputFolder, outputTxtPath, autoFixEncoding, startMarker, endMarker, useRegex,
-                startTemplate, endTemplate, addChapterNumber, false, null, null, false);
-    }
-
-    /**
-     * 处理文件夹下所有 MHT 文件（合并模式）- 终极完整版
+     * 处理文件夹下所有 MHT 文件（合并模式）
      * 支持内容限定 + 自定义模板 + 自动章节名 + GUI 配置的隐藏标题提取
      *
      * @param addChapterNumber 是否添加自动序号（如“第一章”）
@@ -122,7 +69,7 @@ public class MhtBatchProcessor {
         stats.endTemplate = endTemplate;
 
         System.out.println("========================================");
-        System.out.println("MHT 批量处理开始 (GUI 完整版)");
+        System.out.println("MHT 批量处理开始 ");
         System.out.println("输入文件夹：" + inputFolder);
         System.out.println("输出文件：" + outputTxtPath);
 
@@ -169,7 +116,7 @@ public class MhtBatchProcessor {
                     continue;
                 }
 
-                // 2. [核心修改] 生成最终显示的章节头
+                // 2. 生成最终显示的章节头
                 String finalChapterHeader = null;
                 String extractedTitle = null;
 
@@ -188,7 +135,7 @@ public class MhtBatchProcessor {
                     String numberPart = ChapterNumberGenerator.generateChapterName(chapterIndex - 1);
 
                     if (extractedTitle != null && !extractedTitle.isEmpty()) {
-                        // 情况 1: 有序号 + 有标题 -> "第一章 眉娘浪语"
+                        // 情况 1: 有序号 + 有标题 -> "第一章 标题名"
                         finalChapterHeader = numberPart + " " + extractedTitle;
                     } else {
                         // 情况 2: 有序号 + 无标题 -> "第一章"
@@ -198,7 +145,7 @@ public class MhtBatchProcessor {
                 } else {
                     // 步骤 C: 如果没有序号，但提取到了标题
                     if (extractedTitle != null && !extractedTitle.isEmpty()) {
-                        // 情况 3: 无序号 + 有标题 -> "眉娘浪语" (这就是你需要的功能!)
+                        // 情况 3: 无序号 + 有标题 -> "标题名"
                         finalChapterHeader = extractedTitle;
                     }
                     // 情况 4: 无序号 + 无标题 -> finalChapterHeader 保持 null
@@ -231,30 +178,6 @@ public class MhtBatchProcessor {
     }
 
     // ==================== 单独输出模式（每个文件输出到独立 TXT） ====================
-
-    public static ProcessStats processFolderSeparate(String inputFolder, String outputFolder, boolean autoFixEncoding) {
-        return processFolderSeparate(inputFolder, outputFolder, autoFixEncoding, null, null, false,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE);
-    }
-
-    public static ProcessStats processFolderSeparate(String inputFolder, boolean autoFixEncoding) {
-        return processFolderSeparate(inputFolder, inputFolder, autoFixEncoding, null, null, false,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE);
-    }
-
-    public static ProcessStats processFolderSeparate(String inputFolder, String outputFolder,
-                                                     boolean autoFixEncoding,
-                                                     String startMarker, String endMarker, boolean useRegex) {
-        return processFolderSeparate(inputFolder, outputFolder, autoFixEncoding, startMarker, endMarker, useRegex,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE);
-    }
-
-    public static ProcessStats processFolderSeparate(String inputFolder,
-                                                     boolean autoFixEncoding,
-                                                     String startMarker, String endMarker, boolean useRegex) {
-        return processFolderSeparate(inputFolder, inputFolder, autoFixEncoding, startMarker, endMarker, useRegex,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE);
-    }
 
     public static ProcessStats processFolderSeparate(String inputFolder, String outputFolder,
                                                      boolean autoFixEncoding,
@@ -334,14 +257,6 @@ public class MhtBatchProcessor {
         System.out.println("========================================");
 
         return stats;
-    }
-
-    public static ProcessStats processFolderSeparate(String inputFolder,
-                                                     boolean autoFixEncoding,
-                                                     String startMarker, String endMarker, boolean useRegex,
-                                                     String startTemplate, String endTemplate) {
-        return processFolderSeparate(inputFolder, inputFolder, autoFixEncoding, startMarker, endMarker, useRegex,
-                startTemplate, endTemplate);
     }
 
     // ==================== 内部辅助方法 ====================
