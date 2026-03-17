@@ -10,12 +10,15 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * MHT 批量处理工具类
  * 负责扫描文件夹、按时间排序、批量提取文本并写入 TXT
  */
 public class MhtBatchProcessor {
+    private static final Logger logger = LoggerFactory.getLogger(MhtBatchProcessor.class);
 
     // 默认模板
     public static final String DEFAULT_START_TEMPLATE = "========== START ==========";
@@ -68,21 +71,21 @@ public class MhtBatchProcessor {
         stats.startTemplate = startTemplate;
         stats.endTemplate = endTemplate;
 
-        System.out.println("========================================");
-        System.out.println("MHT 批量处理开始 ");
-        System.out.println("输入文件夹：" + inputFolder);
-        System.out.println("输出文件：" + outputTxtPath);
+        logger.info("========================================");
+        logger.info("MHT 批量处理开始 ");
+        logger.info("输入文件夹：{}" , inputFolder);
+        logger.info("输出文件：{}" , outputTxtPath);
 
         if (addChapterNumber) {
-            System.out.println("自动章节名：已启用");
+            logger.info("自动章节名：已启用");
         }
         if (enableTitleExtract) {
-            System.out.println("隐藏标题提取：已启用");
-            System.out.println("  起始标记：" + titleStartMarker);
-            System.out.println("  结束标记：" + titleEndMarker);
+            logger.info("隐藏标题提取：已启用");
+            logger.info("  起始标记：{}" , titleStartMarker);
+            logger.info("  结束标记：{}" , titleEndMarker);
         }
 
-        System.out.println("========================================");
+        logger.info("========================================");
 
         if (!MhtFileWriter.createOrClearFile(outputTxtPath)) {
             return stats;
@@ -92,15 +95,15 @@ public class MhtBatchProcessor {
         stats.totalFiles = mhtFiles.size();
 
         if (mhtFiles.isEmpty()) {
-            System.out.println("未找到任何 MHT 文件");
+            logger.info("未找到任何 MHT 文件");
             stats.endTime = System.currentTimeMillis();
             return stats;
         }
 
-        System.out.println("找到 " + mhtFiles.size() + " 个 MHT 文件");
+        logger.info("找到 {}{}" , mhtFiles.size() , " 个 MHT 文件");
         mhtFiles.sort(Comparator.comparing(MhtFileInfo::getModifiedTime));
-        System.out.println("文件已按修改时间排序");
-        System.out.println("========================================");
+        logger.info("文件已按修改时间排序");
+        logger.info("========================================");
 
         int chapterIndex = 1;
 
@@ -112,7 +115,7 @@ public class MhtBatchProcessor {
 
                 if (text == null || text.trim().isEmpty()) {
                     stats.skipCount++;
-                    System.out.println("[跳过] 内容为空：" + fileInfo.getName());
+                    logger.info("[跳过] 内容为空：{}" , fileInfo.getName());
                     continue;
                 }
 
@@ -126,7 +129,7 @@ public class MhtBatchProcessor {
                             fileInfo.getPath(), titleStartMarker, titleEndMarker, titleUseRegex);
 
                     if (extractedTitle != null && !extractedTitle.isEmpty()) {
-                        System.out.println("[提取标题] " + fileInfo.getName() + " -> " + extractedTitle);
+                        logger.info("[提取标题] {} -> {}" , fileInfo.getName() , extractedTitle);
                     }
                 }
 
@@ -164,15 +167,15 @@ public class MhtBatchProcessor {
 
             } catch (Exception e) {
                 stats.failCount++;
-                System.err.println("[异常] 处理文件失败：" + fileInfo.getName());
-                e.printStackTrace();
+                logger.error("[异常] 处理文件失败：{}" , fileInfo.getName());
+                logger.error("操作失败", e);
             }
         }
 
         stats.endTime = System.currentTimeMillis();
-        System.out.println("========================================");
-        System.out.println(stats);
-        System.out.println("========================================");
+        logger.info("========================================");
+        logger.info("{}", stats);
+        logger.info("========================================");
 
         return stats;
     }
@@ -188,15 +191,15 @@ public class MhtBatchProcessor {
         stats.startTemplate = startTemplate;
         stats.endTemplate = endTemplate;
 
-        System.out.println("========================================");
-        System.out.println("MHT 批量处理开始（单独输出模式）");
-        System.out.println("输入文件夹：" + inputFolder);
-        System.out.println("输出文件夹：" + outputFolder);
-        System.out.println("========================================");
+        logger.info("========================================");
+        logger.info("MHT 批量处理开始（单独输出模式）");
+        logger.info("输入文件夹：{}" , inputFolder);
+        logger.info("输出文件夹：{}" , outputFolder);
+        logger.info("========================================");
 
         File outDir = new File(outputFolder);
         if (!outDir.exists() || !outDir.isDirectory()) {
-            System.err.println("输出文件夹不存在或不是有效目录：" + outputFolder);
+            logger.error("输出文件夹不存在或不是有效目录：{}" , outputFolder);
             stats.endTime = System.currentTimeMillis();
             return stats;
         }
@@ -205,12 +208,12 @@ public class MhtBatchProcessor {
         stats.totalFiles = mhtFiles.size();
 
         if (mhtFiles.isEmpty()) {
-            System.out.println("未找到任何 MHT 文件");
+            logger.info("未找到任何 MHT 文件");
             stats.endTime = System.currentTimeMillis();
             return stats;
         }
 
-        System.out.println("找到 " + mhtFiles.size() + " 个 MHT 文件");
+        logger.info("找到 {} 个 MHT 文件" , mhtFiles.size());
         mhtFiles.sort(Comparator.comparing(MhtFileInfo::getModifiedTime));
 
         for (MhtFileInfo fileInfo : mhtFiles) {
@@ -220,12 +223,11 @@ public class MhtBatchProcessor {
 
                 if (text == null || text.trim().isEmpty()) {
                     stats.skipCount++;
-                    System.out.println("[跳过] 内容为空：" + fileInfo.getName());
+                    logger.info("[跳过] 内容为空：{}" , fileInfo.getName());
                     continue;
                 }
 
-                String mhtName = fileInfo.getName();
-                String txtName = mhtName;
+                String txtName = fileInfo.getName();
                 if (txtName.toLowerCase().endsWith(".mht") || txtName.toLowerCase().endsWith(".mhtml")) {
                     txtName = txtName.substring(0, txtName.lastIndexOf("."));
                 }
@@ -239,22 +241,22 @@ public class MhtBatchProcessor {
 
                 if (writeSuccess) {
                     stats.successCount++;
-                    System.out.println("[成功] " + fileInfo.getName() + " → " + outputPath);
+                    logger.info("[成功] {} → {}" , fileInfo.getName() , outputPath);
                 } else {
                     stats.failCount++;
                 }
 
             } catch (Exception e) {
                 stats.failCount++;
-                System.err.println("[异常] 处理文件失败：" + fileInfo.getName());
-                e.printStackTrace();
+                logger.error("[异常] 处理文件失败：{}" , fileInfo.getName());
+                logger.error("操作失败", e);
             }
         }
 
         stats.endTime = System.currentTimeMillis();
-        System.out.println("========================================");
-        System.out.println(stats);
-        System.out.println("========================================");
+        logger.info("========================================");
+        logger.info("{}", stats);
+        logger.info("========================================");
 
         return stats;
     }
@@ -266,7 +268,7 @@ public class MhtBatchProcessor {
         File folder = new File(folderPath);
 
         if (!folder.exists() || !folder.isDirectory()) {
-            System.err.println("文件夹不存在或不是目录：" + folderPath);
+            logger.error("文件夹不存在或不是目录：{}" , folderPath);
             return files;
         }
 
@@ -286,7 +288,7 @@ public class MhtBatchProcessor {
                         modifiedTime
                 ));
             } catch (IOException e) {
-                System.err.println("无法读取文件信息：" + file.getName());
+                logger.error("无法读取文件信息：{}" , file.getName());
             }
         }
 

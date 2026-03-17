@@ -49,7 +49,7 @@ public class MhtToHtmlExtractor {
                 if (htmlContent != null) {
                     // 从HTML中检测实际编码
                     String detectedCharset = EncodingUtils.detectCharsetFromHtml(htmlContent);
-                    System.out.println("检测到HTML编码: " + (detectedCharset != null ? detectedCharset : "未检测到"));
+                    logger.info("检测到HTML编码: {}" , (detectedCharset != null ? detectedCharset : "未检测到"));
 
                     // 使用检测到的编码重新解析（如果有）
                     if (detectedCharset != null) {
@@ -77,11 +77,11 @@ public class MhtToHtmlExtractor {
 
                     return text;
                 } else {
-                    System.out.println("未找到HTML部分");
+                    logger.info("未找到HTML部分");
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("操作失败", e);
         }
 
         return null;
@@ -97,12 +97,12 @@ public class MhtToHtmlExtractor {
      */
     private static String extractContentByMarker(String html, String startMarker, String endMarker, boolean useRegex) {
         if (html == null || html.isEmpty()) {
-            System.out.println("[内容截取] HTML内容为空");
+            logger.info("[内容截取] HTML内容为空");
             return html;
         }
 
         if (startMarker == null || startMarker.isEmpty() || endMarker == null || endMarker.isEmpty()) {
-            System.out.println("[内容截取] 标记为空，返回完整HTML");
+            logger.info("[内容截取] 标记为空，返回完整HTML");
             return html;
         }
 
@@ -115,15 +115,15 @@ public class MhtToHtmlExtractor {
             }
 
             if (result != null) {
-                System.out.println("[内容截取] 成功截取内容，长度: " + result.length());
+                logger.info("[内容截取] 成功截取内容，长度: {}" , result.length());
                 return result;
             } else {
-                System.out.println("[内容截取] 未找到匹配标记，返回完整HTML");
+                logger.info("[内容截取] 未找到匹配标记，返回完整HTML");
                 return html;
             }
         } catch (Exception e) {
-            System.err.println("[内容截取] 截取失败: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("[内容截取] 截取失败: {}" , e.getMessage());
+            logger.error("操作失败", e);
             return html; // 降级处理，返回原始HTML
         }
     }
@@ -138,7 +138,7 @@ public class MhtToHtmlExtractor {
     private static String extractByString(String html, String startMarker, String endMarker) {
         int startIndex = html.indexOf(startMarker);
         if (startIndex == -1) {
-            System.out.println("[字符串匹配] 未找到起始标记: " + startMarker);
+            logger.info("[字符串匹配] 未找到起始标记: {}" , startMarker);
             return null;
         }
 
@@ -147,14 +147,14 @@ public class MhtToHtmlExtractor {
         int endIndex = html.indexOf(endMarker, contentStart);
 
         if (endIndex == -1) {
-            System.out.println("[字符串匹配] 未找到结束标记: " + endMarker);
+            logger.info("[字符串匹配] 未找到结束标记: {}" , endMarker);
             // 结束标记找不到时，截取从起始标记到末尾的全部内容
             return html.substring(contentStart);
         }
 
         // 检查起始标记是否在结束标记之后
         if (startIndex > endIndex) {
-            System.out.println("[字符串匹配] 起始标记位置在结束标记之后，返回完整HTML");
+            logger.info("[字符串匹配] 起始标记位置在结束标记之后，返回完整HTML");
             return null;
         }
 
@@ -180,28 +180,16 @@ public class MhtToHtmlExtractor {
             if (matcher.find()) {
                 // group(1) 是两个标记之间的内容
                 String content = matcher.group(1);
-                System.out.println("[正则匹配] 成功匹配，内容长度: " + content.length());
+                logger.info("[正则匹配] 成功匹配，内容长度: {}" , content.length());
                 return content;
             } else {
-                System.out.println("[正则匹配] 未找到匹配项");
+                logger.info("[正则匹配] 未找到匹配项");
                 return null;
             }
         } catch (Exception e) {
-            System.err.println("[正则匹配] 正则表达式错误: " + e.getMessage());
+            logger.error("[正则匹配] 正则表达式错误: {}" , e.getMessage());
             return null;
         }
-    }
-
-    /**
-     * 快速测试方法，用于验证截取逻辑
-     * @param html 测试HTML内容
-     * @param startMarker 起始标记
-     * @param endMarker 结束标记
-     * @param useRegex 是否使用正则
-     * @return 截取结果
-     */
-    public static String testExtractContent(String html, String startMarker, String endMarker, boolean useRegex) {
-        return extractContentByMarker(html, startMarker, endMarker, useRegex);
     }
 
     /**
@@ -236,8 +224,8 @@ public class MhtToHtmlExtractor {
             String encoding = part.getEncoding();
             String charset = getCharsetFromContentType(part.getContentType());
 
-            System.out.println("传输编码: " + encoding);
-            System.out.println("Content-Type charset: " + charset);
+            logger.info("传输编码: {}" , encoding);
+            logger.info("Content-Type charset: {}" , charset);
 
             try (InputStream rawIs = (InputStream) content;
                  InputStream decodedIs = MimeUtility.decode(rawIs, encoding)) {
@@ -250,7 +238,7 @@ public class MhtToHtmlExtractor {
                         String result = new String(bytes, tryCharset);
                         // 如果包含中文且没有明显乱码，返回此结果
                         if (EncodingUtils.containsChinese(result) && !EncodingUtils.containsGarbled(result)) {
-                            System.out.println("使用编码: " + tryCharset);
+                            logger.info("使用编码: {}" , tryCharset);
                             return result;
                         }
                     } catch (Exception e) {
@@ -336,7 +324,7 @@ public class MhtToHtmlExtractor {
                 }
             }
         } catch (Exception e) {
-            System.err.println("[警告] 提取章节标题失败：" + e.getMessage());
+            logger.error("[警告] 提取章节标题失败：{}" , e.getMessage());
         }
         return null;
     }
@@ -362,30 +350,35 @@ public class MhtToHtmlExtractor {
      */
     private static String extractHtmlPart(jakarta.mail.Part part) throws Exception {
         if (part.isMimeType("text/html")) {
-            // 获取输入流
-            InputStream is = part.getInputStream(); // 这个方法比 getContent() 更直接可靠
-            if (is != null) {
-                // 使用 MimeUtility 解码流（处理 base64, quoted-printable 等）
-                String encoding = null;
-                if (part instanceof jakarta.mail.internet.MimePart) {
-                    encoding = ((jakarta.mail.internet.MimePart) part).getEncoding();
-                }
-                if (encoding == null) encoding = "utf-8"; // 默认
-                InputStream decodedIs = jakarta.mail.internet.MimeUtility.decode(is, encoding);
-
-                // 尝试获取 charset
-                String charset = "UTF-8";
-                try {
-                    String ct = part.getContentType();
-                    if (ct != null) {
-                        jakarta.mail.internet.ContentType contentType = new jakarta.mail.internet.ContentType(ct);
-                        String cs = contentType.getParameter("charset");
-                        if (cs != null) charset = cs;
+            // 使用 try-with-resources 确保原始流被关闭
+            try (InputStream is = part.getInputStream()) {
+                if (is != null) {
+                    // 使用 MimeUtility 解码流（处理 base64, quoted-printable 等）
+                    String encoding = null;
+                    if (part instanceof jakarta.mail.internet.MimePart) {
+                        encoding = ((jakarta.mail.internet.MimePart) part).getEncoding();
                     }
-                } catch (Exception e) {}
+                    if (encoding == null) encoding = "utf-8"; // 默认
 
-                byte[] bytes = decodedIs.readAllBytes();
-                return new String(bytes, charset);
+
+                    try (InputStream decodedIs = jakarta.mail.internet.MimeUtility.decode(is, encoding)) {
+                        // 尝试获取 charset
+                        String charset = "UTF-8";
+                        try {
+                            String ct = part.getContentType();
+                            if (ct != null) {
+                                jakarta.mail.internet.ContentType contentType = new jakarta.mail.internet.ContentType(ct);
+                                String cs = contentType.getParameter("charset");
+                                if (cs != null) charset = cs;
+                            }
+                        } catch (Exception e) {
+
+                        }
+
+                        byte[] bytes = decodedIs.readAllBytes();
+                        return new String(bytes, charset);
+                    }
+                }
             }
         } else if (part.isMimeType("multipart/*")) {
             jakarta.mail.Multipart mp = (jakarta.mail.Multipart) part.getContent();

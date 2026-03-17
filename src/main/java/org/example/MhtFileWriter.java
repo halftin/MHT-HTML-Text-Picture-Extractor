@@ -4,12 +4,15 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * MHT 文本文件写入工具类
  * 负责将提取的文本内容追加写入到 TXT 文件中
  */
 public class MhtFileWriter {
+    private static final Logger logger = LoggerFactory.getLogger(MhtFileWriter.class);
 
     private static final DateTimeFormatter DATETIME_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -34,7 +37,7 @@ public class MhtFileWriter {
                                            String startTemplate, String endTemplate,
                                            String chapterName) {
         if (text == null || text.trim().isEmpty()) {
-            System.out.println("[跳过] 内容为空：" + sourceFileName);
+            logger.info("[跳过] 内容为空：{}" , sourceFileName);
             return false;
         }
 
@@ -68,12 +71,12 @@ public class MhtFileWriter {
             String endContent = processTemplate(endTemplate, sourceFileName, fileTime);
             writer.write(endContent);
 
-            System.out.println("[成功] 已写入：" + sourceFileName + (chapterName != null ? " (" + chapterName + ")" : ""));
+            logger.info("[成功] 已写入：{}{}" , sourceFileName , (chapterName != null ? " (" + chapterName + ")" : ""));
             return true;
 
         } catch (IOException e) {
-            System.err.println("[失败] 写入文件异常：" + sourceFileName);
-            e.printStackTrace();
+            logger.error("[失败] 写入文件异常：{}" , sourceFileName);
+            logger.error("操作失败", e);
             return false;
         }
     }
@@ -132,11 +135,11 @@ public class MhtFileWriter {
                 file.delete();
             }
             file.createNewFile();
-            System.out.println("[初始化] 输出文件已创建：" + outputTxtPath);
+            logger.info("[初始化] 输出文件已创建：{}" , outputTxtPath);
             return true;
         } catch (IOException e) {
-            System.err.println("[错误] 创建输出文件失败：" + outputTxtPath);
-            e.printStackTrace();
+            logger.error("[错误] 创建输出文件失败：{}" , outputTxtPath);
+            logger.error("操作失败", e);
             return false;
         }
     }
