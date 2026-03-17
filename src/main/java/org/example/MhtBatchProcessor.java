@@ -10,13 +10,15 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * MHT 批量处理工具类
  * 负责扫描文件夹、按时间排序、批量提取文本并写入 TXT
  */
 public class MhtBatchProcessor {
+    private static final Logger logger = LoggerFactory.getLogger(MhtBatchProcessor.class);
 
     // 默认模板
     public static final String DEFAULT_START_TEMPLATE = "========== START ==========";
@@ -46,59 +48,7 @@ public class MhtBatchProcessor {
     // ==================== 合并模式（所有文件输出到一个 TXT） ====================
 
     /**
-     * 处理文件夹下所有 MHT 文件（合并模式）- 旧版本，保持兼容
-     */
-    public static ProcessStats processFolder(String inputFolder, String outputTxtPath) {
-        return processFolder(inputFolder, outputTxtPath, true, null, null, false,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE, false, false, null, null, false);
-    }
-
-    /**
-     * 处理文件夹下所有 MHT 文件（合并模式）- 旧版本，保持兼容
-     */
-    public static ProcessStats processFolder(String inputFolder, String outputTxtPath,
-                                             boolean autoFixEncoding) {
-        return processFolder(inputFolder, outputTxtPath, autoFixEncoding, null, null, false,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE, false, false, null, null, false);
-    }
-
-    /**
-     * 处理文件夹下所有 MHT 文件（合并模式）- 支持内容区域限定
-     */
-    public static ProcessStats processFolder(String inputFolder, String outputTxtPath,
-                                             boolean autoFixEncoding,
-                                             String startMarker, String endMarker, boolean useRegex) {
-        return processFolder(inputFolder, outputTxtPath, autoFixEncoding, startMarker, endMarker, useRegex,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE, false, false, null, null, false);
-    }
-
-    /**
-     * 处理文件夹下所有 MHT 文件（合并模式）- 支持内容区域限定 + 自定义开头结尾模板
-     * 保持兼容，默认不添加章节名
-     */
-    public static ProcessStats processFolder(String inputFolder, String outputTxtPath,
-                                             boolean autoFixEncoding,
-                                             String startMarker, String endMarker, boolean useRegex,
-                                             String startTemplate, String endTemplate) {
-        return processFolder(inputFolder, outputTxtPath, autoFixEncoding, startMarker, endMarker, useRegex,
-                startTemplate, endTemplate, false, false, null, null, false);
-    }
-
-    /**
-     * 处理文件夹下所有 MHT 文件（合并模式）- 支持内容区域限定 + 自定义开头结尾模板 + 自动添加章节名
-     * 保持兼容，默认不提取隐藏标题
-     */
-    public static ProcessStats processFolder(String inputFolder, String outputTxtPath,
-                                             boolean autoFixEncoding,
-                                             String startMarker, String endMarker, boolean useRegex,
-                                             String startTemplate, String endTemplate,
-                                             boolean addChapterNumber) {
-        return processFolder(inputFolder, outputTxtPath, autoFixEncoding, startMarker, endMarker, useRegex,
-                startTemplate, endTemplate, addChapterNumber, false, null, null, false);
-    }
-
-    /**
-     * 处理文件夹下所有 MHT 文件（合并模式）- 终极完整版
+     * 处理文件夹下所有 MHT 文件（合并模式）
      * 支持内容限定 + 自定义模板 + 自动章节名 + GUI 配置的隐藏标题提取
      *
      * @param addChapterNumber 是否添加自动序号（如“第一章”）
@@ -121,21 +71,21 @@ public class MhtBatchProcessor {
         stats.startTemplate = startTemplate;
         stats.endTemplate = endTemplate;
 
-        System.out.println("========================================");
-        System.out.println("MHT 批量处理开始 (GUI 完整版)");
-        System.out.println("输入文件夹：" + inputFolder);
-        System.out.println("输出文件：" + outputTxtPath);
+        logger.info("========================================");
+        logger.info("MHT 批量处理开始 ");
+        logger.info("输入文件夹：{}" , inputFolder);
+        logger.info("输出文件：{}" , outputTxtPath);
 
         if (addChapterNumber) {
-            System.out.println("自动章节名：已启用");
+            logger.info("自动章节名：已启用");
         }
         if (enableTitleExtract) {
-            System.out.println("隐藏标题提取：已启用");
-            System.out.println("  起始标记：" + titleStartMarker);
-            System.out.println("  结束标记：" + titleEndMarker);
+            logger.info("隐藏标题提取：已启用");
+            logger.info("  起始标记：{}" , titleStartMarker);
+            logger.info("  结束标记：{}" , titleEndMarker);
         }
 
-        System.out.println("========================================");
+        logger.info("========================================");
 
         if (!MhtFileWriter.createOrClearFile(outputTxtPath)) {
             return stats;
@@ -145,15 +95,15 @@ public class MhtBatchProcessor {
         stats.totalFiles = mhtFiles.size();
 
         if (mhtFiles.isEmpty()) {
-            System.out.println("未找到任何 MHT 文件");
+            logger.info("未找到任何 MHT 文件");
             stats.endTime = System.currentTimeMillis();
             return stats;
         }
 
-        System.out.println("找到 " + mhtFiles.size() + " 个 MHT 文件");
+        logger.info("找到 {}{}" , mhtFiles.size() , " 个 MHT 文件");
         mhtFiles.sort(Comparator.comparing(MhtFileInfo::getModifiedTime));
-        System.out.println("文件已按修改时间排序");
-        System.out.println("========================================");
+        logger.info("文件已按修改时间排序");
+        logger.info("========================================");
 
         int chapterIndex = 1;
 
@@ -165,11 +115,11 @@ public class MhtBatchProcessor {
 
                 if (text == null || text.trim().isEmpty()) {
                     stats.skipCount++;
-                    System.out.println("[跳过] 内容为空：" + fileInfo.getName());
+                    logger.info("[跳过] 内容为空：{}" , fileInfo.getName());
                     continue;
                 }
 
-                // 2. [核心修改] 生成最终显示的章节头
+                // 2. 生成最终显示的章节头
                 String finalChapterHeader = null;
                 String extractedTitle = null;
 
@@ -179,7 +129,7 @@ public class MhtBatchProcessor {
                             fileInfo.getPath(), titleStartMarker, titleEndMarker, titleUseRegex);
 
                     if (extractedTitle != null && !extractedTitle.isEmpty()) {
-                        System.out.println("[提取标题] " + fileInfo.getName() + " -> " + extractedTitle);
+                        logger.info("[提取标题] {} -> {}" , fileInfo.getName() , extractedTitle);
                     }
                 }
 
@@ -188,7 +138,7 @@ public class MhtBatchProcessor {
                     String numberPart = ChapterNumberGenerator.generateChapterName(chapterIndex - 1);
 
                     if (extractedTitle != null && !extractedTitle.isEmpty()) {
-                        // 情况 1: 有序号 + 有标题 -> "第一章 眉娘浪语"
+                        // 情况 1: 有序号 + 有标题 -> "第一章 标题名"
                         finalChapterHeader = numberPart + " " + extractedTitle;
                     } else {
                         // 情况 2: 有序号 + 无标题 -> "第一章"
@@ -198,7 +148,7 @@ public class MhtBatchProcessor {
                 } else {
                     // 步骤 C: 如果没有序号，但提取到了标题
                     if (extractedTitle != null && !extractedTitle.isEmpty()) {
-                        // 情况 3: 无序号 + 有标题 -> "眉娘浪语" (这就是你需要的功能!)
+                        // 情况 3: 无序号 + 有标题 -> "标题名"
                         finalChapterHeader = extractedTitle;
                     }
                     // 情况 4: 无序号 + 无标题 -> finalChapterHeader 保持 null
@@ -217,44 +167,20 @@ public class MhtBatchProcessor {
 
             } catch (Exception e) {
                 stats.failCount++;
-                System.err.println("[异常] 处理文件失败：" + fileInfo.getName());
-                e.printStackTrace();
+                logger.error("[异常] 处理文件失败：{}" , fileInfo.getName());
+                logger.error("操作失败", e);
             }
         }
 
         stats.endTime = System.currentTimeMillis();
-        System.out.println("========================================");
-        System.out.println(stats);
-        System.out.println("========================================");
+        logger.info("========================================");
+        logger.info("{}", stats);
+        logger.info("========================================");
 
         return stats;
     }
 
     // ==================== 单独输出模式（每个文件输出到独立 TXT） ====================
-
-    public static ProcessStats processFolderSeparate(String inputFolder, String outputFolder, boolean autoFixEncoding) {
-        return processFolderSeparate(inputFolder, outputFolder, autoFixEncoding, null, null, false,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE);
-    }
-
-    public static ProcessStats processFolderSeparate(String inputFolder, boolean autoFixEncoding) {
-        return processFolderSeparate(inputFolder, inputFolder, autoFixEncoding, null, null, false,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE);
-    }
-
-    public static ProcessStats processFolderSeparate(String inputFolder, String outputFolder,
-                                                     boolean autoFixEncoding,
-                                                     String startMarker, String endMarker, boolean useRegex) {
-        return processFolderSeparate(inputFolder, outputFolder, autoFixEncoding, startMarker, endMarker, useRegex,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE);
-    }
-
-    public static ProcessStats processFolderSeparate(String inputFolder,
-                                                     boolean autoFixEncoding,
-                                                     String startMarker, String endMarker, boolean useRegex) {
-        return processFolderSeparate(inputFolder, inputFolder, autoFixEncoding, startMarker, endMarker, useRegex,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE);
-    }
 
     public static ProcessStats processFolderSeparate(String inputFolder, String outputFolder,
                                                      boolean autoFixEncoding,
@@ -265,15 +191,15 @@ public class MhtBatchProcessor {
         stats.startTemplate = startTemplate;
         stats.endTemplate = endTemplate;
 
-        System.out.println("========================================");
-        System.out.println("MHT 批量处理开始（单独输出模式）");
-        System.out.println("输入文件夹：" + inputFolder);
-        System.out.println("输出文件夹：" + outputFolder);
-        System.out.println("========================================");
+        logger.info("========================================");
+        logger.info("MHT 批量处理开始（单独输出模式）");
+        logger.info("输入文件夹：{}" , inputFolder);
+        logger.info("输出文件夹：{}" , outputFolder);
+        logger.info("========================================");
 
         File outDir = new File(outputFolder);
         if (!outDir.exists() || !outDir.isDirectory()) {
-            System.err.println("输出文件夹不存在或不是有效目录：" + outputFolder);
+            logger.error("输出文件夹不存在或不是有效目录：{}" , outputFolder);
             stats.endTime = System.currentTimeMillis();
             return stats;
         }
@@ -282,12 +208,12 @@ public class MhtBatchProcessor {
         stats.totalFiles = mhtFiles.size();
 
         if (mhtFiles.isEmpty()) {
-            System.out.println("未找到任何 MHT 文件");
+            logger.info("未找到任何 MHT 文件");
             stats.endTime = System.currentTimeMillis();
             return stats;
         }
 
-        System.out.println("找到 " + mhtFiles.size() + " 个 MHT 文件");
+        logger.info("找到 {} 个 MHT 文件" , mhtFiles.size());
         mhtFiles.sort(Comparator.comparing(MhtFileInfo::getModifiedTime));
 
         for (MhtFileInfo fileInfo : mhtFiles) {
@@ -297,12 +223,11 @@ public class MhtBatchProcessor {
 
                 if (text == null || text.trim().isEmpty()) {
                     stats.skipCount++;
-                    System.out.println("[跳过] 内容为空：" + fileInfo.getName());
+                    logger.info("[跳过] 内容为空：{}" , fileInfo.getName());
                     continue;
                 }
 
-                String mhtName = fileInfo.getName();
-                String txtName = mhtName;
+                String txtName = fileInfo.getName();
                 if (txtName.toLowerCase().endsWith(".mht") || txtName.toLowerCase().endsWith(".mhtml")) {
                     txtName = txtName.substring(0, txtName.lastIndexOf("."));
                 }
@@ -316,32 +241,24 @@ public class MhtBatchProcessor {
 
                 if (writeSuccess) {
                     stats.successCount++;
-                    System.out.println("[成功] " + fileInfo.getName() + " → " + outputPath);
+                    logger.info("[成功] {} → {}" , fileInfo.getName() , outputPath);
                 } else {
                     stats.failCount++;
                 }
 
             } catch (Exception e) {
                 stats.failCount++;
-                System.err.println("[异常] 处理文件失败：" + fileInfo.getName());
-                e.printStackTrace();
+                logger.error("[异常] 处理文件失败：{}" , fileInfo.getName());
+                logger.error("操作失败", e);
             }
         }
 
         stats.endTime = System.currentTimeMillis();
-        System.out.println("========================================");
-        System.out.println(stats);
-        System.out.println("========================================");
+        logger.info("========================================");
+        logger.info("{}", stats);
+        logger.info("========================================");
 
         return stats;
-    }
-
-    public static ProcessStats processFolderSeparate(String inputFolder,
-                                                     boolean autoFixEncoding,
-                                                     String startMarker, String endMarker, boolean useRegex,
-                                                     String startTemplate, String endTemplate) {
-        return processFolderSeparate(inputFolder, inputFolder, autoFixEncoding, startMarker, endMarker, useRegex,
-                startTemplate, endTemplate);
     }
 
     // ==================== 内部辅助方法 ====================
@@ -351,7 +268,7 @@ public class MhtBatchProcessor {
         File folder = new File(folderPath);
 
         if (!folder.exists() || !folder.isDirectory()) {
-            System.err.println("文件夹不存在或不是目录：" + folderPath);
+            logger.error("文件夹不存在或不是目录：{}" , folderPath);
             return files;
         }
 
@@ -371,7 +288,7 @@ public class MhtBatchProcessor {
                         modifiedTime
                 ));
             } catch (IOException e) {
-                System.err.println("无法读取文件信息：" + file.getName());
+                logger.error("无法读取文件信息：{}" , file.getName());
             }
         }
 

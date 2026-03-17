@@ -4,12 +4,15 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * MHT 文本文件写入工具类
  * 负责将提取的文本内容追加写入到 TXT 文件中
  */
 public class MhtFileWriter {
+    private static final Logger logger = LoggerFactory.getLogger(MhtFileWriter.class);
 
     private static final DateTimeFormatter DATETIME_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -19,48 +22,14 @@ public class MhtFileWriter {
     private static final String DEFAULT_END_TEMPLATE = "\n========== END ==========\n";
 
     /**
-     * 将文本内容追加写入到指定 TXT 文件（简化标记，无时间信息）
-     */
-    public static boolean appendTextToFile(String outputTxtPath, String text, String sourceFileName) {
-        return appendTextToFile(outputTxtPath, text, sourceFileName, null,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE, null);
-    }
-
-    /**
-     * 将文本内容追加写入到指定 TXT 文件（带时间元数据标记）
-     */
-    public static boolean appendTextToFile(String outputTxtPath, String text,
-                                           String sourceFileName, LocalDateTime fileTime) {
-        return appendTextToFile(outputTxtPath, text, sourceFileName, fileTime,
-                DEFAULT_START_TEMPLATE, DEFAULT_END_TEMPLATE, null);
-    }
-
-    /**
-     * 将文本内容追加写入到指定 TXT 文件（支持自定义开头结尾模板）
+     * 将文本内容追加写入到指定 TXT 文件（支持自定义模板 + 章节名）
      * @param outputTxtPath 输出 TXT 文件路径
      * @param text 要写入的文本内容
      * @param sourceFileName 来源 MHT 文件名
      * @param fileTime 来源文件的修改时间（可为 null）
      * @param startTemplate 开头模板（支持 {filename} {datetime} 变量）
      * @param endTemplate 结尾模板
-     * @return 是否写入成功
-     */
-    public static boolean appendTextToFile(String outputTxtPath, String text,
-                                           String sourceFileName, LocalDateTime fileTime,
-                                           String startTemplate, String endTemplate) {
-        return appendTextToFile(outputTxtPath, text, sourceFileName, fileTime,
-                startTemplate, endTemplate, null);
-    }
-
-    /**
-     * 【新增核心方法】将文本内容追加写入到指定 TXT 文件（支持自定义模板 + 章节名）
-     * @param outputTxtPath 输出 TXT 文件路径
-     * @param text 要写入的文本内容
-     * @param sourceFileName 来源 MHT 文件名
-     * @param fileTime 来源文件的修改时间（可为 null）
-     * @param startTemplate 开头模板（支持 {filename} {datetime} 变量）
-     * @param endTemplate 结尾模板
-     * @param chapterName [新增] 章节名（如“第一章”），若为 null 则不添加
+     * @param chapterName 章节名（如“第一章”），若为 null 则不添加
      * @return 是否写入成功
      */
     public static boolean appendTextToFile(String outputTxtPath, String text,
@@ -68,7 +37,7 @@ public class MhtFileWriter {
                                            String startTemplate, String endTemplate,
                                            String chapterName) {
         if (text == null || text.trim().isEmpty()) {
-            System.out.println("[跳过] 内容为空：" + sourceFileName);
+            logger.info("[跳过] 内容为空：{}" , sourceFileName);
             return false;
         }
 
@@ -85,7 +54,7 @@ public class MhtFileWriter {
                         new FileOutputStream(outputTxtPath, true),
                         StandardCharsets.UTF_8))) {
 
-            // [新增] 如果提供了章节名，先写入章节名
+            //  如果提供了章节名，先写入章节名
             if (chapterName != null && !chapterName.trim().isEmpty()) {
                 writer.write(chapterName);
                 writer.write("\n\n"); // 章节名后加两个换行，与下方内容分隔
@@ -102,12 +71,12 @@ public class MhtFileWriter {
             String endContent = processTemplate(endTemplate, sourceFileName, fileTime);
             writer.write(endContent);
 
-            System.out.println("[成功] 已写入：" + sourceFileName + (chapterName != null ? " (" + chapterName + ")" : ""));
+            logger.info("[成功] 已写入：{}{}" , sourceFileName , (chapterName != null ? " (" + chapterName + ")" : ""));
             return true;
 
         } catch (IOException e) {
-            System.err.println("[失败] 写入文件异常：" + sourceFileName);
-            e.printStackTrace();
+            logger.error("[失败] 写入文件异常：{}" , sourceFileName);
+            logger.error("操作失败", e);
             return false;
         }
     }
@@ -157,29 +126,6 @@ public class MhtFileWriter {
     }
 
     /**
-     * 简化版：将文本内容追加写入到指定 TXT 文件（不带元数据）
-     */
-    public static boolean appendTextToFile(String outputTxtPath, String text) {
-        if (text == null || text.trim().isEmpty()) {
-            return false;
-        }
-
-        try (BufferedWriter writer = new BufferedWriter(
-                new OutputStreamWriter(
-                        new FileOutputStream(outputTxtPath, true),
-                        StandardCharsets.UTF_8))) {
-
-            writer.write(text);
-            writer.write("\n");
-            return true;
-
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    /**
      * 创建或清空输出文件（在批量处理前调用）
      */
     public static boolean createOrClearFile(String outputTxtPath) {
@@ -189,11 +135,11 @@ public class MhtFileWriter {
                 file.delete();
             }
             file.createNewFile();
-            System.out.println("[初始化] 输出文件已创建：" + outputTxtPath);
+            logger.info("[初始化] 输出文件已创建：{}" , outputTxtPath);
             return true;
         } catch (IOException e) {
-            System.err.println("[错误] 创建输出文件失败：" + outputTxtPath);
-            e.printStackTrace();
+            logger.error("[错误] 创建输出文件失败：{}" , outputTxtPath);
+            logger.error("操作失败", e);
             return false;
         }
     }
