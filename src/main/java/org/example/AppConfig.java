@@ -2,6 +2,7 @@ package org.example;
 
 import java.util.Objects;
 
+
 public class AppConfig {
     private String inputFolder;
     private String outputFolder;

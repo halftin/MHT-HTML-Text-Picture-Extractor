@@ -20,6 +20,7 @@ public class MhtExtractorGUI extends JFrame {
     private JButton btnExit;
     private JCheckBox chkSeparateFiles;
     private JLabel lblOutput;
+    private JCheckBox chkOpenFolderAfterComplete;
 
     // 选项卡组件
     private JTabbedPane tabbedPane;
@@ -131,13 +132,9 @@ public class MhtExtractorGUI extends JFrame {
         btnBrowseInput.addActionListener(this::browseInputFolder);
         inputPanel.add(btnBrowseInput, gbc);
 
-        gbc.gridy = 1; gbc.gridx = 0; gbc.gridwidth = 3; gbc.weightx = 1.0;
-        chkSeparateFiles = new JCheckBox("单独输出模式(将每个 MHT 文件提取到单独的文本文件中)");
-        chkSeparateFiles.setFont(new Font("微软雅黑", Font.PLAIN, 13));
-        chkSeparateFiles.addActionListener(e -> updateUIForMode());
-        inputPanel.add(chkSeparateFiles, gbc);
 
-        gbc.gridy = 2; gbc.gridx = 0; gbc.gridwidth = 1; gbc.weightx = 0;
+
+        gbc.gridy = 1; gbc.gridx = 0; gbc.gridwidth = 1; gbc.weightx = 0;
         lblOutput = new JLabel("输出文件目录：");
         lblOutput.setFont(new Font("微软雅黑", Font.PLAIN, 13));
         inputPanel.add(lblOutput, gbc);
@@ -154,7 +151,7 @@ public class MhtExtractorGUI extends JFrame {
         btnBrowseOutput.addActionListener(this::browseOutputPath);
         inputPanel.add(btnBrowseOutput, gbc);
 
-        gbc.gridy = 3;
+        gbc.gridy = 2;
         gbc.gridx = 0;
         gbc.gridwidth = 1;
         JLabel lblImportConfig = new JLabel("导入配置：");
@@ -172,6 +169,17 @@ public class MhtExtractorGUI extends JFrame {
         btnImportConfig.setPreferredSize(new Dimension(80, 28));
         btnImportConfig.addActionListener(e -> importConfig());
         inputPanel.add(btnImportConfig, gbc);
+
+        gbc.gridy = 3; gbc.gridx = 0; gbc.gridwidth = 3; gbc.weightx = 1.0;
+        chkSeparateFiles = new JCheckBox("单独输出模式(将每个 MHT 文件提取到单独的文件中)");
+        chkSeparateFiles.setFont(new Font("微软雅黑", Font.PLAIN, 13));
+        chkSeparateFiles.addActionListener(e -> updateUIForMode());
+        inputPanel.add(chkSeparateFiles, gbc);
+
+        gbc.gridy = 4; gbc.gridx = 0; gbc.gridwidth = 3; gbc.weightx = 1.0;
+        chkOpenFolderAfterComplete = new JCheckBox("提取完成后打开输出文件夹");
+        chkOpenFolderAfterComplete.setFont(new Font("微软雅黑", Font.PLAIN, 13));
+        inputPanel.add(chkOpenFolderAfterComplete, gbc);
 
         panel.add(inputPanel, BorderLayout.CENTER);
 
@@ -320,6 +328,7 @@ public class MhtExtractorGUI extends JFrame {
         gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 2; gbc.weightx = 1.0;
         JPanel titleBottomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 5));
         titleBottomPanel.setOpaque(false);
+
         chkTitleUseRegex = new JCheckBox("使用正则表达式匹配标题");
         chkTitleUseRegex.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         titleBottomPanel.add(chkTitleUseRegex);
@@ -637,11 +646,20 @@ public class MhtExtractorGUI extends JFrame {
                     MhtBatchProcessor.ProcessStats stats = get();
                     if (stats != null && stats.successCount > 0) {
                         consoleArea.append("\n处理完成！成功：" + stats.successCount + ", 失败：" + stats.failCount + "\n");
-                        if (!finalIsSeparate) {
-                            int openConfirm = JOptionPane.showConfirmDialog(MhtExtractorGUI.this, "是否立即打开输出文件？", "提示", JOptionPane.YES_NO_OPTION);
-                            if (openConfirm == JOptionPane.YES_OPTION) {
-                                try { Desktop.getDesktop().open(new File(finalOutputPath)); }
-                                catch (Exception ex) { JOptionPane.showMessageDialog(MhtExtractorGUI.this, "无法打开文件", "提示", JOptionPane.INFORMATION_MESSAGE); }
+                        // 根据复选框决定是否打开输出文件夹
+                        if (chkOpenFolderAfterComplete.isSelected()) {
+                            File target;
+                            if (finalIsSeparate) {
+                                target = new File(finalOutputPath);
+                            } else {
+                                target = new File(finalOutputPath).getParentFile();
+                            }
+                            if (target != null && target.exists()) {
+                                try {
+                                    Desktop.getDesktop().open(target);
+                                } catch (Exception ex) {
+                                    JOptionPane.showMessageDialog(MhtExtractorGUI.this, "无法打开文件夹", "提示", JOptionPane.INFORMATION_MESSAGE);
+                                }
                             }
                         }
                     } else if (stats != null) {
@@ -671,6 +689,7 @@ public class MhtExtractorGUI extends JFrame {
         btnExecute.setEnabled(enabled);
         btnExit.setEnabled(enabled);
         chkSeparateFiles.setEnabled(enabled);
+        chkOpenFolderAfterComplete.setEnabled(enabled);
         tabbedPane.setEnabled(enabled);
 
         boolean limitEnabled = enabled && chkEnableLimit.isSelected();

@@ -17,7 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * MHT文件文字提取工具类（增强版，支持多种编码修复 + 内容区域限定）
+ * MHT文件文字提取工具类（支持多种编码修复 + 内容区域限定）
  */
 public class MhtToHtmlExtractor {
     private static final Logger logger = LoggerFactory.getLogger(MhtToHtmlExtractor.class);
@@ -214,7 +214,7 @@ public class MhtToHtmlExtractor {
     }
 
     /**
-     * 从MimePart中提取HTML内容（增强版，支持多种编码）
+     * 从MimePart中提取HTML内容（支持多种编码）
      */
     private static String extractHtmlFromPart(MimePart part) throws MessagingException, java.io.IOException {
         Object content = part.getContent();
