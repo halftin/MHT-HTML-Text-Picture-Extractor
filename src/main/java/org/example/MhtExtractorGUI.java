@@ -3,6 +3,7 @@ package org.example;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.util.ArrayList;
 import java.util.List;
 import java.io.*;
 import org.slf4j.Logger;
@@ -10,21 +11,24 @@ import org.slf4j.LoggerFactory;
 
 public class MhtExtractorGUI extends JFrame {
 
+    // 模式选择组件
+    private JCheckBox chkTextMode; // 纯文本提取模式
+    private JCheckBox chkImageMode; // 图片提取模式
 
-    //  主界面组件
+    // 主界面组件
     private JTextField txtInputFolder;
     private JTextField txtOutputPath;
     private JButton btnBrowseInput;
     private JButton btnBrowseOutput;
     private JButton btnExecute;
-    private JButton btnExit;
+    private JButton btnConfigManage;
     private JCheckBox chkSeparateFiles;
     private JLabel lblOutput;
+    private JCheckBox chkOpenFolderAfterComplete;
 
-    // 选项卡组件
-    private JTabbedPane tabbedPane;
-    private JPanel panelBasic;
-    private JPanel panelAdvanced;
+    private JPanel textExtractPanel;
+    private boolean isTextModeSelected = false;
+    private boolean isImageModeSelected = false;
 
     // 控制台组件
     private static final Logger logger = LoggerFactory.getLogger(MhtExtractorGUI.class);
@@ -52,6 +56,22 @@ public class MhtExtractorGUI extends JFrame {
     private JTextField txtTitleEndMarker;
     private JCheckBox chkTitleUseRegex;
 
+    // 图片名称提取限定组件
+    private JCheckBox chkEnableImageNameExtract;
+    private JTextField txtImageNameStartMarker;
+    private JTextField txtImageNameEndMarker;
+
+    // 图片区域限定组件
+    private JCheckBox chkEnableImageRegionExtract;
+    private JTextField txtImageRegionStartMarker;
+    private JTextField txtImageRegionEndMarker;
+
+    // 图片后处理组件
+    private JCheckBox chkEnableImageZip;
+    private JCheckBox chkEnableImageRename;
+
+    // 图片提取面板
+    private JPanel imageExtractPanel;
 
     private ConfigManager configManager;
     private JComboBox<String> importConfigComboBox;
@@ -63,8 +83,8 @@ public class MhtExtractorGUI extends JFrame {
     }
 
     private void initUI() throws UnsupportedEncodingException {
-        setTitle("MHT 资源提取器 ");
-        setSize(750, 850);
+        setTitle("MHT 资源提取器");
+        setSize(850, 900);
         setLocationRelativeTo(null);
         setResizable(true);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -72,252 +92,290 @@ public class MhtExtractorGUI extends JFrame {
         JPanel mainContainer = new JPanel(new BorderLayout(10, 10));
         mainContainer.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
 
-        tabbedPane = new JTabbedPane(JTabbedPane.TOP);
-        tabbedPane.setFont(new Font("微软雅黑", Font.PLAIN, 13));
+        // 创建主滚动面板
+        JScrollPane mainScrollPane = new JScrollPane();
+        mainScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        mainScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        mainScrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
-        panelBasic = createBasicPanel();
-        tabbedPane.addTab("提取操作", panelBasic);
+        // 创建主内容面板（使用 GridBagLayout）
+        JPanel contentPanel = new JPanel();
+        contentPanel.setLayout(new GridBagLayout());
+        contentPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        panelAdvanced = createAdvancedPanel();
-        JScrollPane advancedScrollPane = new JScrollPane(panelAdvanced);
-        advancedScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-        advancedScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        tabbedPane.addTab("文本提取配置", advancedScrollPane);
-
-        mainContainer.add(tabbedPane, BorderLayout.CENTER);
-
-        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
-
-        mainContainer.add(bottomPanel, BorderLayout.SOUTH);
-        add(mainContainer);
-
-        updateUIForMode();
-        toggleLimitSettings();
-        toggleTemplateSettings();
-        toggleTitleSettings();
-        refreshConfigComboBox();
-        SwingUtilities.invokeLater(() -> {
-            consoleArea.append("欢迎使用 MHT 资源提取器！\n");
-            consoleArea.append("请选择 MHT 文件所在文件夹，然后点击“开始执行”。\n");
-        });
-
-
-
-    }
-
-    private JPanel createBasicPanel() {
-        JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-
-        JPanel inputPanel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.insets = new Insets(5, 10, 5, 10);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0;
-        JLabel lblInput = new JLabel("输入文件夹：");
-        lblInput.setFont(new Font("微软雅黑", Font.PLAIN, 13));
-        inputPanel.add(lblInput, gbc);
+        int row = 0;
 
-        gbc.gridx = 1; gbc.weightx = 1.0;
+        // === 第 1 行：模式选择 ===
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 3;
+        gbc.weightx = 1.0;
+        JPanel modePanel = createModeSelectionPanel();
+        contentPanel.add(modePanel, gbc);
+
+        // === 第 2 行：输入文件夹 ===
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
+        JLabel lblInput = new JLabel("输入文件夹目录：");
+        lblInput.setFont(new Font("微软雅黑", Font.PLAIN, 13));
+        contentPanel.add(lblInput, gbc);
+
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.weightx = 1.0;
         txtInputFolder = new JTextField("", 30);
         txtInputFolder.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        inputPanel.add(txtInputFolder, gbc);
+        txtInputFolder.setEnabled(false);
+        contentPanel.add(txtInputFolder, gbc);
 
-        gbc.gridx = 2; gbc.weightx = 0;
+        gbc.gridx = 2;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
         btnBrowseInput = new JButton("浏览...");
         btnBrowseInput.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         btnBrowseInput.setPreferredSize(new Dimension(80, 28));
+        btnBrowseInput.setEnabled(false);
         btnBrowseInput.addActionListener(this::browseInputFolder);
-        inputPanel.add(btnBrowseInput, gbc);
+        contentPanel.add(btnBrowseInput, gbc);
 
-        gbc.gridy = 1; gbc.gridx = 0; gbc.gridwidth = 3; gbc.weightx = 1.0;
-        chkSeparateFiles = new JCheckBox("单独输出模式(将每个 MHT 文件提取到单独的文本文件中)");
-        chkSeparateFiles.setFont(new Font("微软雅黑", Font.PLAIN, 13));
-        chkSeparateFiles.addActionListener(e -> updateUIForMode());
-        inputPanel.add(chkSeparateFiles, gbc);
-
-        gbc.gridy = 2; gbc.gridx = 0; gbc.gridwidth = 1; gbc.weightx = 0;
-        lblOutput = new JLabel("输出文件目录：");
+        // === 第 3 行：输出文件夹目录 ===
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
+        lblOutput = new JLabel("输出文件夹目录：");
         lblOutput.setFont(new Font("微软雅黑", Font.PLAIN, 13));
-        inputPanel.add(lblOutput, gbc);
+        contentPanel.add(lblOutput, gbc);
 
-        gbc.gridx = 1; gbc.weightx = 1.0;
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.weightx = 1.0;
         txtOutputPath = new JTextField("", 30);
         txtOutputPath.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        inputPanel.add(txtOutputPath, gbc);
+        txtOutputPath.setEnabled(false);
+        contentPanel.add(txtOutputPath, gbc);
 
-        gbc.gridx = 2; gbc.weightx = 0;
+        gbc.gridx = 2;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
         btnBrowseOutput = new JButton("浏览...");
         btnBrowseOutput.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         btnBrowseOutput.setPreferredSize(new Dimension(80, 28));
+        btnBrowseOutput.setEnabled(false);
         btnBrowseOutput.addActionListener(this::browseOutputPath);
-        inputPanel.add(btnBrowseOutput, gbc);
+        contentPanel.add(btnBrowseOutput, gbc);
 
-        gbc.gridy = 3;
+        // === 第 4 行：导入配置 ===
+        gbc.gridy = row++;
         gbc.gridx = 0;
         gbc.gridwidth = 1;
+        gbc.weightx = 0;
         JLabel lblImportConfig = new JLabel("导入配置：");
         lblImportConfig.setFont(new Font("微软雅黑", Font.PLAIN, 13));
-        inputPanel.add(lblImportConfig, gbc);
+        contentPanel.add(lblImportConfig, gbc);
+
         gbc.gridx = 1;
         gbc.gridwidth = 1;
+        gbc.weightx = 1.0;
         importConfigComboBox = new JComboBox<>();
         importConfigComboBox.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        inputPanel.add(importConfigComboBox, gbc);
+        contentPanel.add(importConfigComboBox, gbc);
+
         gbc.gridx = 2;
         gbc.gridwidth = 1;
+        gbc.weightx = 0;
         JButton btnImportConfig = new JButton("导入");
         btnImportConfig.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         btnImportConfig.setPreferredSize(new Dimension(80, 28));
         btnImportConfig.addActionListener(e -> importConfig());
-        inputPanel.add(btnImportConfig, gbc);
+        contentPanel.add(btnImportConfig, gbc);
 
-        panel.add(inputPanel, BorderLayout.CENTER);
+        // === 第 5 行：单独输出模式 ===
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 3;
+        gbc.weightx = 1.0;
+        chkSeparateFiles = new JCheckBox("单独输出模式 (将每个 MHT 文件提取到单独的文件中)");
+        chkSeparateFiles.setFont(new Font("微软雅黑", Font.PLAIN, 13));
+        chkSeparateFiles.setEnabled(false);
+        chkSeparateFiles.addActionListener(e -> updateUIForMode());
+        contentPanel.add(chkSeparateFiles, gbc);
 
-        JPanel consolePanel = new JPanel(new BorderLayout());
-        consolePanel.setBorder(BorderFactory.createTitledBorder("运行日志"));
+        // === 第 6 行：提取完成后打开输出文件夹 ===
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 3;
+        gbc.weightx = 1.0;
+        chkOpenFolderAfterComplete = new JCheckBox("提取完成后打开输出文件夹");
+        chkOpenFolderAfterComplete.setFont(new Font("微软雅黑", Font.PLAIN, 13));
+        chkOpenFolderAfterComplete.setEnabled(false);
+        contentPanel.add(chkOpenFolderAfterComplete, gbc);
 
-        consoleArea = new JTextArea(15, 40);
-        consoleArea.setFont(new Font("Microsoft YaHei", Font.PLAIN, 14));
-        consoleArea.setEditable(false);
-        consoleArea.setBackground(new Color(245, 245, 245));
-        consoleArea.setLineWrap(true);
-        consoleArea.setWrapStyleWord(true);
+        // === 第 7 行：文本提取配置面板 ===
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 3;
+        gbc.weightx = 1.0;
+        textExtractPanel = createTextExtractPanel();
+        textExtractPanel.setVisible(false);
+        contentPanel.add(textExtractPanel, gbc);
 
-        TextAreaAppender.setTextArea(consoleArea);
+        // === 第 8 行：图片提取配置面板 ===
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 3;
+        gbc.weightx = 1.0;
+        imageExtractPanel = createImageExtractPanel();
+        imageExtractPanel.setVisible(false);
+        contentPanel.add(imageExtractPanel, gbc);
 
-        consoleScrollPane = new JScrollPane(consoleArea);
-        consoleScrollPane.setPreferredSize(new Dimension(350, 300));
-        consolePanel.add(consoleScrollPane, BorderLayout.CENTER);
+        // === 第 9 行：运行日志 ===
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 3;
+        gbc.weightx = 1.0;
+        gbc.weighty = 1.0;
+        gbc.fill = GridBagConstraints.BOTH;
+        JPanel consolePanel = createConsolePanel();
+        contentPanel.add(consolePanel, gbc);
 
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
-        btnExecute = new JButton("开始执行");
-        btnExecute.setFont(new Font("微软雅黑", Font.BOLD, 15));
-        btnExecute.setPreferredSize(new Dimension(160, 45));
-        btnExecute.setBackground(new Color(0, 153, 76));
-        btnExecute.setForeground(Color.WHITE);
-        btnExecute.setOpaque(true);
-        btnExecute.setBorderPainted(false);
-        btnExecute.addActionListener(this::executeProcess);
-        buttonPanel.add(btnExecute);
+        // === 按钮面板 ===
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 3;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weighty = 0;
+        JPanel buttonPanel = createButtonPanel();
+        contentPanel.add(buttonPanel, gbc);
 
-        btnExit = new JButton("保存/删除配置");
-        btnExit.setFont(new Font("微软雅黑", Font.PLAIN, 14));
-        btnExit.setPreferredSize(new Dimension(160, 45));
-        btnExit.addActionListener(e -> showConfigDialog());
-        buttonPanel.add(btnExit);
+        mainScrollPane.setViewportView(contentPanel);
+        mainContainer.add(mainScrollPane, BorderLayout.CENTER);
 
+        add(mainContainer);
 
-        JPanel southContainer = new JPanel(new BorderLayout());
-        southContainer.add(consolePanel, BorderLayout.CENTER);
-        southContainer.add(buttonPanel, BorderLayout.SOUTH);
+        // 初始化 UI 状态
+        updateAllUIStates();
+        refreshConfigComboBox();
 
-        panel.add(inputPanel, BorderLayout.CENTER);
-        panel.add(southContainer, BorderLayout.SOUTH);
+        SwingUtilities.invokeLater(() -> {
+            consoleArea.append("欢迎使用 MHT 资源提取器！\n");
+            consoleArea.append("请选择提取模式，然后选择 MHT 文件所在文件夹，点击“开始执行”。\n");
+        });
+    }
+
+    /**
+     * 创建模式选择面板（第一行）
+     */
+    private JPanel createModeSelectionPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 20, 5));
+        panel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(200, 200, 200)),
+                BorderFactory.createEmptyBorder(5, 5, 10, 5)
+        ));
+
+        chkTextMode = new JCheckBox("纯文本提取模式");
+        chkTextMode.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+        chkTextMode.addActionListener(this::onModeSelectionChanged);
+
+        chkImageMode = new JCheckBox("图片提取模式");
+        chkImageMode.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+        chkImageMode.addActionListener(this::onModeSelectionChanged);
+
+        panel.add(chkTextMode);
+        panel.add(chkImageMode);
 
         return panel;
     }
 
-    private JPanel createAdvancedPanel() {
+    /**
+     * 创建文本提取配置面板
+     */
+    private JPanel createTextExtractPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        panel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(0, 102, 204), 1),
+                "文本提取配置",
+                javax.swing.border.TitledBorder.LEFT,
+                javax.swing.border.TitledBorder.TOP,
+                new Font("微软雅黑", Font.BOLD, 13),
+                new Color(0, 102, 204)
+        ));
+
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(8, 10, 8, 10);
+        gbc.insets = new Insets(5, 10, 5, 10);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        // --- 内容限定区域 ---
-        gbc.gridx = 0; gbc.gridy = 7; gbc.gridwidth = 2;
-        JLabel lblLimitTitle = new JLabel("正文内容提取限定");
-        lblLimitTitle.setFont(new Font("微软雅黑", Font.BOLD, 13));
-        lblLimitTitle.setForeground(new Color(0, 102, 204));
-        panel.add(lblLimitTitle, gbc);
+        int row = 0;
 
-        gbc.gridy = 8;
-        chkEnableLimit = new JCheckBox("启用内容限定（只提取指定区域的内容）");
-        chkEnableLimit.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        chkEnableLimit.addActionListener(e -> toggleLimitSettings());
-        panel.add(chkEnableLimit, gbc);
-
-        gbc.gridy = 9; gbc.gridwidth = 1; gbc.weightx = 0;
-        JLabel lblStartMarker = new JLabel("起始标记：");
-        lblStartMarker.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        panel.add(lblStartMarker, gbc);
-
-        gbc.gridx = 1; gbc.weightx = 1.0;
-        txtStartMarker = new JTextField("", 40);
-        txtStartMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
-        panel.add(txtStartMarker, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 10; gbc.weightx = 0;
-        JLabel lblEndMarker = new JLabel("结束标记：");
-        lblEndMarker.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        panel.add(lblEndMarker, gbc);
-
-        gbc.gridx = 1; gbc.weightx = 1.0;
-        txtEndMarker = new JTextField("", 40);
-        txtEndMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
-        panel.add(txtEndMarker, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 11; gbc.gridwidth = 2; gbc.weightx = 1.0;
-        JPanel limitBottomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 5));
-        limitBottomPanel.setOpaque(false);
-
-        chkUseRegex = new JCheckBox("使用正则表达式匹配");
-        chkUseRegex.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        limitBottomPanel.add(chkUseRegex);
-        limitBottomPanel.add(Box.createHorizontalStrut(20));
-
-        panel.add(limitBottomPanel, gbc);
-
-        // --- 分隔线 1 ---
-        gbc.gridy = 12; gbc.gridwidth = 2;
-        JSeparator separator1 = new JSeparator();
-        panel.add(separator1, gbc);
-
-        // --- 自定义模板区域 ---
-        gbc.gridy = 0;
-        JLabel lblTemplateTitle = new JLabel("自定义文件开头/结尾模板");
+        // --- 章节标题区域 ---
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
+        JLabel lblTemplateTitle = new JLabel("章节标题设置");
         lblTemplateTitle.setFont(new Font("微软雅黑", Font.BOLD, 13));
         lblTemplateTitle.setForeground(new Color(0, 102, 204));
         panel.add(lblTemplateTitle, gbc);
 
-        gbc.gridy = 1;
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
         chkAddChapterNumber = new JCheckBox("为每个 MHT 文件添加章节名（仅合并模式有效）");
         chkAddChapterNumber.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         chkAddChapterNumber.setToolTipText("选中后生成“第一章”、“第二章”等序号");
         chkAddChapterNumber.addActionListener(e -> toggleTitleSettings());
         panel.add(chkAddChapterNumber, gbc);
 
-        gbc.gridy = 2;
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
         chkEnableTitleExtract = new JCheckBox("启用隐藏章节标题提取（从源码固定位置提取标题）");
         chkEnableTitleExtract.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         chkEnableTitleExtract.setToolTipText("可独立使用！若提取到标题，将直接作为章节头；若同时勾选上方选项，则格式为“序号 标题”");
         chkEnableTitleExtract.addActionListener(e -> toggleTitleSettings());
         panel.add(chkEnableTitleExtract, gbc);
 
-        // ---  标题提取标记输入区  ---
-        gbc.gridy = 3; gbc.gridwidth = 1; gbc.weightx = 0;
+        // 标题提取标记输入区
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
         JLabel lblTitleStart = new JLabel("标题起始标记：");
         lblTitleStart.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         panel.add(lblTitleStart, gbc);
 
-        gbc.gridx = 1; gbc.weightx = 1.0;
-        txtTitleStartMarker = new JTextField(" ", 40);
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.weightx = 1.0;
+        txtTitleStartMarker = new JTextField("", 40);
         txtTitleStartMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
         panel.add(txtTitleStartMarker, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0;
-        JLabel lblTitleEnd = new JLabel("标题结束标记："); // 明确定义新变量
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
+        JLabel lblTitleEnd = new JLabel("标题结束标记：");
         lblTitleEnd.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         panel.add(lblTitleEnd, gbc);
 
-        gbc.gridx = 1; gbc.weightx = 1.0;
-        txtTitleEndMarker = new JTextField(" ", 40);
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.weightx = 1.0;
+        txtTitleEndMarker = new JTextField("", 40);
         txtTitleEndMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
         panel.add(txtTitleEndMarker, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 2; gbc.weightx = 1.0;
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
         JPanel titleBottomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 5));
         titleBottomPanel.setOpaque(false);
         chkTitleUseRegex = new JCheckBox("使用正则表达式匹配标题");
@@ -325,30 +383,104 @@ public class MhtExtractorGUI extends JFrame {
         titleBottomPanel.add(chkTitleUseRegex);
         panel.add(titleBottomPanel, gbc);
 
-        // --- 分隔线 2 ---
-        gbc.gridy = 6; gbc.gridwidth = 2;
-        JSeparator separator2 = new JSeparator();
-        panel.add(separator2, gbc);
+        // 分隔线
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        panel.add(new JSeparator(), gbc);
 
-        // --- 真正的自定义模板输入区 ---
-        gbc.gridy = 13;
+        // --- 内容限定区域 ---
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        JLabel lblLimitTitle = new JLabel("正文内容提取限定");
+        lblLimitTitle.setFont(new Font("微软雅黑", Font.BOLD, 13));
+        lblLimitTitle.setForeground(new Color(0, 102, 204));
+        panel.add(lblLimitTitle, gbc);
+
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        chkEnableLimit = new JCheckBox("启用内容限定（只提取指定区域的内容）");
+        chkEnableLimit.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        chkEnableLimit.addActionListener(e -> toggleLimitSettings());
+        panel.add(chkEnableLimit, gbc);
+
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
+        JLabel lblStartMarker = new JLabel("起始标记：");
+        lblStartMarker.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        panel.add(lblStartMarker, gbc);
+
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.weightx = 1.0;
+        txtStartMarker = new JTextField("", 40);
+        txtStartMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
+        panel.add(txtStartMarker, gbc);
+
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
+        JLabel lblEndMarker = new JLabel("结束标记：");
+        lblEndMarker.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        panel.add(lblEndMarker, gbc);
+
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.weightx = 1.0;
+        txtEndMarker = new JTextField("", 40);
+        txtEndMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
+        panel.add(txtEndMarker, gbc);
+
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
+        JPanel limitBottomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 5));
+        limitBottomPanel.setOpaque(false);
+        chkUseRegex = new JCheckBox("使用正则表达式匹配");
+        chkUseRegex.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        limitBottomPanel.add(chkUseRegex);
+        panel.add(limitBottomPanel, gbc);
+
+        // 分隔线
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        panel.add(new JSeparator(), gbc);
+
+        // --- 自定义模板内容区域 ---
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
         JLabel lblRealTemplateTitle = new JLabel("自定义文件开头/结尾模板内容");
         lblRealTemplateTitle.setFont(new Font("微软雅黑", Font.BOLD, 13));
         lblRealTemplateTitle.setForeground(new Color(0, 102, 204));
         panel.add(lblRealTemplateTitle, gbc);
 
-        gbc.gridy = 14;
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
         chkEnableCustomTemplate = new JCheckBox("启用自定义模板（覆盖默认开头结尾格式）");
         chkEnableCustomTemplate.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         chkEnableCustomTemplate.addActionListener(e -> toggleTemplateSettings());
         panel.add(chkEnableCustomTemplate, gbc);
 
-        gbc.gridy = 15; gbc.gridwidth = 1; gbc.weightx = 0;
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
         JLabel lblStartTemplate = new JLabel("开头模板：");
         lblStartTemplate.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         panel.add(lblStartTemplate, gbc);
 
-        gbc.gridx = 1; gbc.weightx = 1.0;
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.weightx = 1.0;
         txtStartTemplate = new JTextArea(1, 40);
         txtStartTemplate.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
         txtStartTemplate.setLineWrap(true);
@@ -358,12 +490,17 @@ public class MhtExtractorGUI extends JFrame {
         JScrollPane startTemplateScroll = new JScrollPane(txtStartTemplate);
         panel.add(startTemplateScroll, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 16; gbc.weightx = 0;
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
         JLabel lblEndTemplate = new JLabel("结尾模板：");
         lblEndTemplate.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         panel.add(lblEndTemplate, gbc);
 
-        gbc.gridx = 1; gbc.weightx = 1.0;
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.weightx = 1.0;
         txtEndTemplate = new JTextArea(1, 40);
         txtEndTemplate.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
         txtEndTemplate.setLineWrap(true);
@@ -373,7 +510,10 @@ public class MhtExtractorGUI extends JFrame {
         JScrollPane endTemplateScroll = new JScrollPane(txtEndTemplate);
         panel.add(endTemplateScroll, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 17; gbc.gridwidth = 2; gbc.weightx = 1.0;
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
         lblTemplateVars = new JLabel("可用变量：{filename} | {datetime} | {date} | {time} | \\n");
         lblTemplateVars.setFont(new Font("微软雅黑", Font.ITALIC, 11));
         lblTemplateVars.setForeground(new Color(100, 100, 200));
@@ -382,22 +522,365 @@ public class MhtExtractorGUI extends JFrame {
         return panel;
     }
 
+    /**
+     * 创建图片提取配置面板
+     */
+    private JPanel createImageExtractPanel() {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(0, 102, 204), 1),
+                "图片提取配置",
+                javax.swing.border.TitledBorder.LEFT,
+                javax.swing.border.TitledBorder.TOP,
+                new Font("微软雅黑", Font.BOLD, 13),
+                new Color(0, 102, 204)
+        ));
 
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 10, 5, 10);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
 
+        int row = 0;
+
+        // --- 图片名称提取限定区域 ---
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
+        JLabel lblImageNameTitle = new JLabel("图片名称提取限定");
+        lblImageNameTitle.setFont(new Font("微软雅黑", Font.BOLD, 13));
+        lblImageNameTitle.setForeground(new Color(0, 102, 204));
+        panel.add(lblImageNameTitle, gbc);
+
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        chkEnableImageNameExtract = new JCheckBox("启用名称提取限定（从 HTML 中提取标题作为文件夹/文件名）");
+        chkEnableImageNameExtract.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        chkEnableImageNameExtract.addActionListener(e -> toggleImageNameSettings());
+        panel.add(chkEnableImageNameExtract, gbc);
+
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
+        JLabel lblImageNameStart = new JLabel("名称起始标记：");
+        lblImageNameStart.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        panel.add(lblImageNameStart, gbc);
+
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.weightx = 1.0;
+        txtImageNameStartMarker = new JTextField("", 40);
+        txtImageNameStartMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
+        panel.add(txtImageNameStartMarker, gbc);
+
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
+        JLabel lblImageNameEnd = new JLabel("名称结束标记：");
+        lblImageNameEnd.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        panel.add(lblImageNameEnd, gbc);
+
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.weightx = 1.0;
+        txtImageNameEndMarker = new JTextField("", 40);
+        txtImageNameEndMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
+        panel.add(txtImageNameEndMarker, gbc);
+
+        // 分隔线
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        panel.add(new JSeparator(), gbc);
+
+        // --- 图片区域提取限定区域 ---
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
+        JLabel lblImageRegionTitle = new JLabel("图片区域提取限定");
+        lblImageRegionTitle.setFont(new Font("微软雅黑", Font.BOLD, 13));
+        lblImageRegionTitle.setForeground(new Color(0, 102, 204));
+        panel.add(lblImageRegionTitle, gbc);
+
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        chkEnableImageRegionExtract = new JCheckBox("启用区域限定（只提取指定位置的图片，跳过广告等）");
+        chkEnableImageRegionExtract.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        chkEnableImageRegionExtract.addActionListener(e -> toggleImageRegionSettings());
+        panel.add(chkEnableImageRegionExtract, gbc);
+
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
+        JLabel lblImageRegionStart = new JLabel("区域起始标记：");
+        lblImageRegionStart.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        panel.add(lblImageRegionStart, gbc);
+
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.weightx = 1.0;
+        txtImageRegionStartMarker = new JTextField("", 40);
+        txtImageRegionStartMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
+        panel.add(txtImageRegionStartMarker, gbc);
+
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.weightx = 0;
+        JLabel lblImageRegionEnd = new JLabel("区域结束标记：");
+        lblImageRegionEnd.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        panel.add(lblImageRegionEnd, gbc);
+
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.weightx = 1.0;
+        txtImageRegionEndMarker = new JTextField("", 40);
+        txtImageRegionEndMarker.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
+        panel.add(txtImageRegionEndMarker, gbc);
+
+        // 分隔线
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        panel.add(new JSeparator(), gbc);
+
+        // --- 图片后处理选项 ---
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
+        JLabel lblPostProcess = new JLabel("图片后处理");
+        lblPostProcess.setFont(new Font("微软雅黑", Font.BOLD, 13));
+        lblPostProcess.setForeground(new Color(0, 102, 204));
+        panel.add(lblPostProcess, gbc);
+
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        chkEnableImageRename = new JCheckBox("按照顺序为图片批量重命名（格式：001、002、003...）");
+        chkEnableImageRename.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        panel.add(chkEnableImageRename, gbc);
+
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        chkEnableImageZip = new JCheckBox("提取后打包为 ZIP 文件");
+        chkEnableImageZip.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        panel.add(chkEnableImageZip, gbc);
+
+        return panel;
+    }
+
+    /**
+     * 创建运行日志面板
+     */
+    private JPanel createConsolePanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createTitledBorder("运行日志"));
+        panel.setPreferredSize(new Dimension(350, 250));
+
+        consoleArea = new JTextArea(12, 40);
+        consoleArea.setFont(new Font("Microsoft YaHei", Font.PLAIN, 14));
+        consoleArea.setEditable(false);
+        consoleArea.setBackground(new Color(245, 245, 245));
+        consoleArea.setLineWrap(true);
+        consoleArea.setWrapStyleWord(true);
+
+        TextAreaAppender.setTextArea(consoleArea);
+
+        consoleScrollPane = new JScrollPane(consoleArea);
+        consoleScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        consoleScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        panel.add(consoleScrollPane, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    /**
+     * 创建按钮面板
+     */
+    private JPanel createButtonPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
+
+        btnExecute = new JButton("开始执行");
+        btnExecute.setFont(new Font("微软雅黑", Font.BOLD, 15));
+        btnExecute.setPreferredSize(new Dimension(160, 45));
+        btnExecute.setBackground(new Color(0, 153, 76));
+        btnExecute.setForeground(Color.WHITE);
+        btnExecute.setOpaque(true);
+        btnExecute.setBorderPainted(false);
+        btnExecute.setEnabled(false);
+        btnExecute.addActionListener(this::executeProcess);
+        panel.add(btnExecute);
+
+        btnConfigManage = new JButton("保存/删除配置");
+        btnConfigManage.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+        btnConfigManage.setPreferredSize(new Dimension(160, 45));
+        btnConfigManage.setEnabled(false);
+        btnConfigManage.addActionListener(e -> showConfigDialog());
+        panel.add(btnConfigManage);
+
+        return panel;
+    }
+
+    // ==================== 模式切换与 UI 状态管理 ====================
+
+    /**
+     * 处理模式选择变化
+     */
+    private void onModeSelectionChanged(ActionEvent e) {
+        Object source = e.getSource();
+
+        // 实现互斥：选中一个时取消另一个
+        if (source == chkTextMode) {
+            if (chkTextMode.isSelected()) {
+                logger.info("已选择纯文本提取模式");
+                chkImageMode.setSelected(false);
+            } else {
+                logger.info("已取消纯文本提取模式，清空选项");
+                clearTextModeConfig();
+            }
+        } else if (source == chkImageMode) {
+            if (chkImageMode.isSelected()) {
+                logger.info("已选择图片提取模式");
+                chkTextMode.setSelected(false);
+            } else {
+                logger.info("已取消图片提取模式，清空选项");
+                clearImageModeConfig();
+            }
+        }
+
+        isTextModeSelected = chkTextMode.isSelected();
+        isImageModeSelected = chkImageMode.isSelected();
+
+        updateAllUIStates();
+    }
+
+    /**
+     * 更新所有 UI 组件的状态
+     */
+    private void updateAllUIStates() {
+        boolean anyModeSelected = isTextModeSelected || isImageModeSelected;
+
+        // 1. 更新输入输出控件的启用状态
+        txtInputFolder.setEnabled(anyModeSelected);
+        btnBrowseInput.setEnabled(anyModeSelected);
+        txtOutputPath.setEnabled(anyModeSelected);
+        btnBrowseOutput.setEnabled(anyModeSelected);
+        chkSeparateFiles.setEnabled(anyModeSelected);
+        chkOpenFolderAfterComplete.setEnabled(anyModeSelected);
+        importConfigComboBox.setEnabled(true);
+
+        // 2. 更新执行按钮状态
+        btnExecute.setEnabled(anyModeSelected);
+        btnConfigManage.setEnabled(anyModeSelected);
+
+        // 3. 根据选择的模式显示/隐藏对应的配置面板
+        textExtractPanel.setVisible(isTextModeSelected);
+        imageExtractPanel.setVisible(isImageModeSelected);
+
+        // 4. 更新输出标签文本 — 始终显示"输出文件夹目录："
+        lblOutput.setText("输出文件夹目录：");
+
+        // 5. 更新模式复选框的互斥状态（允许取消选中以切换模式）
+        if (isTextModeSelected) {
+            chkImageMode.setEnabled(false);
+        } else if (isImageModeSelected) {
+            chkTextMode.setEnabled(false);
+        } else {
+            chkTextMode.setEnabled(true);
+            chkImageMode.setEnabled(true);
+        }
+
+        // 6. 更新子面板内部控件的启用状态
+        if (isTextModeSelected) {
+            updateUIForMode();
+            toggleLimitSettings();
+            toggleTemplateSettings();
+            toggleTitleSettings();
+        } else if (isImageModeSelected) {
+            toggleImageNameSettings();
+            toggleImageRegionSettings();
+        }
+
+        // 7. 重新布局
+        SwingUtilities.invokeLater(() -> {
+            getContentPane().revalidate();
+            getContentPane().repaint();
+        });
+    }
+
+    /**
+     * 更新文本模式下的 UI（主要处理合并/单独模式对章节标题的影响）
+     */
     private void updateUIForMode() {
         boolean isSeparate = chkSeparateFiles.isSelected();
+
+        // 当切换"单独输出模式"时，重新设置输出路径
+        String inputPath = txtInputFolder.getText().trim();
+        if (!inputPath.isEmpty()) {
+            autoSetOutputPath(inputPath);
+        }
+
         if (isSeparate) {
             chkAddChapterNumber.setEnabled(false);
             chkAddChapterNumber.setSelected(false);
             chkEnableTitleExtract.setEnabled(false);
             chkEnableTitleExtract.setSelected(false);
-        } else {
+        } else if (isTextModeSelected) {
             chkAddChapterNumber.setEnabled(true);
             chkEnableTitleExtract.setEnabled(true);
         }
         toggleTitleSettings();
-        txtOutputPath.setEnabled(true);
-        btnBrowseOutput.setEnabled(true);
+    }
+
+    /**
+     * 清空文本模式的配置
+     */
+    private void clearTextModeConfig() {
+        chkSeparateFiles.setSelected(false);
+        chkOpenFolderAfterComplete.setSelected(false);
+
+        chkEnableLimit.setSelected(false);
+        txtStartMarker.setText("");
+        txtEndMarker.setText("");
+        chkUseRegex.setSelected(false);
+
+        chkEnableCustomTemplate.setSelected(false);
+        txtStartTemplate.setText(MhtBatchProcessor.DEFAULT_START_TEMPLATE);
+        txtEndTemplate.setText(MhtBatchProcessor.DEFAULT_END_TEMPLATE);
+
+        chkAddChapterNumber.setSelected(false);
+        chkEnableTitleExtract.setSelected(false);
+        txtTitleStartMarker.setText("");
+        txtTitleEndMarker.setText("");
+        chkTitleUseRegex.setSelected(false);
+    }
+
+    /**
+     * 清空图片模式的配置
+     */
+    private void clearImageModeConfig() {
+        chkSeparateFiles.setSelected(false);
+        chkOpenFolderAfterComplete.setSelected(false);
+
+        chkEnableImageNameExtract.setSelected(false);
+        txtImageNameStartMarker.setText("");
+        txtImageNameEndMarker.setText("");
+
+        chkEnableImageRegionExtract.setSelected(false);
+        txtImageRegionStartMarker.setText("");
+        txtImageRegionEndMarker.setText("");
+
+        chkEnableImageRename.setSelected(false);
+        chkEnableImageZip.setSelected(false);
     }
 
     private void toggleLimitSettings() {
@@ -405,6 +888,12 @@ public class MhtExtractorGUI extends JFrame {
         txtStartMarker.setEnabled(enabled);
         txtEndMarker.setEnabled(enabled);
         chkUseRegex.setEnabled(enabled);
+
+        if (!enabled) {
+            txtStartMarker.setText("");
+            txtEndMarker.setText("");
+            chkUseRegex.setSelected(false);
+        }
     }
 
     private void toggleTemplateSettings() {
@@ -412,30 +901,73 @@ public class MhtExtractorGUI extends JFrame {
         txtStartTemplate.setEnabled(enabled);
         txtEndTemplate.setEnabled(enabled);
         lblTemplateVars.setEnabled(enabled);
+
+        if (!enabled) {
+            txtStartTemplate.setText(MhtBatchProcessor.DEFAULT_START_TEMPLATE);
+            txtEndTemplate.setText(MhtBatchProcessor.DEFAULT_END_TEMPLATE);
+        }
     }
 
     private void toggleTitleSettings() {
         boolean isSeparate = chkSeparateFiles.isSelected();
-        if (isSeparate) return;
+        if (isSeparate) {
+            txtTitleStartMarker.setEnabled(false);
+            txtTitleEndMarker.setEnabled(false);
+            chkTitleUseRegex.setEnabled(false);
+            return;
+        }
 
-        boolean hasChapterNumber = chkAddChapterNumber.isSelected();
         boolean enableExtract = chkEnableTitleExtract.isSelected();
+        boolean hasChapterNumber = chkAddChapterNumber.isSelected();
 
-        chkEnableTitleExtract.setEnabled(true);
+        txtTitleStartMarker.setEnabled(enableExtract);
+        txtTitleEndMarker.setEnabled(enableExtract);
+        chkTitleUseRegex.setEnabled(enableExtract);
 
-        boolean inputsEnabled = enableExtract;
-        txtTitleStartMarker.setEnabled(inputsEnabled);
-        txtTitleEndMarker.setEnabled(inputsEnabled);
-        chkTitleUseRegex.setEnabled(inputsEnabled);
+        if (!enableExtract) {
+            txtTitleStartMarker.setText("");
+            txtTitleEndMarker.setText("");
+            chkTitleUseRegex.setSelected(false);
+        }
 
         if (hasChapterNumber && enableExtract) {
-            chkEnableTitleExtract.setToolTipText("模式：序号 + 标题 ");
+            chkEnableTitleExtract.setToolTipText("模式：序号 + 标题");
         } else if (!hasChapterNumber && enableExtract) {
-            chkEnableTitleExtract.setToolTipText("模式：仅标题 ");
+            chkEnableTitleExtract.setToolTipText("模式：仅标题");
         } else {
             chkEnableTitleExtract.setToolTipText("已禁用");
         }
     }
+
+    /**
+     * 切换图片名称提取设置的启用状态
+     */
+    private void toggleImageNameSettings() {
+        boolean enabled = chkEnableImageNameExtract.isSelected();
+        txtImageNameStartMarker.setEnabled(enabled);
+        txtImageNameEndMarker.setEnabled(enabled);
+
+        if (!enabled) {
+            txtImageNameStartMarker.setText("");
+            txtImageNameEndMarker.setText("");
+        }
+    }
+
+    /**
+     * 切换图片区域提取设置的启用状态
+     */
+    private void toggleImageRegionSettings() {
+        boolean enabled = chkEnableImageRegionExtract.isSelected();
+        txtImageRegionStartMarker.setEnabled(enabled);
+        txtImageRegionEndMarker.setEnabled(enabled);
+
+        if (!enabled) {
+            txtImageRegionStartMarker.setText("");
+            txtImageRegionEndMarker.setText("");
+        }
+    }
+
+    // ==================== 浏览文件夹 ====================
 
     private void browseInputFolder(ActionEvent e) {
         JFileChooser fileChooser = new JFileChooser();
@@ -452,63 +984,57 @@ public class MhtExtractorGUI extends JFrame {
     }
 
     private void browseOutputPath(ActionEvent e) {
-        boolean isSeparate = chkSeparateFiles.isSelected();
+        // 输出路径始终选择文件夹目录
         JFileChooser fileChooser = new JFileChooser();
-        if (isSeparate) {
-            fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-            fileChooser.setDialogTitle("选择输出文件夹路径");
-        } else {
-            fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-            fileChooser.setDialogTitle("选择输出 TXT 文件路径");
-            String currentPath = txtOutputPath.getText().trim();
-            if (!currentPath.isEmpty()) fileChooser.setSelectedFile(new File(currentPath));
-            else fileChooser.setSelectedFile(new File("mht_text.txt"));
-        }
+        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        fileChooser.setDialogTitle("选择输出文件夹路径");
+
         String currentPath = txtOutputPath.getText().trim();
         if (!currentPath.isEmpty()) {
             File currentFile = new File(currentPath);
-            File currentDir = currentFile.getParentFile();
-            if (currentDir != null && currentDir.exists()) fileChooser.setCurrentDirectory(currentDir);
+            if (currentFile.exists()) {
+                fileChooser.setCurrentDirectory(currentFile);
+            } else {
+                File parentDir = currentFile.getParentFile();
+                if (parentDir != null && parentDir.exists()) {
+                    fileChooser.setCurrentDirectory(parentDir);
+                }
+            }
         }
-        int result = isSeparate ? fileChooser.showOpenDialog(this) : fileChooser.showSaveDialog(this);
+
+        int result = fileChooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
             String path = fileChooser.getSelectedFile().getAbsolutePath();
-            if (!isSeparate && !path.toLowerCase().endsWith(".txt")) path = path + ".txt";
             txtOutputPath.setText(path);
         }
     }
 
+    /**
+     * 根据输入路径自动设置输出路径
+     * 输出路径始终为文件夹目录（不包含文件名）
+     */
     private void autoSetOutputPath(String inputPath) {
-        File folder = new File(inputPath);
-        String folderName = folder.getName();
-        if (folderName == null || folderName.isEmpty()) {
-            folderName = "mht_output";
-        }
-
-        // 项目根目录（当前工作目录）
         String projectDir = System.getProperty("user.dir");
-        // 目标输出文件夹：项目根目录/输出文件
         String outputBaseDir = projectDir + File.separator + "输出文件";
 
-        // 确保该文件夹存在
         File outDirFile = new File(outputBaseDir);
         if (!outDirFile.exists()) {
-            outDirFile.mkdirs(); // 创建多级目录
+            outDirFile.mkdirs();
         }
 
-        // 根据模式决定输出路径
-        boolean isSeparate = chkSeparateFiles.isSelected();
-        if (isSeparate) {
-            // 单独输出模式：路径就是文件夹
-            txtOutputPath.setText(outputBaseDir);
-        } else {
-            // 合并模式：路径为文件夹内的文件，文件名取输入文件夹名 + ".txt"
-            String outputFilePath = outputBaseDir + File.separator + folderName + ".txt";
-            txtOutputPath.setText(outputFilePath);
-        }
+        // 输出路径始终为文件夹目录
+        txtOutputPath.setText(outputBaseDir);
     }
 
+    // ==================== 执行处理 ====================
+
     private void executeProcess(ActionEvent e) {
+        if (isImageModeSelected) {
+            executeImageProcess();
+            return;
+        }
+
+        // ===== 纯文本提取模式 =====
         boolean isSeparate = chkSeparateFiles.isSelected();
         boolean enableLimit = chkEnableLimit.isSelected();
         boolean enableCustomTemplate = chkEnableCustomTemplate.isSelected();
@@ -532,26 +1058,38 @@ public class MhtExtractorGUI extends JFrame {
             return;
         }
         if (outputPath.isEmpty()) {
-            JOptionPane.showMessageDialog(this, isSeparate ? "请选择输出文件夹路径！" : "请输入输出 TXT 文件路径！", "输入错误", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "请选择输出文件夹路径！", "输入错误", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        File outPathFile = new File(outputPath);
-        if (isSeparate) {
-            if (!outPathFile.exists() || !outPathFile.isDirectory()) {
-                JOptionPane.showMessageDialog(this, "输出文件夹不存在：\n" + outputPath, "路径错误", JOptionPane.ERROR_MESSAGE);
+
+        // 输出路径是文件夹目录，确保存在
+        File outDirFile = new File(outputPath);
+        if (!outDirFile.exists()) {
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "输出目录不存在，是否创建？\n" + outDirFile.getAbsolutePath(),
+                    "目录不存在", JOptionPane.YES_NO_OPTION);
+            if (confirm == JOptionPane.YES_OPTION) {
+                if (!outDirFile.mkdirs()) {
+                    JOptionPane.showMessageDialog(this, "无法创建目录，请检查权限！", "错误", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+            } else {
                 return;
             }
+        }
+
+        // 对于文本模式，根据是否单独输出确定实际的输出文件路径
+        String actualOutputPath;
+        if (isSeparate) {
+            // 单独输出模式：输出到文件夹目录
+            actualOutputPath = outputPath;
         } else {
-            File outputDir = outPathFile.getParentFile();
-            if (outputDir != null && !outputDir.exists()) {
-                int confirm = JOptionPane.showConfirmDialog(this, "输出文件所在目录不存在，是否创建？\n" + outputDir.getAbsolutePath(), "目录不存在", JOptionPane.YES_NO_OPTION);
-                if (confirm == JOptionPane.YES_OPTION) {
-                    if (!outputDir.mkdirs()) {
-                        JOptionPane.showMessageDialog(this, "无法创建目录，请检查权限！", "错误", JOptionPane.ERROR_MESSAGE);
-                        return;
-                    }
-                } else { return; }
+            // 合并输出模式：在输出文件夹下生成以输入文件夹命名的 txt 文件
+            String folderName = folder.getName();
+            if (folderName == null || folderName.isEmpty()) {
+                folderName = "mht_output";
             }
+            actualOutputPath = outputPath + File.separator + folderName + ".txt";
         }
 
         String startMarker = null, endMarker = null;
@@ -571,12 +1109,14 @@ public class MhtExtractorGUI extends JFrame {
             enableTitleExtract = false;
         }
 
-        String startTemplate = null, endTemplate = null;
+        String startTemplate, endTemplate;
         if (enableCustomTemplate) {
             startTemplate = txtStartTemplate.getText();
             endTemplate = txtEndTemplate.getText();
-            if (startTemplate == null || startTemplate.trim().isEmpty()) startTemplate = MhtBatchProcessor.DEFAULT_START_TEMPLATE;
-            if (endTemplate == null || endTemplate.trim().isEmpty()) endTemplate = MhtBatchProcessor.DEFAULT_END_TEMPLATE;
+            if (startTemplate == null || startTemplate.trim().isEmpty())
+                startTemplate = MhtBatchProcessor.DEFAULT_START_TEMPLATE;
+            if (endTemplate == null || endTemplate.trim().isEmpty())
+                endTemplate = MhtBatchProcessor.DEFAULT_END_TEMPLATE;
         } else {
             startTemplate = MhtBatchProcessor.DEFAULT_START_TEMPLATE;
             endTemplate = MhtBatchProcessor.DEFAULT_END_TEMPLATE;
@@ -588,7 +1128,7 @@ public class MhtExtractorGUI extends JFrame {
         final String finalEndMarker = endMarker;
         final boolean finalUseRegex = useRegex;
         final String finalInputFolder = inputFolder;
-        final String finalOutputPath = outputPath;
+        final String finalOutputPath = actualOutputPath;
         final String finalStartTemplate = startTemplate;
         final String finalEndTemplate = endTemplate;
         final boolean finalAddChapterNumber = addChapterNumber;
@@ -601,7 +1141,8 @@ public class MhtExtractorGUI extends JFrame {
         consoleArea.append("\n========================================\n");
         consoleArea.append("任务开始执行...\n");
         if (finalAddChapterNumber) consoleArea.append("模式：自动序号\n");
-        if (finalEnableTitleExtract) consoleArea.append("模式：提取隐藏标题" + (finalAddChapterNumber ? " (与序号组合)" : " (独立使用)") + "\n");
+        if (finalEnableTitleExtract)
+            consoleArea.append("模式：提取隐藏标题" + (finalAddChapterNumber ? " (与序号组合)" : " (独立使用)") + "\n");
         consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
 
         SwingWorker<MhtBatchProcessor.ProcessStats, String> worker = new SwingWorker<>() {
@@ -623,7 +1164,8 @@ public class MhtExtractorGUI extends JFrame {
                                 finalUseRegex,
                                 finalStartTemplate, finalEndTemplate,
                                 finalAddChapterNumber,
-                                finalEnableTitleExtract, finalTitleStartMarker, finalTitleEndMarker, finalTitleUseRegex);
+                                finalEnableTitleExtract, finalTitleStartMarker,
+                                finalTitleEndMarker, finalTitleUseRegex);
                     }
                 } catch (Exception ex) {
                     logger.error("后台处理发生异常", ex);
@@ -637,23 +1179,20 @@ public class MhtExtractorGUI extends JFrame {
                     MhtBatchProcessor.ProcessStats stats = get();
                     if (stats != null && stats.successCount > 0) {
                         consoleArea.append("\n处理完成！成功：" + stats.successCount + ", 失败：" + stats.failCount + "\n");
-                        if (!finalIsSeparate) {
-                            int openConfirm = JOptionPane.showConfirmDialog(MhtExtractorGUI.this, "是否立即打开输出文件？", "提示", JOptionPane.YES_NO_OPTION);
-                            if (openConfirm == JOptionPane.YES_OPTION) {
-                                try { Desktop.getDesktop().open(new File(finalOutputPath)); }
-                                catch (Exception ex) { JOptionPane.showMessageDialog(MhtExtractorGUI.this, "无法打开文件", "提示", JOptionPane.INFORMATION_MESSAGE); }
-                            }
-                        }
+                        openOutputFolderIfNeeded();
                     } else if (stats != null) {
                         consoleArea.append("\n未找到任何 MHT 文件或所有内容为空。\n");
-                        JOptionPane.showMessageDialog(MhtExtractorGUI.this, "未找到任何 MHT 文件！", "提示", JOptionPane.WARNING_MESSAGE);
+                        JOptionPane.showMessageDialog(MhtExtractorGUI.this,
+                                "未找到任何 MHT 文件！", "提示", JOptionPane.WARNING_MESSAGE);
                     } else {
                         consoleArea.append("\n处理过程中发生错误。\n");
-                        JOptionPane.showMessageDialog(MhtExtractorGUI.this, "处理失败，请查看日志", "错误", JOptionPane.ERROR_MESSAGE);
+                        JOptionPane.showMessageDialog(MhtExtractorGUI.this,
+                                "处理失败，请查看日志", "错误", JOptionPane.ERROR_MESSAGE);
                     }
                 } catch (Exception ex) {
                     consoleArea.append("\n发生异常：" + ex.getMessage() + "\n");
-                    JOptionPane.showMessageDialog(MhtExtractorGUI.this, "处理异常：" + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(MhtExtractorGUI.this,
+                            "处理异常：" + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
                 } finally {
                     setControlsEnabled(true);
                     consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
@@ -663,31 +1202,328 @@ public class MhtExtractorGUI extends JFrame {
         worker.execute();
     }
 
+    private void executeImageProcess() {
+        boolean isSeparate = chkSeparateFiles.isSelected();
+        boolean enableNameExtract = chkEnableImageNameExtract.isSelected();
+        boolean enableRegionExtract = chkEnableImageRegionExtract.isSelected();
+        boolean enableZip = chkEnableImageZip.isSelected();
+        boolean enableRename = chkEnableImageRename.isSelected();
+
+        String inputFolder = txtInputFolder.getText().trim();
+        String outputPath = txtOutputPath.getText().trim();
+
+        if (inputFolder.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "请输入 MHT 文件所在文件夹路径！", "输入错误", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        File folder = new File(inputFolder);
+        if (!folder.exists() || !folder.isDirectory()) {
+            JOptionPane.showMessageDialog(this, "文件夹不存在或不是有效目录：\n" + inputFolder, "路径错误", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        if (outputPath.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "请选择输出文件夹路径！", "输入错误", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // 确保输出目录存在
+        File outDirFile = new File(outputPath);
+        if (!outDirFile.exists()) {
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "输出目录不存在，是否创建？\n" + outDirFile.getAbsolutePath(),
+                    "目录不存在", JOptionPane.YES_NO_OPTION);
+            if (confirm == JOptionPane.YES_OPTION) {
+                if (!outDirFile.mkdirs()) {
+                    JOptionPane.showMessageDialog(this, "无法创建目录，请检查权限！", "错误", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+            } else {
+                return;
+            }
+        }
+
+        String nameStartMarker = null, nameEndMarker = null;
+        if (enableNameExtract) {
+            nameStartMarker = txtImageNameStartMarker.getText().trim();
+            nameEndMarker = txtImageNameEndMarker.getText().trim();
+            if (nameStartMarker.isEmpty() || nameEndMarker.isEmpty()) {
+                logger.info("[警告] 已启用名称提取但标记为空，将忽略名称提取功能。");
+                enableNameExtract = false;
+            }
+        }
+
+        String regionStartMarker = null, regionEndMarker = null;
+        if (enableRegionExtract) {
+            regionStartMarker = txtImageRegionStartMarker.getText().trim();
+            regionEndMarker = txtImageRegionEndMarker.getText().trim();
+            if (regionStartMarker.isEmpty() || regionEndMarker.isEmpty()) {
+                logger.info("[警告] 已启用区域提取但标记为空，将忽略区域提取功能。");
+                enableRegionExtract = false;
+            }
+        }
+
+        final String finalOutputPath = outputPath;
+        final String finalInputFolder = inputFolder;
+        final String finalNameStartMarker = nameStartMarker;
+        final String finalNameEndMarker = nameEndMarker;
+        final boolean finalEnableNameExtract = enableNameExtract;
+        final String finalRegionStartMarker = regionStartMarker;
+        final String finalRegionEndMarker = regionEndMarker;
+        final boolean finalEnableRename = enableRename;
+        final boolean finalEnableZip = enableZip;
+        final boolean finalIsSeparate = isSeparate;
+        final String inputFolderName = folder.getName();
+
+        setControlsEnabled(false);
+        consoleArea.append("\n========================================\n");
+        consoleArea.append("图片提取任务开始执行...\n");
+        consoleArea.append("模式：" + (finalIsSeparate ? "单独输出" : "合并输出") + "\n");
+        consoleArea.append("名称提取限定：" + (finalEnableNameExtract ? "启用" : "禁用") + "\n");
+        consoleArea.append("批量重命名：" + (finalEnableRename ? "启用" : "禁用") + "\n");
+        consoleArea.append("ZIP 打包：" + (finalEnableZip ? "启用" : "禁用") + "\n");
+        consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
+
+        SwingWorker<Void, String> worker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() {
+                try {
+                    File[] mhtFiles = new File(finalInputFolder).listFiles((dir, name) ->
+                            name.toLowerCase().endsWith(".mht") || name.toLowerCase().endsWith(".mhtml"));
+
+                    if (mhtFiles == null || mhtFiles.length == 0) {
+                        publish("未找到任何 MHT 文件\n");
+                        return null;
+                    }
+
+                    // 按文件名排序，保证顺序稳定
+                    java.util.Arrays.sort(mhtFiles, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+
+                    publish("找到 " + mhtFiles.length + " 个 MHT 文件\n");
+
+                    List<String> htmlContents = new ArrayList<>();
+                    List<String> mhtFileNames = new ArrayList<>();
+                    for (File mhtFile : mhtFiles) {
+                        try {
+                            String html = extractHtmlFromMht(mhtFile.getAbsolutePath());
+                            if (html != null && !html.isEmpty()) {
+                                htmlContents.add(html);
+                                String fileName = mhtFile.getName();
+                                if (fileName.toLowerCase().endsWith(".mht") || fileName.toLowerCase().endsWith(".mhtml")) {
+                                    fileName = fileName.substring(0, fileName.lastIndexOf("."));
+                                }
+                                mhtFileNames.add(fileName);
+                                publish("已加载：" + mhtFile.getName() + "\n");
+                            }
+                        } catch (Exception ex) {
+                            logger.error("加载 MHT 文件失败：" + mhtFile.getName(), ex);
+                            publish("加载失败：" + mhtFile.getName() + "\n");
+                        }
+                    }
+
+                    if (htmlContents.isEmpty()) {
+                        publish("无法从任何 MHT 文件中提取 HTML 内容\n");
+                        return null;
+                    }
+
+                    AppConfig config = new AppConfig();
+                    config.setImageMode(true);
+                    config.setImageNameExtractEnabled(finalEnableNameExtract);
+                    config.setNameLimitStart(finalNameStartMarker);
+                    config.setNameLimitEnd(finalNameEndMarker);
+                    config.setContentLimitStart(finalRegionStartMarker);
+                    config.setContentLimitEnd(finalRegionEndMarker);
+                    config.setSingleOutputMode(finalIsSeparate);
+                    config.setEnableBatchRenaming(finalEnableRename);
+                    config.setEnableZipPackaging(finalEnableZip);
+                    config.setInputFolder(finalInputFolder);
+
+                    ImageBatchProcessor processor = new ImageBatchProcessor(
+                            htmlContents, config, finalOutputPath, inputFolderName, mhtFileNames);
+                    processor.execute();
+
+                    publish("图片处理完成！\n");
+                } catch (Exception ex) {
+                    logger.error("图片提取后台处理发生异常", ex);
+                    publish("图片提取失败：" + ex.getMessage() + "\n");
+                }
+                return null;
+            }
+
+            @Override
+            protected void process(List<String> chunks) {
+                for (String msg : chunks) {
+                    consoleArea.append(msg);
+                }
+                consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    openOutputFolderIfNeeded();
+                } catch (Exception ex) {
+                    consoleArea.append("\n发生异常：" + ex.getMessage() + "\n");
+                    JOptionPane.showMessageDialog(MhtExtractorGUI.this,
+                            "处理异常：" + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    setControlsEnabled(true);
+                    consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    /**
+     * 如果勾选了"提取完成后打开输出文件夹"，则打开输出文件夹目录
+     * 不论是纯文本模式还是图片模式，不论是否单独输出，都直接打开"输出文件夹目录"对应的路径
+     */
+    private void openOutputFolderIfNeeded() {
+        if (!chkOpenFolderAfterComplete.isSelected()) return;
+
+        String outputPath = txtOutputPath.getText().trim();
+        if (outputPath.isEmpty()) return;
+
+        File target = new File(outputPath);
+
+        if (target.exists() && target.isDirectory()) {
+            try {
+                Desktop.getDesktop().open(target);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this,
+                        "无法打开文件夹：" + target.getAbsolutePath(),
+                        "提示", JOptionPane.INFORMATION_MESSAGE);
+            }
+        } else {
+            logger.warn("输出文件夹不存在，无法打开：{}", outputPath);
+        }
+    }
+
+    // ==================== MHT 解析 ====================
+
+    /**
+     * 从 MHT 文件中提取 HTML 内容
+     */
+    private String extractHtmlFromMht(String mhtPath) throws Exception {
+        java.util.Properties props = new java.util.Properties();
+        props.setProperty("mail.mime.decodetext.strict", "false");
+        props.setProperty("mail.mime.charset", "UTF-8");
+
+        jakarta.mail.Session session = jakarta.mail.Session.getInstance(props);
+
+        try (java.io.FileInputStream fis = new java.io.FileInputStream(mhtPath)) {
+            jakarta.mail.internet.MimeMessage message =
+                    new jakarta.mail.internet.MimeMessage(session, fis);
+            return getRawHtmlFromMimeMessage(message);
+        }
+    }
+
+    /**
+     * 从 MimeMessage 中提取 HTML 部分
+     */
+    private String getRawHtmlFromMimeMessage(jakarta.mail.Part part) throws Exception {
+        if (part.isMimeType("text/html")) {
+            try (java.io.InputStream is = part.getInputStream()) {
+                if (is != null) {
+                    String encoding = null;
+                    if (part instanceof jakarta.mail.internet.MimePart) {
+                        encoding = ((jakarta.mail.internet.MimePart) part).getEncoding();
+                    }
+                    if (encoding == null) encoding = "utf-8";
+
+                    try (java.io.InputStream decodedIs =
+                                 jakarta.mail.internet.MimeUtility.decode(is, encoding)) {
+
+                        String charset = "UTF-8";
+                        try {
+                            String ct = part.getContentType();
+                            if (ct != null) {
+                                jakarta.mail.internet.ContentType contentType =
+                                        new jakarta.mail.internet.ContentType(ct);
+                                String cs = contentType.getParameter("charset");
+                                if (cs != null) charset = cs;
+                            }
+                        } catch (Exception e) {
+                            // 忽略异常
+                        }
+
+                        byte[] bytes = decodedIs.readAllBytes();
+                        return new String(bytes, charset);
+                    }
+                }
+            }
+        } else if (part.isMimeType("multipart/*")) {
+            jakarta.mail.Multipart mp = (jakarta.mail.Multipart) part.getContent();
+            for (int i = 0; i < mp.getCount(); i++) {
+                String result = getRawHtmlFromMimeMessage(mp.getBodyPart(i));
+                if (result != null) return result;
+            }
+        }
+        return null;
+    }
+
+    // ==================== 控件启用/禁用 ====================
+
     private void setControlsEnabled(boolean enabled) {
+        // 基本控件
         txtInputFolder.setEnabled(enabled);
         txtOutputPath.setEnabled(enabled);
         btnBrowseInput.setEnabled(enabled);
         btnBrowseOutput.setEnabled(enabled);
-        btnExecute.setEnabled(enabled);
-        btnExit.setEnabled(enabled);
+        btnExecute.setEnabled(enabled && (isTextModeSelected || isImageModeSelected));
+        btnConfigManage.setEnabled(enabled);
         chkSeparateFiles.setEnabled(enabled);
-        tabbedPane.setEnabled(enabled);
+        chkOpenFolderAfterComplete.setEnabled(enabled);
+        importConfigComboBox.setEnabled(enabled);
 
-        boolean limitEnabled = enabled && chkEnableLimit.isSelected();
-        txtStartMarker.setEnabled(limitEnabled);
-        txtEndMarker.setEnabled(limitEnabled);
-        chkUseRegex.setEnabled(limitEnabled);
+        // 模式复选框：执行期间禁用
+        chkTextMode.setEnabled(enabled && !isImageModeSelected);
+        chkImageMode.setEnabled(enabled && !isTextModeSelected);
 
-        boolean templateEnabled = enabled && chkEnableCustomTemplate.isSelected();
-        txtStartTemplate.setEnabled(templateEnabled);
-        txtEndTemplate.setEnabled(templateEnabled);
-        lblTemplateVars.setEnabled(templateEnabled);
+        if (isTextModeSelected) {
+            // 文本模式组件
+            chkEnableLimit.setEnabled(enabled);
+            chkEnableCustomTemplate.setEnabled(enabled);
 
-        boolean chapterEnabled = enabled && !chkSeparateFiles.isSelected();
-        chkAddChapterNumber.setEnabled(chapterEnabled);
+            boolean limitEnabled = enabled && chkEnableLimit.isSelected();
+            txtStartMarker.setEnabled(limitEnabled);
+            txtEndMarker.setEnabled(limitEnabled);
+            chkUseRegex.setEnabled(limitEnabled);
 
-        toggleTitleSettings();
+            boolean templateEnabled = enabled && chkEnableCustomTemplate.isSelected();
+            txtStartTemplate.setEnabled(templateEnabled);
+            txtEndTemplate.setEnabled(templateEnabled);
+            lblTemplateVars.setEnabled(templateEnabled);
+
+            boolean chapterEnabled = enabled && !chkSeparateFiles.isSelected();
+            chkAddChapterNumber.setEnabled(chapterEnabled);
+            chkEnableTitleExtract.setEnabled(chapterEnabled);
+
+            boolean titleInputEnabled = enabled && !chkSeparateFiles.isSelected()
+                    && chkEnableTitleExtract.isSelected();
+            txtTitleStartMarker.setEnabled(titleInputEnabled);
+            txtTitleEndMarker.setEnabled(titleInputEnabled);
+            chkTitleUseRegex.setEnabled(titleInputEnabled);
+
+        } else if (isImageModeSelected) {
+            // 图片模式组件
+            chkEnableImageNameExtract.setEnabled(enabled);
+            chkEnableImageRegionExtract.setEnabled(enabled);
+            chkEnableImageRename.setEnabled(enabled);
+            chkEnableImageZip.setEnabled(enabled);
+
+            boolean nameEnabled = enabled && chkEnableImageNameExtract.isSelected();
+            txtImageNameStartMarker.setEnabled(nameEnabled);
+            txtImageNameEndMarker.setEnabled(nameEnabled);
+
+            boolean regionEnabled = enabled && chkEnableImageRegionExtract.isSelected();
+            txtImageRegionStartMarker.setEnabled(regionEnabled);
+            txtImageRegionEndMarker.setEnabled(regionEnabled);
+        }
     }
+
+    // ==================== 配置管理 ====================
+
     private void showConfigDialog() {
         AppConfig currentConfig = getCurrentConfig();
 
@@ -702,8 +1538,8 @@ public class MhtExtractorGUI extends JFrame {
         // 第二行：配置选择和删除
         JPanel configSelectPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
         JLabel configSelectLabel = new JLabel("选择配置：");
-        // 声明并初始化下拉框
-        JComboBox<String> configSelectComboBox = new JComboBox<>(configManager.getConfigNames().toArray(new String[0]));
+        JComboBox<String> configSelectComboBox = new JComboBox<>(
+                configManager.getConfigNames().toArray(new String[0]));
         Dimension textFieldSize = configNameField.getPreferredSize();
         Dimension comboBoxSize = configSelectComboBox.getPreferredSize();
         configSelectComboBox.setPreferredSize(new Dimension(textFieldSize.width, comboBoxSize.height));
@@ -720,12 +1556,7 @@ public class MhtExtractorGUI extends JFrame {
                         configManager.deleteConfig(selected);
                         logger.info("配置已删除，删除配置名称: {}", selected);
                         refreshConfigComboBox();
-                        List<String> newNames = configManager.getConfigNames();
-                        DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>();
-                        for (String name : newNames) {
-                            model.addElement(name);
-                        }
-                        configSelectComboBox.setModel(model);
+                        refreshDialogComboBox(configSelectComboBox);
                     } catch (IOException ex) {
                         logger.error("删除配置失败: {}", ex.getMessage());
                     }
@@ -733,7 +1564,6 @@ public class MhtExtractorGUI extends JFrame {
             }
         });
 
-        // 保存按钮监听器
         saveButton.addActionListener(e -> {
             String name = configNameField.getText().trim();
             if (!name.isEmpty()) {
@@ -741,12 +1571,7 @@ public class MhtExtractorGUI extends JFrame {
                     configManager.saveConfig(name, currentConfig);
                     logger.info("配置已保存，配置名称: {}", name);
                     refreshConfigComboBox();
-                    List<String> newNames = configManager.getConfigNames();
-                    DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>();
-                    for (String n : newNames) {
-                        model.addElement(n);
-                    }
-                    configSelectComboBox.setModel(model);
+                    refreshDialogComboBox(configSelectComboBox);
                 } catch (IOException ex) {
                     logger.error("保存配置失败: {}", ex.getMessage());
                 }
@@ -770,6 +1595,18 @@ public class MhtExtractorGUI extends JFrame {
                 "配置管理", JOptionPane.PLAIN_MESSAGE);
     }
 
+    /**
+     * 刷新对话框内的配置下拉框
+     */
+    private void refreshDialogComboBox(JComboBox<String> comboBox) {
+        List<String> newNames = configManager.getConfigNames();
+        DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>();
+        for (String name : newNames) {
+            model.addElement(name);
+        }
+        comboBox.setModel(model);
+    }
+
     private AppConfig getCurrentConfig() {
         AppConfig config = new AppConfig();
         config.setInputFolder(txtInputFolder.getText().trim());
@@ -787,6 +1624,18 @@ public class MhtExtractorGUI extends JFrame {
         config.setTitleStartMarker(txtTitleStartMarker.getText().trim());
         config.setTitleEndMarker(txtTitleEndMarker.getText().trim());
         config.setTitleUseRegex(chkTitleUseRegex.isSelected());
+
+        // 保存图片模式相关配置
+        config.setImageMode(isImageModeSelected);
+        config.setImageNameExtractEnabled(chkEnableImageNameExtract.isSelected());
+        config.setImageNameStartMarker(txtImageNameStartMarker.getText().trim());
+        config.setImageNameEndMarker(txtImageNameEndMarker.getText().trim());
+        config.setImageRegionExtractEnabled(chkEnableImageRegionExtract.isSelected());
+        config.setImageRegionStartMarker(txtImageRegionStartMarker.getText().trim());
+        config.setImageRegionEndMarker(txtImageRegionEndMarker.getText().trim());
+        config.setImageZipEnabled(chkEnableImageZip.isSelected());
+        config.setImageRenameEnabled(chkEnableImageRename.isSelected());
+
         return config;
     }
 
@@ -815,9 +1664,20 @@ public class MhtExtractorGUI extends JFrame {
     }
 
     private void setConfigFromAppConfig(AppConfig config) {
+        // 先设置模式（这会影响后续面板的可见性）
+        boolean imageMode = config.isImageMode();
+        chkTextMode.setSelected(!imageMode);
+        chkImageMode.setSelected(imageMode);
+        isTextModeSelected = !imageMode;
+        isImageModeSelected = imageMode;
+
+        // 设置基础字段
         txtInputFolder.setText(config.getInputFolder());
         txtOutputPath.setText(config.getOutputFolder());
         chkSeparateFiles.setSelected(config.isSeparateFiles());
+        chkOpenFolderAfterComplete.setSelected(false); // 导入配置时默认不打开
+
+        // 文本模式字段
         chkEnableLimit.setSelected(config.isEnableLimit());
         txtStartMarker.setText(config.getStartMarker());
         txtEndMarker.setText(config.getEndMarker());
@@ -831,18 +1691,35 @@ public class MhtExtractorGUI extends JFrame {
         txtTitleEndMarker.setText(config.getTitleEndMarker());
         chkTitleUseRegex.setSelected(config.isTitleUseRegex());
 
-        // 更新UI状态
-        updateUIForMode();
-        toggleLimitSettings();
-        toggleTemplateSettings();
-        toggleTitleSettings();
+        // 图片模式字段
+        chkEnableImageNameExtract.setSelected(config.isImageNameExtractEnabled());
+        txtImageNameStartMarker.setText(config.getImageNameStartMarker());
+        txtImageNameEndMarker.setText(config.getImageNameEndMarker());
+        chkEnableImageRegionExtract.setSelected(config.isImageRegionExtractEnabled());
+        txtImageRegionStartMarker.setText(config.getImageRegionStartMarker());
+        txtImageRegionEndMarker.setText(config.getImageRegionEndMarker());
+        chkEnableImageZip.setSelected(config.isImageZipEnabled());
+        chkEnableImageRename.setSelected(config.isImageRenameEnabled());
+
+        // 更新所有 UI 状态
+        updateAllUIStates();
     }
+
+    // ==================== 主入口 ====================
+
     public static void main(String[] args) {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            logger.info("正在关闭 HTTP 连接池和线程池...");
+            ImageBatchProcessor.shutdownResources();
+            logger.info("资源已关闭");
+        }));
+
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception e) {
-            logger.error("操作失败", e);
+            logger.error("设置 LookAndFeel 失败", e);
         }
+
         System.out.println("正在启动 MHT 资源提取器...");
 
         SwingUtilities.invokeLater(() -> {
@@ -850,10 +1727,10 @@ public class MhtExtractorGUI extends JFrame {
                 MhtExtractorGUI gui = new MhtExtractorGUI();
                 gui.setVisible(true);
             } catch (Exception e) {
-                logger.error("操作失败", e);
-                JOptionPane.showMessageDialog(null, "启动失败:\n" + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                logger.error("启动失败", e);
+                JOptionPane.showMessageDialog(null,
+                        "启动失败:\n" + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
             }
         });
     }
-
 }

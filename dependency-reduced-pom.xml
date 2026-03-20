@@ -18,7 +18,7 @@
             <configuration>
               <transformers>
                 <transformer>
-                  <mainClass>org.example.MhtExtractorGUI</mainClass>
+                  <mainClass>org.example.Main</mainClass>
                 </transformer>
               </transformers>
             </configuration>
