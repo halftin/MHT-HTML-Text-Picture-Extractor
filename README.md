@@ -38,18 +38,13 @@ MHT资源提取器是一款专注于解析和提取`.mht`（MIME HTML）文件�
 
 ### 安装与运行
 
-#### 下载发布包
+## 📥 下载
 
-```bash
-# 访问 Releases 页面下载 mht-extractor-v1.0.jar
-wget https://gitee.com/your-repo/mht-extractor/releases/download/v1.0/mht-extractor-v1.0.jar
-```
+您可以直接从 [发行版页面](https://gitee.com/halftin/mht-resource-extractor/releases) 下载最新版本的软件。
 
-#### 运行程序
-
-```bash
-java -jar mht-extractor-v1.0.jar
-```
+- **最新版本**: v1.0.0
+- **下载地址**: [MHT资源提取器-v1.0-Windows.zip](https://gitee.com/halftin/mht-resource-extractor/releases/download/v1.0.0/MHT资源提取器-v1.0-Windows.zip)
+- **说明**: 下载后解压，双击 `MHT资源提取器.exe` 即可运行，无需安装 Java 环境。
 
 ### 基本使用流程
 
