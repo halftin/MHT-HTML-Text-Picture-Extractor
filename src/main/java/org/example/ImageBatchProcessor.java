@@ -30,6 +30,7 @@ public class ImageBatchProcessor {
     private final String outputDir;
     private final String inputFolderName;
     private final List<String> mhtFileNames;
+    private final List<String> mhtFilePaths;
 
     // HTTP 连接池（静态单例，全局复用）
     private static final CloseableHttpClient httpClient;
@@ -58,6 +59,7 @@ public class ImageBatchProcessor {
         executor = Executors.newFixedThreadPool(10);
     }
 
+
     // 广告关键词列表（用于过滤）
     private static final List<String> AD_KEYWORDS = Arrays.asList(
             "ad", "banner", "advert", "ads", "advertisement",
@@ -66,11 +68,11 @@ public class ImageBatchProcessor {
 
     /**
      * 构造函数
-     * @param htmlContents HTML 内容列表（每个 MHT 文件对应一个 HTML 字符串）
+     * @param htmlContents HTML 内容列表（每个 MHT文件对应一个 HTML 字符串）
      * @param config 应用配置
      * @param outputDir 输出目录路径
      * @param inputFolderName 输入文件夹名称（用于默认命名）
-     * @param mhtFileNames MHT 文件名列表（不含扩展名，用于单独输出模式的默认命名）
+     * @param mhtFileNames MHT文件名列表（不含扩展名，用于单独输出模式的默认命名）
      */
     public ImageBatchProcessor(List<String> htmlContents, AppConfig config, String outputDir,
                                String inputFolderName, List<String> mhtFileNames) {
@@ -79,7 +81,19 @@ public class ImageBatchProcessor {
         this.outputDir = outputDir;
         this.inputFolderName = inputFolderName;
         this.mhtFileNames = mhtFileNames;
+        this.mhtFilePaths = new ArrayList<>();
     }
+
+    /**
+     * 设置 MHT文件的完整路径列表（用于直接读取 MIME 结构）
+     * @param mhtFilePaths MHT文件路径列表
+     */
+    public void setMhtFilePaths(List<String> mhtFilePaths) {
+        this.mhtFilePaths.clear();
+        this.mhtFilePaths.addAll(mhtFilePaths);
+    }
+
+
 
     /**
      * 执行图片提取和输出
@@ -89,11 +103,13 @@ public class ImageBatchProcessor {
         Files.createDirectories(Paths.get(outputDir));
 
         if (config.isSingleOutputMode()) {
-            // 单独输出模式：为每个 MHT 文件生成独立输出
+            // 单独输出模式：为每个 MHT文件生成独立输出
             for (int i = 0; i < htmlContents.size(); i++) {
                 String mhtFileName = (mhtFileNames != null && i < mhtFileNames.size())
                         ? mhtFileNames.get(i) : null;
-                processSingleFile(htmlContents.get(i), i, mhtFileName);
+                String mhtFilePath = (mhtFilePaths != null && i < mhtFilePaths.size())
+                        ? mhtFilePaths.get(i) : null;
+                processSingleFile(htmlContents.get(i), i, mhtFileName, mhtFilePath);
             }
         } else {
             // 合并输出模式：生成单个输出文件夹/ZIP
@@ -102,13 +118,13 @@ public class ImageBatchProcessor {
     }
 
     /**
-     * 处理单个 MHT 文件（单独输出模式）
+     * 处理单个 MHT文件（单独输出模式）
      * @param htmlContent HTML 内容
      * @param index 文件索引（用于生成默认标题）
-     * @param mhtFileName MHT 文件名（不含扩展名）
+     * @param mhtFileName MHT文件名（不含扩展名）
+     * @param mhtFilePath MHT文件完整路径
      */
-    private void processSingleFile(String htmlContent, int index, String mhtFileName) throws IOException {
-
+    private void processSingleFile(String htmlContent, int index, String mhtFileName, String mhtFilePath) throws IOException {
         // 创建提取器
         ImageExtractor extractor = new ImageExtractor(
                 htmlContent,
@@ -118,9 +134,20 @@ public class ImageBatchProcessor {
                 config.getContentLimitEnd()
         );
 
-        // 提取图片
-        List<String> images = extractor.extractImages();
-        if (images.isEmpty()) {
+        // 从 MHT 的 MIME 结构中提取所有图片
+        List<ImageExtractor.ImageData> imageDataList;
+        if (mhtFilePath != null && !mhtFilePath.isEmpty()) {
+            imageDataList = extractor.extractImagesFromMht(mhtFilePath);
+        } else {
+            // 降级处理：从 HTML 中提取 URL
+            List<String> imageUrls = extractor.extractImages();
+            imageDataList = new ArrayList<>();
+            for (String url : imageUrls) {
+                imageDataList.add(new ImageExtractor.ImageData(null, null, null));
+            }
+        }
+
+        if (imageDataList.isEmpty()) {
             logger.warn("[警告] 文件 {} 未找到图片，跳过", (index + 1));
             return;
         }
@@ -135,13 +162,13 @@ public class ImageBatchProcessor {
             if (extractedTitle != null && !extractedTitle.isEmpty()) {
                 folderName = sanitizeFileName(extractedTitle);
             } else {
-                // 提取失败时回退到 MHT 文件名
+                // 提取失败时回退到 MHT文件名
                 folderName = (mhtFileName != null && !mhtFileName.isEmpty())
                         ? sanitizeFileName(mhtFileName) : "Image_" + (index + 1);
                 logger.warn("[警告]文件 {} 未提取到标题，使用默认名称：{}", (index + 1), folderName);
             }
         } else {
-            // 未勾选"启用名称提取限定"：使用 MHT 文件名作为名称
+            // 未勾选"启用名称提取限定"：使用 MHT文件名作为名称
             folderName = (mhtFileName != null && !mhtFileName.isEmpty())
                     ? sanitizeFileName(mhtFileName) : "Image_" + (index + 1);
         }
@@ -150,8 +177,8 @@ public class ImageBatchProcessor {
         String outputFolder = Paths.get(outputDir, folderName).toString();
         Files.createDirectories(Paths.get(outputFolder));
 
-        // 保存图片
-        saveImages(images, outputFolder, config.isEnableBatchRenaming());
+        // 保存图片（传入 CID 映射表）
+        saveImagesFromData(imageDataList, outputFolder, config.isEnableBatchRenaming(), extractor.getCidImageMap());
 
         // 如果启用 ZIP 打包，打包后删除文件夹
         if (config.isEnableZipPackaging()) {
@@ -160,13 +187,12 @@ public class ImageBatchProcessor {
             logger.info("已删除临时文件夹：{}", outputFolder);
         }
     }
-
     /**
-     * 处理所有 MHT 文件（合并输出模式）
+     * 处理所有 MHT文件（合并输出模式）
      */
     private void processMergedFiles() throws IOException {
         if (htmlContents.isEmpty()) {
-            throw new IOException("没有 MHT 文件可处理");
+            throw new IOException("没有 MHT文件可处理");
         }
 
         // 确定合并输出的文件夹/ZIP 名称
@@ -197,20 +223,30 @@ public class ImageBatchProcessor {
                     ? sanitizeFileName(inputFolderName) : "All_Images";
         }
 
-        // 提取所有图片
-        List<String> allImages = new ArrayList<>();
-        for (String html : htmlContents) {
-            ImageExtractor extractor = new ImageExtractor(
-                    html,
-                    config.getNameLimitStart(),
-                    config.getNameLimitEnd(),
-                    config.getContentLimitStart(),
-                    config.getContentLimitEnd()
-            );
-            allImages.addAll(extractor.extractImages());
+        // 从所有 MHT文件的 MIME 结构中提取图片
+        List<ImageExtractor.ImageData> allImageData = new ArrayList<>();
+        Map<String, byte[]> globalCidMap = new HashMap<>();
+
+        for (int i = 0; i < htmlContents.size(); i++) {
+            String mhtFilePath = (mhtFilePaths != null && i < mhtFilePaths.size())
+                    ? mhtFilePaths.get(i) : null;
+
+            if (mhtFilePath != null && !mhtFilePath.isEmpty()) {
+                ImageExtractor extractor = new ImageExtractor(
+                        htmlContents.get(i),
+                        config.getNameLimitStart(),
+                        config.getNameLimitEnd(),
+                        config.getContentLimitStart(),
+                        config.getContentLimitEnd()
+                );
+
+                List<ImageExtractor.ImageData> imageDataList = extractor.extractImagesFromMht(mhtFilePath);
+                allImageData.addAll(imageDataList);
+                globalCidMap.putAll(extractor.getCidImageMap());
+            }
         }
 
-        if (allImages.isEmpty()) {
+        if (allImageData.isEmpty()) {
             logger.warn("[警告] 未找到任何图片，跳过合并输出");
             return;
         }
@@ -220,7 +256,7 @@ public class ImageBatchProcessor {
         Files.createDirectories(Paths.get(outputFolder));
 
         // 保存图片
-        saveImages(allImages, outputFolder, config.isEnableBatchRenaming());
+        saveImagesFromData(allImageData, outputFolder, config.isEnableBatchRenaming(), globalCidMap);
 
         // 如果启用 ZIP 打包，打包后删除文件夹
         if (config.isEnableZipPackaging()) {
@@ -231,8 +267,103 @@ public class ImageBatchProcessor {
     }
 
     /**
+     * 从 ImageData 列表保存图片（支持 CID 引用）
+     * @param imageDataList 图片数据列表
+     * @param outputFolder 输出目录
+     * @param enableBatchRenaming 是否启用批量重命名
+     * @param cidMap CID 到图片数据的映射
+     */
+    private void saveImagesFromData(List<ImageExtractor.ImageData> imageDataList,
+                                    String outputFolder, boolean enableBatchRenaming,
+                                    Map<String, byte[]> cidMap) throws IOException {
+        CountDownLatch latch = new CountDownLatch(imageDataList.size());
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger skippedCount = new AtomicInteger(0);
+        logger.info("========================================");
+        logger.info("开始并发保存，图片数：{}", imageDataList.size());
+        long startTime = System.currentTimeMillis();
+
+        for (int i = 0; i < imageDataList.size(); i++) {
+            final int index = i;
+            final ImageExtractor.ImageData imageData = imageDataList.get(i);
+
+            executor.submit(() -> {
+                try {
+                    byte[] imageDataBytes;
+                    String fileName;
+                    String ext;
+
+                    // 如果有 CID，从 cidMap 中获取实际数据
+                    if (imageData.contentId != null && cidMap.containsKey(imageData.contentId)) {
+                        imageDataBytes = cidMap.get(imageData.contentId);
+                        fileName = imageData.filename;
+                        ext = getExtensionFromFilename(fileName);
+                    } else if (imageData.imageData != null) {
+                        imageDataBytes = imageData.imageData;
+                        fileName = imageData.filename;
+                        ext = getExtensionFromFilename(fileName);
+                    } else {
+                        logger.info("[跳过] 无效的图片数据");
+                        skippedCount.incrementAndGet();
+                        return;
+                    }
+
+                    if (imageDataBytes == null || imageDataBytes.length == 0) {
+                        logger.info("[跳过] 图片数据为空");
+                        skippedCount.incrementAndGet();
+                        return;
+                    }
+
+                    // 生成文件名
+                    String finalFileName;
+                    if (enableBatchRenaming) {
+                        finalFileName = String.format("%03d.%s", index + 1, ext);
+                    } else {
+                        finalFileName = sanitizeFileName(fileName != null ? fileName : "image") + "." + ext;
+                    }
+
+                    File outputFile = new File(outputFolder, finalFileName);
+                    try (FileOutputStream fos = new FileOutputStream(outputFile)) {
+                        fos.write(imageDataBytes);
+                    }
+
+                    successCount.incrementAndGet();
+                    logger.info(String.format("[进度 %d/%d] 已保存：%s (%.2f KB)",
+                            successCount.get() + skippedCount.get(), imageDataList.size(),
+                            finalFileName, imageDataBytes.length / 1024.0));
+
+                } catch (Exception e) {
+                    logger.error("[失败] 保存图片异常 - {}", e.getMessage());
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+
+        try {
+            latch.await();
+
+            long endTime = System.currentTimeMillis();
+            long totalTime = endTime - startTime;
+
+            logger.info("\n========================================");
+            logger.info("下载完成统计：");
+            logger.info("  总图片数：{}", imageDataList.size());
+            logger.info("  成功：{}", successCount.get());
+            logger.info("  跳过：{}", skippedCount.get());
+            logger.info("  总耗时：{} 秒", (totalTime / 1000.0));
+            logger.info("  平均速度：{} 张/秒", String.format("%.2f", imageDataList.size() / (totalTime / 1000.0)));
+            logger.info("========================================");
+
+        } catch (InterruptedException e) {
+            logger.error("下载被中断");
+        }
+    }
+
+
+    /**
      * 保存图片到指定目录（多线程并发版本）
-     * @param images 图片 URL 列表
+     * @param images 图片URL 列表
      * @param outputFolder 输出目录
      * @param enableBatchRenaming 是否启用批量重命名
      */
@@ -301,6 +432,22 @@ public class ImageBatchProcessor {
         }
     }
 
+    /**
+     * 从文件名获取扩展名
+     */
+    private String getExtensionFromFilename(String filename) {
+        if (filename == null || filename.isEmpty()) {
+            return "jpg";
+        }
+        int dotIndex = filename.lastIndexOf('.');
+        if (dotIndex != -1 && dotIndex < filename.length() - 1) {
+            String ext = filename.substring(dotIndex + 1).toLowerCase();
+            if (Arrays.asList("jpg", "jpeg", "png", "gif", "bmp", "webp").contains(ext)) {
+                return ext;
+            }
+        }
+        return "jpg";
+    }
     /**
      * 判断是否为广告图片
      * @param imageUrl 图片 URL
@@ -395,7 +542,10 @@ public class ImageBatchProcessor {
         // 设置请求头，模拟浏览器
         request.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         request.setHeader("Accept", "image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
-        request.setHeader("Referer", "https://wnacg.com/");
+        String referer = extractRefererFromUrl(imageUrl);
+        if (referer != null && !referer.isEmpty()) {
+            request.setHeader("Referer", referer);
+        }
 
         try (CloseableHttpResponse response = httpClient.execute(request)) {
             int statusCode = response.getCode();
@@ -424,6 +574,38 @@ public class ImageBatchProcessor {
     }
 
     /**
+     * 从图片 URL 中提取 Referer（取域名部分）
+     * 例如：https://img.example.com/path/img.jpg -> https://example.com/
+     */
+    private String extractRefererFromUrl(String imageUrl) {
+        if (imageUrl == null || imageUrl.isEmpty()) {
+            return null;
+        }
+
+        try {
+            java.net.URL url = new java.net.URL(imageUrl);
+            String protocol = url.getProtocol();
+            String host = url.getHost();
+
+            // 移除 www. 前缀
+            if (host.startsWith("www.")) {
+                host = host.substring(4);
+            }
+
+            // 提取主域名（处理类似 img.site.com 的情况）
+            String[] parts = host.split("\\.");
+            if (parts.length >= 2) {
+                // 取最后两部分作为主域名
+                host = parts[parts.length - 2] + "." + parts[parts.length - 1];
+            }
+
+            return protocol + "://" + host + "/";
+        } catch (Exception e) {
+            logger.warn("解析 Referer 失败：{} - {}", imageUrl, e.getMessage());
+            return null;
+        }
+    }
+    /**
      * 获取URL中的文件扩展名
      */
     private String getExtensionFromUrl(String url) {
@@ -434,13 +616,13 @@ public class ImageBatchProcessor {
         // 处理 Data URI
         if (url.startsWith("data:")) {
             String mimeType = url.substring(5, url.indexOf(';'));
-            switch (mimeType.toLowerCase()) {
-                case "image/png": return "png";
-                case "image/gif": return "gif";
-                case "image/bmp": return "bmp";
-                case "image/webp": return "webp";
-                default: return "jpg";
-            }
+            return switch (mimeType.toLowerCase()) {
+                case "image/png" -> "png";
+                case "image/gif" -> "gif";
+                case "image/bmp" -> "bmp";
+                case "image/webp" -> "webp";
+                default -> "jpg";
+            };
         }
 
         String ext = "jpg"; // 默认扩展名

@@ -9,6 +9,7 @@ import java.io.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 public class MhtExtractorGUI extends JFrame {
 
     // 模式选择组件
@@ -77,12 +78,12 @@ public class MhtExtractorGUI extends JFrame {
     private JComboBox<String> importConfigComboBox;
 
 
-    public MhtExtractorGUI() throws UnsupportedEncodingException {
+    public MhtExtractorGUI() {
         configManager = new ConfigManager();
         initUI();
     }
 
-    private void initUI() throws UnsupportedEncodingException {
+    private void initUI() {
         setTitle("MHT 资源提取器");
         setSize(850, 900);
         setLocationRelativeTo(null);
@@ -483,12 +484,29 @@ public class MhtExtractorGUI extends JFrame {
         gbc.weightx = 1.0;
         txtStartTemplate = new JTextArea(1, 40);
         txtStartTemplate.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
-        txtStartTemplate.setLineWrap(true);
-        txtStartTemplate.setWrapStyleWord(true);
+        txtStartTemplate.setLineWrap(false);
+        txtStartTemplate.setWrapStyleWord(false);
         txtStartTemplate.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200), 1));
-        txtStartTemplate.setText(MhtBatchProcessor.DEFAULT_START_TEMPLATE);
+        txtStartTemplate.setText(escapeNewlines(MhtBatchProcessor.DEFAULT_START_TEMPLATE));
+        txtStartTemplate.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override
+            public void keyPressed(java.awt.event.KeyEvent e) {
+                if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER) {
+                    e.consume();
+                    int caretPos = txtStartTemplate.getCaretPosition();
+                    try {
+                        txtStartTemplate.getDocument().insertString(caretPos, "\\n", null);
+                    } catch (javax.swing.text.BadLocationException ex) {
+                        ex.printStackTrace();
+                    }
+                }
+            }
+        });
         JScrollPane startTemplateScroll = new JScrollPane(txtStartTemplate);
+        startTemplateScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+        startTemplateScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         panel.add(startTemplateScroll, gbc);
+
 
         gbc.gridy = row++;
         gbc.gridx = 0;
@@ -503,11 +521,27 @@ public class MhtExtractorGUI extends JFrame {
         gbc.weightx = 1.0;
         txtEndTemplate = new JTextArea(1, 40);
         txtEndTemplate.setFont(new Font("Microsoft YaHei", Font.PLAIN, 11));
-        txtEndTemplate.setLineWrap(true);
-        txtEndTemplate.setWrapStyleWord(true);
+        txtEndTemplate.setLineWrap(false);
+        txtEndTemplate.setWrapStyleWord(false);
         txtEndTemplate.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200), 1));
-        txtEndTemplate.setText(MhtBatchProcessor.DEFAULT_END_TEMPLATE);
+        txtEndTemplate.setText(escapeNewlines(MhtBatchProcessor.DEFAULT_END_TEMPLATE));
+        txtEndTemplate.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override
+            public void keyPressed(java.awt.event.KeyEvent e) {
+                if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER) {
+                    e.consume();
+                    int caretPos = txtEndTemplate.getCaretPosition();
+                    try {
+                        txtEndTemplate.getDocument().insertString(caretPos, "\\n", null);
+                    } catch (javax.swing.text.BadLocationException ex) {
+                        ex.printStackTrace();
+                    }
+                }
+            }
+        });
         JScrollPane endTemplateScroll = new JScrollPane(txtEndTemplate);
+        endTemplateScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+        endTemplateScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         panel.add(endTemplateScroll, gbc);
 
         gbc.gridy = row++;
@@ -829,15 +863,11 @@ public class MhtExtractorGUI extends JFrame {
             autoSetOutputPath(inputPath);
         }
 
-        if (isSeparate) {
-            chkAddChapterNumber.setEnabled(false);
-            chkAddChapterNumber.setSelected(false);
-            chkEnableTitleExtract.setEnabled(false);
-            chkEnableTitleExtract.setSelected(false);
-        } else if (isTextModeSelected) {
+        if (isTextModeSelected) {
             chkAddChapterNumber.setEnabled(true);
             chkEnableTitleExtract.setEnabled(true);
         }
+
         toggleTitleSettings();
     }
 
@@ -903,19 +933,13 @@ public class MhtExtractorGUI extends JFrame {
         lblTemplateVars.setEnabled(enabled);
 
         if (!enabled) {
-            txtStartTemplate.setText(MhtBatchProcessor.DEFAULT_START_TEMPLATE);
-            txtEndTemplate.setText(MhtBatchProcessor.DEFAULT_END_TEMPLATE);
+            txtStartTemplate.setText(escapeNewlines(MhtBatchProcessor.DEFAULT_START_TEMPLATE));
+            txtEndTemplate.setText(escapeNewlines(MhtBatchProcessor.DEFAULT_END_TEMPLATE));
         }
     }
 
     private void toggleTitleSettings() {
-        boolean isSeparate = chkSeparateFiles.isSelected();
-        if (isSeparate) {
-            txtTitleStartMarker.setEnabled(false);
-            txtTitleEndMarker.setEnabled(false);
-            chkTitleUseRegex.setEnabled(false);
-            return;
-        }
+
 
         boolean enableExtract = chkEnableTitleExtract.isSelected();
         boolean hasChapterNumber = chkAddChapterNumber.isSelected();
@@ -1111,8 +1135,8 @@ public class MhtExtractorGUI extends JFrame {
 
         String startTemplate, endTemplate;
         if (enableCustomTemplate) {
-            startTemplate = txtStartTemplate.getText();
-            endTemplate = txtEndTemplate.getText();
+            startTemplate = unescapeNewlines(txtStartTemplate.getText());
+            endTemplate = unescapeNewlines(txtEndTemplate.getText());
             if (startTemplate == null || startTemplate.trim().isEmpty())
                 startTemplate = MhtBatchProcessor.DEFAULT_START_TEMPLATE;
             if (endTemplate == null || endTemplate.trim().isEmpty())
@@ -1155,7 +1179,10 @@ public class MhtExtractorGUI extends JFrame {
                                 finalEnableLimit ? finalStartMarker : null,
                                 finalEnableLimit ? finalEndMarker : null,
                                 finalUseRegex,
-                                finalStartTemplate, finalEndTemplate);
+                                finalStartTemplate, finalEndTemplate,
+                                finalAddChapterNumber,
+                                finalEnableTitleExtract, finalTitleStartMarker,
+                                finalTitleEndMarker, finalTitleUseRegex);
                     } else {
                         return MhtBatchProcessor.processFolder(
                                 finalInputFolder, finalOutputPath, true,
@@ -1201,7 +1228,21 @@ public class MhtExtractorGUI extends JFrame {
         };
         worker.execute();
     }
+    /**
+     * 将换行符 \n 转义为字面的 \\n 用于显示
+     */
+    private String escapeNewlines(String text) {
+        if (text == null) return null;
+        return text.replace("\n", "\\n");
+    }
 
+    /**
+     * 将字面的 \\n 还原为实际的换行符 \n 用于处理
+     */
+    private String unescapeNewlines(String text) {
+        if (text == null) return null;
+        return text.replace("\\n", "\n");
+    }
     private void executeImageProcess() {
         boolean isSeparate = chkSeparateFiles.isSelected();
         boolean enableNameExtract = chkEnableImageNameExtract.isSelected();
@@ -1213,7 +1254,7 @@ public class MhtExtractorGUI extends JFrame {
         String outputPath = txtOutputPath.getText().trim();
 
         if (inputFolder.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "请输入 MHT 文件所在文件夹路径！", "输入错误", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "请输入 MHT文件所在文件夹路径！", "输入错误", JOptionPane.WARNING_MESSAGE);
             return;
         }
         File folder = new File(inputFolder);
@@ -1291,17 +1332,19 @@ public class MhtExtractorGUI extends JFrame {
                             name.toLowerCase().endsWith(".mht") || name.toLowerCase().endsWith(".mhtml"));
 
                     if (mhtFiles == null || mhtFiles.length == 0) {
-                        publish("未找到任何 MHT 文件\n");
+                        publish("未找到任何 MHT文件\n");
                         return null;
                     }
 
                     // 按文件名排序，保证顺序稳定
                     java.util.Arrays.sort(mhtFiles, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
 
-                    publish("找到 " + mhtFiles.length + " 个 MHT 文件\n");
+                    publish("找到 " + mhtFiles.length + " 个 MHT文件\n");
 
                     List<String> htmlContents = new ArrayList<>();
                     List<String> mhtFileNames = new ArrayList<>();
+                    List<String> mhtFilePaths = new ArrayList<>();
+
                     for (File mhtFile : mhtFiles) {
                         try {
                             String html = extractHtmlFromMht(mhtFile.getAbsolutePath());
@@ -1312,16 +1355,17 @@ public class MhtExtractorGUI extends JFrame {
                                     fileName = fileName.substring(0, fileName.lastIndexOf("."));
                                 }
                                 mhtFileNames.add(fileName);
+                                mhtFilePaths.add(mhtFile.getAbsolutePath());
                                 publish("已加载：" + mhtFile.getName() + "\n");
                             }
                         } catch (Exception ex) {
-                            logger.error("加载 MHT 文件失败：" + mhtFile.getName(), ex);
+                            logger.error("加载 MHT文件{}失败" , mhtFile.getName(), ex);
                             publish("加载失败：" + mhtFile.getName() + "\n");
                         }
                     }
 
                     if (htmlContents.isEmpty()) {
-                        publish("无法从任何 MHT 文件中提取 HTML 内容\n");
+                        publish("无法从任何 MHT文件中提取 HTML 内容\n");
                         return null;
                     }
 
@@ -1339,6 +1383,7 @@ public class MhtExtractorGUI extends JFrame {
 
                     ImageBatchProcessor processor = new ImageBatchProcessor(
                             htmlContents, config, finalOutputPath, inputFolderName, mhtFileNames);
+                    processor.setMhtFilePaths(mhtFilePaths);
                     processor.execute();
 
                     publish("图片处理完成！\n");
@@ -1617,8 +1662,8 @@ public class MhtExtractorGUI extends JFrame {
         config.setEndMarker(txtEndMarker.getText().trim());
         config.setUseRegex(chkUseRegex.isSelected());
         config.setEnableCustomTemplate(chkEnableCustomTemplate.isSelected());
-        config.setStartTemplate(txtStartTemplate.getText());
-        config.setEndTemplate(txtEndTemplate.getText());
+        config.setStartTemplate(escapeNewlines(txtStartTemplate.getText()));
+        config.setEndTemplate(escapeNewlines(txtEndTemplate.getText()));
         config.setAddChapterNumber(chkAddChapterNumber.isSelected());
         config.setEnableTitleExtract(chkEnableTitleExtract.isSelected());
         config.setTitleStartMarker(txtTitleStartMarker.getText().trim());
@@ -1683,8 +1728,8 @@ public class MhtExtractorGUI extends JFrame {
         txtEndMarker.setText(config.getEndMarker());
         chkUseRegex.setSelected(config.isUseRegex());
         chkEnableCustomTemplate.setSelected(config.isEnableCustomTemplate());
-        txtStartTemplate.setText(config.getStartTemplate());
-        txtEndTemplate.setText(config.getEndTemplate());
+        txtStartTemplate.setText(escapeNewlines(config.getStartTemplate()));
+        txtEndTemplate.setText(escapeNewlines(config.getEndTemplate()));
         chkAddChapterNumber.setSelected(config.isAddChapterNumber());
         chkEnableTitleExtract.setSelected(config.isEnableTitleExtract());
         txtTitleStartMarker.setText(config.getTitleStartMarker());
@@ -1715,9 +1760,18 @@ public class MhtExtractorGUI extends JFrame {
         }));
 
         try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            // 替换原有的系统默认主题，启用 FlatLaf 浅色主题
+            UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatLightLaf());
+            //增强高分屏支持，让界面在 4K 屏幕上更清晰
+            UIManager.put("TitlePane.useWindowDecorations", true);
         } catch (Exception e) {
-            logger.error("设置 LookAndFeel 失败", e);
+            // 如果 FlatLaf 初始化失败（例如依赖缺失），回退到系统默认主题，防止程序崩溃
+            logger.warn("FlatLaf 初始化失败，回退到系统默认主题", e);
+            try {
+                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            } catch (Exception ex) {
+                logger.error("设置系统默认主题也失败", ex);
+            }
         }
 
         System.out.println("正在启动 MHT 资源提取器...");

@@ -21,8 +21,8 @@ public class MhtBatchProcessor {
     private static final Logger logger = LoggerFactory.getLogger(MhtBatchProcessor.class);
 
     // 默认模板
-    public static final String DEFAULT_START_TEMPLATE = "========== START ==========";
-    public static final String DEFAULT_END_TEMPLATE = "========== END ==========";
+    public static final String DEFAULT_START_TEMPLATE = "\n========== START ==========\n";
+    public static final String DEFAULT_END_TEMPLATE = "\n========== END ==========\n";
 
     // 处理统计信息
     public static class ProcessStats {
@@ -185,7 +185,12 @@ public class MhtBatchProcessor {
     public static ProcessStats processFolderSeparate(String inputFolder, String outputFolder,
                                                      boolean autoFixEncoding,
                                                      String startMarker, String endMarker, boolean useRegex,
-                                                     String startTemplate, String endTemplate) {
+                                                     String startTemplate, String endTemplate,
+                                                     boolean addChapterNumber,
+                                                     boolean enableTitleExtract,
+                                                     String titleStartMarker,
+                                                     String titleEndMarker,
+                                                     boolean titleUseRegex) {
         ProcessStats stats = new ProcessStats();
         stats.startTime = System.currentTimeMillis();
         stats.startTemplate = startTemplate;
@@ -195,6 +200,16 @@ public class MhtBatchProcessor {
         logger.info("MHT 批量处理开始（单独输出模式）");
         logger.info("输入文件夹：{}" , inputFolder);
         logger.info("输出文件夹：{}" , outputFolder);
+
+        if (addChapterNumber) {
+            logger.info("自动章节名：已启用");
+        }
+        if (enableTitleExtract) {
+            logger.info("隐藏标题提取：已启用");
+            logger.info("  起始标记：{}" , titleStartMarker);
+            logger.info("  结束标记：{}" , titleEndMarker);
+        }
+
         logger.info("========================================");
 
         File outDir = new File(outputFolder);
@@ -216,6 +231,8 @@ public class MhtBatchProcessor {
         logger.info("找到 {} 个 MHT 文件" , mhtFiles.size());
         mhtFiles.sort(Comparator.comparing(MhtFileInfo::getModifiedTime));
 
+        int chapterIndex = 1;
+
         for (MhtFileInfo fileInfo : mhtFiles) {
             try {
                 String text = MhtToHtmlExtractor.extractTextFromMht(
@@ -227,6 +244,33 @@ public class MhtBatchProcessor {
                     continue;
                 }
 
+                String finalChapterHeader = null;
+                String extractedTitle = null;
+
+                if (enableTitleExtract && titleStartMarker != null && !titleStartMarker.isEmpty()) {
+                    extractedTitle = MhtToHtmlExtractor.extractChapterTitle(
+                            fileInfo.getPath(), titleStartMarker, titleEndMarker, titleUseRegex);
+
+                    if (extractedTitle != null && !extractedTitle.isEmpty()) {
+                        logger.info("[提取标题] {} -> {}" , fileInfo.getName() , extractedTitle);
+                    }
+                }
+
+                if (addChapterNumber) {
+                    String numberPart = ChapterNumberGenerator.generateChapterName(chapterIndex - 1);
+
+                    if (extractedTitle != null && !extractedTitle.isEmpty()) {
+                        finalChapterHeader = numberPart + " " + extractedTitle;
+                    } else {
+                        finalChapterHeader = numberPart;
+                    }
+                    chapterIndex++;
+                } else {
+                    if (extractedTitle != null && !extractedTitle.isEmpty()) {
+                        finalChapterHeader = extractedTitle;
+                    }
+                }
+
                 String txtName = fileInfo.getName();
                 if (txtName.toLowerCase().endsWith(".mht") || txtName.toLowerCase().endsWith(".mhtml")) {
                     txtName = txtName.substring(0, txtName.lastIndexOf("."));
@@ -236,8 +280,8 @@ public class MhtBatchProcessor {
                 String outputPath = outputFolder + "\\" + txtName;
 
                 boolean writeSuccess = MhtFileWriter.appendTextToFile(
-                        outputPath, text, fileInfo.getName(), null,
-                        startTemplate, endTemplate, null);
+                        outputPath, text, fileInfo.getName(), fileInfo.getModifiedTime(),
+                        startTemplate, endTemplate, finalChapterHeader);
 
                 if (writeSuccess) {
                     stats.successCount++;
@@ -260,6 +304,7 @@ public class MhtBatchProcessor {
 
         return stats;
     }
+
 
     // ==================== 内部辅助方法 ====================
 
