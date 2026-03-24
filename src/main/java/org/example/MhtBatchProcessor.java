@@ -95,7 +95,7 @@ public class MhtBatchProcessor {
         stats.totalFiles = mhtFiles.size();
 
         if (mhtFiles.isEmpty()) {
-            logger.info("未找到任何 MHT 文件");
+            logger.info("[警告]未找到任何 MHT 文件");
             stats.endTime = System.currentTimeMillis();
             return stats;
         }
@@ -208,7 +208,7 @@ public class MhtBatchProcessor {
         stats.totalFiles = mhtFiles.size();
 
         if (mhtFiles.isEmpty()) {
-            logger.info("未找到任何 MHT 文件");
+            logger.info("[警告]未找到任何 MHT 文件");
             stats.endTime = System.currentTimeMillis();
             return stats;
         }

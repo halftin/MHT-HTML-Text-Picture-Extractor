@@ -1099,13 +1099,13 @@ public class MhtExtractorGUI extends JFrame {
             endMarker = txtEndMarker.getText().trim();
             useRegex = chkUseRegex.isSelected();
             if (startMarker.isEmpty() || endMarker.isEmpty()) {
-                logger.info("[警告] 已启用内容限定但标记为空，将忽略内容限定功能。");
+                logger.warn("[警告] 已启用内容限定但标记为空，将忽略内容限定功能。");
                 enableLimit = false;
             }
         }
 
         if (enableTitleExtract && (titleStartMarker.isEmpty() || titleEndMarker.isEmpty())) {
-            logger.info("[警告] 已启用标题提取但标记为空，将忽略标题提取功能。");
+            logger.warn("[警告] 已启用标题提取但标记为空，将忽略标题提取功能。");
             enableTitleExtract = false;
         }
 
@@ -1247,7 +1247,7 @@ public class MhtExtractorGUI extends JFrame {
             nameStartMarker = txtImageNameStartMarker.getText().trim();
             nameEndMarker = txtImageNameEndMarker.getText().trim();
             if (nameStartMarker.isEmpty() || nameEndMarker.isEmpty()) {
-                logger.info("[警告] 已启用名称提取但标记为空，将忽略名称提取功能。");
+                logger.warn("[警告] 已启用名称提取但标记为空，将忽略名称提取功能。");
                 enableNameExtract = false;
             }
         }
@@ -1257,7 +1257,7 @@ public class MhtExtractorGUI extends JFrame {
             regionStartMarker = txtImageRegionStartMarker.getText().trim();
             regionEndMarker = txtImageRegionEndMarker.getText().trim();
             if (regionStartMarker.isEmpty() || regionEndMarker.isEmpty()) {
-                logger.info("[警告] 已启用区域提取但标记为空，将忽略区域提取功能。");
+                logger.warn("[警告] 已启用区域提取但标记为空，将忽略区域提取功能。");
                 enableRegionExtract = false;
             }
         }

@@ -121,7 +121,7 @@ public class ImageBatchProcessor {
         // 提取图片
         List<String> images = extractor.extractImages();
         if (images.isEmpty()) {
-            logger.info("警告：文件 {} 未找到图片，跳过", (index + 1));
+            logger.warn("[警告] 文件 {} 未找到图片，跳过", (index + 1));
             return;
         }
 
@@ -138,7 +138,7 @@ public class ImageBatchProcessor {
                 // 提取失败时回退到 MHT 文件名
                 folderName = (mhtFileName != null && !mhtFileName.isEmpty())
                         ? sanitizeFileName(mhtFileName) : "Image_" + (index + 1);
-                logger.info("文件 {} 未提取到标题，使用默认名称：{}", (index + 1), folderName);
+                logger.warn("[警告]文件 {} 未提取到标题，使用默认名称：{}", (index + 1), folderName);
             }
         } else {
             // 未勾选"启用名称提取限定"：使用 MHT 文件名作为名称
@@ -189,7 +189,7 @@ public class ImageBatchProcessor {
                 // 提取失败时回退到输入文件夹名称
                 folderName = (inputFolderName != null && !inputFolderName.isEmpty())
                         ? sanitizeFileName(inputFolderName) : "All_Images";
-                logger.info("未从第一个文件提取到标题，使用默认名称：{}", folderName);
+                logger.warn("[警告] 未从第一个文件提取到标题，使用默认名称：{}", folderName);
             }
         } else {
             // 未勾选"启用名称提取限定"：使用输入文件夹名称
@@ -211,7 +211,7 @@ public class ImageBatchProcessor {
         }
 
         if (allImages.isEmpty()) {
-            logger.info("警告：未找到任何图片，跳过合并输出");
+            logger.warn("[警告] 未找到任何图片，跳过合并输出");
             return;
         }
 
@@ -240,7 +240,7 @@ public class ImageBatchProcessor {
         CountDownLatch latch = new CountDownLatch(images.size());
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger skippedCount = new AtomicInteger(0);
-
+        logger.info("========================================");
         logger.info("开始并发下载，线程数：10");
         long startTime = System.currentTimeMillis();
 

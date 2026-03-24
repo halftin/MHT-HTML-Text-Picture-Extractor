@@ -20,13 +20,17 @@ public class TextAreaAppender extends AppenderBase<ILoggingEvent> {
     @Override
     protected void append(ILoggingEvent event) {
         if (textArea != null) {
-            // 格式化时间戳
-            String timestamp = TIME_FORMATTER.format(Instant.ofEpochMilli(event.getTimeStamp()));
-            // 拼接时间戳和原始日志消息
-            String message = timestamp + " " + event.getFormattedMessage() + "\n";
+            String formattedMessage = event.getFormattedMessage();
+            String finalMessage;
+            if (formattedMessage.startsWith("======") || formattedMessage.matches("^=+\\|*=+$")) {
+                finalMessage = formattedMessage + "\n";
+            } else {
+                String timestamp = TIME_FORMATTER.format(Instant.ofEpochMilli(event.getTimeStamp()));
+                finalMessage = timestamp + " " + formattedMessage + "\n";
+            }
             SwingUtilities.invokeLater(() -> {
                 if (textArea != null) {
-                    textArea.append(message);
+                    textArea.append(finalMessage);
                     textArea.setCaretPosition(textArea.getDocument().getLength());
                 }
             });

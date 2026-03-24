@@ -20,10 +20,10 @@ public class AppConfig {
     private String titleEndMarker;
     private boolean titleUseRegex;
 
-    // 新增：当前模式标志（true=图片模式，false=文本模式）
+    //当前模式标志（true=图片模式，false=文本模式）
     private boolean imageMode;
 
-    // 新增：图片提取模式专用字段
+    //图片提取模式专用字段
     private boolean imageNameExtractEnabled;
     private String imageNameStartMarker;
     private String imageNameEndMarker;
@@ -33,18 +33,17 @@ public class AppConfig {
     private boolean imageZipEnabled;
     private boolean imageRenameEnabled;
 
-    // 新增：文本提取内容限定字段（用于 ImageExtractor）
+    //文本提取内容限定字段（用于 ImageExtractor）
     private String nameLimitStart;
     private String nameLimitEnd;
     private String contentLimitStart;
     private String contentLimitEnd;
 
-    // 新增：图片输出模式字段
+    //图片输出模式字段
     private boolean singleOutputMode;
     private boolean enableBatchRenaming;
     private boolean enableZipPackaging;
 
-    // ==================== 原有 Getters and Setters ====================
     public String getInputFolder() {
         return inputFolder;
     }
@@ -135,8 +134,6 @@ public class AppConfig {
     public void setTitleUseRegex(boolean titleUseRegex) {
         this.titleUseRegex = titleUseRegex;
     }
-
-    // ==================== 新增 Getters and Setters ====================
     public boolean isImageMode() {
         return imageMode;
     }

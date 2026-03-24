@@ -286,7 +286,7 @@ public class MhtToHtmlExtractor {
             return "";
         }
         Document doc = Jsoup.parse(html);
-        return doc.body().text();
+        return doc.body() != null ? doc.body().wholeText() : "";
     }
 
 
