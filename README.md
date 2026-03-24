@@ -43,7 +43,7 @@ MHT资源提取器是一款专注于解析和提取`.mht`（MIME HTML）文件�
 您可以直接从 [发行版页面](https://gitee.com/halftin/mht-resource-extractor/releases) 下载最新版本的软件。
 
 - **最新版本**: v1.0.0
-- **下载地址**: [MHT资源提取器-v1.0-Windows.zip](https://gitee.com/halftin/mht-resource-extractor/releases/download/v1.0.0/MHT资源提取器-v1.0-Windows.zip)
+- **下载地址**: [MHT资源提取器-v1.0-Windows.zip](https://gitee.com/halftin/mht-resource-extractor/releases/download/v1.1.0/MHT%E8%B5%84%E6%BA%90%E6%8F%90%E5%8F%96%E5%99%A8V1.1.zip)
 - **说明**: 下载后解压，双击 `MHT资源提取器.exe` 即可运行，无需安装 Java 环境。
 
 ### 基本使用流程
