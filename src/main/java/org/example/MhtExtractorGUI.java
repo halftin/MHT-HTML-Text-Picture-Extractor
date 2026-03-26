@@ -69,6 +69,7 @@ public class MhtExtractorGUI extends JFrame {
 
     // 图片后处理组件
     private JCheckBox chkEnableImageZip;
+    private JCheckBox chkEnableImageCbz;
     private JCheckBox chkEnableImageRename;
 
     // 图片提取面板
@@ -202,7 +203,7 @@ public class MhtExtractorGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridwidth = 3;
         gbc.weightx = 1.0;
-        chkSeparateFiles = new JCheckBox("单独输出模式 (将每个 MHT 文件提取到单独的文件中)");
+        chkSeparateFiles = new JCheckBox("单独输出模式 (将每个 MHT 文件提取到单独的文件或文件夹中)");
         chkSeparateFiles.setFont(new Font("微软雅黑", Font.PLAIN, 13));
         chkSeparateFiles.setEnabled(false);
         chkSeparateFiles.addActionListener(e -> updateUIForMode());
@@ -329,7 +330,7 @@ public class MhtExtractorGUI extends JFrame {
         gbc.gridwidth = 2;
         chkAddChapterNumber = new JCheckBox("为每个 MHT 文件添加章节名（仅合并模式有效）");
         chkAddChapterNumber.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        chkAddChapterNumber.setToolTipText("选中后生成“第一章”、“第二章”等序号");
+        chkAddChapterNumber.setToolTipText("选中后生成“第一章” “第二章”等序号");
         chkAddChapterNumber.addActionListener(e -> toggleTitleSettings());
         panel.add(chkAddChapterNumber, gbc);
 
@@ -701,12 +702,27 @@ public class MhtExtractorGUI extends JFrame {
         chkEnableImageRename.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         panel.add(chkEnableImageRename, gbc);
 
+        // 打包格式行：使用 FlowLayout 将标签和两个复选框排在一行
         gbc.gridy = row++;
         gbc.gridx = 0;
         gbc.gridwidth = 2;
-        chkEnableImageZip = new JCheckBox("提取后打包为 ZIP 文件");
+        gbc.weightx = 1.0;
+        JPanel packagingPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        packagingPanel.setOpaque(false);
+
+        JLabel lblPackaging = new JLabel("提取后打包为：");
+        lblPackaging.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        packagingPanel.add(lblPackaging);
+
+        chkEnableImageZip = new JCheckBox("ZIP 文件");
         chkEnableImageZip.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-        panel.add(chkEnableImageZip, gbc);
+        packagingPanel.add(chkEnableImageZip);
+
+        chkEnableImageCbz = new JCheckBox("CBZ 文件");
+        chkEnableImageCbz.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        packagingPanel.add(chkEnableImageCbz);
+
+        panel.add(packagingPanel, gbc);
 
         return panel;
     }
@@ -911,6 +927,7 @@ public class MhtExtractorGUI extends JFrame {
 
         chkEnableImageRename.setSelected(false);
         chkEnableImageZip.setSelected(false);
+        chkEnableImageCbz.setSelected(false);
     }
 
     private void toggleLimitSettings() {
@@ -1248,6 +1265,7 @@ public class MhtExtractorGUI extends JFrame {
         boolean enableNameExtract = chkEnableImageNameExtract.isSelected();
         boolean enableRegionExtract = chkEnableImageRegionExtract.isSelected();
         boolean enableZip = chkEnableImageZip.isSelected();
+        boolean enableCbz = chkEnableImageCbz.isSelected();
         boolean enableRename = chkEnableImageRename.isSelected();
 
         String inputFolder = txtInputFolder.getText().trim();
@@ -1312,6 +1330,7 @@ public class MhtExtractorGUI extends JFrame {
         final String finalRegionEndMarker = regionEndMarker;
         final boolean finalEnableRename = enableRename;
         final boolean finalEnableZip = enableZip;
+        final boolean finalEnableCbz = enableCbz;
         final boolean finalIsSeparate = isSeparate;
         final String inputFolderName = folder.getName();
 
@@ -1322,6 +1341,7 @@ public class MhtExtractorGUI extends JFrame {
         consoleArea.append("名称提取限定：" + (finalEnableNameExtract ? "启用" : "禁用") + "\n");
         consoleArea.append("批量重命名：" + (finalEnableRename ? "启用" : "禁用") + "\n");
         consoleArea.append("ZIP 打包：" + (finalEnableZip ? "启用" : "禁用") + "\n");
+        consoleArea.append("CBZ 打包：" + (finalEnableCbz ? "启用" : "禁用") + "\n");
         consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
 
         SwingWorker<Void, String> worker = new SwingWorker<>() {
@@ -1379,6 +1399,7 @@ public class MhtExtractorGUI extends JFrame {
                     config.setSingleOutputMode(finalIsSeparate);
                     config.setEnableBatchRenaming(finalEnableRename);
                     config.setEnableZipPackaging(finalEnableZip);
+                    config.setEnableCbzPackaging(finalEnableCbz);
                     config.setInputFolder(finalInputFolder);
 
                     ImageBatchProcessor processor = new ImageBatchProcessor(
@@ -1556,6 +1577,7 @@ public class MhtExtractorGUI extends JFrame {
             chkEnableImageRegionExtract.setEnabled(enabled);
             chkEnableImageRename.setEnabled(enabled);
             chkEnableImageZip.setEnabled(enabled);
+            chkEnableImageCbz.setEnabled(enabled);
 
             boolean nameEnabled = enabled && chkEnableImageNameExtract.isSelected();
             txtImageNameStartMarker.setEnabled(nameEnabled);
@@ -1679,6 +1701,7 @@ public class MhtExtractorGUI extends JFrame {
         config.setImageRegionStartMarker(txtImageRegionStartMarker.getText().trim());
         config.setImageRegionEndMarker(txtImageRegionEndMarker.getText().trim());
         config.setImageZipEnabled(chkEnableImageZip.isSelected());
+        config.setImageCbzEnabled(chkEnableImageCbz.isSelected());
         config.setImageRenameEnabled(chkEnableImageRename.isSelected());
 
         return config;
@@ -1686,7 +1709,7 @@ public class MhtExtractorGUI extends JFrame {
 
     private void refreshConfigComboBox() {
         importConfigComboBox.removeAllItems();
-        importConfigComboBox.addItem("请选择配置");
+        importConfigComboBox.addItem("请选择配置，选择后点击“导入”按钮");
         List<String> configNames = configManager.getConfigNames();
         for (String name : configNames) {
             importConfigComboBox.addItem(name);
@@ -1744,6 +1767,7 @@ public class MhtExtractorGUI extends JFrame {
         txtImageRegionStartMarker.setText(config.getImageRegionStartMarker());
         txtImageRegionEndMarker.setText(config.getImageRegionEndMarker());
         chkEnableImageZip.setSelected(config.isImageZipEnabled());
+        chkEnableImageCbz.setSelected(config.isImageCbzEnabled());
         chkEnableImageRename.setSelected(config.isImageRenameEnabled());
 
         // 更新所有 UI 状态

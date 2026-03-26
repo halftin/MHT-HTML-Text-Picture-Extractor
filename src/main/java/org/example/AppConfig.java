@@ -31,6 +31,7 @@ public class AppConfig {
     private String imageRegionStartMarker;
     private String imageRegionEndMarker;
     private boolean imageZipEnabled;
+    private boolean imageCbzEnabled;
     private boolean imageRenameEnabled;
 
     //文本提取内容限定字段（用于 ImageExtractor）
@@ -43,6 +44,7 @@ public class AppConfig {
     private boolean singleOutputMode;
     private boolean enableBatchRenaming;
     private boolean enableZipPackaging;
+    private boolean enableCbzPackaging;
 
     public String getInputFolder() {
         return inputFolder;
@@ -182,6 +184,12 @@ public class AppConfig {
     public void setImageZipEnabled(boolean imageZipEnabled) {
         this.imageZipEnabled = imageZipEnabled;
     }
+    public boolean isImageCbzEnabled() {
+        return imageCbzEnabled;
+    }
+    public void setImageCbzEnabled(boolean imageCbzEnabled) {
+        this.imageCbzEnabled = imageCbzEnabled;
+    }
     public boolean isImageRenameEnabled() {
         return imageRenameEnabled;
     }
@@ -234,6 +242,12 @@ public class AppConfig {
     public void setEnableZipPackaging(boolean enableZipPackaging) {
         this.enableZipPackaging = enableZipPackaging;
     }
+    public boolean isEnableCbzPackaging() {
+        return enableCbzPackaging;
+    }
+    public void setEnableCbzPackaging(boolean enableCbzPackaging) {
+        this.enableCbzPackaging = enableCbzPackaging;
+    }
 
     // ==================== equals and hashCode ====================
     @Override
@@ -241,13 +255,13 @@ public class AppConfig {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         AppConfig appConfig = (AppConfig) o;
-        return separateFiles == appConfig.separateFiles && enableLimit == appConfig.enableLimit && useRegex == appConfig.useRegex && enableCustomTemplate == appConfig.enableCustomTemplate && addChapterNumber == appConfig.addChapterNumber && enableTitleExtract == appConfig.enableTitleExtract && titleUseRegex == appConfig.titleUseRegex && imageMode == appConfig.imageMode && imageNameExtractEnabled == appConfig.imageNameExtractEnabled && imageRegionExtractEnabled == appConfig.imageRegionExtractEnabled && imageZipEnabled == appConfig.imageZipEnabled && imageRenameEnabled == appConfig.imageRenameEnabled && singleOutputMode == appConfig.singleOutputMode && enableBatchRenaming == appConfig.enableBatchRenaming && enableZipPackaging == appConfig.enableZipPackaging && Objects.equals(inputFolder, appConfig.inputFolder) && Objects.equals(outputFolder, appConfig.outputFolder) && Objects.equals(startMarker, appConfig.startMarker) && Objects.equals(endMarker, appConfig.endMarker) && Objects.equals(startTemplate, appConfig.startTemplate) && Objects.equals(endTemplate, appConfig.endTemplate) && Objects.equals(titleStartMarker, appConfig.titleStartMarker) && Objects.equals(titleEndMarker, appConfig.titleEndMarker) && Objects.equals(imageNameStartMarker, appConfig.imageNameStartMarker) && Objects.equals(imageNameEndMarker, appConfig.imageNameEndMarker) && Objects.equals(imageRegionStartMarker, appConfig.imageRegionStartMarker) && Objects.equals(imageRegionEndMarker, appConfig.imageRegionEndMarker) && Objects.equals(nameLimitStart, appConfig.nameLimitStart) && Objects.equals(nameLimitEnd, appConfig.nameLimitEnd) && Objects.equals(contentLimitStart, appConfig.contentLimitStart) && Objects.equals(contentLimitEnd, appConfig.contentLimitEnd);
+        return separateFiles == appConfig.separateFiles && enableLimit == appConfig.enableLimit && useRegex == appConfig.useRegex && enableCustomTemplate == appConfig.enableCustomTemplate && addChapterNumber == appConfig.addChapterNumber && enableTitleExtract == appConfig.enableTitleExtract && titleUseRegex == appConfig.titleUseRegex && imageMode == appConfig.imageMode && imageNameExtractEnabled == appConfig.imageNameExtractEnabled && imageRegionExtractEnabled == appConfig.imageRegionExtractEnabled && imageZipEnabled == appConfig.imageZipEnabled && imageCbzEnabled == appConfig.imageCbzEnabled && imageRenameEnabled == appConfig.imageRenameEnabled && singleOutputMode == appConfig.singleOutputMode && enableBatchRenaming == appConfig.enableBatchRenaming && enableZipPackaging == appConfig.enableZipPackaging && enableCbzPackaging == appConfig.enableCbzPackaging && Objects.equals(inputFolder, appConfig.inputFolder) && Objects.equals(outputFolder, appConfig.outputFolder) && Objects.equals(startMarker, appConfig.startMarker) && Objects.equals(endMarker, appConfig.endMarker) && Objects.equals(startTemplate, appConfig.startTemplate) && Objects.equals(endTemplate, appConfig.endTemplate) && Objects.equals(titleStartMarker, appConfig.titleStartMarker) && Objects.equals(titleEndMarker, appConfig.titleEndMarker) && Objects.equals(imageNameStartMarker, appConfig.imageNameStartMarker) && Objects.equals(imageNameEndMarker, appConfig.imageNameEndMarker) && Objects.equals(imageRegionStartMarker, appConfig.imageRegionStartMarker) && Objects.equals(imageRegionEndMarker, appConfig.imageRegionEndMarker) && Objects.equals(nameLimitStart, appConfig.nameLimitStart) && Objects.equals(nameLimitEnd, appConfig.nameLimitEnd) && Objects.equals(contentLimitStart, appConfig.contentLimitStart) && Objects.equals(contentLimitEnd, appConfig.contentLimitEnd);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(
-                inputFolder, outputFolder, separateFiles, enableLimit, startMarker, endMarker, useRegex, enableCustomTemplate, startTemplate, endTemplate, addChapterNumber, enableTitleExtract, titleStartMarker, titleEndMarker, titleUseRegex, imageMode, imageNameExtractEnabled, imageNameStartMarker, imageNameEndMarker, imageRegionExtractEnabled, imageRegionStartMarker, imageRegionEndMarker, imageZipEnabled, imageRenameEnabled, singleOutputMode, enableBatchRenaming, enableZipPackaging, nameLimitStart, nameLimitEnd, contentLimitStart, contentLimitEnd
+                inputFolder, outputFolder, separateFiles, enableLimit, startMarker, endMarker, useRegex, enableCustomTemplate, startTemplate, endTemplate, addChapterNumber, enableTitleExtract, titleStartMarker, titleEndMarker, titleUseRegex, imageMode, imageNameExtractEnabled, imageNameStartMarker, imageNameEndMarker, imageRegionExtractEnabled, imageRegionStartMarker, imageRegionEndMarker, imageZipEnabled, imageCbzEnabled, imageRenameEnabled, singleOutputMode, enableBatchRenaming, enableZipPackaging, enableCbzPackaging, nameLimitStart, nameLimitEnd, contentLimitStart, contentLimitEnd
         );
     }
 }

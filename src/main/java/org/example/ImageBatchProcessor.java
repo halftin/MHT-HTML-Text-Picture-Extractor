@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * 图片批量处理器，负责处理多个MHT文件的图片提取和输出
- * 支持单独输出模式（每个文件生成独立文件夹/ZIP）和合并输出模式（所有文件生成单个文件夹/ZIP）
+ * 支持单独输出模式（每个文件生成独立文件夹/ZIP/CBZ）和合并输出模式（所有文件生成单个文件夹/ZIP/CBZ）
  */
 public class ImageBatchProcessor {
     private static final Logger logger = LoggerFactory.getLogger(ImageBatchProcessor.class);
@@ -112,7 +112,7 @@ public class ImageBatchProcessor {
                 processSingleFile(htmlContents.get(i), i, mhtFileName, mhtFilePath);
             }
         } else {
-            // 合并输出模式：生成单个输出文件夹/ZIP
+            // 合并输出模式：生成单个输出文件夹/ZIP/CBZ
             processMergedFiles();
         }
     }
@@ -137,7 +137,20 @@ public class ImageBatchProcessor {
         // 从 MHT 的 MIME 结构中提取所有图片
         List<ImageExtractor.ImageData> imageDataList;
         if (mhtFilePath != null && !mhtFilePath.isEmpty()) {
-            imageDataList = extractor.extractImagesFromMht(mhtFilePath);
+            // 检查是否启用了区域限定
+            boolean hasRegionLimit = config.getContentLimitStart() != null &&
+                    config.getContentLimitEnd() != null &&
+                    !config.getContentLimitStart().isEmpty() &&
+                    !config.getContentLimitEnd().isEmpty();
+
+            // 根据是否启用区域限定选择不同方法
+            if (hasRegionLimit) {
+                // 使用带区域过滤的方法
+                imageDataList = extractor.extractImagesFromMhtWithRegionFilter(mhtFilePath);
+            } else {
+                // 使用原有方法（提取所有图片）
+                imageDataList = extractor.extractImagesFromMht(mhtFilePath);
+            }
         } else {
             // 降级处理：从 HTML 中提取 URL
             List<String> imageUrls = extractor.extractImages();
@@ -152,7 +165,7 @@ public class ImageBatchProcessor {
             return;
         }
 
-        // 确定文件夹/ZIP 名称
+        // 确定文件夹/ZIP/CBZ 名称
         String folderName;
         boolean nameExtractEnabled = config.isImageNameExtractEnabled();
 
@@ -180,9 +193,12 @@ public class ImageBatchProcessor {
         // 保存图片（传入 CID 映射表）
         saveImagesFromData(imageDataList, outputFolder, config.isEnableBatchRenaming(), extractor.getCidImageMap());
 
-        // 如果启用 ZIP 打包，打包后删除文件夹
-        if (config.isEnableZipPackaging()) {
-            createZipArchive(outputFolder);
+        // 判断是否需要打包
+        boolean needZip = config.isEnableZipPackaging();
+        boolean needCbz = config.isEnableCbzPackaging();
+
+        if (needZip || needCbz) {
+            createArchive(outputFolder, needZip, needCbz);
             deleteDirectory(new File(outputFolder));
             logger.info("已删除临时文件夹：{}", outputFolder);
         }
@@ -195,7 +211,7 @@ public class ImageBatchProcessor {
             throw new IOException("没有 MHT文件可处理");
         }
 
-        // 确定合并输出的文件夹/ZIP 名称
+        // 确定合并输出的文件夹/ZIP/CBZ 名称
         String folderName;
         boolean nameExtractEnabled = config.isImageNameExtractEnabled();
 
@@ -223,10 +239,14 @@ public class ImageBatchProcessor {
                     ? sanitizeFileName(inputFolderName) : "All_Images";
         }
 
-        // 从所有 MHT文件的 MIME 结构中提取图片
+        // 从所有 MHT 文件的 MIME 结构中提取图片
         List<ImageExtractor.ImageData> allImageData = new ArrayList<>();
         Map<String, byte[]> globalCidMap = new HashMap<>();
-
+        // 检查是否启用了区域限定
+        boolean hasRegionLimit = config.getContentLimitStart() != null &&
+                config.getContentLimitEnd() != null &&
+                !config.getContentLimitStart().isEmpty() &&
+                !config.getContentLimitEnd().isEmpty();
         for (int i = 0; i < htmlContents.size(); i++) {
             String mhtFilePath = (mhtFilePaths != null && i < mhtFilePaths.size())
                     ? mhtFilePaths.get(i) : null;
@@ -240,8 +260,26 @@ public class ImageBatchProcessor {
                         config.getContentLimitEnd()
                 );
 
-                List<ImageExtractor.ImageData> imageDataList = extractor.extractImagesFromMht(mhtFilePath);
-                allImageData.addAll(imageDataList);
+                // 根据是否启用区域限定选择不同方法
+                List<ImageExtractor.ImageData> imageDataList;
+                if (hasRegionLimit) {
+                    // 使用带区域过滤的方法
+                    imageDataList = extractor.extractImagesFromMhtWithRegionFilter(mhtFilePath);
+                } else {
+                    // 使用原有方法（提取所有图片）
+                    imageDataList = extractor.extractImagesFromMht(mhtFilePath);
+                }
+                // 为每个图片数据添加来源文件索引（用于合并输出模式避免覆盖）
+                final int fileIndex = i;
+                for (ImageExtractor.ImageData data : imageDataList) {
+                    // 创建新的 ImageData，在 filename 中添加文件索引前缀
+                    String prefixedFilename = data.filename;
+                    if (prefixedFilename != null && !prefixedFilename.isEmpty() && htmlContents.size() > 1) {
+                        // 多文件合并时，添加文件索引前缀：f01_001.jpg, f02_001.jpg
+                        prefixedFilename = String.format("f%02d_", fileIndex + 1) + prefixedFilename;
+                    }
+                    allImageData.add(new ImageExtractor.ImageData(prefixedFilename, data.contentId, data.imageData));
+                }
                 globalCidMap.putAll(extractor.getCidImageMap());
             }
         }
@@ -258,9 +296,12 @@ public class ImageBatchProcessor {
         // 保存图片
         saveImagesFromData(allImageData, outputFolder, config.isEnableBatchRenaming(), globalCidMap);
 
-        // 如果启用 ZIP 打包，打包后删除文件夹
-        if (config.isEnableZipPackaging()) {
-            createZipArchive(outputFolder);
+        // 判断是否需要打包
+        boolean needZip = config.isEnableZipPackaging();
+        boolean needCbz = config.isEnableCbzPackaging();
+
+        if (needZip || needCbz) {
+            createArchive(outputFolder, needZip, needCbz);
             deleteDirectory(new File(outputFolder));
             logger.info("已删除临时文件夹：{}", outputFolder);
         }
@@ -298,10 +339,119 @@ public class ImageBatchProcessor {
                         imageDataBytes = cidMap.get(imageData.contentId);
                         fileName = imageData.filename;
                         ext = getExtensionFromFilename(fileName);
+                        System.out.println("[DEBUG] 从 CID 获取 - 原始文件名：" + fileName + ", CID: " + imageData.contentId + ", 扩展名：" + ext);
                     } else if (imageData.imageData != null) {
                         imageDataBytes = imageData.imageData;
                         fileName = imageData.filename;
                         ext = getExtensionFromFilename(fileName);
+
+                        // 尝试从 Content-Type 推断扩展名
+                        if (ext.equals("jpg") || ext.equals("jpeg")) {
+                            // 检查实际图片数据的魔数来确定真实格式
+                            if (imageDataBytes.length >= 4) {
+                                // PNG: 89 50 4E 47
+                                if (imageDataBytes[0] == (byte)0x89 &&
+                                        imageDataBytes[1] == (byte)0x50 &&
+                                        imageDataBytes[2] == (byte)0x4E &&
+                                        imageDataBytes[3] == (byte)0x47) {
+                                    ext = "png";
+                                }
+                                // GIF: 47 49 46 38
+                                else if (imageDataBytes[0] == (byte)0x47 &&
+                                        imageDataBytes[1] == (byte)0x49 &&
+                                        imageDataBytes[2] == (byte)0x46 &&
+                                        imageDataBytes[3] == (byte)0x38) {
+                                    ext = "gif";
+                                }
+                                // WebP: RIFF....WEBP
+                                else if (imageDataBytes.length >= 12 &&
+                                        imageDataBytes[0] == (byte)0x52 &&
+                                        imageDataBytes[1] == (byte)0x49 &&
+                                        imageDataBytes[2] == (byte)0x46 &&
+                                        imageDataBytes[3] == (byte)0x46 &&
+                                        imageDataBytes[8] == (byte)0x57 &&
+                                        imageDataBytes[9] == (byte)0x45 &&
+                                        imageDataBytes[10] == (byte)0x42 &&
+                                        imageDataBytes[11] == (byte)0x50) {
+                                    ext = "webp";
+                                }
+                                // BMP: 42 4D
+                                else if (imageDataBytes[0] == (byte)0x42 &&
+                                        imageDataBytes[1] == (byte)0x4D) {
+                                    ext = "bmp";
+                                }
+                                // JPEG: FF D8 FF
+                                else if (imageDataBytes[0] == (byte)0xFF &&
+                                        imageDataBytes[1] == (byte)0xD8 &&
+                                        imageDataBytes[2] == (byte)0xFF) {
+                                    ext = "jpg";
+                                }
+                            }
+                        }
+                        // SVG: 以 < 开头，通常包含 <?xml 或 <svg
+                        else if (ext.equals("svg")) {
+                            if (imageDataBytes.length >= 4) {
+                                boolean isSvg = false;
+                                String startStr = new String(imageDataBytes, 0, Math.min(100, imageDataBytes.length));
+                                if (startStr.startsWith("<?xml") || startStr.startsWith("<svg")) {
+                                    isSvg = true;
+                                }
+                                // 也检查 UTF-8 BOM 后的内容
+                                else if (imageDataBytes.length >= 7 &&
+                                        imageDataBytes[0] == (byte)0xEF &&
+                                        imageDataBytes[1] == (byte)0xBB &&
+                                        imageDataBytes[2] == (byte)0xBF &&
+                                        new String(imageDataBytes, 3, Math.min(10, imageDataBytes.length - 3)).trim().startsWith("<?xml")) {
+                                    isSvg = true;
+                                }
+                                if (!isSvg) {
+                                    ext = "jpg"; // 不是有效的 SVG，降级为 jpg
+                                }
+                            }
+                        }
+                        // ICO: 00 00 01 00 或 00 00 02 00
+                        else if (ext.equals("ico")) {
+                            if (imageDataBytes.length >= 4 &&
+                                    imageDataBytes[0] == (byte)0x00 &&
+                                    imageDataBytes[1] == (byte)0x00 &&
+                                    imageDataBytes[2] == (byte)0x01 &&
+                                    imageDataBytes[3] == (byte)0x00) {
+                                ext = "ico"; // 确认是 ICO
+                            }
+                            else if (imageDataBytes.length >= 4 &&
+                                    imageDataBytes[0] == (byte)0x00 &&
+                                    imageDataBytes[1] == (byte)0x00 &&
+                                    imageDataBytes[2] == (byte)0x02 &&
+                                    imageDataBytes[3] == (byte)0x00) {
+                                ext = "cur"; // Windows 光标文件，也保存为 ico
+                            }
+                            else {
+                                ext = "jpg"; // 不是有效的 ICO，降级为 jpg
+                            }
+                        }
+                        // AVIF: ftyp avif 或 ftyp avis
+                        else if (ext.equals("avif")) {
+                            if (imageDataBytes.length >= 12 &&
+                                    imageDataBytes[4] == (byte)0x66 && // 'f'
+                                    imageDataBytes[5] == (byte)0x74 && // 't'
+                                    imageDataBytes[6] == (byte)0x79 && // 'y'
+                                    imageDataBytes[7] == (byte)0x70 && // 'p'
+                                    ((imageDataBytes[8] == (byte)0x61 && // 'a'
+                                            imageDataBytes[9] == (byte)0x76 && // 'v'
+                                            imageDataBytes[10] == (byte)0x69 && // 'i'
+                                            imageDataBytes[11] == (byte)0x66) || // 'f'
+                                            (imageDataBytes[8] == (byte)0x61 && // 'a'
+                                                    imageDataBytes[9] == (byte)0x76 && // 'v'
+                                                    imageDataBytes[10] == (byte)0x69 && // 'i'
+                                                    imageDataBytes[11] == (byte)0x73))) { // 's'
+                                ext = "avif"; // 确认是 AVIF
+                            }
+                            else {
+                                ext = "jpg"; // 不是有效的 AVIF，降级为 jpg
+                            }
+                        }
+
+                        System.out.println("[DEBUG] 从 imageData 获取 - 原始文件名：" + fileName + ", 扩展名：" + ext + ", 数据大小：" + imageDataBytes.length);
                     } else {
                         logger.info("[跳过] 无效的图片数据");
                         skippedCount.incrementAndGet();
@@ -319,7 +469,23 @@ public class ImageBatchProcessor {
                     if (enableBatchRenaming) {
                         finalFileName = String.format("%03d.%s", index + 1, ext);
                     } else {
-                        finalFileName = sanitizeFileName(fileName != null ? fileName : "image") + "." + ext;
+                        // 未启用批量重命名时，按以下优先级生成文件名：
+                        // 1. 原始文件名（如果有）
+                        // 2. Content-ID（内联资源通常有 CID）
+                        // 3. 带序号的默认名（防止覆盖）
+                        if (fileName != null && !fileName.isEmpty()) {
+                            finalFileName = sanitizeFileName(fileName) + "." + ext;
+                            System.out.println("[DEBUG] 使用原始文件名：" + finalFileName);
+                        } else if (imageData.contentId != null && !imageData.contentId.isEmpty()) {
+                            // 使用 CID 作为文件名（去掉 <> 括号和非法字符）
+                            String cidName = sanitizeFileName(imageData.contentId.replace("<", "").replace(">", ""));
+                            finalFileName = cidName + "." + ext;
+                            System.out.println("[DEBUG] 使用 CID 作为文件名：" + finalFileName);
+                        } else {
+                            // 都没有时使用默认名（添加序号避免覆盖）
+                            finalFileName = "image_" + index + "." + ext;
+                            System.out.println("[DEBUG] 使用默认序号名：" + finalFileName);
+                        }
                     }
 
                     File outputFile = new File(outputFolder, finalFileName);
@@ -442,7 +608,7 @@ public class ImageBatchProcessor {
         int dotIndex = filename.lastIndexOf('.');
         if (dotIndex != -1 && dotIndex < filename.length() - 1) {
             String ext = filename.substring(dotIndex + 1).toLowerCase();
-            if (Arrays.asList("jpg", "jpeg", "png", "gif", "bmp", "webp").contains(ext)) {
+            if (Arrays.asList("jpg", "jpeg", "png", "gif", "bmp", "webp", "svg", "ico","avif").contains(ext)) {
                 return ext;
             }
         }
@@ -677,11 +843,33 @@ public class ImageBatchProcessor {
     }
 
     /**
-     * 创建ZIP压缩文件
+     * 根据配置创建归档文件（ZIP 和/或 CBZ）
+     * @param folderPath 要打包的文件夹路径
+     * @param needZip 是否生成 ZIP 文件
+     * @param needCbz 是否生成 CBZ 文件
      */
-    private void createZipArchive(String folderPath) throws IOException {
-        String zipPath = folderPath + ".zip";
-        try (FileOutputStream fos = new FileOutputStream(zipPath);
+    private void createArchive(String folderPath, boolean needZip, boolean needCbz) throws IOException {
+        if (needCbz && needZip) {
+            // 两个都勾选：先生成 CBZ 文件，再生成 ZIP 文件
+            createZipArchive(folderPath, ".cbz");
+            createZipArchive(folderPath, ".zip");
+        } else if (needCbz) {
+            // 只勾选 CBZ：生成 .cbz 扩展名的文件
+            createZipArchive(folderPath, ".cbz");
+        } else if (needZip) {
+            // 只勾选 ZIP：生成 .zip 扩展名的文件（原逻辑）
+            createZipArchive(folderPath, ".zip");
+        }
+    }
+
+    /**
+     * 创建ZIP/CBZ压缩文件
+     * @param folderPath 要打包的文件夹路径
+     * @param extension 文件扩展名（".zip" 或 ".cbz"）
+     */
+    private void createZipArchive(String folderPath, String extension) throws IOException {
+        String archivePath = folderPath + extension;
+        try (FileOutputStream fos = new FileOutputStream(archivePath);
              ZipOutputStream zos = new ZipOutputStream(fos)) {
 
             File folder = new File(folderPath);
@@ -704,7 +892,7 @@ public class ImageBatchProcessor {
                 }
             }
         }
-        logger.info("已创建ZIP文件: {}", zipPath);
+        logger.info("已创建{}文件: {}", extension.toUpperCase().substring(1), archivePath);
     }
 
     /**
