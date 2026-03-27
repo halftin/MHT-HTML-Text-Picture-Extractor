@@ -498,7 +498,7 @@ public class MhtExtractorGUI extends JFrame {
                     try {
                         txtStartTemplate.getDocument().insertString(caretPos, "\\n", null);
                     } catch (javax.swing.text.BadLocationException ex) {
-                        ex.printStackTrace();
+                        logger.error("[错误]在起始模板中插入换行符失败", ex);
                     }
                 }
             }
@@ -535,7 +535,7 @@ public class MhtExtractorGUI extends JFrame {
                     try {
                         txtEndTemplate.getDocument().insertString(caretPos, "\\n", null);
                     } catch (javax.swing.text.BadLocationException ex) {
-                        ex.printStackTrace();
+                        logger.error("[错误]在结尾模板中插入换行符失败", ex);
                     }
                 }
             }
@@ -773,7 +773,7 @@ public class MhtExtractorGUI extends JFrame {
         btnConfigManage = new JButton("保存/删除配置");
         btnConfigManage.setFont(new Font("微软雅黑", Font.PLAIN, 14));
         btnConfigManage.setPreferredSize(new Dimension(160, 45));
-        btnConfigManage.setEnabled(false);
+        btnConfigManage.setEnabled(true);
         btnConfigManage.addActionListener(e -> showConfigDialog());
         panel.add(btnConfigManage);
 
@@ -830,7 +830,7 @@ public class MhtExtractorGUI extends JFrame {
 
         // 2. 更新执行按钮状态
         btnExecute.setEnabled(anyModeSelected);
-        btnConfigManage.setEnabled(anyModeSelected);
+        btnConfigManage.setEnabled(true);
 
         // 3. 根据选择的模式显示/隐藏对应的配置面板
         textExtractPanel.setVisible(isTextModeSelected);
@@ -1432,6 +1432,7 @@ public class MhtExtractorGUI extends JFrame {
                     JOptionPane.showMessageDialog(MhtExtractorGUI.this,
                             "处理异常：" + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
                 } finally {
+
                     setControlsEnabled(true);
                     consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
                 }
@@ -1561,16 +1562,23 @@ public class MhtExtractorGUI extends JFrame {
             txtEndTemplate.setEnabled(templateEnabled);
             lblTemplateVars.setEnabled(templateEnabled);
 
-            boolean chapterEnabled = enabled && !chkSeparateFiles.isSelected();
-            chkAddChapterNumber.setEnabled(chapterEnabled);
-            chkEnableTitleExtract.setEnabled(chapterEnabled);
+            if (enabled) {
+                // 任务执行完毕后，恢复章节标题控件的启用状态
+                chkAddChapterNumber.setEnabled(true);
+                chkEnableTitleExtract.setEnabled(true);
 
-            boolean titleInputEnabled = enabled && !chkSeparateFiles.isSelected()
-                    && chkEnableTitleExtract.isSelected();
-            txtTitleStartMarker.setEnabled(titleInputEnabled);
-            txtTitleEndMarker.setEnabled(titleInputEnabled);
-            chkTitleUseRegex.setEnabled(titleInputEnabled);
-
+                boolean enableExtract = chkEnableTitleExtract.isSelected();
+                txtTitleStartMarker.setEnabled(enableExtract);
+                txtTitleEndMarker.setEnabled(enableExtract);
+                chkTitleUseRegex.setEnabled(enableExtract);
+            } else {
+                // 任务执行期间，禁用章节标题控件
+                chkAddChapterNumber.setEnabled(false);
+                chkEnableTitleExtract.setEnabled(false);
+                txtTitleStartMarker.setEnabled(false);
+                txtTitleEndMarker.setEnabled(false);
+                chkTitleUseRegex.setEnabled(false);
+            }
         } else if (isImageModeSelected) {
             // 图片模式组件
             chkEnableImageNameExtract.setEnabled(enabled);

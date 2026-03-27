@@ -210,6 +210,7 @@ public class MhtToHtmlExtractor {
         } else if (message.isMimeType("text/html")) {
             return extractHtmlFromPart(message);
         }
+        logger.warn("未在 MHT 文件中找到 HTML 部分，MIME 类型：{}", message.getContentType());
         return null;
     }
 
@@ -242,7 +243,7 @@ public class MhtToHtmlExtractor {
                             return result;
                         }
                     } catch (Exception e) {
-                        // 尝试下一个编码
+                        logger.debug("编码 {} 解析失败：{}", tryCharset, e.getMessage());
                     }
                 }
 

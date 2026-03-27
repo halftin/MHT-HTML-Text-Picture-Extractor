@@ -1,13 +1,11 @@
 package org.example;
 
 
-import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
+
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
@@ -15,6 +13,7 @@ import java.util.zip.*;
 import org.apache.hc.core5.util.Timeout;
 import java.util.Base64;
 import java.util.concurrent.*;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +22,7 @@ import org.slf4j.LoggerFactory;
  * 图片批量处理器，负责处理多个MHT文件的图片提取和输出
  * 支持单独输出模式（每个文件生成独立文件夹/ZIP/CBZ）和合并输出模式（所有文件生成单个文件夹/ZIP/CBZ）
  */
-public class ImageBatchProcessor {
+public class ImageBatchProcessor implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(ImageBatchProcessor.class);
     private final List<String> htmlContents;
     private final AppConfig config;
@@ -35,7 +34,8 @@ public class ImageBatchProcessor {
     // HTTP 连接池（静态单例，全局复用）
     private static final CloseableHttpClient httpClient;
     private static final ExecutorService executor;
-
+    // 线程池大小（根据 CPU 核心数动态调整）
+    private static final int THREAD_POOL_SIZE;
     static {
         // 初始化连接池
         PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
@@ -55,8 +55,11 @@ public class ImageBatchProcessor {
                 .setDefaultRequestConfig(requestConfig)
                 .build();
 
-        // 创建线程池（10 个并发线程）
-        executor = Executors.newFixedThreadPool(10);
+        // 根据 CPU 核心数动态调整线程池大小
+        // 图片下载是 IO 密集型任务，线程数设置为 CPU 核心数的 2 倍较为合理
+        int cpuCores = Runtime.getRuntime().availableProcessors();
+        THREAD_POOL_SIZE = Math.max(cpuCores * 2, 4); // 至少 4 个线程，最多为核心数的 2 倍
+        executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
     }
 
 
@@ -191,8 +194,7 @@ public class ImageBatchProcessor {
         Files.createDirectories(Paths.get(outputFolder));
 
         // 保存图片（传入 CID 映射表）
-        saveImagesFromData(imageDataList, outputFolder, config.isEnableBatchRenaming(), extractor.getCidImageMap());
-
+        saveImagesFromData(imageDataList, outputFolder, config.isEnableBatchRenaming(), extractor.getCidImageMap(), folderName);
         // 判断是否需要打包
         boolean needZip = config.isEnableZipPackaging();
         boolean needCbz = config.isEnableCbzPackaging();
@@ -294,8 +296,7 @@ public class ImageBatchProcessor {
         Files.createDirectories(Paths.get(outputFolder));
 
         // 保存图片
-        saveImagesFromData(allImageData, outputFolder, config.isEnableBatchRenaming(), globalCidMap);
-
+        saveImagesFromData(allImageData, outputFolder, config.isEnableBatchRenaming(), globalCidMap, folderName);
         // 判断是否需要打包
         boolean needZip = config.isEnableZipPackaging();
         boolean needCbz = config.isEnableCbzPackaging();
@@ -316,12 +317,12 @@ public class ImageBatchProcessor {
      */
     private void saveImagesFromData(List<ImageExtractor.ImageData> imageDataList,
                                     String outputFolder, boolean enableBatchRenaming,
-                                    Map<String, byte[]> cidMap) throws IOException {
+                                    Map<String, byte[]> cidMap, String fileName) throws IOException {
         CountDownLatch latch = new CountDownLatch(imageDataList.size());
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger skippedCount = new AtomicInteger(0);
         logger.info("========================================");
-        logger.info("开始并发保存，图片数：{}", imageDataList.size());
+        logger.info("文件：{} 开始并发保存，图片数：{}", fileName, imageDataList.size());
         long startTime = System.currentTimeMillis();
 
         for (int i = 0; i < imageDataList.size(); i++) {
@@ -331,19 +332,19 @@ public class ImageBatchProcessor {
             executor.submit(() -> {
                 try {
                     byte[] imageDataBytes;
-                    String fileName;
+                    String imageFileName;
                     String ext;
 
                     // 如果有 CID，从 cidMap 中获取实际数据
                     if (imageData.contentId != null && cidMap.containsKey(imageData.contentId)) {
                         imageDataBytes = cidMap.get(imageData.contentId);
-                        fileName = imageData.filename;
-                        ext = getExtensionFromFilename(fileName);
+                        imageFileName = imageData.filename;
+                        ext = getExtensionFromFilename(imageFileName);
                         System.out.println("[DEBUG] 从 CID 获取 - 原始文件名：" + fileName + ", CID: " + imageData.contentId + ", 扩展名：" + ext);
                     } else if (imageData.imageData != null) {
                         imageDataBytes = imageData.imageData;
-                        fileName = imageData.filename;
-                        ext = getExtensionFromFilename(fileName);
+                        imageFileName = imageData.filename;
+                        ext = getExtensionFromFilename(imageFileName);
 
                         // 尝试从 Content-Type 推断扩展名
                         if (ext.equals("jpg") || ext.equals("jpeg")) {
@@ -451,7 +452,7 @@ public class ImageBatchProcessor {
                             }
                         }
 
-                        System.out.println("[DEBUG] 从 imageData 获取 - 原始文件名：" + fileName + ", 扩展名：" + ext + ", 数据大小：" + imageDataBytes.length);
+                        System.out.println("[DEBUG] 从 imageData 获取 - 原始文件名：" + imageFileName + ", 扩展名：" + ext + ", 数据大小：" + imageDataBytes.length);
                     } else {
                         logger.info("[跳过] 无效的图片数据");
                         skippedCount.incrementAndGet();
@@ -470,19 +471,35 @@ public class ImageBatchProcessor {
                         finalFileName = String.format("%03d.%s", index + 1, ext);
                     } else {
                         // 未启用批量重命名时，按以下优先级生成文件名：
-                        // 1. 原始文件名（如果有）
-                        // 2. Content-ID（内联资源通常有 CID）
+                        // 1. Content-ID（最可靠，因为 HTML 中使用的是 CID）
+                        // 2. MIME 文件名（如果没有 CID）
                         // 3. 带序号的默认名（防止覆盖）
-                        if (fileName != null && !fileName.isEmpty()) {
-                            finalFileName = sanitizeFileName(fileName) + "." + ext;
-                            System.out.println("[DEBUG] 使用原始文件名：" + finalFileName);
-                        } else if (imageData.contentId != null && !imageData.contentId.isEmpty()) {
-                            // 使用 CID 作为文件名（去掉 <> 括号和非法字符）
+
+                        if (imageData.contentId != null && !imageData.contentId.isEmpty()) {
+                            // 优先使用 CID 作为文件名（去掉 <> 括号）
                             String cidName = sanitizeFileName(imageData.contentId.replace("<", "").replace(">", ""));
                             finalFileName = cidName + "." + ext;
                             System.out.println("[DEBUG] 使用 CID 作为文件名：" + finalFileName);
+                        } else if (imageFileName != null && !imageFileName.isEmpty()) {
+                            // 使用 MIME 文件名，但要去除原有扩展名避免双扩展名
+                            String baseName = sanitizeFileName(imageFileName);
+
+                            // 检查文件名是否已有扩展名，如果有则去除
+                            int dotIndex = baseName.lastIndexOf('.');
+                            if (dotIndex != -1 && dotIndex < baseName.length() - 1) {
+                                String existingExt = baseName.substring(dotIndex + 1).toLowerCase();
+                                // 如果是常见图片扩展名，去除它
+                                if (Arrays.asList("jpg", "jpeg", "png", "gif", "bmp", "webp", "svg", "ico", "avif").contains(existingExt)) {
+                                    baseName = baseName.substring(0, dotIndex);
+                                    System.out.println("[DEBUG] 去除 MIME 文件名的原有扩展名：" + imageFileName + " -> " + baseName);
+                                }
+                            }
+
+                            finalFileName = baseName + "." + ext;
+                            System.out.println("[DEBUG] 使用 MIME 文件名：" + finalFileName);
+
                         } else {
-                            // 都没有时使用默认名（添加序号避免覆盖）
+                            // 都没有时使用默认名
                             finalFileName = "image_" + index + "." + ext;
                             System.out.println("[DEBUG] 使用默认序号名：" + finalFileName);
                         }
@@ -538,7 +555,7 @@ public class ImageBatchProcessor {
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger skippedCount = new AtomicInteger(0);
         logger.info("========================================");
-        logger.info("开始并发下载，线程数：10");
+        logger.info("开始并发下载，线程数：{}", THREAD_POOL_SIZE);
         long startTime = System.currentTimeMillis();
 
         for (int i = 0; i < images.size(); i++) {
@@ -629,7 +646,7 @@ public class ImageBatchProcessor {
     }
 
     /**
-     * 下载图片或解码 Data URI，返回原始字节数组
+     * 解码 Data URI，返回原始字节数组
      * 支持：
      * 1. Data URI scheme (data:image/jpeg;base64,...)
      * 2. 相对路径或 file:// 协议
@@ -660,7 +677,8 @@ public class ImageBatchProcessor {
             }
 
             // 否则尝试作为 URL 下载
-            return downloadImageToBytes(imageUrl);
+            logger.warn("[安全限制] 不支持网络图片下载，跳过：{}", imageUrl);
+            return null;
         } catch (Exception e) {
             logger.error("处理图片失败：{} - {}", imageUrl, e.getMessage());
             return null;
@@ -699,78 +717,8 @@ public class ImageBatchProcessor {
         }
     }
 
-    /**
-     * 使用 HttpClient 下载图片并返回字节数组
-     */
-    private byte[] downloadImageToBytes(String imageUrl) throws IOException {
-        HttpGet request = new HttpGet(imageUrl);
 
-        // 设置请求头，模拟浏览器
-        request.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-        request.setHeader("Accept", "image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
-        String referer = extractRefererFromUrl(imageUrl);
-        if (referer != null && !referer.isEmpty()) {
-            request.setHeader("Referer", referer);
-        }
 
-        try (CloseableHttpResponse response = httpClient.execute(request)) {
-            int statusCode = response.getCode();
-
-            if (statusCode != 200) {
-                return null;
-            }
-
-            byte[] imageBytes = EntityUtils.toByteArray(response.getEntity());
-
-            if (imageBytes == null || imageBytes.length == 0) {
-                return null;
-            }
-
-            String contentStart = new String(imageBytes, 0, Math.min(100, imageBytes.length));
-            if (contentStart.trim().toLowerCase().startsWith("<!doctype") ||
-                    contentStart.trim().toLowerCase().startsWith("<html")) {
-                return null;
-            }
-
-            return imageBytes;
-
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
-     * 从图片 URL 中提取 Referer（取域名部分）
-     * 例如：https://img.example.com/path/img.jpg -> https://example.com/
-     */
-    private String extractRefererFromUrl(String imageUrl) {
-        if (imageUrl == null || imageUrl.isEmpty()) {
-            return null;
-        }
-
-        try {
-            java.net.URL url = new java.net.URL(imageUrl);
-            String protocol = url.getProtocol();
-            String host = url.getHost();
-
-            // 移除 www. 前缀
-            if (host.startsWith("www.")) {
-                host = host.substring(4);
-            }
-
-            // 提取主域名（处理类似 img.site.com 的情况）
-            String[] parts = host.split("\\.");
-            if (parts.length >= 2) {
-                // 取最后两部分作为主域名
-                host = parts[parts.length - 2] + "." + parts[parts.length - 1];
-            }
-
-            return protocol + "://" + host + "/";
-        } catch (Exception e) {
-            logger.warn("解析 Referer 失败：{} - {}", imageUrl, e.getMessage());
-            return null;
-        }
-    }
     /**
      * 获取URL中的文件扩展名
      */
@@ -921,12 +869,29 @@ public class ImageBatchProcessor {
         try {
             if (httpClient != null) {
                 httpClient.close();
+                logger.info("HTTP 连接池已关闭");
             }
-            if (executor != null) {
+            if (executor != null && !executor.isShutdown()) {
                 executor.shutdown();
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                    logger.info("线程池已强制关闭");
+                } else {
+                    logger.info("线程池已正常关闭");
+                }
             }
-        } catch (IOException e) {
-            // 忽略异常
+        } catch (IOException | InterruptedException e) {
+            logger.error("关闭资源失败", e);
+            if (Thread.currentThread().isInterrupted()) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
+
+    @Override
+    public void close() {
+        shutdownResources();
+    }
+
+
 }
