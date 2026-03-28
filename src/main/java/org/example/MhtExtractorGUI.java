@@ -72,6 +72,11 @@ public class MhtExtractorGUI extends JFrame {
     private JCheckBox chkEnableImageCbz;
     private JCheckBox chkEnableImageRename;
 
+    // 高速提取模式复选框
+    private JCheckBox chkLegacyMemoryMode;
+    // 标记是否已弹出过警告
+    private boolean legacyModeWarningShown = false;
+
     // 图片提取面板
     private JPanel imageExtractPanel;
 
@@ -328,7 +333,7 @@ public class MhtExtractorGUI extends JFrame {
         gbc.gridy = row++;
         gbc.gridx = 0;
         gbc.gridwidth = 2;
-        chkAddChapterNumber = new JCheckBox("为每个 MHT 文件添加章节名（仅合并模式有效）");
+        chkAddChapterNumber = new JCheckBox("为每个 MHT 文件添加章节序号");
         chkAddChapterNumber.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         chkAddChapterNumber.setToolTipText("选中后生成“第一章” “第二章”等序号");
         chkAddChapterNumber.addActionListener(e -> toggleTitleSettings());
@@ -337,7 +342,7 @@ public class MhtExtractorGUI extends JFrame {
         gbc.gridy = row++;
         gbc.gridx = 0;
         gbc.gridwidth = 2;
-        chkEnableTitleExtract = new JCheckBox("启用隐藏章节标题提取（从源码固定位置提取标题）");
+        chkEnableTitleExtract = new JCheckBox("启用章节标题提取（从源码固定位置提取标题）");
         chkEnableTitleExtract.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         chkEnableTitleExtract.setToolTipText("可独立使用！若提取到标题，将直接作为章节头；若同时勾选上方选项，则格式为“序号 标题”");
         chkEnableTitleExtract.addActionListener(e -> toggleTitleSettings());
@@ -395,7 +400,7 @@ public class MhtExtractorGUI extends JFrame {
         gbc.gridy = row++;
         gbc.gridx = 0;
         gbc.gridwidth = 2;
-        JLabel lblLimitTitle = new JLabel("正文内容提取限定");
+        JLabel lblLimitTitle = new JLabel("正文内容提取限定（从源码固定位置提取正文）");
         lblLimitTitle.setFont(new Font("微软雅黑", Font.BOLD, 13));
         lblLimitTitle.setForeground(new Color(0, 102, 204));
         panel.add(lblLimitTitle, gbc);
@@ -702,7 +707,7 @@ public class MhtExtractorGUI extends JFrame {
         chkEnableImageRename.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         panel.add(chkEnableImageRename, gbc);
 
-        // 打包格式行：使用 FlowLayout 将标签和两个复选框排在一行
+        // 打包格式行
         gbc.gridy = row++;
         gbc.gridx = 0;
         gbc.gridwidth = 2;
@@ -724,7 +729,48 @@ public class MhtExtractorGUI extends JFrame {
 
         panel.add(packagingPanel, gbc);
 
+        // 分隔线
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        panel.add(new JSeparator(), gbc);
+
+        // --- 高速提取模式复选框 ---
+        gbc.gridy = row++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
+        chkLegacyMemoryMode = new JCheckBox("高速提取模式（开启后会占用大量内存，慎选）");
+        chkLegacyMemoryMode.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        chkLegacyMemoryMode.setForeground(new Color(204, 0, 0));
+        chkLegacyMemoryMode.setToolTipText("开启后将预先加载所有MHT文件到内存，速度更快但内存占用极大");
+        chkLegacyMemoryMode.addActionListener(e -> onLegacyMemoryModeChanged());
+        panel.add(chkLegacyMemoryMode, gbc);
+
         return panel;
+    }
+
+    /**
+     * 高速提取模式复选框状态变化处理
+     * 在勾选时弹出一次警告
+     */
+    private void onLegacyMemoryModeChanged() {
+        if (chkLegacyMemoryMode.isSelected()) {
+            if (!legacyModeWarningShown) {
+                legacyModeWarningShown = true;
+                JOptionPane.showMessageDialog(this,
+                        "警告！开启此模式需要你的空闲内存为要提取的 MHT 文件总大小的 4 倍。\n\n" +
+                                "提示：不开启此模式时，也需要 2 倍的内存。\n\n" +
+                                "否则程序将因内存不足（OutOfMemoryError）而强制退出！",
+                        "内存警告",
+                        JOptionPane.WARNING_MESSAGE);
+            }
+            logger.info("已开启高速提取模式");
+        } else {
+            // 取消勾选时重置标记，下次勾选时可再次弹出
+            legacyModeWarningShown = false;
+            logger.info("已关闭高速提取模式");
+        }
     }
 
     /**
@@ -836,10 +882,10 @@ public class MhtExtractorGUI extends JFrame {
         textExtractPanel.setVisible(isTextModeSelected);
         imageExtractPanel.setVisible(isImageModeSelected);
 
-        // 4. 更新输出标签文本 — 始终显示"输出文件夹目录："
+        // 4. 更新输出标签文本
         lblOutput.setText("输出文件夹目录：");
 
-        // 5. 更新模式复选框的互斥状态（允许取消选中以切换模式）
+        // 5. 更新模式复选框的互斥状态
         if (isTextModeSelected) {
             chkImageMode.setEnabled(false);
         } else if (isImageModeSelected) {
@@ -868,12 +914,11 @@ public class MhtExtractorGUI extends JFrame {
     }
 
     /**
-     * 更新文本模式下的 UI（主要处理合并/单独模式对章节标题的影响）
+     * 更新文本模式下的 UI
      */
     private void updateUIForMode() {
         boolean isSeparate = chkSeparateFiles.isSelected();
 
-        // 当切换"单独输出模式"时，重新设置输出路径
         String inputPath = txtInputFolder.getText().trim();
         if (!inputPath.isEmpty()) {
             autoSetOutputPath(inputPath);
@@ -928,6 +973,10 @@ public class MhtExtractorGUI extends JFrame {
         chkEnableImageRename.setSelected(false);
         chkEnableImageZip.setSelected(false);
         chkEnableImageCbz.setSelected(false);
+
+        // 清空高速模式状态
+        chkLegacyMemoryMode.setSelected(false);
+        legacyModeWarningShown = false;
     }
 
     private void toggleLimitSettings() {
@@ -956,8 +1005,6 @@ public class MhtExtractorGUI extends JFrame {
     }
 
     private void toggleTitleSettings() {
-
-
         boolean enableExtract = chkEnableTitleExtract.isSelected();
         boolean hasChapterNumber = chkAddChapterNumber.isSelected();
 
@@ -1025,7 +1072,6 @@ public class MhtExtractorGUI extends JFrame {
     }
 
     private void browseOutputPath(ActionEvent e) {
-        // 输出路径始终选择文件夹目录
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         fileChooser.setDialogTitle("选择输出文件夹路径");
@@ -1052,7 +1098,6 @@ public class MhtExtractorGUI extends JFrame {
 
     /**
      * 根据输入路径自动设置输出路径
-     * 输出路径始终为文件夹目录（不包含文件名）
      */
     private void autoSetOutputPath(String inputPath) {
         String projectDir = System.getProperty("user.dir");
@@ -1063,7 +1108,6 @@ public class MhtExtractorGUI extends JFrame {
             outDirFile.mkdirs();
         }
 
-        // 输出路径始终为文件夹目录
         txtOutputPath.setText(outputBaseDir);
     }
 
@@ -1103,7 +1147,6 @@ public class MhtExtractorGUI extends JFrame {
             return;
         }
 
-        // 输出路径是文件夹目录，确保存在
         File outDirFile = new File(outputPath);
         if (!outDirFile.exists()) {
             int confirm = JOptionPane.showConfirmDialog(this,
@@ -1119,13 +1162,10 @@ public class MhtExtractorGUI extends JFrame {
             }
         }
 
-        // 对于文本模式，根据是否单独输出确定实际的输出文件路径
         String actualOutputPath;
         if (isSeparate) {
-            // 单独输出模式：输出到文件夹目录
             actualOutputPath = outputPath;
         } else {
-            // 合并输出模式：在输出文件夹下生成以输入文件夹命名的 txt 文件
             String folderName = folder.getName();
             if (folderName == null || folderName.isEmpty()) {
                 folderName = "mht_output";
@@ -1154,10 +1194,6 @@ public class MhtExtractorGUI extends JFrame {
         if (enableCustomTemplate) {
             startTemplate = unescapeNewlines(txtStartTemplate.getText());
             endTemplate = unescapeNewlines(txtEndTemplate.getText());
-            if (startTemplate == null || startTemplate.trim().isEmpty())
-                startTemplate = MhtBatchProcessor.DEFAULT_START_TEMPLATE;
-            if (endTemplate == null || endTemplate.trim().isEmpty())
-                endTemplate = MhtBatchProcessor.DEFAULT_END_TEMPLATE;
         } else {
             startTemplate = MhtBatchProcessor.DEFAULT_START_TEMPLATE;
             endTemplate = MhtBatchProcessor.DEFAULT_END_TEMPLATE;
@@ -1245,6 +1281,7 @@ public class MhtExtractorGUI extends JFrame {
         };
         worker.execute();
     }
+
     /**
      * 将换行符 \n 转义为字面的 \\n 用于显示
      */
@@ -1260,6 +1297,7 @@ public class MhtExtractorGUI extends JFrame {
         if (text == null) return null;
         return text.replace("\\n", "\n");
     }
+
     private void executeImageProcess() {
         boolean isSeparate = chkSeparateFiles.isSelected();
         boolean enableNameExtract = chkEnableImageNameExtract.isSelected();
@@ -1267,6 +1305,7 @@ public class MhtExtractorGUI extends JFrame {
         boolean enableZip = chkEnableImageZip.isSelected();
         boolean enableCbz = chkEnableImageCbz.isSelected();
         boolean enableRename = chkEnableImageRename.isSelected();
+        boolean useLegacyMemoryMode = chkLegacyMemoryMode.isSelected();
 
         String inputFolder = txtInputFolder.getText().trim();
         String outputPath = txtOutputPath.getText().trim();
@@ -1332,12 +1371,14 @@ public class MhtExtractorGUI extends JFrame {
         final boolean finalEnableZip = enableZip;
         final boolean finalEnableCbz = enableCbz;
         final boolean finalIsSeparate = isSeparate;
+        final boolean finalUseLegacyMemoryMode = useLegacyMemoryMode;
         final String inputFolderName = folder.getName();
 
         setControlsEnabled(false);
         consoleArea.append("\n========================================\n");
         consoleArea.append("图片提取任务开始执行...\n");
-        consoleArea.append("模式：" + (finalIsSeparate ? "单独输出" : "合并输出") + "\n");
+        consoleArea.append("处理模式：" + (finalUseLegacyMemoryMode ? "高速模式（内存）" : "流式模式（节省内存）") + "\n");
+        consoleArea.append("输出模式：" + (finalIsSeparate ? "单独输出" : "合并输出") + "\n");
         consoleArea.append("名称提取限定：" + (finalEnableNameExtract ? "启用" : "禁用") + "\n");
         consoleArea.append("批量重命名：" + (finalEnableRename ? "启用" : "禁用") + "\n");
         consoleArea.append("ZIP 打包：" + (finalEnableZip ? "启用" : "禁用") + "\n");
@@ -1361,34 +1402,20 @@ public class MhtExtractorGUI extends JFrame {
 
                     publish("找到 " + mhtFiles.length + " 个 MHT文件\n");
 
-                    List<String> htmlContents = new ArrayList<>();
+                    // 准备文件名和路径列表（两种模式都需要）
                     List<String> mhtFileNames = new ArrayList<>();
                     List<String> mhtFilePaths = new ArrayList<>();
 
                     for (File mhtFile : mhtFiles) {
-                        try {
-                            String html = extractHtmlFromMht(mhtFile.getAbsolutePath());
-                            if (html != null && !html.isEmpty()) {
-                                htmlContents.add(html);
-                                String fileName = mhtFile.getName();
-                                if (fileName.toLowerCase().endsWith(".mht") || fileName.toLowerCase().endsWith(".mhtml")) {
-                                    fileName = fileName.substring(0, fileName.lastIndexOf("."));
-                                }
-                                mhtFileNames.add(fileName);
-                                mhtFilePaths.add(mhtFile.getAbsolutePath());
-                                publish("已加载：" + mhtFile.getName() + "\n");
-                            }
-                        } catch (Exception ex) {
-                            logger.error("加载 MHT文件{}失败" , mhtFile.getName(), ex);
-                            publish("加载失败：" + mhtFile.getName() + "\n");
+                        String fileName = mhtFile.getName();
+                        if (fileName.toLowerCase().endsWith(".mht") || fileName.toLowerCase().endsWith(".mhtml")) {
+                            fileName = fileName.substring(0, fileName.lastIndexOf("."));
                         }
+                        mhtFileNames.add(fileName);
+                        mhtFilePaths.add(mhtFile.getAbsolutePath());
                     }
 
-                    if (htmlContents.isEmpty()) {
-                        publish("无法从任何 MHT文件中提取 HTML 内容\n");
-                        return null;
-                    }
-
+                    // 构建 AppConfig
                     AppConfig config = new AppConfig();
                     config.setImageMode(true);
                     config.setImageNameExtractEnabled(finalEnableNameExtract);
@@ -1401,11 +1428,51 @@ public class MhtExtractorGUI extends JFrame {
                     config.setEnableZipPackaging(finalEnableZip);
                     config.setEnableCbzPackaging(finalEnableCbz);
                     config.setInputFolder(finalInputFolder);
+                    config.setLegacyMemoryMode(finalUseLegacyMemoryMode);
 
-                    ImageBatchProcessor processor = new ImageBatchProcessor(
-                            htmlContents, config, finalOutputPath, inputFolderName, mhtFileNames);
-                    processor.setMhtFilePaths(mhtFilePaths);
-                    processor.execute();
+                    if (finalUseLegacyMemoryMode) {
+                        // ===== 高速模式：预先加载所有文件到内存 =====
+                        publish("高速模式：正在预加载所有 MHT 文件到内存...\n");
+
+                        List<String> htmlContents = new ArrayList<>();
+
+                        for (File mhtFile : mhtFiles) {
+                            try {
+                                String html = extractHtmlFromMht(mhtFile.getAbsolutePath());
+                                if (html != null && !html.isEmpty()) {
+                                    htmlContents.add(html);
+                                    publish("已加载：" + mhtFile.getName() + "\n");
+                                }
+                            } catch (Exception ex) {
+                                logger.error("加载 MHT文件{}失败", mhtFile.getName(), ex);
+                                publish("加载失败：" + mhtFile.getName() + "\n");
+                            }
+                        }
+
+                        if (htmlContents.isEmpty()) {
+                            publish("无法从任何 MHT文件中提取 HTML 内容\n");
+                            return null;
+                        }
+
+                        publish("所有文件已加载到内存，开始处理...\n");
+
+                        ImageBatchProcessor processor = new ImageBatchProcessor(
+                                htmlContents, config, finalOutputPath, inputFolderName, mhtFileNames);
+                        processor.setMhtFilePaths(mhtFilePaths);
+                        processor.execute();
+
+                    } else {
+                        // ===== 流式模式：不预加载文件，由 ImageBatchProcessor 逐个读取 =====
+                        publish("流式模式：将逐个读取和处理 MHT 文件...\n");
+
+                        // 传入空的 htmlContents 列表，流式模式不需要预加载
+                        List<String> emptyHtmlContents = new ArrayList<>();
+
+                        ImageBatchProcessor processor = new ImageBatchProcessor(
+                                emptyHtmlContents, config, finalOutputPath, inputFolderName, mhtFileNames);
+                        processor.setMhtFilePaths(mhtFilePaths);
+                        processor.execute();
+                    }
 
                     publish("图片处理完成！\n");
                 } catch (Exception ex) {
@@ -1432,7 +1499,6 @@ public class MhtExtractorGUI extends JFrame {
                     JOptionPane.showMessageDialog(MhtExtractorGUI.this,
                             "处理异常：" + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
                 } finally {
-
                     setControlsEnabled(true);
                     consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
                 }
@@ -1443,7 +1509,6 @@ public class MhtExtractorGUI extends JFrame {
 
     /**
      * 如果勾选了"提取完成后打开输出文件夹"，则打开输出文件夹目录
-     * 不论是纯文本模式还是图片模式，不论是否单独输出，都直接打开"输出文件夹目录"对应的路径
      */
     private void openOutputFolderIfNeeded() {
         if (!chkOpenFolderAfterComplete.isSelected()) return;
@@ -1511,7 +1576,7 @@ public class MhtExtractorGUI extends JFrame {
                                 if (cs != null) charset = cs;
                             }
                         } catch (Exception e) {
-                            // 忽略异常
+                            logger.debug("从 Part 获取 Charset 参数失败：{}", e.getMessage());
                         }
 
                         byte[] bytes = decodedIs.readAllBytes();
@@ -1563,7 +1628,6 @@ public class MhtExtractorGUI extends JFrame {
             lblTemplateVars.setEnabled(templateEnabled);
 
             if (enabled) {
-                // 任务执行完毕后，恢复章节标题控件的启用状态
                 chkAddChapterNumber.setEnabled(true);
                 chkEnableTitleExtract.setEnabled(true);
 
@@ -1572,7 +1636,6 @@ public class MhtExtractorGUI extends JFrame {
                 txtTitleEndMarker.setEnabled(enableExtract);
                 chkTitleUseRegex.setEnabled(enableExtract);
             } else {
-                // 任务执行期间，禁用章节标题控件
                 chkAddChapterNumber.setEnabled(false);
                 chkEnableTitleExtract.setEnabled(false);
                 txtTitleStartMarker.setEnabled(false);
@@ -1586,6 +1649,7 @@ public class MhtExtractorGUI extends JFrame {
             chkEnableImageRename.setEnabled(enabled);
             chkEnableImageZip.setEnabled(enabled);
             chkEnableImageCbz.setEnabled(enabled);
+            chkLegacyMemoryMode.setEnabled(enabled);
 
             boolean nameEnabled = enabled && chkEnableImageNameExtract.isSelected();
             txtImageNameStartMarker.setEnabled(nameEnabled);
@@ -1712,6 +1776,9 @@ public class MhtExtractorGUI extends JFrame {
         config.setImageCbzEnabled(chkEnableImageCbz.isSelected());
         config.setImageRenameEnabled(chkEnableImageRename.isSelected());
 
+        // 保存高速模式配置
+        config.setLegacyMemoryMode(chkLegacyMemoryMode.isSelected());
+
         return config;
     }
 
@@ -1778,6 +1845,11 @@ public class MhtExtractorGUI extends JFrame {
         chkEnableImageCbz.setSelected(config.isImageCbzEnabled());
         chkEnableImageRename.setSelected(config.isImageRenameEnabled());
 
+        // 高速模式字段
+        chkLegacyMemoryMode.setSelected(config.isLegacyMemoryMode());
+        // 导入配置时重置警告标记
+        legacyModeWarningShown = false;
+
         // 更新所有 UI 状态
         updateAllUIStates();
     }
@@ -1792,12 +1864,9 @@ public class MhtExtractorGUI extends JFrame {
         }));
 
         try {
-            // 替换原有的系统默认主题，启用 FlatLaf 浅色主题
             UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatLightLaf());
-            //增强高分屏支持，让界面在 4K 屏幕上更清晰
             UIManager.put("TitlePane.useWindowDecorations", true);
         } catch (Exception e) {
-            // 如果 FlatLaf 初始化失败（例如依赖缺失），回退到系统默认主题，防止程序崩溃
             logger.warn("FlatLaf 初始化失败，回退到系统默认主题", e);
             try {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());

@@ -104,7 +104,7 @@ public class ImageExtractor {
         String lowerUrl = imageUrl.toLowerCase();
 
         // 检查是否包含任何广告关键词
-        return !AD_KEYWORDS.stream().anyMatch(lowerUrl::contains);
+        return AD_KEYWORDS.stream().noneMatch(lowerUrl::contains);
     }
 
     /**

@@ -17,9 +17,7 @@ public class MhtFileWriter {
     private static final DateTimeFormatter DATETIME_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    // 默认模板
-    private static final String DEFAULT_START_TEMPLATE = "\n========== START ==========\n";
-    private static final String DEFAULT_END_TEMPLATE = "\n========== END ==========\n";
+
 
     /**
      * 将文本内容追加写入到指定 TXT 文件（支持自定义模板 + 章节名）
@@ -41,12 +39,12 @@ public class MhtFileWriter {
             return false;
         }
 
-        // 使用默认模板（如果用户未设置）
-        if (startTemplate == null || startTemplate.trim().isEmpty()) {
-            startTemplate = DEFAULT_START_TEMPLATE;
+        // 果模板为空，则不使用任何模板（保持空字符串）
+        if (startTemplate == null) {
+            startTemplate = "";
         }
-        if (endTemplate == null || endTemplate.trim().isEmpty()) {
-            endTemplate = DEFAULT_END_TEMPLATE;
+        if (endTemplate == null) {
+            endTemplate = "";
         }
 
         try (BufferedWriter writer = new BufferedWriter(

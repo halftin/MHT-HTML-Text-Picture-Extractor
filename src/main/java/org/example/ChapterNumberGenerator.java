@@ -2,10 +2,6 @@ package org.example;
 
 /**
  * 章节序号生成器（中文全汉字实现，支持1-9999）
- * 已修复：
- * 1. 修正了 10, 20, 30... 等整十数显示为空的问题
- * 2. 修正了 11-19 显示重复数字的问题 (如 "第十一一章")
- * 3. 规范了零的处理逻辑
  */
 public class ChapterNumberGenerator {
 
@@ -62,7 +58,7 @@ public class ChapterNumberGenerator {
 
                 if (hasNonZeroAfter) {
                     // 如果结果最后一位还不是“零”，则添加
-                    if (result.length() == 0 || result.charAt(result.length() - 1) != '零') {
+                    if (result.isEmpty() || result.charAt(result.length() - 1) != '零') {
                         result.append("零");
                     }
                 }

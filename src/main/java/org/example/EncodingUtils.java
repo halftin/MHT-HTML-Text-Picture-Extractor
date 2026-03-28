@@ -3,13 +3,14 @@ package org.example;
 import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * 增强版编码转换工具类
  * 支持多种编码检测和修复
  */
 public class EncodingUtils {
-
+    private static final Logger logger = LoggerFactory.getLogger(EncodingUtils.class);
     // 常见中文编码组合
     private static final String[] COMMONCharsets = {
             "UTF-8", "GBK", "GB2312", "GB18030", "Big5", "ISO-8859-1", "Windows-1252"
@@ -27,6 +28,7 @@ public class EncodingUtils {
             byte[] bytes = garbledText.getBytes(StandardCharsets.ISO_8859_1);
             return new String(bytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
+            logger.debug("UTF-8 修复失败：{}", e.getMessage());
             return garbledText;
         }
     }
@@ -43,6 +45,7 @@ public class EncodingUtils {
             byte[] bytes = garbledText.getBytes(StandardCharsets.UTF_8);
             return new String(bytes, "GBK");
         } catch (Exception e) {
+            logger.debug("GBK 修复失败：{}", e.getMessage());
             return garbledText;
         }
     }
@@ -74,7 +77,8 @@ public class EncodingUtils {
                     return result;
                 }
             } catch (Exception e) {
-                // 尝试下一个组合
+                logger.trace("编码转换失败 [{} -> {}]: {}", pair[0], pair[1], e.getMessage());
+
             }
         }
 

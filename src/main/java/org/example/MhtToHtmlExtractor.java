@@ -373,7 +373,7 @@ public class MhtToHtmlExtractor {
                                 if (cs != null) charset = cs;
                             }
                         } catch (Exception e) {
-
+                            logger.debug("获取 Content-Type 的 charset 参数失败：{}", e.getMessage());
                         }
 
                         byte[] bytes = decodedIs.readAllBytes();
