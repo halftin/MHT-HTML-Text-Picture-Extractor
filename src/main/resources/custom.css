@@ -1,0 +1,16 @@
+/* 自定义 ToggleSwitch 样式：开关在左、文字在右、圆角 */
+
+/* 文字标签显示在右侧 */
+.toggle-switch > .label-container > .label {
+    -fx-padding: 2px 0 2px 6px;
+}
+
+/* 圆形 thumb */
+.toggle-switch > .thumb {
+    -fx-background-radius: 10em;
+}
+
+/* 圆角轨道 */
+.toggle-switch > .thumb-area {
+    -fx-background-radius: 1em;
+}

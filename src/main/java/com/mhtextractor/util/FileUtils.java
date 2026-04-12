@@ -1,0 +1,112 @@
+package com.mhtextractor.util;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * 文件操作工具类
+ */
+public class FileUtils {
+    private static final Logger logger = LoggerFactory.getLogger(FileUtils.class);
+
+    /**
+     * 获取目录下所有 .mht 文件，按修改时间排序
+     */
+    public static List<File> findMhtFiles(String folderPath) {
+        File dir = new File(folderPath);
+        if (!dir.exists() || !dir.isDirectory()) {
+            logger.warn("输入目录不存在：{}", folderPath);
+            return List.of();
+        }
+
+        File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".mht") || name.toLowerCase().endsWith(".mhtml"));
+        if (files == null || files.length == 0) {
+            logger.warn("目录中未找到 .mht 文件：{}", folderPath);
+            return List.of();
+        }
+
+        // 按修改时间排序
+        return java.util.Arrays.stream(files)
+                .sorted(Comparator.comparingLong(File::lastModified))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 创建或清空文件
+     */
+    public static boolean createOrClearFile(String path) {
+        try {
+            File file = new File(path);
+            File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs();
+            }
+            if (file.exists()) {
+                file.delete();
+            }
+            return file.createNewFile();
+        } catch (IOException e) {
+            logger.error("创建/清空文件失败：{}", path, e);
+            return false;
+        }
+    }
+
+    /**
+     * 确保目录存在
+     */
+    public static boolean ensureDirectory(String dirPath) {
+        File dir = new File(dirPath);
+        if (!dir.exists()) {
+            return dir.mkdirs();
+        }
+        return dir.isDirectory();
+    }
+
+    /**
+     * 获取文件名（不含扩展名）
+     */
+    public static String getBaseName(File file) {
+        String name = file.getName();
+        int dotIndex = name.lastIndexOf('.');
+        return dotIndex > 0 ? name.substring(0, dotIndex) : name;
+    }
+
+    /**
+     * 创建子目录（基于父目录和子目录名）
+     */
+    public static String createSubDirectory(String parentDir, String subDirName) {
+        Path path = Paths.get(parentDir, subDirName);
+        if (ensureDirectory(path.toString())) {
+            return path.toString();
+        }
+        return null;
+    }
+
+    /**
+     * 递归删除目录及其所有内容
+     */
+    public static void deleteDirectory(File directory) {
+        if (directory == null || !directory.exists()) return;
+        File[] files = directory.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isDirectory()) {
+                    deleteDirectory(file);
+                } else {
+                    file.delete();
+                }
+            }
+        }
+        directory.delete();
+    }
+}
