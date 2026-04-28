@@ -3,10 +3,8 @@ package com.mhtextractor.output;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
+import java.util.function.IntConsumer;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -17,29 +15,16 @@ import java.util.zip.ZipOutputStream;
 @Slf4j
 public class Archiver {
 
-    /**
-     * 将目录打包为 ZIP 文件
-     *
-     * @param sourceDir 要打包的目录
-     * @param outputZipPath 输出的 ZIP 文件路径
-     * @return 是否成功
-     */
-    public static boolean createZip(String sourceDir, String outputZipPath) {
-        return createArchive(sourceDir, outputZipPath, "zip");
+    public static boolean createZip(String sourceDir, String outputZipPath, IntConsumer progressCallback) {
+        return createArchive(sourceDir, outputZipPath, "zip", progressCallback);
     }
 
-    /**
-     * 将目录打包为 CBZ 文件（实质是 ZIP，扩展名不同）
-     *
-     * @param sourceDir 要打包的目录
-     * @param outputCbzPath 输出的 CBZ 文件路径
-     * @return 是否成功
-     */
-    public static boolean createCbz(String sourceDir, String outputCbzPath) {
-        return createArchive(sourceDir, outputCbzPath, "cbz");
+    public static boolean createCbz(String sourceDir, String outputCbzPath, IntConsumer progressCallback) {
+        return createArchive(sourceDir, outputCbzPath, "cbz", progressCallback);
     }
 
-    private static boolean createArchive(String sourceDir, String outputPath, String format) {
+    private static boolean createArchive(String sourceDir, String outputPath, String format,
+                                         IntConsumer progressCallback) {
         File dir = new File(sourceDir);
         if (!dir.exists() || !dir.isDirectory()) {
             log.error("[归档] 目录不存在：{}", sourceDir);
@@ -52,9 +37,12 @@ public class Archiver {
             return false;
         }
 
+        int totalFiles = files.length;
+
         try (ZipOutputStream zos = new ZipOutputStream(
                 new BufferedOutputStream(new FileOutputStream(outputPath)))) {
 
+            int processed = 0;
             byte[] buffer = new byte[8192];
             for (File file : files) {
                 if (file.isFile()) {
@@ -67,10 +55,14 @@ public class Archiver {
                         }
                     }
                     zos.closeEntry();
+                    processed++;
+                    if (progressCallback != null) {
+                        progressCallback.accept(processed);
+                    }
                 }
             }
 
-            log.info("[归档] {} 创建成功：{} ({} 个文件)", format.toUpperCase(), outputPath, files.length);
+            log.info("[归档] {} 创建成功：{} ({} 个文件)", format.toUpperCase(), outputPath, totalFiles);
             return true;
 
         } catch (IOException e) {

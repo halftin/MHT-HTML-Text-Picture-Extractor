@@ -1,5 +1,12 @@
 /* 自定义 ToggleSwitch 样式：开关在左、文字在右、圆角 */
 
+/* 标题样式 - heading-3 */
+.heading-3 {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #333333;
+}
+
 /* 文字标签显示在右侧 */
 .toggle-switch > .label-container > .label {
     -fx-padding: 2px 0 2px 6px;
@@ -13,4 +20,399 @@
 /* 圆角轨道 */
 .toggle-switch > .thumb-area {
     -fx-background-radius: 1em;
+}
+
+/* 模式切换按钮（文本提取/图片提取）悬停效果 */
+.toggle-button {
+    -fx-cursor: hand;
+}
+
+.toggle-button:hover {
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 8, 0, 0, 1);
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+.toggle-button:pressed {
+    -fx-scale-x: 0.98;
+    -fx-scale-y: 0.98;
+}
+
+/* 开始提取按钮 - 绿色主题 */
+.action-button {
+    -fx-background-color: #4CAF50;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-padding: 8 20 8 20;
+}
+
+.action-button .ikonli-font-icon {
+    -fx-icon-color: white;
+}
+
+/* 开始提取按钮 - 鼠标悬停效果（保持高亮） */
+.action-button:hover {
+    -fx-background-color: #45a049;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 10, 0, 0, 2);
+    -fx-cursor: hand;
+}
+
+/* 开始提取按钮 - 按下效果 */
+.action-button:pressed {
+    -fx-background-color: #3d8b40;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 5, 0, 0, 1);
+}
+
+/* 开始提取按钮 - 禁用状态 */
+.action-button:disabled {
+    -fx-background-color: #cccccc;
+    -fx-text-fill: #666666;
+    -fx-opacity: 0.6;
+}
+
+/* 停止按钮 - 红色主题（非禁用状态） */
+.stop-button {
+    -fx-background-color: #f44336;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-padding: 8 20 8 20;
+}
+
+.stop-button .ikonli-font-icon {
+    -fx-icon-color: white;
+}
+
+/* 停止按钮 - 鼠标悬停效果 */
+.stop-button:hover {
+    -fx-background-color: #da190b;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 10, 0, 0, 2);
+    -fx-cursor: hand;
+}
+
+/* 停止按钮 - 按下效果 */
+.stop-button:pressed {
+    -fx-background-color: #c1170a;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 5, 0, 0, 1);
+}
+
+/* 停止按钮 - 禁用状态（与开始提取按钮保持一致） */
+.stop-button:disabled {
+    -fx-background-color: #cccccc;
+    -fx-text-fill: #666666;
+    -fx-opacity: 0.6;
+}
+
+/* TitledPane（可展开面板）无边框样式 */
+.titled-pane {
+    -fx-background-color: transparent;
+}
+
+.titled-pane > .title {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 5 10 5 10;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.titled-pane > .content {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 5 10 10 10;
+}
+
+/* ComboBox（配置下拉框）- 带边框和悬停效果 */
+.config-combo-box {
+    -fx-background-color: white;
+    -fx-border-color: #cccccc;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-padding: 2px;
+}
+
+.config-combo-box:hover {
+    -fx-border-color: #4CAF50;
+    -fx-border-width: 2px;
+    -fx-effect: dropshadow(gaussian, rgba(76, 175, 80, 0.3), 8, 0, 0, 0);
+}
+
+.config-combo-box:focused {
+    -fx-border-color: #2196F3;
+    -fx-border-width: 2px;
+    -fx-effect: dropshadow(gaussian, rgba(33, 150, 243, 0.4), 10, 0, 0, 0);
+}
+
+.config-combo-box > .list-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 4px 8px;
+}
+
+.config-combo-box .arrow-button {
+    -fx-background-color: transparent;
+}
+
+.config-combo-box .arrow {
+    -fx-background-color: #666666;
+}
+
+.config-combo-box:hover .arrow {
+    -fx-background-color: #4CAF50;
+}
+
+/* 加载按钮 - 蓝色主题 */
+.load-button {
+    -fx-background-color: #2196F3;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-padding: 6 14 6 14;
+}
+
+.load-button .ikonli-font-icon {
+    -fx-icon-color: white;
+}
+
+.load-button:hover {
+    -fx-background-color: #1976D2;
+    -fx-effect: dropshadow(gaussian, rgba(33, 150, 243, 0.3), 8, 0, 0, 0);
+    -fx-cursor: hand;
+}
+
+.load-button:pressed {
+    -fx-background-color: #1565C0;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 5, 0, 0, 1);
+}
+
+/* 保存按钮 - 青色主题 */
+.save-button {
+    -fx-background-color: #00BCD4;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-padding: 6 14 6 14;
+}
+
+.save-button .ikonli-font-icon {
+    -fx-icon-color: white;
+}
+
+.save-button:hover {
+    -fx-background-color: #0097A7;
+    -fx-effect: dropshadow(gaussian, rgba(0, 188, 212, 0.3), 8, 0, 0, 0);
+    -fx-cursor: hand;
+}
+
+.save-button:pressed {
+    -fx-background-color: #00838F;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 5, 0, 0, 1);
+}
+
+/* ===== 弹窗样式 —— 模仿 AtlantaFX Card 风格 ===== */
+
+.dialog-pane {
+    -fx-background-color: white;
+    -fx-background-radius: 8px;
+    -fx-border-color: #e0e0e0;
+    -fx-border-radius: 8px;
+    -fx-border-width: 1px;
+    -fx-padding: 24 24 20 24;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 20, 0, 0, 4);
+    -fx-font-size: 13px;
+}
+
+/* 头部区域（标题 + 图标） */
+.dialog-pane .header-panel {
+    -fx-background-color: transparent;
+    -fx-padding: 0 0 8 0;
+}
+
+.dialog-pane .header-panel .label {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #333333;
+}
+
+/* 图标区域 — 保持图标但缩小并着色 */
+.dialog-pane .graphic-container {
+    -fx-padding: 0 12 0 0;
+}
+
+.dialog-pane .graphic-container .label {
+    -fx-font-size: 28px;
+}
+
+/* 警告图标 — 橙色 */
+.dialog-pane:warning .graphic-container .label {
+    -fx-text-fill: #FF9800;
+}
+
+/* 错误图标 — 红色 */
+.dialog-pane:error .graphic-container .label {
+    -fx-text-fill: #f44336;
+}
+
+/* 信息图标 — 蓝色 */
+.dialog-pane:information .graphic-container .label {
+    -fx-text-fill: #2196F3;
+}
+
+/* 确认对话框不显示图标 */
+.dialog-pane:confirmation .graphic-container {
+    -fx-pref-width: 0;
+    -fx-pref-height: 0;
+    -fx-padding: 0;
+}
+
+/* 正文内容区域 */
+.dialog-pane .content {
+    -fx-padding: 4 0 12 0;
+}
+
+/* Alert 的文本内容（Label） */
+.dialog-pane .content .label {
+    -fx-text-fill: #555555;
+    -fx-wrap-text: true;
+    -fx-line-spacing: 2px;
+}
+
+/* TextInputDialog 的文本输入框 */
+.dialog-pane .text-input {
+    -fx-background-color: white;
+    -fx-border-color: #cccccc;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-padding: 6 10 6 10;
+    -fx-font-size: 13px;
+    -fx-pref-width: 300px;
+}
+
+.dialog-pane .text-input:focused {
+    -fx-border-color: #2196F3;
+    -fx-border-width: 2px;
+    -fx-effect: dropshadow(gaussian, rgba(33, 150, 243, 0.3), 8, 0, 0, 0);
+}
+
+/* 按钮栏 — 右对齐 */
+.dialog-pane .button-bar {
+    -fx-padding: 8 0 0 0;
+    -fx-alignment: center-right;
+    -fx-spacing: 10px;
+    -fx-background-insets: 0;
+    -fx-border-width: 0;
+}
+
+.dialog-pane .button-bar .container {
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+/* 弹窗中的默认按钮（OK / Confirm / YES）—— 蓝色主按钮 */
+.dialog-pane .button-bar .button:default {
+    -fx-background-color: #2196F3;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-padding: 8 24 8 24;
+    -fx-background-radius: 4px;
+    -fx-cursor: hand;
+    -fx-min-width: 100px;
+}
+
+.dialog-pane .button-bar .button:default:hover {
+    -fx-background-color: #1976D2;
+    -fx-effect: dropshadow(gaussian, rgba(33, 150, 243, 0.3), 8, 0, 0, 0);
+}
+
+.dialog-pane .button-bar .button:default:pressed {
+    -fx-background-color: #1565C0;
+}
+
+/* 弹窗中的次要按钮（Cancel / NO）—— 灰色 */
+.dialog-pane .button-bar .button {
+    -fx-background-color: #f5f5f5;
+    -fx-text-fill: #333333;
+    -fx-font-weight: bold;
+    -fx-padding: 8 24 8 24;
+    -fx-background-radius: 4px;
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-cursor: hand;
+    -fx-min-width: 100px;
+}
+
+.dialog-pane .button-bar .button:hover {
+    -fx-background-color: #eeeeee;
+    -fx-border-color: #cccccc;
+}
+
+.dialog-pane .button-bar .button:pressed {
+    -fx-background-color: #e0e0e0;
+}
+
+/* 特殊：错误弹窗的 OK 按钮用红色 */
+.dialog-pane:error .button-bar .button:default {
+    -fx-background-color: #f44336;
+}
+
+.dialog-pane:error .button-bar .button:default:hover {
+    -fx-background-color: #da190b;
+}
+
+/* 特殊：警告弹窗的 OK 按钮用橙色 */
+.dialog-pane:warning .button-bar .button:default {
+    -fx-background-color: #FF9800;
+}
+
+.dialog-pane:warning .button-bar .button:default:hover {
+    -fx-background-color: #F57C00;
+}
+
+/* 删除按钮 - 黑色主题 */
+.delete-button {
+    -fx-background-color: #333333;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-padding: 6 14 6 14;
+}
+
+.delete-button .ikonli-font-icon {
+    -fx-icon-color: white;
+}
+
+.delete-button:hover {
+    -fx-background-color: #1a1a1a;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.4), 8, 0, 0, 0);
+    -fx-cursor: hand;
+}
+
+.delete-button:pressed {
+    -fx-background-color: #000000;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.3), 5, 0, 0, 1);
+}
+/* 日志文本区域 - 允许选中但不可编辑 */
+.log-text-area {
+    -fx-cursor: text;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+.log-text-area .content {
+    -fx-highlight-fill: black;
+    -fx-highlight-text-fill: white;
+}
+
+.log-text-area:focused {
+    -fx-background-color: white;
+}
+
+/* 全局文字选中底纹加深 */
+.text-input {
+    -fx-highlight-fill: black;
+    -fx-highlight-text-fill: white;
+    -fx-accent: black;
+}
+
+.text-area .content {
+    -fx-highlight-fill: black;
+    -fx-highlight-text-fill: white;
 }

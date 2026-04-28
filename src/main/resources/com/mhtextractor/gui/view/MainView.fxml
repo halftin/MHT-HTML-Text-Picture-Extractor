@@ -5,6 +5,7 @@
 <?import javafx.scene.layout.*?>
 <?import com.mhtextractor.gui.component.LogTextArea?>
 <?import atlantafx.base.controls.ToggleSwitch?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
 
 <BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="com.mhtextractor.gui.controller.MainController"
@@ -19,11 +20,19 @@
 
             <!-- 标题栏 -->
             <HBox spacing="10" alignment="CENTER_LEFT">
-                <Label text="MHT Extractor 2.0" styleClass="heading-3"/>
-                <Region HBox.hgrow="ALWAYS"/>
                 <Label text="模式选择:"/>
-                <ToggleButton fx:id="textModeToggle" text="文本提取"/>
-                <ToggleButton fx:id="imageModeToggle" text="图片提取"/>
+                <ToggleButton fx:id="textModeToggle" text="文本提取">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-file-alt" iconSize="16"/>
+                    </graphic>
+                </ToggleButton>
+                <ToggleButton fx:id="imageModeToggle" text="图片提取">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-file-image" iconSize="16"/>
+                    </graphic>
+                </ToggleButton>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label text="MHT 资源提取器" styleClass="heading-3"/>
             </HBox>
 
             <!-- 输入/输出目录 -->
@@ -31,16 +40,24 @@
                 <columnConstraints>
                     <ColumnConstraints minWidth="80" prefWidth="80"/>
                     <ColumnConstraints hgrow="ALWAYS" minWidth="200"/>
-                    <ColumnConstraints minWidth="80"/>
+                    <ColumnConstraints minWidth="100" prefWidth="100"/>
                 </columnConstraints>
 
                 <Label text="输入目录:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
                 <TextField fx:id="inputFolderField" promptText="选择包含 .mht 文件的目录" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
-                <Button fx:id="browseInputButton" text="浏览..." onAction="#onBrowseInput" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
+                <Button fx:id="browseInputButton" text="浏览..." onAction="#onBrowseInput" GridPane.rowIndex="0" GridPane.columnIndex="2">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-folder-open" iconSize="14"/>
+                    </graphic>
+                </Button>
 
                 <Label text="输出目录:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
                 <TextField fx:id="outputFolderField" promptText="选择输出目录" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
-                <Button fx:id="browseOutputButton" text="浏览..." onAction="#onBrowseOutput" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
+                <Button fx:id="browseOutputButton" text="浏览..." onAction="#onBrowseOutput" GridPane.rowIndex="1" GridPane.columnIndex="2">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-folder-open" iconSize="14"/>
+                    </graphic>
+                </Button>
             </GridPane>
         </VBox>
     </top>
@@ -136,7 +153,7 @@
                         <!-- 名称提取 -->
                         <TitledPane fx:id="imageNamePane" text="名称提取" expanded="false">
                             <VBox spacing="8">
-                                <ToggleSwitch fx:id="imageNameExtractCheck" text="启用图片名称提取"/>
+                                <ToggleSwitch fx:id="imageNameExtractCheck" text="启用图片文件夹名称提取"/>
                                 <GridPane hgap="8" vgap="4">
                                     <columnConstraints>
                                         <ColumnConstraints minWidth="100" prefWidth="100"/>
@@ -170,7 +187,7 @@
                         <!-- 图片处理 -->
                         <TitledPane fx:id="imageProcessPane" text="图片处理选项" expanded="false">
                             <VBox spacing="8">
-                                <ToggleSwitch fx:id="imageRenameCheck" text="批量重命名图片（image_0001.jpg...）"/>
+                                <ToggleSwitch fx:id="imageRenameCheck" text="批量重命名图片（001.jpg、002.jpg...）"/>
                                 <ToggleSwitch fx:id="imageZipCheck" text="ZIP 打包"/>
                                 <ToggleSwitch fx:id="imageCbzCheck" text="CBZ 打包"/>
                             </VBox>
@@ -209,19 +226,40 @@
             <!-- 完成后操作 -->
             <ToggleSwitch fx:id="openFolderAfterCompleteCheck" text="提取完成后打开输出文件夹"/>
 
+
             <!-- 操作按钮 -->
             <!-- 操作按钮 -->
             <HBox spacing="10" alignment="CENTER">
-                <Button fx:id="startButton" text="开始提取" onAction="#onStartProcessing" styleClass="action-button"/>
+                <Button fx:id="startButton" text="开始提取" onAction="#onStartProcessing" styleClass="action-button">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-play" iconSize="14"/>
+                    </graphic>
+                </Button>
                 <Button fx:id="stopButton" text="停止" onAction="#onStopProcessing"
-                        disable="true"/>
+                        disable="true" styleClass="stop-button">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-stop" iconSize="14"/>
+                    </graphic>
+                </Button>
                 <Region HBox.hgrow="ALWAYS"/>
                 <!-- 配置管理 -->
                 <Label text="配置:"/>
-                <ComboBox fx:id="configComboBox" prefWidth="150" promptText="选择配置"/>
-                <Button text="加载" onAction="#onLoadConfig"/>
-                <Button text="保存" onAction="#onSaveConfig"/>
-                <Button text="删除" onAction="#onDeleteConfig"/>
+                <ComboBox fx:id="configComboBox" prefWidth="150" promptText="选择配置" styleClass="config-combo-box"/>
+                <Button text="加载" onAction="#onLoadConfig" styleClass="load-button">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-share-square" iconSize="14"/>
+                    </graphic>
+                </Button>
+                <Button text="保存" onAction="#onSaveConfig" styleClass="save-button">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-save" iconSize="14"/>
+                    </graphic>
+                </Button>
+                <Button text="删除" onAction="#onDeleteConfig" styleClass="delete-button">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-trash-alt" iconSize="14"/>
+                    </graphic>
+                </Button>
             </HBox>
 
             <!-- 日志区域 -->

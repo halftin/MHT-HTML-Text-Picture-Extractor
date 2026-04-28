@@ -2,14 +2,15 @@ package com.mhtextractor.processor;
 
 import com.mhtextractor.util.FileUtils;
 import lombok.Data;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Supplier;
@@ -30,7 +31,11 @@ public abstract class BatchProcessor {
     /**
      * 递归深度超限继续回调
      * 由调用方通过 setRecursionContinueCallback 绑定 GUI 弹窗逻辑
+     * -- SETTER --
+     *  设置递归深度超限时是否继续的回调
+
      */
+    @Setter
     protected volatile Supplier<Boolean> recursionContinueCallback;
 
     /**
@@ -38,13 +43,6 @@ public abstract class BatchProcessor {
      */
     public void setCancelSupplier(Supplier<Boolean> supplier) {
         this.cancelSupplier = supplier != null ? supplier : (() -> false);
-    }
-
-    /**
-     * 设置递归深度超限时是否继续的回调
-     */
-    public void setRecursionContinueCallback(Supplier<Boolean> callback) {
-        this.recursionContinueCallback = callback;
     }
 
     /**
@@ -66,15 +64,10 @@ public abstract class BatchProcessor {
          * @param current 当前已处理的文件数（从1开始）
          * @param total 总文件数
          * @param fileName 当前处理的文件名
+         * @param subProgress 文件内部子阶段进度 0.0~1.0
          */
-        void onProgress(int current, int total, String fileName);
+        void onProgress(int current, int total, String fileName, double subProgress);
     }
-
-    /**
-     * 默认模板
-     */
-    public static final String DEFAULT_START_TEMPLATE = "\n========== START ==========\n";
-    public static final String DEFAULT_END_TEMPLATE = "\n========== END ==========\n";
 
     /**
      * 处理统计信息
@@ -85,16 +78,52 @@ public abstract class BatchProcessor {
         private int successCount = 0;
         private int failCount = 0;
         private int skipCount = 0;
+        private int warnCount = 0;
         private long startTime;
         private long endTime;
 
-        @Override
-        public String toString() {
+        private final List<String> failDetails = new ArrayList<>();
+        private final List<String> skipDetails = new ArrayList<>();
+        private final List<String> warnDetails = new ArrayList<>();
+
+        public void addFailDetail(String detail) {
+            failDetails.add(detail);
+        }
+
+        public void addSkipDetail(String detail) {
+            skipDetails.add(detail);
+        }
+
+        public void addWarnDetail(String detail) {
+            warnDetails.add(detail);
+        }
+
+        public String getSummaryLine() {
             return String.format(
-                    "处理完成 - 总计：%d, 成功：%d, 失败：%d, 跳过：%d, 耗时：%.2f 秒",
-                    totalFiles, successCount, failCount, skipCount,
+                    "处理完成 - 总计：%d, 成功：%d, 失败：%d, 跳过：%d, 出现警告：%d, 耗时：%.2f 秒",
+                    totalFiles, successCount, failCount, skipCount, warnCount,
                     (endTime - startTime) / 1000.0
             );
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append(getSummaryLine());
+            boolean hasDetails = !failDetails.isEmpty() || !skipDetails.isEmpty() || !warnDetails.isEmpty();
+            if (hasDetails) {
+                sb.append("\n========================================");
+                for (String detail : failDetails) {
+                    sb.append("\n").append(detail);
+                }
+                for (String detail : skipDetails) {
+                    sb.append("\n").append(detail);
+                }
+                for (String detail : warnDetails) {
+                    sb.append("\n").append(detail);
+                }
+            }
+            return sb.toString();
         }
     }
 

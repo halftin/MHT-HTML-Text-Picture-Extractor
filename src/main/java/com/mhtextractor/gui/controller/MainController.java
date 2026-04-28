@@ -7,6 +7,7 @@ import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.processor.TextBatchProcessor;
 import javafx.application.Platform;
+import javafx.beans.property.DoubleProperty;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
@@ -18,6 +19,8 @@ import com.mhtextractor.gui.component.LogTextArea;
 
 import java.awt.Desktop;
 import java.io.File;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -89,6 +92,8 @@ public class MainController {
     private final ConfigManager configManager = new ConfigManager();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Task<BatchProcessor.ProcessStats> currentTask;
+    private DoubleProperty smoothProgress;
+    private boolean isApplyingConfig = false;
 
     @FXML
     public void initialize() {
@@ -272,6 +277,14 @@ public class MainController {
             }
         }
 
+        // 生成时间戳会话目录，隔离每次提取运行
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH：mm：ss"));
+        String sessionOutputFolder = new File(outputFolder, timestamp).getPath();
+        if (!new File(sessionOutputFolder).mkdirs()) {
+            log.warn("会话输出目录创建失败或已存在：{}", sessionOutputFolder);
+        }
+        log.info("会话输出目录：{}", sessionOutputFolder);
+
         running.set(true);
         startButton.setDisable(true);
         stopButton.setDisable(false);
@@ -285,8 +298,9 @@ public class MainController {
                     AppConfig config = buildConfig();
 
                     // 进度回调：每处理完一个文件时更新进度
-                    BatchProcessor.ProgressCallback progressCallback = (current, total, fileName) -> {
-                        updateProgress(current, total);
+                    BatchProcessor.ProgressCallback progressCallback = (current, total, fileName, subProgress) -> {
+                        double overall = (current - 1 + subProgress) / total;
+                        updateProgress(overall, 1.0);
                     };
 
                     // 递归深度超限回调：弹窗询问用户是否继续
@@ -310,19 +324,19 @@ public class MainController {
                         ImageBatchProcessor processor = new ImageBatchProcessor(config);
                         processor.setCancelSupplier(this::isCancelled);
                         processor.setRecursionContinueCallback(recursionCallback);
-                        return processor.process(inputFolder, outputFolder, progressCallback);
+                        return processor.process(inputFolder, sessionOutputFolder, progressCallback);
                     } else {
                         TextBatchProcessor processor = new TextBatchProcessor(config);
                         processor.setCancelSupplier(this::isCancelled);
                         processor.setRecursionContinueCallback(recursionCallback);
                         if (config.isSeparateFiles()) {
-                            return processor.processSeparate(inputFolder, outputFolder, progressCallback);
+                            return processor.processSeparate(inputFolder, sessionOutputFolder, progressCallback);
                         } else {
                             String inputDirName = new File(inputFolder).getName();
                             if (inputDirName == null || inputDirName.isEmpty()) {
                                 inputDirName = "mht_output";
                             }
-                            String outputPath = new File(outputFolder, inputDirName + ".txt").toString();
+                            String outputPath = new File(sessionOutputFolder, inputDirName + ".txt").toString();
                             return processor.processMerged(inputFolder, outputPath, progressCallback);
                         }
                     }
@@ -333,33 +347,31 @@ public class MainController {
             }
         };
 
-        // 绑定进度条到 Task 的进度属性
-        progressBar.progressProperty().bind(task.progressProperty());
+        // 使用平滑进度条动画替代直接绑定
+        smoothProgress = JavaFxUtil.createSmoothProgressProperty();
+        progressBar.progressProperty().bind(smoothProgress);
+
+        // 监听 Task 进度变化，平滑过渡到新值
+        task.progressProperty().addListener((obs, oldVal, newVal) -> {
+            JavaFxUtil.setSmoothProgress(smoothProgress, newVal.doubleValue());
+        });
 
         task.setOnSucceeded(e -> {
             running.set(false);
             currentTask = null;
             startButton.setDisable(false);
             stopButton.setDisable(true);
+            smoothProgress.set(1.0);
             progressBar.progressProperty().unbind();
-            progressBar.setProgress(1.0);
+            JavaFxUtil.stopSmoothProgress(smoothProgress);
             statusLabel.setText("处理完成");
             BatchProcessor.ProcessStats stats = task.getValue();
             if (stats != null) {
-                statusLabel.setText(stats.toString());
+                statusLabel.setText(stats.getSummaryLine());
             }
-            // 提取完成后打开输出文件夹
+            // 提取完成后打开会话输出目录
             if (openFolderAfterCompleteCheck.isSelected()) {
-                String targetFolder = outputFolderField.getText();
-                if (!imageMode && !separateFilesCheck.isSelected()) {
-                    String inputDirName = new File(inputFolderField.getText()).getName();
-                    if (inputDirName == null || inputDirName.isEmpty()) {
-                        inputDirName = "mht_output";
-                    }
-                    File outputFile = new File(targetFolder, inputDirName + ".txt");
-                    targetFolder = outputFile.getParent();
-                }
-                File folder = new File(targetFolder);
+                File folder = new File(sessionOutputFolder);
                 if (folder.exists() && Desktop.isDesktopSupported()) {
                     try {
                         Desktop.getDesktop().open(folder);
@@ -376,6 +388,7 @@ public class MainController {
             startButton.setDisable(false);
             stopButton.setDisable(true);
             progressBar.progressProperty().unbind();
+            JavaFxUtil.stopSmoothProgress(smoothProgress);
             progressBar.setVisible(false);
             statusLabel.setText("处理异常");
             Throwable ex = task.getException();
@@ -393,6 +406,12 @@ public class MainController {
             currentTask.cancel(true);
         }
         running.set(false);
+        startButton.setDisable(false);
+        stopButton.setDisable(true);
+        progressBar.progressProperty().unbind();
+        JavaFxUtil.stopSmoothProgress(smoothProgress);
+        progressBar.setVisible(false);
+        statusLabel.setText("已停止");
         log.info("用户手动停止处理");
     }
 

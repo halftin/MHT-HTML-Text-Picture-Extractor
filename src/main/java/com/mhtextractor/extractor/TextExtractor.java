@@ -2,16 +2,11 @@ package com.mhtextractor.extractor;
 
 import com.mhtextractor.core.ContentExtractor;
 import com.mhtextractor.core.MimeParser;
-import com.mhtextractor.util.EncodingUtils;
-import lombok.Data;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * 文本提取器
@@ -21,6 +16,7 @@ public class TextExtractor {
     private static final Logger logger = LoggerFactory.getLogger(TextExtractor.class);
 
     private final MimeParser.ParsedMht parsedMht;
+    private List<String> lastWarnings = Collections.emptyList();
 
     public TextExtractor(MimeParser.ParsedMht parsedMht) {
         this.parsedMht = parsedMht;
@@ -36,8 +32,10 @@ public class TextExtractor {
             return null;
         }
         ContentExtractor contentExtractor = new ContentExtractor();
-        return contentExtractor.extractText(parsedMht.getHtmlContent(),
+        String text = contentExtractor.extractText(parsedMht.getHtmlContent(),
                 autoFixEncoding, startMarker, endMarker, useRegex);
+        lastWarnings = contentExtractor.getLastWarnings();
+        return text;
     }
 
     /**
@@ -48,5 +46,9 @@ public class TextExtractor {
         ContentExtractor contentExtractor = new ContentExtractor();
         return contentExtractor.extractChapterTitle(parsedMht.getHtmlContent(),
                 startMarker, endMarker, useRegex);
+    }
+
+    public List<String> getLastWarnings() {
+        return lastWarnings;
     }
 }

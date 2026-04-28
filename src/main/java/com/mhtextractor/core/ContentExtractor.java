@@ -5,6 +5,8 @@ import org.jsoup.Jsoup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -15,11 +17,18 @@ import java.util.regex.Pattern;
 public class ContentExtractor {
     private static final Logger logger = LoggerFactory.getLogger(ContentExtractor.class);
 
+    private final List<String> lastWarnings = new ArrayList<>();
+
+    public List<String> getLastWarnings() {
+        return lastWarnings;
+    }
+
     /**
      * 从HTML内容中提取纯文本
      */
     public String extractText(String htmlContent, boolean autoFixEncoding,
                               String startMarker, String endMarker, boolean useRegex) {
+        lastWarnings.clear();
         if (htmlContent == null || htmlContent.isEmpty()) return null;
 
         // 检测编码并修复（仅在MimeParser未正确解码时生效）
@@ -107,17 +116,33 @@ public class ContentExtractor {
                 Matcher matcher = pattern.matcher(html);
                 if (matcher.find()) {
                     return matcher.group(1);
+                } else {
+                    String msg = String.format("内容限定标记未找到 - 起始: %s, 结束: %s", startMarker, endMarker);
+                    logger.warn("[警告] {}", msg);
+                    lastWarnings.add(msg);
                 }
             } else {
                 int startIndex = html.indexOf(startMarker);
-                if (startIndex == -1) return html;
+                if (startIndex == -1) {
+                    String msg = String.format("内容限定起始标记未找到: %s", startMarker);
+                    logger.warn("[警告] {}", msg);
+                    lastWarnings.add(msg);
+                    return html;
+                }
                 int contentStart = startIndex + startMarker.length();
                 int endIndex = html.indexOf(endMarker, contentStart);
-                if (endIndex == -1) return html.substring(contentStart);
+                if (endIndex == -1) {
+                    String msg = String.format("内容限定结束标记未找到: %s，将从起始标记后截取到末尾", endMarker);
+                    logger.warn("[警告] {}", msg);
+                    lastWarnings.add(msg);
+                    return html.substring(contentStart);
+                }
                 return html.substring(contentStart, endIndex);
             }
         } catch (Exception e) {
-            logger.warn("内容截取失败：{}", e.getMessage());
+            String msg = String.format("内容截取失败: %s", e.getMessage());
+            logger.warn(msg);
+            lastWarnings.add(msg);
         }
         return html;
     }

@@ -14,6 +14,9 @@ public class LogTextArea extends TextArea {
         setWrapText(true);
         setPrefHeight(200);
 
+        // 添加自定义样式类
+        getStyleClass().add("log-text-area");
+
         // 注册到 Logback Appender
         TextAreaAppender.setLogConsumer(this::appendLog);
     }

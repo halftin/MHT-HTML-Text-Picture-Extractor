@@ -11,6 +11,7 @@ import lombok.Data;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -18,6 +19,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -31,44 +34,100 @@ public class MimeParser {
     /** 递归深度限制阈值 */
     private static final int RECURSION_LIMIT = 100;
 
-    /**
-     * 解析MHT文件，返回结构化数据
-     */
-    public ParsedMht parse(String mhtPath) throws Exception {
-        return parse(mhtPath, null);
+    /** 每处理 N 个 part 报告一次进度 */
+    private static final int PROGRESS_INTERVAL = 5;
+
+    /** 解析阶段枚举，用于进度报告 */
+    public enum ParsingStage {
+        FILE_READ,
+        HTML_EXTRACTED,
+        MIME_TRAVERSED,
+        IMAGES_EXTRACTED,
+        COMPLETE
     }
 
     /**
-     * 解析MHT文件，支持递归深度限制回调
+     * 解析MHT文件，支持递归深度限制回调和进度报告
      *
      * @param mhtPath 文件路径
      * @param continueCallback 递归超限时回调，返回 true 继续解析，false 终止解析
      *                         回调格式：Supplier<Boolean>
      *                         传入 null 则不检查递归深度
+     * @param progressCallback 进度报告回调，可传入 null 禁用进度报告
      */
-    public ParsedMht parse(String mhtPath, Supplier<Boolean> continueCallback) throws Exception {
+    public ParsedMht parse(String mhtPath, Supplier<Boolean> continueCallback,
+                           Consumer<ParsingStage> progressCallback) throws Exception {
+        return parse(mhtPath, continueCallback, progressCallback, null);
+    }
+
+    /**
+     * 解析MHT文件，支持递归深度限制回调和细粒度进度报告
+     *
+     * @param mhtPath 文件路径
+     * @param continueCallback 递归超限时回调，返回 true 继续解析，false 终止解析
+     * @param stageCallback 阶段进度回调（ParsingStage 枚举），可传入 null
+     * @param byteProgressCallback 细粒度进度回调（0.0~1.0，覆盖 0.05~0.35 解析阶段），可传入 null
+     */
+    public ParsedMht parse(String mhtPath, Supplier<Boolean> continueCallback,
+                           Consumer<ParsingStage> stageCallback,
+                           Consumer<Double> byteProgressCallback) throws Exception {
         Properties props = new Properties();
         props.setProperty("mail.mime.decodetext.strict", "false");
         props.setProperty("mail.mime.charset", "UTF-8");
         Session session = Session.getInstance(props);
 
         try (FileInputStream fis = new FileInputStream(mhtPath)) {
+            if (stageCallback != null) stageCallback.accept(ParsingStage.FILE_READ);
             MimeMessage message = new MimeMessage(session, fis);
-            return parseMimeMessage(message, continueCallback);
+
+            // 首次快速遍历统计总 part 数，用于进度估算
+            int totalParts = countTotalParts(message);
+            if (totalParts < 1) totalParts = 1;
+
+            // 原子计数器：跟踪已处理的 part 数，用于周期性报告进度
+            AtomicInteger partsProcessed = new AtomicInteger(0);
+
+            return parseMimeMessage(message, continueCallback, stageCallback, byteProgressCallback,
+                    partsProcessed, totalParts);
+        }
+    }
+
+    /**
+     * 快速遍历 MIME 树统计总 part 数，用于进度估算
+     */
+    private int countTotalParts(jakarta.mail.Part part) {
+        try {
+            if (part.isMimeType("multipart/*")) {
+                Multipart mp = (Multipart) part.getContent();
+                int count = 1;
+                for (int i = 0; i < mp.getCount(); i++) {
+                    count += countTotalParts(mp.getBodyPart(i));
+                }
+                return count;
+            }
+            return 1;
+        } catch (Exception e) {
+            return 1;
         }
     }
 
     /**
      * 从MimeMessage中提取HTML内容和CID映射
      */
-    private ParsedMht parseMimeMessage(MimeMessage message, Supplier<Boolean> continueCallback) throws Exception {
+    private ParsedMht parseMimeMessage(MimeMessage message, Supplier<Boolean> continueCallback,
+                                       Consumer<ParsingStage> stageCallback,
+                                       Consumer<Double> byteProgressCallback,
+                                       AtomicInteger partsProcessed, int totalParts) throws Exception {
         ParsedMht result = new ParsedMht();
         result.setCidMap(new LinkedHashMap<>());
         result.setLocationMap(new LinkedHashMap<>());
         result.setLocationDataMap(new LinkedHashMap<>());
         result.setImageInfoList(new ArrayList<>());
 
-        extractFromPart(message, result, 0, continueCallback);
+        extractFromPart(message, result, 0, continueCallback, stageCallback, byteProgressCallback,
+                partsProcessed, totalParts);
+        if (stageCallback != null) stageCallback.accept(ParsingStage.MIME_TRAVERSED);
+        if (byteProgressCallback != null) byteProgressCallback.accept(0.35);
         return result;
     }
 
@@ -79,9 +138,16 @@ public class MimeParser {
      * @param result 解析结果
      * @param depth 当前递归深度
      * @param continueCallback 递归深度超限时是否继续的回调
+     * @param stageCallback 阶段进度回调
+     * @param byteProgressCallback 细粒度进度回调（0.0~1.0）
+     * @param partsProcessed 已处理 part 计数器
+     * @param totalParts 预估总 part 数
      */
     private void extractFromPart(jakarta.mail.Part part, ParsedMht result,
-                                 int depth, Supplier<Boolean> continueCallback) throws Exception {
+                                 int depth, Supplier<Boolean> continueCallback,
+                                 Consumer<ParsingStage> stageCallback,
+                                 Consumer<Double> byteProgressCallback,
+                                 AtomicInteger partsProcessed, int totalParts) throws Exception {
         if (depth > RECURSION_LIMIT && continueCallback != null) {
             logger.warn("[递归警告] MIME树深度已达 {} 层（阈值 {}），可能为损坏文件", depth, RECURSION_LIMIT);
             if (!continueCallback.get()) {
@@ -96,13 +162,22 @@ public class MimeParser {
         if (part.isMimeType("text/html")) {
             if (result.getHtmlContent() == null) {
                 result.setHtmlContent(extractHtmlFromPart(part));
+                if (stageCallback != null) stageCallback.accept(ParsingStage.HTML_EXTRACTED);
+                if (byteProgressCallback != null) byteProgressCallback.accept(0.15);
             }
         } else if (part.isMimeType("image/*")) {
-            extractImagePart(part, result);
+            extractImagePart(part, result, stageCallback);
         } else if (part.isMimeType("multipart/*")) {
             Multipart mp = (Multipart) part.getContent();
             for (int i = 0; i < mp.getCount(); i++) {
-                extractFromPart(mp.getBodyPart(i), result, depth + 1, continueCallback);
+                extractFromPart(mp.getBodyPart(i), result, depth + 1, continueCallback,
+                        stageCallback, byteProgressCallback, partsProcessed, totalParts);
+                // 每处理 PROGRESS_INTERVAL 个 part 报告一次细粒度进度
+                int processed = partsProcessed.incrementAndGet();
+                if (byteProgressCallback != null && processed % PROGRESS_INTERVAL == 0) {
+                    double progress = 0.05 + 0.28 * ((double) processed / totalParts);
+                    byteProgressCallback.accept(Math.min(progress, 0.33));
+                }
             }
         }
     }
@@ -160,7 +235,7 @@ public class MimeParser {
      */
     private boolean containsReplacementChars(String text) {
         for (int i = 0; i < text.length(); i++) {
-            if (text.charAt(i) == '\uFFFD') return true;
+            if (text.charAt(i) == '�') return true;
         }
         return false;
     }
@@ -168,7 +243,8 @@ public class MimeParser {
     /**
      * 提取图片资源，按CID和Content-Location建立映射
      */
-    private void extractImagePart(jakarta.mail.Part part, ParsedMht result) throws Exception {
+    private void extractImagePart(jakarta.mail.Part part, ParsedMht result,
+                                  Consumer<ParsingStage> progressCallback) throws Exception {
         String contentId = null;
         String contentLocation = null;
         String filename = null;
@@ -209,6 +285,7 @@ public class MimeParser {
             }
             // 记录图片信息（包含原始文件名和出现顺序）
             result.getImageInfoList().add(new ImageInfo(contentId, contentLocation, filename, data));
+            if (progressCallback != null) progressCallback.accept(ParsingStage.IMAGES_EXTRACTED);
         }
     }
 

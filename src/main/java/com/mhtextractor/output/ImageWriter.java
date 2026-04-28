@@ -9,6 +9,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.IntConsumer;
 
 /**
  * 图片保存工具类
@@ -18,21 +19,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ImageWriter {
 
     private static final int MAX_RENAME_ATTEMPTS = 1000;
-
-    /**
-     * 保存单张图片到指定目录
-     *
-     * @param imageData 图片数据
-     * @param outputDir 输出目录
-     * @param fallbackExt 默认扩展名
-     * @param rename 是否启用批量重命名
-     * @param counter 重命名计数器引用（长度为1的数组）
-     * @return 保存的文件名，失败返回 null
-     */
-    public static String saveImage(ImageExtractor.ImageData imageData, String outputDir,
-                                   String fallbackExt, boolean rename, int[] counter) {
-        return saveImage(imageData, outputDir, fallbackExt, rename, counter, "");
-    }
 
     /**
      * 保存单张图片到指定目录（支持文件名前缀）
@@ -55,7 +41,7 @@ public class ImageWriter {
         if (rename) {
             int num = counter[0]++;
             // 使用全局序号：格式 001、002、003...
-            finalFileName = String.format("%03d.%s", num, ext);
+            finalFileName = String.format("%05d.%s", num, ext);
         } else if (filePrefix != null && !filePrefix.isEmpty()) {
             // 合并模式不重命名：文件前缀 + 原始文件名
             String cleanName = SanitizeUtils.sanitize(imageData.getFilename());
@@ -118,7 +104,7 @@ public class ImageWriter {
         int[] counter = {0};
         int saved = 0;
         for (ImageExtractor.ImageData imageData : images) {
-            String result = saveImage(imageData, outputDir, fallbackExt, rename, counter);
+            String result = saveImage(imageData, outputDir, fallbackExt, rename, counter, "");
             if (result != null) saved++;
         }
         return saved;
@@ -136,12 +122,32 @@ public class ImageWriter {
      */
     public static int saveImagesConcurrent(List<ImageExtractor.ImageData> images, String outputDir,
                                            String fallbackExt, boolean rename, String filePrefix) {
+        return saveImagesConcurrent(images, outputDir, fallbackExt, rename, filePrefix, null);
+    }
+
+    /**
+     * 顺序保存图片（带进度回调）
+     *
+     * @param images 图片列表
+     * @param outputDir 输出目录
+     * @param fallbackExt 默认扩展名
+     * @param rename 是否启用批量重命名
+     * @param filePrefix 文件名前缀
+     * @param progressCallback 每保存一张图片后回调，参数为已保存数量
+     * @return 保存成功的数量
+     */
+    public static int saveImagesConcurrent(List<ImageExtractor.ImageData> images, String outputDir,
+                                           String fallbackExt, boolean rename, String filePrefix,
+                                           IntConsumer progressCallback) {
         int[] counter = {0};
         int saved = 0;
         for (int i = 0; i < images.size(); i++) {
             counter[0] = i + 1;
             String result = saveImage(images.get(i), outputDir, fallbackExt, rename, counter, filePrefix);
             if (result != null) saved++;
+            if (progressCallback != null) {
+                progressCallback.accept(saved);
+            }
         }
         return saved;
     }
@@ -160,11 +166,32 @@ public class ImageWriter {
     public static int saveImagesWithGlobalIndex(List<ImageExtractor.ImageData> images, String outputDir,
                                                 String fallbackExt, boolean rename, String filePrefix,
                                                 AtomicInteger globalIndex) {
+        return saveImagesWithGlobalIndex(images, outputDir, fallbackExt, rename, filePrefix, globalIndex, null);
+    }
+
+    /**
+     * 顺序保存图片（全局计数器版本 - 带进度回调）
+     *
+     * @param images 图片列表
+     * @param outputDir 输出目录
+     * @param fallbackExt 默认扩展名
+     * @param rename 是否启用批量重命名
+     * @param filePrefix 文件名前缀（用于不重命名模式区分不同源文件）
+     * @param globalIndex 全局计数器（跨文件递增）
+     * @param progressCallback 每保存一张图片后回调，参数为已保存数量
+     * @return 保存成功的数量
+     */
+    public static int saveImagesWithGlobalIndex(List<ImageExtractor.ImageData> images, String outputDir,
+                                                String fallbackExt, boolean rename, String filePrefix,
+                                                AtomicInteger globalIndex, IntConsumer progressCallback) {
         int saved = 0;
         for (ImageExtractor.ImageData imageData : images) {
             int[] idx = {globalIndex.getAndIncrement()};
             String result = saveImage(imageData, outputDir, fallbackExt, rename, idx, filePrefix);
             if (result != null) saved++;
+            if (progressCallback != null) {
+                progressCallback.accept(saved);
+            }
         }
         return saved;
     }
