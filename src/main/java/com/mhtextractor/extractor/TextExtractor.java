@@ -5,21 +5,15 @@ import com.mhtextractor.core.MimeParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
-import java.util.List;
-
 /**
  * 文本提取器
  * 基于 MimeParser 的解析结果进行文本提取
  */
-public class TextExtractor {
+public class TextExtractor extends BaseExtractor {
     private static final Logger logger = LoggerFactory.getLogger(TextExtractor.class);
 
-    private final MimeParser.ParsedMht parsedMht;
-    private List<String> lastWarnings = Collections.emptyList();
-
     public TextExtractor(MimeParser.ParsedMht parsedMht) {
-        this.parsedMht = parsedMht;
+        super(parsedMht);
     }
 
     /**
@@ -34,7 +28,8 @@ public class TextExtractor {
         ContentExtractor contentExtractor = new ContentExtractor();
         String text = contentExtractor.extractText(parsedMht.getHtmlContent(),
                 autoFixEncoding, startMarker, endMarker, useRegex);
-        lastWarnings = contentExtractor.getLastWarnings();
+        lastWarnings.clear();
+        lastWarnings.addAll(contentExtractor.getLastWarnings());
         return text;
     }
 
@@ -48,7 +43,4 @@ public class TextExtractor {
                 startMarker, endMarker, useRegex);
     }
 
-    public List<String> getLastWarnings() {
-        return lastWarnings;
-    }
 }

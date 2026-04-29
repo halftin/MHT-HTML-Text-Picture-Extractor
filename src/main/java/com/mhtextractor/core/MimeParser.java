@@ -1,6 +1,7 @@
 package com.mhtextractor.core;
 
 import com.mhtextractor.util.EncodingUtils;
+import com.mhtextractor.util.SanitizeUtils;
 import jakarta.mail.Multipart;
 import jakarta.mail.Session;
 import jakarta.mail.internet.ContentType;
@@ -107,6 +108,7 @@ public class MimeParser {
             }
             return 1;
         } catch (Exception e) {
+            logger.debug("统计MIME部件总数失败：{}", e.getMessage(), e);
             return 1;
         }
     }
@@ -203,7 +205,7 @@ public class MimeParser {
                     if (cs != null) declaredCharset = cs;
                 }
             } catch (Exception e) {
-                logger.debug("获取Content-Type charset失败：{}", e.getMessage());
+                logger.debug("获取Content-Type charset失败：{}", e.getMessage(), e);
             }
 
             try (InputStream decodedIs = MimeUtility.decode(is, encoding)) {
@@ -215,12 +217,12 @@ public class MimeParser {
                     try {
                         String result = new String(bytes, tryCharset);
                         // 如果包含中文且没有U+FFFD替换字符，说明编码正确
-                        if (EncodingUtils.containsChinese(result) && !containsReplacementChars(result)) {
+                        if (EncodingUtils.containsChinese(result) && !EncodingUtils.containsGarbled(result)) {
                             logger.info("使用编码: {} 解码成功", tryCharset);
                             return result;
                         }
                     } catch (Exception e) {
-                        logger.debug("编码 {} 解析失败：{}", tryCharset, e.getMessage());
+                        logger.debug("编码 {} 解析失败：{}", tryCharset, e.getMessage(), e);
                     }
                 }
 
@@ -230,15 +232,6 @@ public class MimeParser {
         }
     }
 
-    /**
-     * 检查文本中是否包含U+FFFD替换字符（表示解码失败）
-     */
-    private boolean containsReplacementChars(String text) {
-        for (int i = 0; i < text.length(); i++) {
-            if (text.charAt(i) == '�') return true;
-        }
-        return false;
-    }
 
     /**
      * 提取图片资源，按CID和Content-Location建立映射
@@ -267,7 +260,7 @@ public class MimeParser {
             filename = getFilenameFromPart(part);
             if ((filename == null || filename.isEmpty()) && contentLocation != null) {
                 // 从 Content-Location URL 中提取文件名
-                filename = extractFilenameFromUrl(contentLocation);
+                filename = SanitizeUtils.extractFilenameFromUrl(contentLocation);
             }
         }
 
@@ -294,39 +287,13 @@ public class MimeParser {
      */
     private String getFilenameFromPart(jakarta.mail.Part part) throws Exception {
         // 方法1: 从 Content-Disposition 获取 filename
-        String disposition = part.getDisposition();
-        if (disposition != null) {
-            int filenameIndex = disposition.toLowerCase().indexOf("filename");
-            if (filenameIndex != -1) {
-                int equalsIndex = disposition.indexOf('=', filenameIndex);
-                if (equalsIndex != -1 && equalsIndex < disposition.length() - 1) {
-                    String fname = disposition.substring(equalsIndex + 1).trim();
-                    if (fname.startsWith("\"") && fname.endsWith("\"")) {
-                        fname = fname.substring(1, fname.length() - 1);
-                    }
-                    if (!fname.isEmpty()) {
-                        return fname;
-                    }
-                }
-            }
-        }
+        String name = extractMimeParam(part.getDisposition(), "filename");
+        if (name != null) return name;
 
         // 方法2: 从 Content-Type 的 name 参数获取
         if (part instanceof MimePart) {
-            String contentType = part.getContentType();
-            int nameIndex = contentType.toLowerCase().indexOf("name");
-            if (nameIndex != -1) {
-                int equalsIndex = contentType.indexOf('=', nameIndex);
-                if (equalsIndex != -1 && equalsIndex < contentType.length() - 1) {
-                    String name = contentType.substring(equalsIndex + 1).trim();
-                    if (name.startsWith("\"") && name.endsWith("\"")) {
-                        name = name.substring(1, name.length() - 1);
-                    }
-                    if (!name.isEmpty()) {
-                        return name;
-                    }
-                }
-            }
+            name = extractMimeParam(part.getContentType(), "name");
+            if (name != null) return name;
         }
 
         // 方法3: 使用 getFileName() 作为后备
@@ -334,15 +301,19 @@ public class MimeParser {
     }
 
     /**
-     * 从 URL 中提取文件名部分
+     * 从 MIME 头部字符串中提取指定参数的值
      */
-    private String extractFilenameFromUrl(String url) {
-        if (url == null || url.isEmpty()) return null;
-        int lastSlash = url.lastIndexOf('/');
-        if (lastSlash != -1 && lastSlash < url.length() - 1) {
-            return url.substring(lastSlash + 1);
+    private static String extractMimeParam(String source, String paramName) {
+        if (source == null) return null;
+        int keywordIdx = source.toLowerCase().indexOf(paramName.toLowerCase());
+        if (keywordIdx == -1) return null;
+        int eqIdx = source.indexOf('=', keywordIdx);
+        if (eqIdx == -1 || eqIdx >= source.length() - 1) return null;
+        String val = source.substring(eqIdx + 1).trim();
+        if (val.startsWith("\"") && val.endsWith("\"")) {
+            val = val.substring(1, val.length() - 1);
         }
-        return url;
+        return val.isEmpty() ? null : val;
     }
 
     /**

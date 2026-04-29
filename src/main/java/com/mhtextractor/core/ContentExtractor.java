@@ -1,7 +1,9 @@
 package com.mhtextractor.core;
 
 import com.mhtextractor.util.EncodingUtils;
+import com.mhtextractor.util.HtmlUtils;
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,21 +34,18 @@ public class ContentExtractor {
         if (htmlContent == null || htmlContent.isEmpty()) return null;
 
         // 检测编码并修复（仅在MimeParser未正确解码时生效）
-        // 注意：如果htmlContent中已经包含U+FFFD替换字符，说明解码已损坏，
-        // 此时ISO-8859-1逆向转换无法恢复原始字节，应跳过此步骤
-        if (!containsUPlusFFFD(htmlContent)) {
+        if (!EncodingUtils.containsGarbled(htmlContent)) {
             String detectedCharset = EncodingUtils.detectCharsetFromHtml(htmlContent);
             if (detectedCharset != null) {
                 try {
                     byte[] htmlBytes = htmlContent.getBytes("ISO-8859-1");
                     String reDecoded = new String(htmlBytes, detectedCharset);
-                    // 只有重新解码结果更好时才使用
-                    if (!containsUPlusFFFD(reDecoded) && EncodingUtils.containsChinese(reDecoded)) {
+                    if (!EncodingUtils.containsGarbled(reDecoded) && EncodingUtils.containsChinese(reDecoded)) {
                         htmlContent = reDecoded;
                         logger.info("编码修复成功，使用 {} 重新解码", detectedCharset);
                     }
                 } catch (Exception e) {
-                    logger.debug("编码修复失败：{}", e.getMessage());
+                    logger.warn("编码修复失败：{}", e.getMessage(), e);
                 }
             }
         }
@@ -58,24 +57,14 @@ public class ContentExtractor {
         }
 
         // HTML → 纯文本
-        String text = Jsoup.parse(htmlContent).body() != null
-                ? Jsoup.parse(htmlContent).body().wholeText() : "";
+        Document doc = Jsoup.parse(htmlContent);
+        String text = doc.body() != null ? doc.body().wholeText() : "";
 
         // 乱码修复
         if (autoFixEncoding && text != null) {
             text = EncodingUtils.smartFix(text);
         }
         return text;
-    }
-
-    /**
-     * 检查是否包含U+FFFD替换字符（表示底层解码已损坏）
-     */
-    private boolean containsUPlusFFFD(String text) {
-        for (int i = 0; i < text.length(); i++) {
-            if (text.charAt(i) == '\uFFFD') return true;
-        }
-        return false;
     }
 
     /**
@@ -99,7 +88,7 @@ public class ContentExtractor {
                 return title.isEmpty() ? null : title;
             }
         } catch (Exception e) {
-            logger.warn("提取章节标题失败：{}", e.getMessage());
+            logger.warn("提取章节标题失败：{}", e.getMessage(), e);
         }
         return null;
     }
@@ -122,26 +111,15 @@ public class ContentExtractor {
                     lastWarnings.add(msg);
                 }
             } else {
-                int startIndex = html.indexOf(startMarker);
-                if (startIndex == -1) {
-                    String msg = String.format("内容限定起始标记未找到: %s", startMarker);
-                    logger.warn("[警告] {}", msg);
-                    lastWarnings.add(msg);
-                    return html;
+                String result = HtmlUtils.extractRegion(html, startMarker, endMarker, lastWarnings);
+                if (result != null) {
+                    return result;
                 }
-                int contentStart = startIndex + startMarker.length();
-                int endIndex = html.indexOf(endMarker, contentStart);
-                if (endIndex == -1) {
-                    String msg = String.format("内容限定结束标记未找到: %s，将从起始标记后截取到末尾", endMarker);
-                    logger.warn("[警告] {}", msg);
-                    lastWarnings.add(msg);
-                    return html.substring(contentStart);
-                }
-                return html.substring(contentStart, endIndex);
+                return html;
             }
         } catch (Exception e) {
             String msg = String.format("内容截取失败: %s", e.getMessage());
-            logger.warn(msg);
+            logger.warn(msg, e);
             lastWarnings.add(msg);
         }
         return html;

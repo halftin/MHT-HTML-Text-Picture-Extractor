@@ -1,9 +1,14 @@
 package com.mhtextractor.util;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * 文件名清理工具（包含魔数检测）
  */
 public class SanitizeUtils {
+
+    private static final Logger logger = LoggerFactory.getLogger(SanitizeUtils.class);
 
     private static final String[] IMAGE_MAGIC_NUMBERS = {
             "FFD8FF",   // JPEG
@@ -132,8 +137,21 @@ public class SanitizeUtils {
             String base64Data = content.substring(commaIndex + 1);
             return java.util.Base64.getDecoder().decode(base64Data.trim());
         } catch (Exception e) {
+            logger.debug("Data URI解码失败：{}", e.getMessage(), e);
             return null;
         }
+    }
+
+    /**
+     * 从 URL 中提取文件名部分
+     */
+    public static String extractFilenameFromUrl(String url) {
+        if (url == null || url.isEmpty()) return null;
+        int lastSlash = url.lastIndexOf('/');
+        if (lastSlash != -1 && lastSlash < url.length() - 1) {
+            return url.substring(lastSlash + 1);
+        }
+        return url;
     }
 
     /**

@@ -21,7 +21,7 @@ public class EncodingUtils {
             byte[] bytes = garbledText.getBytes(StandardCharsets.ISO_8859_1);
             return new String(bytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            logger.debug("UTF-8 修复失败：{}", e.getMessage());
+            logger.debug("UTF-8 修复失败：{}", e.getMessage(), e);
             return garbledText;
         }
     }
@@ -35,7 +35,7 @@ public class EncodingUtils {
             byte[] bytes = garbledText.getBytes(StandardCharsets.UTF_8);
             return new String(bytes, "GBK");
         } catch (Exception e) {
-            logger.debug("GBK 修复失败：{}", e.getMessage());
+            logger.debug("GBK 修复失败：{}", e.getMessage(), e);
             return garbledText;
         }
     }
@@ -109,7 +109,7 @@ public class EncodingUtils {
                     bestResult = result;
                 }
             } catch (Exception e) {
-                // 忽略无法转换的编码对
+                logger.debug("编码对 {}/{} 转换失败：{}", pair[0], pair[1], e.getMessage(), e);
             }
         }
 

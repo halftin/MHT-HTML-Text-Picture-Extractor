@@ -1,6 +1,7 @@
 package com.mhtextractor.extractor;
 
 import com.mhtextractor.core.MimeParser;
+import com.mhtextractor.util.HtmlUtils;
 import com.mhtextractor.util.SanitizeUtils;
 import lombok.Data;
 import org.jsoup.Jsoup;
@@ -16,7 +17,7 @@ import java.util.function.Consumer;
  * 图片提取器
  * 基于 MimeParser 返回的 cidMap 直接获取图片数据
  */
-public class ImageExtractor {
+public class ImageExtractor extends BaseExtractor {
     private static final Logger logger = LoggerFactory.getLogger(ImageExtractor.class);
 
     private static final List<String> AD_KEYWORDS = Arrays.asList(
@@ -24,17 +25,15 @@ public class ImageExtractor {
             "promo", "sponsored", "popup", "click", "banner-ad"
     );
 
-    private final MimeParser.ParsedMht parsedMht;
     private final String nameLimitStart;
     private final String nameLimitEnd;
     private final String contentLimitStart;
     private final String contentLimitEnd;
-    private final List<String> lastWarnings = new ArrayList<>();
 
     public ImageExtractor(MimeParser.ParsedMht parsedMht,
                           String nameLimitStart, String nameLimitEnd,
                           String contentLimitStart, String contentLimitEnd) {
-        this.parsedMht = parsedMht;
+        super(parsedMht);
         this.nameLimitStart = nameLimitStart;
         this.nameLimitEnd = nameLimitEnd;
         this.contentLimitStart = contentLimitStart;
@@ -176,7 +175,7 @@ public class ImageExtractor {
 
         // 2. 从 Content-Location 提取
         if (info.getContentLocation() != null && !info.getContentLocation().isEmpty()) {
-            String locFilename = extractFilenameFromUrl(info.getContentLocation());
+            String locFilename = SanitizeUtils.extractFilenameFromUrl(info.getContentLocation());
             if (locFilename != null && !locFilename.isEmpty()) {
                 return SanitizeUtils.sanitize(locFilename);
             }
@@ -209,7 +208,7 @@ public class ImageExtractor {
                 }
             }
         } catch (Exception e) {
-            logger.warn("解析HTML图片引用失败：{}", e.getMessage());
+            logger.warn("解析HTML图片引用失败：{}", e.getMessage(), e);
         }
         return refs;
     }
@@ -271,37 +270,11 @@ public class ImageExtractor {
 
     private String extractContentArea(String html) {
         if (contentLimitStart == null || contentLimitEnd == null) return html;
-        int startIdx = html.indexOf(contentLimitStart);
-        int endIdx = html.indexOf(contentLimitEnd, startIdx + 1);
-        if (startIdx == -1) {
-            String msg = String.format("图片区域限定起始标记未找到: %s", contentLimitStart);
-            logger.warn("[警告] {}", msg);
-            lastWarnings.add(msg);
-            return null;
+        String result = HtmlUtils.extractRegion(html, contentLimitStart, contentLimitEnd, lastWarnings);
+        if (result == null) {
+            logger.warn("[警告] {}", lastWarnings.get(lastWarnings.size() - 1));
         }
-        if (endIdx == -1) {
-            String msg = String.format("图片区域限定结束标记未找到: %s，将从起始标记后截取到末尾", contentLimitEnd);
-            logger.warn("[警告] {}", msg);
-            lastWarnings.add(msg);
-            return html.substring(startIdx + contentLimitStart.length());
-        }
-        return html.substring(startIdx + contentLimitStart.length(), endIdx);
-    }
-
-    public List<String> getLastWarnings() {
-        return lastWarnings;
-    }
-
-    /**
-     * 从 URL 中提取文件名部分
-     */
-    private String extractFilenameFromUrl(String url) {
-        if (url == null || url.isEmpty()) return null;
-        int lastSlash = url.lastIndexOf('/');
-        if (lastSlash != -1 && lastSlash < url.length() - 1) {
-            return url.substring(lastSlash + 1);
-        }
-        return url;
+        return result;
     }
 
     private boolean isAdImage(String urlOrCid) {
@@ -326,7 +299,7 @@ public class ImageExtractor {
                 }
             }
         } catch (Exception e) {
-            logger.debug("提取Data URI图片失败：{}", e.getMessage());
+            logger.debug("提取Data URI图片失败：{}", e.getMessage(), e);
         }
     }
 

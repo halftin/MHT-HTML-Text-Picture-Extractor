@@ -1,5 +1,7 @@
 package com.mhtextractor.processor;
 
+import com.mhtextractor.core.MimeParser;
+import com.mhtextractor.extractor.WarningProvider;
 import com.mhtextractor.util.FileUtils;
 import lombok.Data;
 import lombok.Setter;
@@ -37,6 +39,8 @@ public abstract class BatchProcessor {
      */
     @Setter
     protected volatile Supplier<Boolean> recursionContinueCallback;
+
+    protected ProgressCallback progressCallback;
 
     /**
      * 设置取消检查信号
@@ -98,6 +102,11 @@ public abstract class BatchProcessor {
             warnDetails.add(detail);
         }
 
+        public void incrementSuccess() { successCount++; }
+        public void incrementFail() { failCount++; }
+        public void incrementSkip() { skipCount++; }
+        public void incrementWarn() { warnCount++; }
+
         public String getSummaryLine() {
             return String.format(
                     "处理完成 - 总计：%d, 成功：%d, 失败：%d, 跳过：%d, 出现警告：%d, 耗时：%.2f 秒",
@@ -157,7 +166,7 @@ public abstract class BatchProcessor {
                                 .toLocalDateTime();
                         return new MhtFileInfo(f.getAbsolutePath(), f.getName(), mtime);
                     } catch (Exception e) {
-                        log.error("无法读取文件信息：{}", f.getName());
+                        log.error("无法读取文件信息：{}", f.getName(), e);
                         return null;
                     }
                 })
@@ -167,15 +176,50 @@ public abstract class BatchProcessor {
     }
 
     /**
-     * 处理单个文件（由子类实现）
-     */
-    protected abstract boolean processSingleFile(MhtFileInfo fileInfo);
-
-    /**
      * 获取输出目录名
      */
     protected String getOutputDirName(String mhtFileName) {
         String base = mhtFileName.replaceAll("\\.(?i)(mht|mhtml)$", "");
         return base;
+    }
+
+    /**
+     * 触发进度回调（带子阶段进度）
+     * @param subProgress 文件内部子阶段进度 0.0~1.0
+     */
+    protected void fireProgress(int current, int total, String fileName, double subProgress) {
+        if (progressCallback != null) {
+            try {
+                progressCallback.onProgress(current, total, fileName, subProgress);
+            } catch (Exception e) {
+                log.warn("进度回调异常：{}", e.getMessage(), e);
+            }
+        }
+    }
+
+    /**
+     * 将解析阶段映射到 0.05~0.35 的子进度范围（文件解析阶段）
+     */
+    protected void fireParsingProgress(int current, int total, String fileName, MimeParser.ParsingStage stage) {
+        double subProgress;
+        switch (stage) {
+            case FILE_READ -> subProgress = 0.08;
+            case HTML_EXTRACTED -> subProgress = 0.15;
+            case MIME_TRAVERSED -> subProgress = 0.25;
+            case IMAGES_EXTRACTED -> subProgress = 0.30;
+            case COMPLETE -> subProgress = 0.35;
+            default -> subProgress = 0.10;
+        }
+        fireProgress(current, total, fileName, subProgress);
+    }
+
+    /**
+     * 收集提取器的警告信息到统计对象
+     */
+    protected void reportExtractorWarnings(String fileName, WarningProvider extractor, ProcessStats stats) {
+        for (String warning : extractor.getLastWarnings()) {
+            stats.incrementWarn();
+            stats.addWarnDetail(String.format("文件：%s 出现警告，警告信息：%s", fileName, warning));
+        }
     }
 }

@@ -1,5 +1,6 @@
 package com.mhtextractor.output;
 
+import com.mhtextractor.util.FileUtils;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.*;
@@ -57,25 +58,14 @@ public class FileWriter {
     }
 
     /**
-     * 创建或清空输出文件
+     * 创建或清空输出文件（委托给 FileUtils）
      */
     public static boolean createOrClearFile(String outputPath) {
-        try {
-            File file = new File(outputPath);
-            File parent = file.getParentFile();
-            if (parent != null && !parent.exists()) {
-                parent.mkdirs();
-            }
-            if (file.exists()) {
-                file.delete();
-            }
-            file.createNewFile();
+        boolean ok = FileUtils.createOrClearFile(outputPath);
+        if (ok) {
             log.info("[初始化] 输出文件已创建：{}", outputPath);
-            return true;
-        } catch (IOException e) {
-            log.error("[错误] 创建输出文件失败：{}", outputPath, e);
-            return false;
         }
+        return ok;
     }
 
     /**
