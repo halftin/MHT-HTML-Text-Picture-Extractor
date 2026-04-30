@@ -11,10 +11,11 @@
     <packaging>jar</packaging>
 
     <properties>
-        <!-- 使用 Java 21 LTS 以兼容 AtlantaFX 2.1.0 -->
+        <!-- GraalVM JDK 25 兼容 Java 21 字节码 -->
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <graalvm.version>25.0.2</graalvm.version>
 
         <!-- 依赖版本统一管理 -->
         <javafx.version>21.0.2</javafx.version>
@@ -228,4 +229,31 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>native</id>
+            <properties>
+                <native.config.dir>${project.basedir}/src/main/resources/META-INF/native-image/com.mhtextractor</native.config.dir>
+            </properties>
+            <build>
+                <resources>
+                    <!-- 包含 src/main/resources 下的所有资源（含 native-image 配置） -->
+                    <resource>
+                        <directory>src/main/resources</directory>
+                        <includes>
+                            <include>**/*</include>
+                        </includes>
+                    </resource>
+                    <!-- 包含 src/main/java 下的 FXML 文件 -->
+                    <resource>
+                        <directory>src/main/java</directory>
+                        <includes>
+                            <include>**/*.fxml</include>
+                        </includes>
+                    </resource>
+                </resources>
+            </build>
+        </profile>
+    </profiles>
 </project>

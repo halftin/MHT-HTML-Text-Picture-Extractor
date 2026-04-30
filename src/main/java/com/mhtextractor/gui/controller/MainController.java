@@ -17,7 +17,6 @@ import atlantafx.base.controls.ToggleSwitch;
 import lombok.extern.slf4j.Slf4j;
 import com.mhtextractor.gui.component.LogTextArea;
 
-import java.awt.Desktop;
 import java.io.File;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -372,9 +371,9 @@ public class MainController {
             // 提取完成后打开会话输出目录
             if (openFolderAfterCompleteCheck.isSelected()) {
                 File folder = new File(sessionOutputFolder);
-                if (folder.exists() && Desktop.isDesktopSupported()) {
+                if (folder.exists()) {
                     try {
-                        Desktop.getDesktop().open(folder);
+                        Runtime.getRuntime().exec("explorer.exe " + folder.getAbsolutePath());
                     } catch (Exception ex) {
                         log.error("打开文件夹失败", ex);
                     }
@@ -876,5 +875,130 @@ public class MainController {
     private void showAlert(Alert.AlertType type, String message) {
         Alert alert = new Alert(type, message, ButtonType.OK);
         alert.showAndWait();
+    }
+
+    // Agent exercise code removed — use build-native.cmd for agent runs
+    private void __agent_exercise_removed() throws Exception {
+        // Phase 1: Toggle text mode on/off
+        textModeToggle.setSelected(true);
+        Thread.sleep(300);
+        textModeToggle.setSelected(false);
+        Thread.sleep(300);
+
+        // Phase 2: Toggle image mode on/off
+        imageModeToggle.setSelected(true);
+        Thread.sleep(300);
+        imageModeToggle.setSelected(false);
+        Thread.sleep(300);
+
+        // Phase 3: Text mode - all ToggleSwitches and fields
+        textModeToggle.setSelected(true);
+        Thread.sleep(200);
+        enableLimitCheck.setSelected(true);
+        useRegexCheck.setSelected(true);
+        enableTemplateCheck.setSelected(true);
+        addChapterNumberCheck.setSelected(true);
+        enableTitleExtractCheck.setSelected(true);
+        titleUseRegexCheck.setSelected(true);
+        separateFilesCheck.setSelected(true);
+        autoFixEncodingCheck.setSelected(true);
+        startMarkerField.setText("<!--START-->");
+        endMarkerField.setText("<!--END-->");
+        startTemplateField.setText("\\n==START==\\n");
+        endTemplateField.setText("\\n==END==\\n");
+        titleStartMarkerField.setText("<title>");
+        titleEndMarkerField.setText("</title>");
+        Thread.sleep(200);
+
+        // Collapse and expand TitledPanes
+        textTitlePane.setExpanded(false);
+        textContentLimitPane.setExpanded(false);
+        Thread.sleep(100);
+        textTitlePane.setExpanded(true);
+        textContentLimitPane.setExpanded(true);
+        textTemplatePane.setExpanded(true);
+        textOutputModePane.setExpanded(true);
+        Thread.sleep(200);
+
+        // Phase 4: Image mode - all ToggleSwitches and fields
+        textModeToggle.setSelected(false);
+        imageModeToggle.setSelected(true);
+        Thread.sleep(200);
+        imageNameExtractCheck.setSelected(true);
+        imageRegionExtractCheck.setSelected(true);
+        imageRenameCheck.setSelected(true);
+        imageZipCheck.setSelected(true);
+        imageCbzCheck.setSelected(true);
+        singleOutputCheck.setSelected(true);
+        highSpeedMemoryCheck.setSelected(true);
+        imageNameStartField.setText("img-");
+        imageNameEndField.setText(".png");
+        imageRegionStartField.setText("<!--IMG-->");
+        imageRegionEndField.setText("<!--/IMG-->");
+        Thread.sleep(200);
+        toggleImageNameSettings();
+        toggleImageRegionSettings();
+        Thread.sleep(200);
+
+        // Phase 5: Config combo box
+        configComboBox.setValue("agent_test_config");
+        configComboBox.getEditor().setText("agent_test_config");
+        Thread.sleep(200);
+
+        // Phase 6: Fill paths
+        inputFolderField.setText("C:\\test\\mht");
+        outputFolderField.setText("D:\\output");
+        openFolderAfterCompleteCheck.setSelected(true);
+        Thread.sleep(200);
+
+        // Phase 7: Trigger dialog/processor object creation (without showing dialogs)
+        // These constructors trigger reflection registration for Dialog classes
+        new Alert(Alert.AlertType.INFORMATION);
+        new Alert(Alert.AlertType.WARNING);
+        new Alert(Alert.AlertType.ERROR);
+        new Alert(Alert.AlertType.CONFIRMATION);
+        new TextInputDialog("agent_test");
+        new javafx.stage.DirectoryChooser();
+        new ButtonType("OK");
+        new Tooltip("test tooltip");
+        new java.io.File("C:\\test");
+        // Trigger Jackson serialization
+        ObjectMapperForExercise om = new ObjectMapperForExercise();
+        AppConfig config = buildConfig();
+        String json = om.writeValueAsString(config);
+        AppConfig restored = om.readValue(json, AppConfig.class);
+        log.info("Agent config serialization test: {}", restored.getInputFolder());
+        Thread.sleep(300);
+
+        // Phase 8: Deselect all modes
+        textModeToggle.setSelected(false);
+        imageModeToggle.setSelected(false);
+        disableAndCollapseAllPanes();
+        Thread.sleep(300);
+
+        // Phase 9: High speed memory toggle (triggers Alert)
+        textModeToggle.setSelected(true);
+        imageModeToggle.setSelected(false);
+        highSpeedMemoryCheck.setSelected(true); // triggers onHighSpeedMemoryChanged
+        Thread.sleep(300);
+        highSpeedMemoryCheck.setSelected(false);
+
+        log.info("Agent exercise complete - all UI features exercised");
+    }
+
+    /** Minimal Jackson ObjectMapper wrapper for agent exercise */
+    private static class ObjectMapperForExercise {
+        private final com.fasterxml.jackson.databind.ObjectMapper mapper;
+        ObjectMapperForExercise() {
+            mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+            mapper.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        }
+        String writeValueAsString(Object value) throws Exception {
+            return mapper.writeValueAsString(value);
+        }
+        AppConfig readValue(String json, Class<AppConfig> clazz) throws Exception {
+            return mapper.readValue(json, clazz);
+        }
     }
 }

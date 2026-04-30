@@ -2,6 +2,7 @@ package com.mhtextractor;
 
 import atlantafx.base.theme.NordLight;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
@@ -18,6 +19,13 @@ public class App extends Application {
 
     @Override
     public void start(Stage primaryStage) throws IOException {
+        // 全局未捕获异常处理器 — 将异常输出到控制台和日志
+        Thread.currentThread().setUncaughtExceptionHandler((t, e) -> {
+            log.error("未捕获异常 [{}]: {}", t.getName(), e.getMessage(), e);
+            System.err.println("FATAL: " + e.getMessage());
+            e.printStackTrace();
+        });
+
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/mhtextractor/gui/view/MainView.fxml"));
         Scene scene = new Scene(loader.load());
 

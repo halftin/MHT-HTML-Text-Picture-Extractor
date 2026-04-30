@@ -1,0 +1,17 @@
+[
+  {
+    "interfaces": ["javafx.collections.ListChangeListener"]
+  },
+  {
+    "interfaces": ["javafx.beans.value.ChangeListener"]
+  },
+  {
+    "interfaces": ["java.util.function.Supplier"]
+  },
+  {
+    "interfaces": ["com.mhtextractor.processor.BatchProcessor$ProgressCallback"]
+  },
+  {
+    "interfaces": ["java.util.concurrent.Callable"]
+  }
+]
