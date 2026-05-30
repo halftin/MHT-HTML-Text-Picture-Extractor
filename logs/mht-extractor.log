@@ -1,0 +1,283 @@
+2026-05-31 01:20:59 [JavaFX Application Thread] INFO  c.m.gui.controller.MainController - Agent config serialization test: C:\test\mht
+2026-05-31 01:21:00 [JavaFX Application Thread] INFO  c.m.gui.controller.MainController - Agent exercise complete - all UI features exercised
+2026-05-31 02:18:01 [Timer-0] INFO  c.m.gui.controller.MainController - === Starting automated tests ===
+2026-05-31 02:18:03 [Timer-0] INFO  c.m.gui.controller.MainController - 会话输出目录：Y:\MHTtest\output\auto\text\2026-05-31 02：18：03
+2026-05-31 02:18:03 [Thread-8] INFO  c.m.processor.TextBatchProcessor - ========================================
+2026-05-31 02:18:03 [Thread-8] INFO  c.m.processor.TextBatchProcessor - MHT 批量文本处理开始（合并模式）
+2026-05-31 02:18:03 [Thread-8] INFO  c.m.processor.TextBatchProcessor - 输入文件夹：Y:\MHTtest\文本提取测试
+2026-05-31 02:18:03 [Thread-8] INFO  c.m.processor.TextBatchProcessor - 输出文件：Y:\MHTtest\output\auto\text\2026-05-31 02：18：03\文本提取测试.txt
+2026-05-31 02:18:03 [Thread-8] INFO  c.m.processor.TextBatchProcessor - ========================================
+2026-05-31 02:18:03 [Thread-8] INFO  com.mhtextractor.output.FileWriter - [初始化] 输出文件已创建：Y:\MHTtest\output\auto\text\2026-05-31 02：18：03\文本提取测试.txt
+2026-05-31 02:18:03 [Thread-8] INFO  c.m.processor.TextBatchProcessor - 找到 3 个 MHT 文件
+2026-05-31 02:18:03 [Thread-8] INFO  c.m.processor.TextBatchProcessor - 文件已按修改时间排序
+2026-05-31 02:18:03 [Thread-8] INFO  c.m.processor.TextBatchProcessor - ========================================
+2026-05-31 02:18:03 [Thread-8] INFO  c.m.processor.TextBatchProcessor - [解析] 第1章1_平凡的世界路遥著_五六中文网.mht
+2026-05-31 02:18:03 [Thread-8] INFO  com.mhtextractor.core.MimeParser - 使用编码: GBK 解码成功
+2026-05-31 02:18:03 [Thread-8] INFO  com.mhtextractor.output.FileWriter - [成功] 已写入：第1章1_平凡的世界路遥著_五六中文网.mht
+2026-05-31 02:18:03 [Thread-8] INFO  c.m.processor.TextBatchProcessor - [解析] 第1章2_平凡的世界路遥著_五六中文网.mht
+2026-05-31 02:18:03 [Thread-8] INFO  com.mhtextractor.core.MimeParser - 使用编码: GBK 解码成功
+2026-05-31 02:18:03 [Thread-8] INFO  com.mhtextractor.output.FileWriter - [成功] 已写入：第1章2_平凡的世界路遥著_五六中文网.mht
+2026-05-31 02:18:03 [Thread-8] INFO  c.m.processor.TextBatchProcessor - [解析] (5 封私信 _ 6 条消息) B站up使用codex+godot一天时间复刻杀戮尖塔，未来做游戏会不会是完全0代码，全靠创意比拼？ - 知乎.mhtml
+2026-05-31 02:18:03 [Thread-8] INFO  com.mhtextractor.output.FileWriter - [成功] 已写入：(5 封私信 _ 6 条消息) B站up使用codex+godot一天时间复刻杀戮尖塔，未来做游戏会不会是完全0代码，全靠创意比拼？ - 知乎.mhtml
+2026-05-31 02:18:03 [Thread-8] INFO  c.m.processor.TextBatchProcessor - 处理完成 - 总计：3, 成功：3, 失败：0, 跳过：0, 出现警告：0, 耗时：0.12 秒
+2026-05-31 02:18:05 [Timer-0] INFO  c.m.gui.controller.MainController - 会话输出目录：Y:\MHTtest\output\auto\image\2026-05-31 02：18：05
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - ========================================
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - MHT 批量图片处理开始
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - 输入文件夹：Y:\MHTtest\图片提取测试
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - 输出文件夹：Y:\MHTtest\output\auto\image\2026-05-31 02：18：05
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - ========================================
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - 找到 2 个 MHT 文件
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - ========================================
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - 流式单独输出模式：共 2 个文件待处理
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - ========================================
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - ----------------------------------------
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - [处理] [1/2] 斗破苍穹之大主宰第01话 激战过后斗破苍穹之大主宰漫画第01话 激战过后在线观看 - 漫画160.mht
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - [解析] 斗破苍穹之大主宰第01话 激战过后斗破苍穹之大主宰漫画第01话 激战过后在线观看 - 漫画160.mht
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - [跳过] 未提取到图片：斗破苍穹之大主宰第01话 激战过后斗破苍穹之大主宰漫画第01话 激战过后在线观看 - 漫画160.mht
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - ----------------------------------------
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - [处理] [2/2] 斗破苍穹之大主宰第02话 时过境迁斗破苍穹之大主宰漫画第02话 时过境迁在线观看 - 漫画160.mht
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - [解析] 斗破苍穹之大主宰第02话 时过境迁斗破苍穹之大主宰漫画第02话 时过境迁在线观看 - 漫画160.mht
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - [跳过] 未提取到图片：斗破苍穹之大主宰第02话 时过境迁斗破苍穹之大主宰漫画第02话 时过境迁在线观看 - 漫画160.mht
+2026-05-31 02:18:05 [Thread-9] INFO  c.m.processor.ImageBatchProcessor - 处理完成 - 总计：2, 成功：0, 失败：0, 跳过：2, 出现警告：0, 耗时：0.06 秒
+========================================
+文件：斗破苍穹之大主宰第01话 激战过后斗破苍穹之大主宰漫画第01话 激战过后在线观看 - 漫画160.mht 跳过，跳过原因：未提取到图片
+文件：斗破苍穹之大主宰第02话 时过境迁斗破苍穹之大主宰漫画第02话 时过境迁在线观看 - 漫画160.mht 跳过，跳过原因：未提取到图片
+2026-05-31 02:18:07 [Timer-0] INFO  c.m.gui.controller.MainController - Automated tests complete: 9 passed, 0 failed
+2026-05-31 02:19:49 [Timer-0] INFO  c.m.gui.controller.MainController - === Starting automated tests ===
+2026-05-31 02:19:51 [Timer-0] INFO  c.m.gui.controller.MainController - 会话输出目录：Y:\MHTtest\output\auto\text\2026-05-31 02：19：51
+2026-05-31 02:19:51 [Thread-6] INFO  c.m.processor.TextBatchProcessor - ========================================
+2026-05-31 02:19:51 [Thread-6] INFO  c.m.processor.TextBatchProcessor - MHT 批量文本处理开始（合并模式）
+2026-05-31 02:19:51 [Thread-6] INFO  c.m.processor.TextBatchProcessor - 输入文件夹：Y:\MHTtest\文本提取测试
+2026-05-31 02:19:51 [Thread-6] INFO  c.m.processor.TextBatchProcessor - 输出文件：Y:\MHTtest\output\auto\text\2026-05-31 02：19：51\文本提取测试.txt
+2026-05-31 02:19:51 [Thread-6] INFO  c.m.processor.TextBatchProcessor - ========================================
+2026-05-31 02:19:51 [Thread-6] INFO  com.mhtextractor.output.FileWriter - [初始化] 输出文件已创建：Y:\MHTtest\output\auto\text\2026-05-31 02：19：51\文本提取测试.txt
+2026-05-31 02:19:51 [Thread-6] INFO  c.m.processor.TextBatchProcessor - 找到 3 个 MHT 文件
+2026-05-31 02:19:51 [Thread-6] INFO  c.m.processor.TextBatchProcessor - 文件已按修改时间排序
+2026-05-31 02:19:51 [Thread-6] INFO  c.m.processor.TextBatchProcessor - ========================================
+2026-05-31 02:19:51 [Thread-6] INFO  c.m.processor.TextBatchProcessor - [解析] 第1章1_平凡的世界路遥著_五六中文网.mht
+2026-05-31 02:19:51 [Thread-6] ERROR c.m.processor.TextBatchProcessor - [异常] 处理文件失败：第1章1_平凡的世界路遥著_五六中文网.mht
+java.lang.ClassCastException: jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+	at com.mhtextractor.core.MimeParser.extractFromPart(MimeParser.java:173)
+	at com.mhtextractor.core.MimeParser.parseMimeMessage(MimeParser.java:129)
+	at com.mhtextractor.core.MimeParser.parse(MimeParser.java:91)
+	at com.mhtextractor.processor.TextBatchProcessor.processFiles(TextBatchProcessor.java:101)
+	at com.mhtextractor.processor.TextBatchProcessor.processMerged(TextBatchProcessor.java:43)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:339)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:293)
+	at javafx.concurrent.Task$TaskCallable.call(Task.java:1407)
+	at java.base@25.0.2/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base@25.0.2/java.lang.Thread.runWith(Thread.java:1487)
+	at java.base@25.0.2/java.lang.Thread.run(Thread.java:1474)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:832)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:808)
+2026-05-31 02:19:51 [Thread-6] INFO  c.m.processor.TextBatchProcessor - [解析] 第1章2_平凡的世界路遥著_五六中文网.mht
+2026-05-31 02:19:51 [Thread-6] ERROR c.m.processor.TextBatchProcessor - [异常] 处理文件失败：第1章2_平凡的世界路遥著_五六中文网.mht
+java.lang.ClassCastException: jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+	at com.mhtextractor.core.MimeParser.extractFromPart(MimeParser.java:173)
+	at com.mhtextractor.core.MimeParser.parseMimeMessage(MimeParser.java:129)
+	at com.mhtextractor.core.MimeParser.parse(MimeParser.java:91)
+	at com.mhtextractor.processor.TextBatchProcessor.processFiles(TextBatchProcessor.java:101)
+	at com.mhtextractor.processor.TextBatchProcessor.processMerged(TextBatchProcessor.java:43)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:339)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:293)
+	at javafx.concurrent.Task$TaskCallable.call(Task.java:1407)
+	at java.base@25.0.2/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base@25.0.2/java.lang.Thread.runWith(Thread.java:1487)
+	at java.base@25.0.2/java.lang.Thread.run(Thread.java:1474)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:832)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:808)
+2026-05-31 02:19:51 [Thread-6] INFO  c.m.processor.TextBatchProcessor - [解析] (5 封私信 _ 6 条消息) B站up使用codex+godot一天时间复刻杀戮尖塔，未来做游戏会不会是完全0代码，全靠创意比拼？ - 知乎.mhtml
+2026-05-31 02:19:51 [Thread-6] ERROR c.m.processor.TextBatchProcessor - [异常] 处理文件失败：(5 封私信 _ 6 条消息) B站up使用codex+godot一天时间复刻杀戮尖塔，未来做游戏会不会是完全0代码，全靠创意比拼？ - 知乎.mhtml
+java.lang.ClassCastException: jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+	at com.mhtextractor.core.MimeParser.extractFromPart(MimeParser.java:173)
+	at com.mhtextractor.core.MimeParser.parseMimeMessage(MimeParser.java:129)
+	at com.mhtextractor.core.MimeParser.parse(MimeParser.java:91)
+	at com.mhtextractor.processor.TextBatchProcessor.processFiles(TextBatchProcessor.java:101)
+	at com.mhtextractor.processor.TextBatchProcessor.processMerged(TextBatchProcessor.java:43)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:339)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:293)
+	at javafx.concurrent.Task$TaskCallable.call(Task.java:1407)
+	at java.base@25.0.2/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base@25.0.2/java.lang.Thread.runWith(Thread.java:1487)
+	at java.base@25.0.2/java.lang.Thread.run(Thread.java:1474)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:832)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:808)
+2026-05-31 02:19:51 [Thread-6] INFO  c.m.processor.TextBatchProcessor - 处理完成 - 总计：3, 成功：0, 失败：3, 跳过：0, 出现警告：0, 耗时：0.00 秒
+========================================
+文件：第1章1_平凡的世界路遥著_五六中文网.mht 失败，失败原因：jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+文件：第1章2_平凡的世界路遥著_五六中文网.mht 失败，失败原因：jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+文件：(5 封私信 _ 6 条消息) B站up使用codex+godot一天时间复刻杀戮尖塔，未来做游戏会不会是完全0代码，全靠创意比拼？ - 知乎.mhtml 失败，失败原因：jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+2026-05-31 02:19:54 [Timer-0] INFO  c.m.gui.controller.MainController - 会话输出目录：Y:\MHTtest\output\auto\image\2026-05-31 02：19：54
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - ========================================
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - MHT 批量图片处理开始
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - 输入文件夹：Y:\MHTtest\图片提取测试
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - 输出文件夹：Y:\MHTtest\output\auto\image\2026-05-31 02：19：54
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - ========================================
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - 找到 2 个 MHT 文件
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - ========================================
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - 流式单独输出模式：共 2 个文件待处理
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - ========================================
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - ----------------------------------------
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - [处理] [1/2] 斗破苍穹之大主宰第01话 激战过后斗破苍穹之大主宰漫画第01话 激战过后在线观看 - 漫画160.mht
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - [解析] 斗破苍穹之大主宰第01话 激战过后斗破苍穹之大主宰漫画第01话 激战过后在线观看 - 漫画160.mht
+2026-05-31 02:19:54 [Thread-7] ERROR c.m.processor.ImageBatchProcessor - [异常] 处理文件失败：斗破苍穹之大主宰第01话 激战过后斗破苍穹之大主宰漫画第01话 激战过后在线观看 - 漫画160.mht
+java.lang.ClassCastException: jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+	at com.mhtextractor.core.MimeParser.extractFromPart(MimeParser.java:173)
+	at com.mhtextractor.core.MimeParser.parseMimeMessage(MimeParser.java:129)
+	at com.mhtextractor.core.MimeParser.parse(MimeParser.java:91)
+	at com.mhtextractor.processor.ImageBatchProcessor$StreamingProvider.provide(ImageBatchProcessor.java:333)
+	at com.mhtextractor.processor.ImageBatchProcessor.processUnified(ImageBatchProcessor.java:207)
+	at com.mhtextractor.processor.ImageBatchProcessor.processStreaming(ImageBatchProcessor.java:165)
+	at com.mhtextractor.processor.ImageBatchProcessor.process(ImageBatchProcessor.java:71)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:326)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:293)
+	at javafx.concurrent.Task$TaskCallable.call(Task.java:1407)
+	at java.base@25.0.2/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base@25.0.2/java.lang.Thread.runWith(Thread.java:1487)
+	at java.base@25.0.2/java.lang.Thread.run(Thread.java:1474)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:832)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:808)
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - ----------------------------------------
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - [处理] [2/2] 斗破苍穹之大主宰第02话 时过境迁斗破苍穹之大主宰漫画第02话 时过境迁在线观看 - 漫画160.mht
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - [解析] 斗破苍穹之大主宰第02话 时过境迁斗破苍穹之大主宰漫画第02话 时过境迁在线观看 - 漫画160.mht
+2026-05-31 02:19:54 [Thread-7] ERROR c.m.processor.ImageBatchProcessor - [异常] 处理文件失败：斗破苍穹之大主宰第02话 时过境迁斗破苍穹之大主宰漫画第02话 时过境迁在线观看 - 漫画160.mht
+java.lang.ClassCastException: jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+	at com.mhtextractor.core.MimeParser.extractFromPart(MimeParser.java:173)
+	at com.mhtextractor.core.MimeParser.parseMimeMessage(MimeParser.java:129)
+	at com.mhtextractor.core.MimeParser.parse(MimeParser.java:91)
+	at com.mhtextractor.processor.ImageBatchProcessor$StreamingProvider.provide(ImageBatchProcessor.java:333)
+	at com.mhtextractor.processor.ImageBatchProcessor.processUnified(ImageBatchProcessor.java:207)
+	at com.mhtextractor.processor.ImageBatchProcessor.processStreaming(ImageBatchProcessor.java:165)
+	at com.mhtextractor.processor.ImageBatchProcessor.process(ImageBatchProcessor.java:71)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:326)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:293)
+	at javafx.concurrent.Task$TaskCallable.call(Task.java:1407)
+	at java.base@25.0.2/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base@25.0.2/java.lang.Thread.runWith(Thread.java:1487)
+	at java.base@25.0.2/java.lang.Thread.run(Thread.java:1474)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:832)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:808)
+2026-05-31 02:19:54 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - 处理完成 - 总计：2, 成功：0, 失败：2, 跳过：0, 出现警告：0, 耗时：0.01 秒
+========================================
+文件：斗破苍穹之大主宰第01话 激战过后斗破苍穹之大主宰漫画第01话 激战过后在线观看 - 漫画160.mht 失败，失败原因：jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+文件：斗破苍穹之大主宰第02话 时过境迁斗破苍穹之大主宰漫画第02话 时过境迁在线观看 - 漫画160.mht 失败，失败原因：jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+2026-05-31 02:19:56 [Timer-0] INFO  c.m.gui.controller.MainController - Automated tests complete: 9 passed, 0 failed
+2026-05-31 02:22:19 [Timer-0] INFO  c.m.gui.controller.MainController - === Starting automated tests ===
+2026-05-31 02:22:21 [Timer-0] INFO  c.m.gui.controller.MainController - 会话输出目录：Y:\MHTtest\output\auto\text\2026-05-31 02：22：21
+2026-05-31 02:22:21 [Thread-6] INFO  c.m.processor.TextBatchProcessor - ========================================
+2026-05-31 02:22:21 [Thread-6] INFO  c.m.processor.TextBatchProcessor - MHT 批量文本处理开始（合并模式）
+2026-05-31 02:22:21 [Thread-6] INFO  c.m.processor.TextBatchProcessor - 输入文件夹：Y:\MHTtest\文本提取测试
+2026-05-31 02:22:21 [Thread-6] INFO  c.m.processor.TextBatchProcessor - 输出文件：Y:\MHTtest\output\auto\text\2026-05-31 02：22：21\文本提取测试.txt
+2026-05-31 02:22:21 [Thread-6] INFO  c.m.processor.TextBatchProcessor - ========================================
+2026-05-31 02:22:21 [Thread-6] INFO  com.mhtextractor.output.FileWriter - [初始化] 输出文件已创建：Y:\MHTtest\output\auto\text\2026-05-31 02：22：21\文本提取测试.txt
+2026-05-31 02:22:21 [Thread-6] INFO  c.m.processor.TextBatchProcessor - 找到 3 个 MHT 文件
+2026-05-31 02:22:21 [Thread-6] INFO  c.m.processor.TextBatchProcessor - 文件已按修改时间排序
+2026-05-31 02:22:21 [Thread-6] INFO  c.m.processor.TextBatchProcessor - ========================================
+2026-05-31 02:22:21 [Thread-6] INFO  c.m.processor.TextBatchProcessor - [解析] 第1章1_平凡的世界路遥著_五六中文网.mht
+2026-05-31 02:22:21 [Thread-6] ERROR c.m.processor.TextBatchProcessor - [异常] 处理文件失败：第1章1_平凡的世界路遥著_五六中文网.mht
+java.lang.ClassCastException: jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+	at com.mhtextractor.core.MimeParser.extractFromPart(MimeParser.java:173)
+	at com.mhtextractor.core.MimeParser.parseMimeMessage(MimeParser.java:129)
+	at com.mhtextractor.core.MimeParser.parse(MimeParser.java:91)
+	at com.mhtextractor.processor.TextBatchProcessor.processFiles(TextBatchProcessor.java:101)
+	at com.mhtextractor.processor.TextBatchProcessor.processMerged(TextBatchProcessor.java:43)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:339)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:293)
+	at javafx.concurrent.Task$TaskCallable.call(Task.java:1407)
+	at java.base@25.0.2/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base@25.0.2/java.lang.Thread.runWith(Thread.java:1487)
+	at java.base@25.0.2/java.lang.Thread.run(Thread.java:1474)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:832)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:808)
+2026-05-31 02:22:21 [Thread-6] INFO  c.m.processor.TextBatchProcessor - [解析] 第1章2_平凡的世界路遥著_五六中文网.mht
+2026-05-31 02:22:21 [Thread-6] ERROR c.m.processor.TextBatchProcessor - [异常] 处理文件失败：第1章2_平凡的世界路遥著_五六中文网.mht
+java.lang.ClassCastException: jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+	at com.mhtextractor.core.MimeParser.extractFromPart(MimeParser.java:173)
+	at com.mhtextractor.core.MimeParser.parseMimeMessage(MimeParser.java:129)
+	at com.mhtextractor.core.MimeParser.parse(MimeParser.java:91)
+	at com.mhtextractor.processor.TextBatchProcessor.processFiles(TextBatchProcessor.java:101)
+	at com.mhtextractor.processor.TextBatchProcessor.processMerged(TextBatchProcessor.java:43)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:339)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:293)
+	at javafx.concurrent.Task$TaskCallable.call(Task.java:1407)
+	at java.base@25.0.2/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base@25.0.2/java.lang.Thread.runWith(Thread.java:1487)
+	at java.base@25.0.2/java.lang.Thread.run(Thread.java:1474)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:832)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:808)
+2026-05-31 02:22:21 [Thread-6] INFO  c.m.processor.TextBatchProcessor - [解析] (5 封私信 _ 6 条消息) B站up使用codex+godot一天时间复刻杀戮尖塔，未来做游戏会不会是完全0代码，全靠创意比拼？ - 知乎.mhtml
+2026-05-31 02:22:21 [Thread-6] ERROR c.m.processor.TextBatchProcessor - [异常] 处理文件失败：(5 封私信 _ 6 条消息) B站up使用codex+godot一天时间复刻杀戮尖塔，未来做游戏会不会是完全0代码，全靠创意比拼？ - 知乎.mhtml
+java.lang.ClassCastException: jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+	at com.mhtextractor.core.MimeParser.extractFromPart(MimeParser.java:173)
+	at com.mhtextractor.core.MimeParser.parseMimeMessage(MimeParser.java:129)
+	at com.mhtextractor.core.MimeParser.parse(MimeParser.java:91)
+	at com.mhtextractor.processor.TextBatchProcessor.processFiles(TextBatchProcessor.java:101)
+	at com.mhtextractor.processor.TextBatchProcessor.processMerged(TextBatchProcessor.java:43)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:339)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:293)
+	at javafx.concurrent.Task$TaskCallable.call(Task.java:1407)
+	at java.base@25.0.2/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base@25.0.2/java.lang.Thread.runWith(Thread.java:1487)
+	at java.base@25.0.2/java.lang.Thread.run(Thread.java:1474)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:832)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:808)
+2026-05-31 02:22:21 [Thread-6] INFO  c.m.processor.TextBatchProcessor - 处理完成 - 总计：3, 成功：0, 失败：3, 跳过：0, 出现警告：0, 耗时：0.00 秒
+========================================
+文件：第1章1_平凡的世界路遥著_五六中文网.mht 失败，失败原因：jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+文件：第1章2_平凡的世界路遥著_五六中文网.mht 失败，失败原因：jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+文件：(5 封私信 _ 6 条消息) B站up使用codex+godot一天时间复刻杀戮尖塔，未来做游戏会不会是完全0代码，全靠创意比拼？ - 知乎.mhtml 失败，失败原因：jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+2026-05-31 02:22:24 [Timer-0] INFO  c.m.gui.controller.MainController - 会话输出目录：Y:\MHTtest\output\auto\image\2026-05-31 02：22：24
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - ========================================
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - MHT 批量图片处理开始
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - 输入文件夹：Y:\MHTtest\图片提取测试
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - 输出文件夹：Y:\MHTtest\output\auto\image\2026-05-31 02：22：24
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - ========================================
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - 找到 2 个 MHT 文件
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - ========================================
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - 流式单独输出模式：共 2 个文件待处理
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - ========================================
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - ----------------------------------------
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - [处理] [1/2] 斗破苍穹之大主宰第01话 激战过后斗破苍穹之大主宰漫画第01话 激战过后在线观看 - 漫画160.mht
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - [解析] 斗破苍穹之大主宰第01话 激战过后斗破苍穹之大主宰漫画第01话 激战过后在线观看 - 漫画160.mht
+2026-05-31 02:22:24 [Thread-7] ERROR c.m.processor.ImageBatchProcessor - [异常] 处理文件失败：斗破苍穹之大主宰第01话 激战过后斗破苍穹之大主宰漫画第01话 激战过后在线观看 - 漫画160.mht
+java.lang.ClassCastException: jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+	at com.mhtextractor.core.MimeParser.extractFromPart(MimeParser.java:173)
+	at com.mhtextractor.core.MimeParser.parseMimeMessage(MimeParser.java:129)
+	at com.mhtextractor.core.MimeParser.parse(MimeParser.java:91)
+	at com.mhtextractor.processor.ImageBatchProcessor$StreamingProvider.provide(ImageBatchProcessor.java:333)
+	at com.mhtextractor.processor.ImageBatchProcessor.processUnified(ImageBatchProcessor.java:207)
+	at com.mhtextractor.processor.ImageBatchProcessor.processStreaming(ImageBatchProcessor.java:165)
+	at com.mhtextractor.processor.ImageBatchProcessor.process(ImageBatchProcessor.java:71)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:326)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:293)
+	at javafx.concurrent.Task$TaskCallable.call(Task.java:1407)
+	at java.base@25.0.2/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base@25.0.2/java.lang.Thread.runWith(Thread.java:1487)
+	at java.base@25.0.2/java.lang.Thread.run(Thread.java:1474)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:832)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:808)
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - ----------------------------------------
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - [处理] [2/2] 斗破苍穹之大主宰第02话 时过境迁斗破苍穹之大主宰漫画第02话 时过境迁在线观看 - 漫画160.mht
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - [解析] 斗破苍穹之大主宰第02话 时过境迁斗破苍穹之大主宰漫画第02话 时过境迁在线观看 - 漫画160.mht
+2026-05-31 02:22:24 [Thread-7] ERROR c.m.processor.ImageBatchProcessor - [异常] 处理文件失败：斗破苍穹之大主宰第02话 时过境迁斗破苍穹之大主宰漫画第02话 时过境迁在线观看 - 漫画160.mht
+java.lang.ClassCastException: jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+	at com.mhtextractor.core.MimeParser.extractFromPart(MimeParser.java:173)
+	at com.mhtextractor.core.MimeParser.parseMimeMessage(MimeParser.java:129)
+	at com.mhtextractor.core.MimeParser.parse(MimeParser.java:91)
+	at com.mhtextractor.processor.ImageBatchProcessor$StreamingProvider.provide(ImageBatchProcessor.java:333)
+	at com.mhtextractor.processor.ImageBatchProcessor.processUnified(ImageBatchProcessor.java:207)
+	at com.mhtextractor.processor.ImageBatchProcessor.processStreaming(ImageBatchProcessor.java:165)
+	at com.mhtextractor.processor.ImageBatchProcessor.process(ImageBatchProcessor.java:71)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:326)
+	at com.mhtextractor.gui.controller.MainController$1.call(MainController.java:293)
+	at javafx.concurrent.Task$TaskCallable.call(Task.java:1407)
+	at java.base@25.0.2/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base@25.0.2/java.lang.Thread.runWith(Thread.java:1487)
+	at java.base@25.0.2/java.lang.Thread.run(Thread.java:1474)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:832)
+	at org.graalvm.nativeimage.builder/com.oracle.svm.core.thread.PlatformThreads.threadStartRoutine(PlatformThreads.java:808)
+2026-05-31 02:22:24 [Thread-7] INFO  c.m.processor.ImageBatchProcessor - 处理完成 - 总计：2, 成功：0, 失败：2, 跳过：0, 出现警告：0, 耗时：0.01 秒
+========================================
+文件：斗破苍穹之大主宰第01话 激战过后斗破苍穹之大主宰漫画第01话 激战过后在线观看 - 漫画160.mht 失败，失败原因：jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+文件：斗破苍穹之大主宰第02话 时过境迁斗破苍穹之大主宰漫画第02话 时过境迁在线观看 - 漫画160.mht 失败，失败原因：jakarta.mail.util.SharedByteArrayInputStream cannot be cast to jakarta.mail.Multipart
+2026-05-31 02:22:26 [Timer-0] INFO  c.m.gui.controller.MainController - Automated tests complete: 9 passed, 0 failed

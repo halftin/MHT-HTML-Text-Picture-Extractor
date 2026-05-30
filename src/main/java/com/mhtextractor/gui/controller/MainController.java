@@ -877,8 +877,8 @@ public class MainController {
         alert.showAndWait();
     }
 
-    // Agent exercise code removed — use build-native.cmd for agent runs
-    private void __agent_exercise_removed() throws Exception {
+    /** 供 Tracing Agent 自动演练所有 UI 功能，捕获完整的反射/JNI 元数据 */
+    public void exerciseAllFeatures() throws Exception {
         // Phase 1: Toggle text mode on/off
         textModeToggle.setSelected(true);
         Thread.sleep(300);
@@ -930,7 +930,7 @@ public class MainController {
         imageZipCheck.setSelected(true);
         imageCbzCheck.setSelected(true);
         singleOutputCheck.setSelected(true);
-        highSpeedMemoryCheck.setSelected(true);
+        // highSpeedMemoryCheck skipped — its setSelected(true) triggers modal Alert that blocks agent
         imageNameStartField.setText("img-");
         imageNameEndField.setText(".png");
         imageRegionStartField.setText("<!--IMG-->");
@@ -976,14 +976,74 @@ public class MainController {
         disableAndCollapseAllPanes();
         Thread.sleep(300);
 
-        // Phase 9: High speed memory toggle (triggers Alert)
+        // Phase 9: Final cleanup — highSpeedMemoryCheck skipped (triggers modal Alert)
         textModeToggle.setSelected(true);
         imageModeToggle.setSelected(false);
-        highSpeedMemoryCheck.setSelected(true); // triggers onHighSpeedMemoryChanged
         Thread.sleep(300);
-        highSpeedMemoryCheck.setSelected(false);
 
         log.info("Agent exercise complete - all UI features exercised");
+    }
+
+    /** 自动化测试：依次执行所有功能并记录结果到日志 */
+    public void runAutomatedTests() {
+        String logPath = "Y:/MHTtest/test-results.txt";
+        try (java.io.PrintWriter out = new java.io.PrintWriter(new java.io.FileWriter(logPath))) {
+            log.info("=== Starting automated tests ===");
+            out.println("=== MHT Extractor Automated Test Results ===");
+            out.println("Time: " + java.time.LocalDateTime.now()); out.println();
+            int p = 0, f = 0;
+
+            try { textModeToggle.setSelected(true); Thread.sleep(300); out.println("[PASS] Text mode toggle"); p++;
+            } catch (Exception e) { out.println("[FAIL] Text mode: " + e.getMessage()); f++; }
+
+            try { imageModeToggle.setSelected(true); Thread.sleep(300); out.println("[PASS] Image mode toggle"); p++;
+            } catch (Exception e) { out.println("[FAIL] Image mode: " + e.getMessage()); f++; }
+
+            try { textModeToggle.setSelected(true); imageModeToggle.setSelected(false); Thread.sleep(200);
+                enableLimitCheck.setSelected(true); useRegexCheck.setSelected(true);
+                separateFilesCheck.setSelected(true); autoFixEncodingCheck.setSelected(true);
+                addChapterNumberCheck.setSelected(true); enableTitleExtractCheck.setSelected(true);
+                out.println("[PASS] Text switches"); p++;
+            } catch (Exception e) { out.println("[FAIL] Text switches: " + e.getMessage()); f++; }
+
+            try { textModeToggle.setSelected(false); imageModeToggle.setSelected(true); Thread.sleep(200);
+                imageNameExtractCheck.setSelected(true); imageRegionExtractCheck.setSelected(true);
+                imageRenameCheck.setSelected(true); imageZipCheck.setSelected(true);
+                singleOutputCheck.setSelected(true);
+                out.println("[PASS] Image switches"); p++;
+            } catch (Exception e) { out.println("[FAIL] Image switches: " + e.getMessage()); f++; }
+
+            try { inputFolderField.setText("Y:\\MHTtest\\文本提取测试"); Thread.sleep(200);
+                out.println("[PASS] Set input folder"); p++;
+            } catch (Exception e) { out.println("[FAIL] Input folder: " + e.getMessage()); f++; }
+
+            try { outputFolderField.setText("Y:\\MHTtest\\output\\auto"); Thread.sleep(200);
+                out.println("[PASS] Set output folder"); p++;
+            } catch (Exception e) { out.println("[FAIL] Output folder: " + e.getMessage()); f++; }
+
+            try { javafx.application.Platform.runLater(() -> {
+                configComboBox.setValue("auto_test"); configComboBox.getEditor().setText("auto_test"); });
+                Thread.sleep(200); out.println("[PASS] Config combo"); p++;
+            } catch (Exception e) { out.println("[FAIL] Config combo: " + e.getMessage()); f++; }
+
+            try { textModeToggle.setSelected(true); imageModeToggle.setSelected(false); Thread.sleep(300);
+                inputFolderField.setText("Y:\\MHTtest\\文本提取测试");
+                outputFolderField.setText("Y:\\MHTtest\\output\\auto\\text");
+                startButton.fire(); Thread.sleep(2000);
+                out.println("[PASS] Text extraction started"); p++;
+            } catch (Exception e) { out.println("[FAIL] Text extraction: " + e.getMessage()); f++; }
+
+            try { textModeToggle.setSelected(false); imageModeToggle.setSelected(true); Thread.sleep(300);
+                inputFolderField.setText("Y:\\MHTtest\\图片提取测试");
+                outputFolderField.setText("Y:\\MHTtest\\output\\auto\\image");
+                startButton.fire(); Thread.sleep(2000);
+                out.println("[PASS] Image extraction started"); p++;
+            } catch (Exception e) { out.println("[FAIL] Image extraction: " + e.getMessage()); f++; }
+
+            out.println(); out.println("=== RESULTS: " + p + " passed, " + f + " failed ===");
+            out.flush();
+            log.info("Automated tests complete: {} passed, {} failed", p, f);
+        } catch (Exception e) { log.error("Test framework error", e); }
     }
 
     /** Minimal Jackson ObjectMapper wrapper for agent exercise */

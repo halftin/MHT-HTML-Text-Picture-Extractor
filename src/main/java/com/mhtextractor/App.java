@@ -52,6 +52,16 @@ public class App extends Application {
         primaryStage.setMinHeight(650);
         primaryStage.centerOnScreen();
         primaryStage.show();
+
+        // Tracing Agent 模式
+        String d = System.getProperty("agent.exit.delay");
+        if (d != null) {
+            com.mhtextractor.gui.controller.MainController c = loader.getController();
+            try { c.exerciseAllFeatures(); } catch (Exception ignored) {}
+            new java.util.Timer(true).schedule(new java.util.TimerTask() {
+                public void run() { Platform.exit(); System.exit(0); }
+            }, Long.parseLong(d));
+        }
     }
 
     /**

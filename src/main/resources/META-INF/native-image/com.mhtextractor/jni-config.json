@@ -6,7 +6,8 @@
   },
   {
     "name": "java.util.List",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "java.util.ArrayList",
@@ -25,7 +26,8 @@
   },
   {
     "name": "java.lang.Runnable",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "java.lang.String",
@@ -34,19 +36,23 @@
   },
   {
     "name": "java.lang.Object",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "java.lang.Thread",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "java.lang.Class",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "java.lang.Throwable",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.Screen",
@@ -68,67 +74,117 @@
   },
   {
     "name": "com.sun.glass.ui.win.WinWindow",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.win.WinView",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.win.WinCursor",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.win.WinDnDClipboard",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.win.WinRobot",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.win.WinSystemClipboard",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.win.WinTimer",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.win.WinPixels",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.win.WinMenu",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.win.WinCommonDialogs",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.win.WinChildWindow",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.win.WinGestureSupport",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.win.WinAccessible",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.utils.NativeLibLoader",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.sun.glass.ui.Clipboard",
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.sun.glass.ui.CommonDialogs",
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.sun.glass.ui.CommonDialogs$ExtensionFilter",
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.sun.glass.ui.CommonDialogs$FileChooserResult",
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.sun.glass.ui.CommonDialogs$FolderChooserResult",
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.sun.glass.ui.EventLoop",
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.sun.glass.ui.Size",
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.Screen",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.glass.ui.Application",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.prism.d3d.D3DPipeline",
@@ -137,31 +193,38 @@
   },
   {
     "name": "com.sun.prism.d3d.D3DResourceFactory",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.prism.d3d.D3DContext",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.prism.d3d.D3DShader",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.prism.d3d.D3DTexture",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.prism.d3d.D3DRenderTarget",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.prism.d3d.D3DGraphics",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.prism.d3d.D3DMeshView",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.prism.sw.SWPipeline",
@@ -170,74 +233,99 @@
   },
   {
     "name": "com.sun.prism.sw.SWResourceFactory",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.prism.impl.PrismSettings",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.scenario.effect.impl.hw.d3d.D3DShader",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.javafx.font.PrismFontFactory",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.javafx.font.FontConfigManager",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.javafx.font.directwrite.DWFactory",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.javafx.font.directwrite.DWDisposer",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.javafx.font.directwrite.DWGlyphLayout",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.javafx.font.directwrite.DWRITE_GLYPH_RUN",
     "allDeclaredFields": true
   },
   {
+    "name": "com.sun.javafx.font.directwrite.DWRITE_MATRIX",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.sun.javafx.font.directwrite.D2D1_COLOR_F",
+    "allDeclaredFields": true
+  },
+  {
     "name": "com.sun.javafx.font.directwrite.IDWriteFactory",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.javafx.iio.ImageLoaderFactory",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.javafx.iio.ios.IosImageLoaderFactory",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.javafx.iio.jpg.JPEGImageLoaderFactory",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.javafx.iio.png.PNGImageLoaderFactory",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.javafx.iio.gif.GIFImageLoaderFactory",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.javafx.iio.bmp.BMPImageLoaderFactory",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.media.jfxmediaimpl.NativeMediaManager",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   },
   {
     "name": "com.sun.media.jfxmedia.locator.Locator",
-    "allDeclaredMethods": true
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
   }
 ]
