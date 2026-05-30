@@ -62,6 +62,12 @@ public class App extends Application {
                 public void run() { Platform.exit(); System.exit(0); }
             }, Long.parseLong(d));
         }
+        if ("true".equals(System.getProperty("test.mode"))) {
+            final com.mhtextractor.gui.controller.MainController c = loader.getController();
+            new java.util.Timer(true).schedule(new java.util.TimerTask() {
+                public void run() { c.runAutomatedTests(); Platform.exit(); System.exit(0); }
+            }, 2000);
+        }
     }
 
     /**

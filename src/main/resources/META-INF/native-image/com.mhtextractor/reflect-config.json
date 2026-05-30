@@ -127,6 +127,11 @@
     "allDeclaredMethods": true
   },
   {
+    "name": "jakarta.mail.internet.MimePartDataSource",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true
+  },
+  {
     "name": "jakarta.mail.internet.ContentType",
     "allDeclaredMethods": true,
     "allDeclaredConstructors": true
@@ -153,6 +158,11 @@
   {
     "name": "jakarta.activation.CommandMap",
     "allDeclaredMethods": true
+  },
+  {
+    "name": "jakarta.activation.MailcapCommandMap",
+    "allDeclaredMethods": true,
+    "allDeclaredConstructors": true
   },
   {
     "name": "jakarta.activation.DataHandler",
