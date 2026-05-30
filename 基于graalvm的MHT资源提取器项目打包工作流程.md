@@ -1,8 +1,8 @@
 # 基于 GraalVM 的 MHT 资源提取器项目打包工作流程
 
-> **目标**: 将 JavaFX 21 + Maven 项目编译为 GraalVM Native Image 绿色免安装 Windows EXE。
+> **目标**: 将 JavaFX 25 + Maven 项目编译为 GraalVM Native Image 绿色免安装 Windows EXE。
 > **适用场景**: 从 Git 拉取代码后，在任何 Windows 设备上完成打包。
-> **最后更新**: 2026-04-30 | **已验证 GraalVM 版本**: Oracle GraalVM 25.0.2+10.1 (JDK 25)
+> **最后更新**: 2026-05-31 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
 
 ---
 
@@ -11,29 +11,31 @@
 | 项目 | 详情 |
 |------|------|
 | 构建工具 | Maven (pom.xml) |
-| 编译 JDK | JDK 21（需含 JavaFX，如 Liberica Full） |
-| Native Image JDK | GraalVM JDK 25+（含 native-image 工具） |
-| JavaFX | 21.0.2 (win classifier)，无 module-info.java，classpath 模式 |
+| 编译 JDK | Liberica NIK 25.0.3（含 JavaFX + native-image，统一编译和构建） |
+| Native Image JDK | GraalVM 25.0.2+ 或 Liberica NIK 25.0.3 |
+| JavaFX | 25.0.3 (win classifier)，无 module-info.java，classpath 模式 |
 | 主类 | `com.mhtextractor.App` |
-| 关键依赖 | Jackson, Ikonli, AtlantaFX, Jakarta Mail, Jsoup, Logback, Lombok |
+| 关键依赖 | Jackson, Ikonli, AtlantaFX, Jakarta Mail, Jsoup, Logback, Lombok 1.18.44 |
 | 打包路径 | pom.xml → fat JAR → native-image → EXE + DLLs |
 
-> **注意**: 本项目代码中已有一处关键修改——`MainController.java` 中将 `java.awt.Desktop.getDesktop().open(folder)` 替换为 `Runtime.getRuntime().exec("explorer.exe " + path)`。这是因为 AWT 在 native-image 中不被支持。如果在新设备上从 Git 拉取的代码包含此修改则无需再次修改；如果代码被还原，请重新应用此修改。
+> **v2.3.1 升级说明**: 编译器升级至 JDK 25（`maven.compiler.release=25`），Lombok 升级至 1.18.44（兼容 JDK 25），JavaFX 升级至 25.0.3。编译和 native-image 不再需要两套 JDK 切换。Liberica NIK 25.0.3 的静态链接与项目现有的 JNI 配置存在兼容性问题（`glass.lib` 缺少符号），当前仍推荐用 GraalVM 25.0.2 执行 native-image 步骤。
+
+> **注意**: 本项目代码中已有一处关键修改——`MainController.java` 中将 `java.awt.Desktop.getDesktop().open(folder)` 替换为 `Runtime.getRuntime().exec("explorer.exe " + path)`。这是因为 AWT 在 native-image 中不被支持。
 
 ---
 
 ## 二、核心原则（最重要）
 
-### 2.1 两阶段编译
+### 2.1 编译与构建（v2.3.1 起统一为 JDK 25）
 
 ```
-阶段1: 源码 → 字节码         使用 JDK 21（Lombok 兼容）
-阶段2: 字节码 → Native EXE   使用 GraalVM JDK 25+（native-image）
+阶段1: 源码 → 字节码         使用 Liberica NIK 25.0.3（含 JavaFX）
+阶段2: 字节码 → Native EXE   使用 GraalVM 25.0.2（与 JNI 配置兼容）
 ```
 
-**为什么必须分开？** 本项目使用的 Lombok 1.18.30 依赖 JDK 内部 API（`com.sun.tools.javac.code.TypeTag`），这些 API 在 JDK 25 中已变更，会导致编译失败。GraalVM 的 `native-image` 处理的是已编译的字节码，不关心字节码是哪个 JDK 版本生成的（只要 major version ≤ 当前 JDK 版本）。
+**为什么 native-image 仍用 GraalVM 25.0.2？** NIK 25.0.3 的 native-image 采用静态链接模式（`.lib`），其内置 JavaFX 25 的 `glass.lib` 缺少 `Java_com_sun_glass_ui_Application__1overrideNativeWindowHandle` 符号，导致链接失败。GraalVM 25.0.2 使用动态链接（`.dll`）模式，与项目现有的 JNI 配置兼容。
 
-> **推论**: 如果将来升级了 Lombok 版本使其兼容 JDK 25+，可以只用 GraalVM JDK 完成编译和 native-image 两个阶段。
+> **升级方向**: 如需统一为 NIK，需用 Tracing Agent 重新生成 native-image 配置文件（`jni-config.json` 等），匹配 NIK 内置 JavaFX 25 的 JNI 符号表。
 
 ### 2.2 封闭世界假设（Closed World）
 
@@ -1519,6 +1521,44 @@ target/dist/
 4. **检查反射注册数**: 构建日志中 `types registered for reflection` 应 ≥ 4000（完整配置）
 5. **分步验证**: 先确保 JVM 模式正常运行（`java -jar target/...`），再构建 native-image
 
+### 8.5 已知环境陷阱（2026-05 验证）
+
+**错误**: `Module org.graalvm.nativeimage.builder not found`，native-image 启动即崩溃。
+
+**根因**: GraalVM 安装路径（任一级目录）包含中文字符。模块解析器无法处理非 ASCII 路径。
+
+**解决**: 将 GraalVM 移动到纯英文路径，例如 `Y:\graalvm-sdk\`。同时确保项目路径、输出路径也避免中文。
+
+---
+
+**错误**: `Writing image to non-existent directory target\native-image\.library.path=target is not allowed`。
+
+**根因**: 在 PowerShell 中直接调用 native-image 时，`-Djava.library.path=target\jfx-dlls` 参数被 PowerShell 误解析为 `-Djava` 参数名 + `.library.path=...` 值，导致输出路径被拼接。
+
+**解决**: 
+- 将 `-Djava.library.path=target\jfx-dlls` 写入 `META-INF/native-image/com.mhtextractor/native-image.properties`（`JavaArgs = -Djava.library.path=target\\jfx-dlls`），命令行不再传此参数。
+- 或从原生 Windows 命令提示符（cmd.exe）运行，而非 PowerShell。
+
+---
+
+**错误**: `Failed to automatically set up Windows build environment`，cl.exe 无法找到。
+
+**根因**: MSYS2/Git Bash 环境中，`cmd.exe //c` 无法访问 `C:\Program Files\Microsoft Visual Studio\` 目录（文件系统虚拟化/路径编码问题）。
+
+**解决**: 
+- 不通过 bash 启动 cmd.exe，直接在 Windows 原生 cmd.exe 或 PowerShell 中运行构建脚本。
+- 如果用 PowerShell，手动设置 MSVC 环境变量（PATH/INCLUDE/LIB），不要依赖 `vcvars64.bat`。
+
+---
+
+**错误**: NIK 25.0.3 native-image 链接失败 `error LNK2001: unresolved external symbol Java_com_sun_glass_ui_Application__1overrideNativeWindowHandle`。
+
+**根因**: NIK 25.0.3 内置 JavaFX 25 的静态链接库 `glass.lib` 与项目当前 JNI 配置（基于 JavaFX 21 生成）不兼容。NIK 使用静态链接，GraalVM 使用动态链接。
+
+**解决**:
+- 编译用 NIK 25.0.3，native-image 仍用 GraalVM 25.0.2（动态链接模式）。
+- 或重新用 Tracing Agent 在 NIK 环境下生成全套 native-image 配置文件。
+
 ---
 
 ## 九、给 Claude Code CLI 的提示
@@ -1526,12 +1566,12 @@ target/dist/
 如果在新的会话或新设备上使用 Claude Code CLI 打包此项目：
 
 1. **先读本文档**，了解整体流程
-2. **运行环境检查**（第三章），确认 JDK 21、GraalVM JDK 25、Maven、MSVC 都已就绪
-3. **检查并生成配置文件**（第四章），`src/main/resources/META-INF/native-image/com.mhtextractor/` 下的 6 个 JSON 文件都需要存在
-4. **编译用 JDK 21，native-image 用 GraalVM**，不要混用
-5. **`--initialize-at-run-time` 参数一个都不能少**，缺失任何一个 JavaFX 子包都会崩溃
-6. **DLL 必须放在 EXE 同目录**，包括 JNI 桥接库 `awt.dll`/`java.dll`/`jvm.dll`
-7. **改代码后必须重跑 Tracing Agent**，确保新代码的反射调用被捕获
+2. **运行环境检查**（第三章），确认 Liberica NIK 25.0.3、GraalVM JDK 25.0.2、Maven、MSVC 都已就绪
+3. **检查并生成配置文件**（第四章），`src/main/resources/META-INF/native-image/com.mhtextractor/` 下的 7 个配置文件都需要存在
+4. **编译用 NIK 25.0.3，native-image 用 GraalVM 25.0.2**，当前不宜混用
+5. **所有工具路径必须纯 ASCII**，含中文的路径会导致模块加载失败（`Module org.graalvm.nativeimage.builder not found`）
+6. **`--initialize-at-run-time` 参数一个都不能少**，缺失任何一个 JavaFX 子包都会崩溃
+7. **DLL 必须放在 EXE 同目录**，包括 JNI 桥接库 `awt.dll`/`java.dll`/`jvm.dll`
 8. **构建后用 `editbin /SUBSYSTEM:WINDOWS`** 隐藏控制台窗口
 9. **遇到 `Failed to delete target\lib`**: 跳过 clean，用 `mvn package` 而非 `mvn clean package`
 10. **遇到新错误**: 搜索本文档第八章，或在命令行运行 EXE 获取具体堆栈信息

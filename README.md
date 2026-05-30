@@ -12,7 +12,7 @@
 
 ## 📖 项目简介
 
-MHT资源提取器是一款专注于解析和提取`.mht`（MIME HTML）文件内容的工具。它能够将网页归档文件中的纯文本与嵌入式图片等资源高效分离，并以结构化的方式输出。本工具采用本地运行模式，无需联网即可操作，确保了用户数据的安全性与隐私性。项目采用 Java 21 + JavaFX 21 构建，使用 MVC 架构设计，代码模块化、可维护性强。
+MHT资源提取器是一款专注于解析和提取`.mht`（MIME HTML）文件内容的工具。它能够将网页归档文件中的纯文本与嵌入式图片等资源高效分离，并以结构化的方式输出。本工具采用本地运行模式，无需联网即可操作，确保了用户数据的安全性与隐私性。项目采用 Java 25 + JavaFX 25.0.3 构建，使用 MVC 架构设计，代码模块化、可维护性强。
 
 ## ⚙️ 主要功能
 
@@ -51,7 +51,7 @@ MHT资源提取器是一款专注于解析和提取`.mht`（MIME HTML）文件�
 ### 系统要求
 
 - **操作系统**：Windows / Linux / macOS
-- **JDK版本**：Java 21+（重构后升级）
+- **JDK版本**：Java 25+（Liberica NIK 25.0.3 或 GraalVM JDK 25+）
 - **内存建议**：至少512MB可用内存以流畅处理大型MHT文件
 
 ### 安装与运行
@@ -106,31 +106,36 @@ MHT资源提取器是一款专注于解析和提取`.mht`（MIME HTML）文件�
 
 ### 构建环境
 
-- **JDK版本**：21+
-- **构建工具**：Maven 3.6+
+- **JDK版本**：JDK 25+（推荐 Liberica NIK 25.0.3，自带 JavaFX 和 native-image）
+- **构建工具**：Maven 3.9+
+- **Native Image**：GraalVM 25.0.2+ 或 Liberica NIK 25.0.3
 
-### 构建命令
-
-```bash
-mvn clean package
-```
-
-成功执行上述命令后，可在 `target/` 目录下找到生成的可执行JAR文件。
-
-### 开发运行
+### JVM 模式
 
 ```bash
+# 编译
+mvn package -DskipTests
+
+# 运行
 mvn javafx:run
 ```
+
+### Native Image 模式（生成免安装 EXE）
+
+```bash
+build-native.cmd
+```
+
+详见 `基于graalvm的MHT资源提取器项目打包工作流程.md`。
+
+> **注意**：GraalVM/NIK 安装路径和项目路径必须全部为英文（ASCII），含中文的路径会导致模块加载失败。
 
 ## 📦 依赖库列表
 
 | 依赖库                                                   | 版本    | 用途                 |
 | -------------------------------------------------------- | ------- | -------------------- |
-| `org.openjfx:javafx-controls`                            | 21.0.2  | JavaFX UI控件        |
-| `org.openjfx:javafx-fxml`                                | 21.0.2  | FXML布局加载         |
-| `org.openjfx:javafx-media`                               | 21.0.2  | JavaFX媒体支持       |
-| `org.openjfx:javafx-web`                                 | 21.0.2  | JavaFX Web组件       |
+| `org.openjfx:javafx-controls`                            | 25.0.3  | JavaFX UI控件        |
+| `org.openjfx:javafx-fxml`                                | 25.0.3  | FXML布局加载         |
 | `com.sun.mail:jakarta.mail`                              | 2.0.2   | MIME/MHT文件解析     |
 | `org.jsoup:jsoup`                                        | 1.18.1  | HTML解析与文本提取   |
 | `com.fasterxml.jackson.core:jackson-databind`            | 2.18.6  | JSON配置序列化       |
@@ -138,8 +143,9 @@ mvn javafx:run
 | `org.slf4j:slf4j-api`                                    | 2.0.9   | 日志API              |
 | `ch.qos.logback:logback-classic`                         | 1.5.26  | 日志实现             |
 | `io.github.mkpaz:atlantafx-base`                         | 2.1.0   | UI主题（Nord Light） |
-| `org.projectlombok:lombok`                               | 1.18.30 | 代码简化（注解）     |
-| `commons-io:commons-io`                                  | 2.15.1  | 文件IO工具           |
+| `org.projectlombok:lombok`                               | 1.18.44 | 代码简化（注解）     |
+| `org.kordamp.ikonli:ikonli-javafx`                       | 12.3.1  | 图标库               |
+| `org.kordamp.ikonli:ikonli-fontawesome5-pack`            | 12.3.1  | FontAwesome 图标     |
 
 ## 💬 贡献指南
 

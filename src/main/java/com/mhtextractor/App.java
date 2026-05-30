@@ -6,6 +6,8 @@ import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
+import javafx.geometry.Rectangle2D;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import lombok.extern.slf4j.Slf4j;
@@ -37,10 +39,18 @@ public class App extends Application {
         scene.getStylesheets().add(customCssUrl);
         injectStylesToAllWindows();
 
+        // 窗口初始大小自适应屏幕70%，最小尺寸保持原有固定值
+        Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
+        double winWidth  = screenBounds.getWidth()  * 0.75;
+        double winHeight = screenBounds.getHeight() * 0.85;
+
         primaryStage.setTitle("MHT 资源提取器");
         primaryStage.setScene(scene);
+        primaryStage.setWidth(winWidth);
+        primaryStage.setHeight(winHeight);
         primaryStage.setMinWidth(900);
         primaryStage.setMinHeight(650);
+        primaryStage.centerOnScreen();
         primaryStage.show();
     }
 

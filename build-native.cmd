@@ -9,13 +9,13 @@ setlocal enabledelayedexpansion
 echo === Step 1: 设置环境变量 ===
 
 REM 编译用 JDK 21 (Lombok 兼容)
-set "BUILD_JAVA_HOME=C:\Users\Administrator\.jdks\liberica-full-21.0.11"
+set "BUILD_JAVA_HOME=Y:\JAVA环境\liberica-full-21.0.11"
 
 REM GraalVM JDK 25 (用于 native-image 编译)
-set "GRAALVM_HOME=Y:\instll\graalvm-jdk-25.0.2+10.1"
+set "GRAALVM_HOME=Y:\JAVA环境\graalvm-jdk-25_windows-x64_bin\graalvm-jdk-25.0.2+10.1"
 
 REM Maven
-set "MAVEN_HOME=Y:\instll\apache-maven-3.9.9"
+set "MAVEN_HOME=Y:\JAVA环境\apache-maven-3.9.9"
 
 echo === Step 2: 用 JDK 21 编译项目 ===
 set JAVA_HOME=%BUILD_JAVA_HOME%
@@ -41,7 +41,7 @@ echo DLLs 已提取到 target\jfx-dlls\
 
 echo === Step 4: 构建 Native Image (需要 1-3 分钟) ===
 REM 初始化 Visual Studio 构建环境
-call "Y:\instll\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo [WARNING] 无法初始化 Visual Studio 环境, 尝试继续...
 )
@@ -78,7 +78,7 @@ copy /Y "target\native-image\*.dll" "target\dist\" >nul
 copy /Y "target\jfx-dlls\*.dll" "target\dist\" >nul
 
 echo === Step 6: 隐藏控制台窗口 (GUI模式) ===
-for /f "delims=" %%i in ('where /r "Y:\instll\Microsoft Visual Studio" editbin.exe 2^>nul ^| findstr /r "Hostx64.*editbin"') do set EDITBIN=%%i
+for /f "delims=" %%i in ('where /r "C:\Program Files\Microsoft Visual Studio" editbin.exe 2^>nul ^| findstr /r "Hostx64.*editbin"') do set EDITBIN=%%i
 if defined EDITBIN (
     "%EDITBIN%" /SUBSYSTEM:WINDOWS "target\dist\MhtExtractor.exe" >nul 2>&1
     echo GUI 模式已启用 - 双击运行不再显示黑窗口
