@@ -269,7 +269,8 @@ public class ImageExtractor extends BaseExtractor {
     }
 
     private String extractContentArea(String html) {
-        if (contentLimitStart == null || contentLimitEnd == null) return html;
+        if (contentLimitStart == null || contentLimitEnd == null
+                || contentLimitStart.isEmpty() || contentLimitEnd.isEmpty()) return html;
         String result = HtmlUtils.extractRegion(html, contentLimitStart, contentLimitEnd, lastWarnings);
         if (result == null) {
             logger.warn("[警告] {}", lastWarnings.get(lastWarnings.size() - 1));

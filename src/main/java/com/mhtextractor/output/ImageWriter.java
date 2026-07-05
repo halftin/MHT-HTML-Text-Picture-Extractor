@@ -50,6 +50,9 @@ public class ImageWriter {
         } else {
             String cleanName = SanitizeUtils.sanitize(imageData.getFilename());
             cleanName = stripExtension(cleanName);
+            if (cleanName.matches("\\d+")) {
+                cleanName = "img_" + cleanName;
+            }
             finalFileName = cleanName + "." + ext;
         }
 

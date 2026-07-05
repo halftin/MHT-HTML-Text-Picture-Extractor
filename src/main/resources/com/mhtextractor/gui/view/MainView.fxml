@@ -78,15 +78,15 @@
                         <TitledPane fx:id="textTitlePane" text="章节与标题" expanded="false">
                             <VBox spacing="8">
                                 <ToggleSwitch fx:id="addChapterNumberCheck" text="自动添加章节序号（第一章、第二章...）"/>
-                                <ToggleSwitch fx:id="enableTitleExtractCheck" text="提取隐藏标题"/>
+                                <ToggleSwitch fx:id="enableTitleExtractCheck" text="提取网页内标题"/>
                                 <GridPane hgap="8" vgap="4">
                                     <columnConstraints>
                                         <ColumnConstraints minWidth="100" prefWidth="100"/>
                                         <ColumnConstraints hgrow="ALWAYS"/>
                                     </columnConstraints>
-                                    <Label text="标题起始:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                    <Label text="标题起始标记:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
                                     <TextField fx:id="titleStartMarkerField" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
-                                    <Label text="标题结束:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                    <Label text="标题结束标记:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
                                     <TextField fx:id="titleEndMarkerField" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
                                 </GridPane>
                                 <ToggleSwitch fx:id="titleUseRegexCheck" text="标题标记使用正则表达式"/>
@@ -94,7 +94,7 @@
                         </TitledPane>
 
                         <!-- 内容限定 -->
-                        <TitledPane fx:id="textContentLimitPane" text="内容限定" expanded="false">
+                        <TitledPane fx:id="textContentLimitPane" text="内容区域限定" expanded="false">
                             <VBox spacing="8">
                                 <ToggleSwitch fx:id="enableLimitCheck" text="启用内容区域限定"/>
                                 <GridPane hgap="8" vgap="4">
@@ -153,15 +153,15 @@
                         <!-- 名称提取 -->
                         <TitledPane fx:id="imageNamePane" text="名称提取" expanded="false">
                             <VBox spacing="8">
-                                <ToggleSwitch fx:id="imageNameExtractCheck" text="启用图片文件夹名称提取"/>
+                                <ToggleSwitch fx:id="imageNameExtractCheck" text="提取网页内标题，用于命名输出的图片文件夹"/>
                                 <GridPane hgap="8" vgap="4">
                                     <columnConstraints>
                                         <ColumnConstraints minWidth="100" prefWidth="100"/>
                                         <ColumnConstraints hgrow="ALWAYS"/>
                                     </columnConstraints>
-                                    <Label text="起始标记:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                    <Label text="标题起始标记:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
                                     <TextField fx:id="imageNameStartField" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
-                                    <Label text="结束标记:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                    <Label text="标题结束标记:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
                                     <TextField fx:id="imageNameEndField" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
                                 </GridPane>
                             </VBox>
@@ -170,7 +170,7 @@
                         <!-- 区域限定 -->
                         <TitledPane fx:id="imageRegionPane" text="内容区域限定" expanded="false">
                             <VBox spacing="8">
-                                <ToggleSwitch fx:id="imageRegionExtractCheck" text="启用区域限定"/>
+                                <ToggleSwitch fx:id="imageRegionExtractCheck" text="启用内容区域限定"/>
                                 <GridPane hgap="8" vgap="4">
                                     <columnConstraints>
                                         <ColumnConstraints minWidth="100" prefWidth="100"/>
@@ -220,7 +220,7 @@
             </padding>
 
             <!-- 进度条 -->
-            <ProgressBar fx:id="progressBar" progress="0" prefWidth="860" visible="false"/>
+            <ProgressBar fx:id="progressBar" progress="0" maxWidth="Infinity" visible="false"/>
             <Label fx:id="statusLabel" text="就绪" styleClass="text-small"/>
 
             <!-- 完成后操作 -->

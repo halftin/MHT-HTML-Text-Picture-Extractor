@@ -91,7 +91,6 @@ public class MainController {
     private final ConfigManager configManager = new ConfigManager();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Task<BatchProcessor.ProcessStats> currentTask;
-    private DoubleProperty smoothProgress;
     private boolean isApplyingConfig = false;
 
     @FXML
@@ -346,13 +345,9 @@ public class MainController {
             }
         };
 
-        // 使用平滑进度条动画替代直接绑定
-        smoothProgress = JavaFxUtil.createSmoothProgressProperty();
-        progressBar.progressProperty().bind(smoothProgress);
-
-        // 监听 Task 进度变化，平滑过渡到新值
+        // 用 listener 直接设值
         task.progressProperty().addListener((obs, oldVal, newVal) -> {
-            JavaFxUtil.setSmoothProgress(smoothProgress, newVal.doubleValue());
+            progressBar.setProgress(newVal.doubleValue());
         });
 
         task.setOnSucceeded(e -> {
@@ -360,9 +355,7 @@ public class MainController {
             currentTask = null;
             startButton.setDisable(false);
             stopButton.setDisable(true);
-            smoothProgress.set(1.0);
-            progressBar.progressProperty().unbind();
-            JavaFxUtil.stopSmoothProgress(smoothProgress);
+            progressBar.setProgress(1.0);
             statusLabel.setText("处理完成");
             BatchProcessor.ProcessStats stats = task.getValue();
             if (stats != null) {
@@ -386,8 +379,6 @@ public class MainController {
             currentTask = null;
             startButton.setDisable(false);
             stopButton.setDisable(true);
-            progressBar.progressProperty().unbind();
-            JavaFxUtil.stopSmoothProgress(smoothProgress);
             progressBar.setVisible(false);
             statusLabel.setText("处理异常");
             Throwable ex = task.getException();
@@ -407,8 +398,6 @@ public class MainController {
         running.set(false);
         startButton.setDisable(false);
         stopButton.setDisable(true);
-        progressBar.progressProperty().unbind();
-        JavaFxUtil.stopSmoothProgress(smoothProgress);
         progressBar.setVisible(false);
         statusLabel.setText("已停止");
         log.info("用户手动停止处理");
@@ -527,8 +516,10 @@ public class MainController {
         config.setImageNameStartMarker(imageNameStartField.getText());
         config.setImageNameEndMarker(imageNameEndField.getText());
         config.setEnableRegionExtraction(imageRegionExtractCheck.isSelected());
-        config.setImageRegionStartMarker(imageRegionStartField.getText());
-        config.setImageRegionEndMarker(imageRegionEndField.getText());
+        config.setImageRegionStartMarker(
+                config.isEnableRegionExtraction() ? imageRegionStartField.getText() : null);
+        config.setImageRegionEndMarker(
+                config.isEnableRegionExtraction() ? imageRegionEndField.getText() : null);
         config.setEnableBatchRenaming(imageRenameCheck.isSelected());
         config.setEnableZipPackaging(imageZipCheck.isSelected());
         config.setEnableCbzPackaging(imageCbzCheck.isSelected());
