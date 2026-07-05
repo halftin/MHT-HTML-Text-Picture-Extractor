@@ -2,7 +2,7 @@
 
 > **目标**: 将 JavaFX 25 + Maven 项目编译为 GraalVM Native Image 绿色免安装 Windows EXE。
 > **适用场景**: 从 Git 拉取代码后，在任何 Windows 设备上完成打包。
-> **最后更新**: 2026-05-31 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
+> **最后更新**: 2026-07-05 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
 
 ---
 
@@ -47,16 +47,16 @@ Native Image 只包含静态分析可达的代码。任何通过 `Class.forName(
 
 在开始打包前，逐一检查以下条件。**缺失任何一项都必须先安装**。
 
-### 3.1 JDK 21（编译用）
+### 3.1 JDK 25（编译用）
 
 | 检查项 | 验证命令 |
 |--------|----------|
-| 是否安装 | `<JDK21_HOME>/bin/java -version` 应输出 `21.x.x` |
-| 是否含 JavaFX | `<JDK21_HOME>/bin/java --list-modules \| grep javafx` 应有输出（Liberica Full 或 Azul Zulu FX） |
+| 是否安装 | `<JDK25_HOME>/bin/java -version` 应输出 `25.x.x` |
+| 是否含 JavaFX | `<JDK25_HOME>/bin/java --list-modules \| grep javafx` 应有输出（Liberica Full 或 Azul Zulu FX） |
 
-> **推荐**: 使用 Liberica Full JDK 21 或任何包含 JavaFX 的 JDK 21 发行版。普通 JDK 21 不含 JavaFX，编译可通过但 Tracing Agent 阶段无法运行。
+> v2.3.1 起编译目标升级为 JDK 25（`maven.compiler.release=25`），Lombok 1.18.44 已兼容 JDK 25。推荐使用 Liberica Full JDK 25 或任何包含 JavaFX 的 JDK 25 发行版。
 
-**如果未安装**: 从 [BellSoft Liberica](https://bell-sw.com/pages/downloads/) 下载 "Full JDK 21" Windows x64 版本，安装后记录其 `bin` 目录的上级路径（即 `JAVA_HOME`）。
+**如果未安装**: 从 [BellSoft Liberica](https://bell-sw.com/pages/downloads/) 下载 "Full JDK 25" Windows x64 版本，安装后记录其 `bin` 目录的上级路径（即 `JAVA_HOME`）。
 
 ### 3.2 GraalVM JDK 25+（Native Image 构建用）
 
@@ -117,12 +117,12 @@ Windows SDK 随 Visual Studio 一起安装，无需额外操作。如果未安�
 echo "=== 环境检查 ==="
 errors=0
 
-# JDK 21
-echo -n "JDK 21: "
-if java21=$(command -v java 2>/dev/null) && "$java21" -version 2>&1 | grep -q "21\."; then
+# JDK 25
+echo -n "JDK 25: "
+if java25=$(command -v java 2>/dev/null) && "$java25" -version 2>&1 | grep -q "25\."; then
     echo "OK ($(which java))"
 else
-    echo "MISSING - 需要 JDK 21（含 JavaFX）用于编译"
+    echo "MISSING - 需要 JDK 25（含 JavaFX）用于编译"
     errors=$((errors+1))
 fi
 
@@ -366,12 +366,6 @@ Agent 无法捕获通过 `new` 直接实例化的类（这些类静态可达，�
     "name": "com.mhtextractor.gui.util.JavaFxUtil",
     "allDeclaredMethods": true,
     "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.gui.util.JavaFxUtil$SmoothProgressProperty",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true,
-    "allDeclaredFields": true
   },
   {
     "name": "jakarta.mail.Session",
@@ -1120,17 +1114,17 @@ Native Image 构建需要 MSVC 链接器环境。**在同一个终端中**按顺
 
 ```bash
 # ========== Step 0: 设置路径变量（按实际环境修改） ==========
-JDK21_HOME=<你的 JDK 21 路径>
+JDK25_HOME=<你的 JDK 25 路径（Liberica Full JDK 25）>
 GRAALVM_HOME=<你的 GraalVM JDK 25+ 路径>
 PROJECT_DIR=<项目根目录>
 
 # ========== Step 1: 初始化 MSVC 环境（必须最先执行） ==========
 # 找到 vcvars64.bat 的位置（通常在 VS 安装目录下）
-# 示例路径: "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+# 示例路径: "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 call "<VS安装目录>\VC\Auxiliary\Build\vcvars64.bat"
 
-# ========== Step 2: 编译（JDK 21） ==========
-export JAVA_HOME=$JDK21_HOME
+# ========== Step 2: 编译（JDK 25） ==========
+export JAVA_HOME=$JDK25_HOME
 export PATH=$JAVA_HOME/bin:$PATH
 cd $PROJECT_DIR
 mvn clean package -DskipTests
@@ -1239,16 +1233,16 @@ REM ============================================================
 setlocal enabledelayedexpansion
 
 REM ====== 请根据本机环境修改以下路径 ======
-set "JDK21_HOME=<你的 JDK 21 路径>"
+set "JDK25_HOME=<你的 JDK 25 路径（Liberica Full JDK 25）>"
 set "GRAALVM_HOME=<你的 GraalVM JDK 25+ 路径>"
 set "MAVEN_HOME=<你的 Maven 路径>"
 REM VS vcvars64.bat 路径（通常在 VS 安装目录下）
 set "VCVARS64=<你的 VS 安装目录>\VC\Auxiliary\Build\vcvars64.bat"
 
 REM ====== 验证环境 ======
-if not exist "%JDK21_HOME%\bin\java.exe" (
-    echo [ERROR] JDK 21 未找到: %JDK21_HOME%
-    echo 请修改脚本中的 JDK21_HOME 变量
+if not exist "%JDK25_HOME%\bin\java.exe" (
+    echo [ERROR] JDK 25 未找到: %JDK25_HOME%
+    echo 请修改脚本中的 JDK25_HOME 变量
     pause & exit /b 1
 )
 if not exist "%GRAALVM_HOME%\bin\native-image.cmd" (
@@ -1273,8 +1267,8 @@ if %ERRORLEVEL% NEQ 0 (
 )
 echo MSVC 环境就绪
 
-echo === Step 2: 编译项目 (JDK 21) ===
-set JAVA_HOME=%JDK21_HOME%
+echo === Step 2: 编译项目 (JDK 25) ===
+set JAVA_HOME=%JDK25_HOME%
 set PATH=%JAVA_HOME%\bin;%PATH%
 call "%MAVEN_HOME%\bin\mvn.cmd" clean package -DskipTests -f pom.xml
 if %ERRORLEVEL% NEQ 0 (
@@ -1286,7 +1280,7 @@ echo === Step 3: 提取 JavaFX DLLs ===
 if not exist "target\jfx-dlls" mkdir "target\jfx-dlls"
 cd target\lib
 for %%f in (glass.dll prism_common.dll prism_d3d.dll prism_sw.dll decora_sse.dll javafx_font.dll javafx_iio.dll msvcp140.dll msvcp140_1.dll msvcp140_2.dll vcruntime140.dll vcruntime140_1.dll) do (
-    "%GRAALVM_HOME%\bin\jar" xf javafx-graphics-*-win.jar %%f 2>nul
+    "%GRAALVM_HOME%\bin\jar" xf javafx-graphics-25.0.3-win.jar %%f 2>nul
     if exist %%f move /Y %%f ..\jfx-dlls\ >nul 2>&1
 )
 cd ..\..
@@ -1485,7 +1479,7 @@ target/dist/
 
 | 现象 | 可能原因 | 解决方法 |
 |------|----------|----------|
-| `Fatal error compiling: TypeTag :: UNKNOWN` | 用 JDK 25 编译 Lombok 注解的源码 | 切换为 JDK 21 编译 |
+| `Fatal error compiling: TypeTag :: UNKNOWN` | Lombok 版本不兼容当前 JDK | 升级 Lombok 到最新版本（当前 1.18.44+ 兼容 JDK 25） |
 | `mvn: command not found` | Maven 未在 PATH | 用完整路径或安装 Maven |
 | `Failed to delete target\lib` | 之前构建的 DLL 被占用 | 跳过 clean: `mvn package -DskipTests` |
 
@@ -1568,7 +1562,7 @@ target/dist/
 1. **先读本文档**，了解整体流程
 2. **运行环境检查**（第三章），确认 Liberica NIK 25.0.3、GraalVM JDK 25.0.2、Maven、MSVC 都已就绪
 3. **检查并生成配置文件**（第四章），`src/main/resources/META-INF/native-image/com.mhtextractor/` 下的 7 个配置文件都需要存在
-4. **编译用 NIK 25.0.3，native-image 用 GraalVM 25.0.2**，当前不宜混用
+4. **编译用 JDK 25，native-image 用 GraalVM 25.0.2**，NIK 的 native-image 存在静态链接兼容问题
 5. **所有工具路径必须纯 ASCII**，含中文的路径会导致模块加载失败（`Module org.graalvm.nativeimage.builder not found`）
 6. **`--initialize-at-run-time` 参数一个都不能少**，缺失任何一个 JavaFX 子包都会崩溃
 7. **DLL 必须放在 EXE 同目录**，包括 JNI 桥接库 `awt.dll`/`java.dll`/`jvm.dll`
