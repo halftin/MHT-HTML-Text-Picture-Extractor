@@ -56,6 +56,22 @@ MHT资源提取器是一款专注于解析和提取`.mht`（MIME HTML）文件�
 
 ### 安装与运行
 
+#### 便携版（推荐，无需安装 JDK）
+
+1. 从 [发行版页面](https://gitee.com/halftin/mht-resource-extractor/releases) 下载最新 `MHT资源提取器_便携版.zip`
+2. 解压到任意目录
+3. 双击 `MhtExtractor.exe` 启动
+
+#### 开发版（需要 JDK 25 + Maven）
+
+```bash
+# 克隆仓库
+git clone https://gitee.com/halftin/mht-resource-extractor.git
+cd mht-resource-extractor
+
+# 编译并运行
+mvn javafx:run
+```
 
 
 ### 基本使用流程
@@ -106,9 +122,10 @@ MHT资源提取器是一款专注于解析和提取`.mht`（MIME HTML）文件�
 
 ### 构建环境
 
-- **JDK版本**：JDK 25+（推荐 Liberica NIK 25.0.3，自带 JavaFX 和 native-image）
+- **编译 JDK**：JDK 25+（推荐 Liberica NIK 25.0.3，自带 JavaFX）
+- **Native Image JDK**：GraalVM JDK 25.0.2+（用于生成 EXE）
 - **构建工具**：Maven 3.9+
-- **Native Image**：GraalVM 25.0.2+ 或 Liberica NIK 25.0.3
+- **C 编译器**：Visual Studio 2022 Build Tools（Windows 上 native-image 必须）
 
 ### JVM 模式
 
@@ -122,13 +139,22 @@ mvn javafx:run
 
 ### Native Image 模式（生成免安装 EXE）
 
+构建前需确认：
+- GraalVM JDK 25 已安装，`native-image` 可用
+- Visual Studio Build Tools 已安装（含 MSVC 工具链）
+- `build-native.cmd` 中的路径已适配当前环境
+
 ```bash
 build-native.cmd
 ```
 
-详见 `基于graalvm的MHT资源提取器项目打包工作流程.md`。
+构建产物在 `build-native.cmd` 中 `OUTPUT_DIR` 指定的目录下，包含：
+- `MhtExtractor.exe`（约 65 MB，GUI 模式无控制台窗口）
+- `*.dll`（JavaFX + GraalVM JNI 运行库）
 
-> **注意**：GraalVM/NIK 安装路径和项目路径必须全部为英文（ASCII），含中文的路径会导致模块加载失败。
+将该目录整体分发即可，目标机器无需安装 JDK/JRE。
+
+> **注意**：所有路径必须为英文（ASCII），含中文的路径会导致 native-image 模块加载失败。
 
 ## 📦 依赖库列表
 
