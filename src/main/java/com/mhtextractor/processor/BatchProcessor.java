@@ -153,24 +153,38 @@ public abstract class BatchProcessor {
     }
 
     /**
+     * 从文件构建 MhtFileInfo（修改时间读取失败回退当前时间，条目仍入列表）
+     */
+    public static MhtFileInfo toMhtFileInfo(File f) {
+        try {
+            LocalDateTime mtime = Files.getLastModifiedTime(Paths.get(f.getAbsolutePath()))
+                    .toInstant()
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDateTime();
+            return new MhtFileInfo(f.getAbsolutePath(), f.getName(), mtime);
+        } catch (Exception e) {
+            log.warn("无法读取文件修改时间，回退当前时间：{}", f.getName(), e);
+            return new MhtFileInfo(f.getAbsolutePath(), f.getName(), LocalDateTime.now());
+        }
+    }
+
+    /**
+     * 按传入顺序构建 MhtFileInfo 列表（预览窗口拖拽排序后的最终顺序）
+     */
+    public static List<MhtFileInfo> buildMhtFileInfoList(List<String> paths) {
+        return paths.stream()
+                .map(File::new)
+                .map(BatchProcessor::toMhtFileInfo)
+                .toList();
+    }
+
+    /**
      * 收集并排序 MHT 文件
      */
     protected List<MhtFileInfo> collectMhtFiles(String folderPath) {
         List<File> files = FileUtils.findMhtFiles(folderPath);
         return files.stream()
-                .map(f -> {
-                    try {
-                        LocalDateTime mtime = Files.getLastModifiedTime(Paths.get(f.getAbsolutePath()))
-                                .toInstant()
-                                .atZone(ZoneId.systemDefault())
-                                .toLocalDateTime();
-                        return new MhtFileInfo(f.getAbsolutePath(), f.getName(), mtime);
-                    } catch (Exception e) {
-                        log.error("无法读取文件信息：{}", f.getName(), e);
-                        return null;
-                    }
-                })
-                .filter(info -> info != null)
+                .map(BatchProcessor::toMhtFileInfo)
                 .sorted(Comparator.comparing(MhtFileInfo::getModifiedTime))
                 .toList();
     }

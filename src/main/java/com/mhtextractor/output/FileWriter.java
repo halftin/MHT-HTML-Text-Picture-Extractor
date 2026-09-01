@@ -69,9 +69,9 @@ public class FileWriter {
     }
 
     /**
-     * 处理模板中的变量替换
+     * 处理模板中的变量替换（预览窗口渲染与正式输出共用）
      */
-    private static String processTemplate(String template, String filename, LocalDateTime fileTime) {
+    public static String processTemplate(String template, String filename, LocalDateTime fileTime) {
         if (template == null || template.isEmpty()) return "";
 
         String result = template;

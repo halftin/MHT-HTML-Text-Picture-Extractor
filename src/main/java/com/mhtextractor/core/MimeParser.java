@@ -58,7 +58,7 @@ public class MimeParser {
      */
     public ParsedMht parse(String mhtPath, Supplier<Boolean> continueCallback,
                            Consumer<ParsingStage> progressCallback) throws Exception {
-        return parse(mhtPath, continueCallback, progressCallback, null);
+        return parse(mhtPath, false, continueCallback, progressCallback, null);
     }
 
     /**
@@ -70,6 +70,15 @@ public class MimeParser {
      * @param byteProgressCallback 细粒度进度回调（0.0~1.0，覆盖 0.05~0.35 解析阶段），可传入 null
      */
     public ParsedMht parse(String mhtPath, Supplier<Boolean> continueCallback,
+                           Consumer<ParsingStage> stageCallback,
+                           Consumer<Double> byteProgressCallback) throws Exception {
+        return parse(mhtPath, false, continueCallback, stageCallback, byteProgressCallback);
+    }
+
+    /**
+     * 解析MHT文件（textOnly=true 跳过图片二进制读取，供预览预解析使用）
+     */
+    public ParsedMht parse(String mhtPath, boolean textOnly, Supplier<Boolean> continueCallback,
                            Consumer<ParsingStage> stageCallback,
                            Consumer<Double> byteProgressCallback) throws Exception {
         Properties props = new Properties();
@@ -88,7 +97,7 @@ public class MimeParser {
             // 原子计数器：跟踪已处理的 part 数，用于周期性报告进度
             AtomicInteger partsProcessed = new AtomicInteger(0);
 
-            return parseMimeMessage(message, continueCallback, stageCallback, byteProgressCallback,
+            return parseMimeMessage(message, textOnly, continueCallback, stageCallback, byteProgressCallback,
                     partsProcessed, totalParts);
         }
     }
@@ -116,7 +125,8 @@ public class MimeParser {
     /**
      * 从MimeMessage中提取HTML内容和CID映射
      */
-    private ParsedMht parseMimeMessage(MimeMessage message, Supplier<Boolean> continueCallback,
+    private ParsedMht parseMimeMessage(MimeMessage message, boolean textOnly,
+                                       Supplier<Boolean> continueCallback,
                                        Consumer<ParsingStage> stageCallback,
                                        Consumer<Double> byteProgressCallback,
                                        AtomicInteger partsProcessed, int totalParts) throws Exception {
@@ -126,7 +136,7 @@ public class MimeParser {
         result.setLocationDataMap(new LinkedHashMap<>());
         result.setImageInfoList(new ArrayList<>());
 
-        extractFromPart(message, result, 0, continueCallback, stageCallback, byteProgressCallback,
+        extractFromPart(message, result, 0, textOnly, continueCallback, stageCallback, byteProgressCallback,
                 partsProcessed, totalParts);
         if (stageCallback != null) stageCallback.accept(ParsingStage.MIME_TRAVERSED);
         if (byteProgressCallback != null) byteProgressCallback.accept(0.35);
@@ -146,7 +156,7 @@ public class MimeParser {
      * @param totalParts 预估总 part 数
      */
     private void extractFromPart(jakarta.mail.Part part, ParsedMht result,
-                                 int depth, Supplier<Boolean> continueCallback,
+                                 int depth, boolean textOnly, Supplier<Boolean> continueCallback,
                                  Consumer<ParsingStage> stageCallback,
                                  Consumer<Double> byteProgressCallback,
                                  AtomicInteger partsProcessed, int totalParts) throws Exception {
@@ -168,11 +178,13 @@ public class MimeParser {
                 if (byteProgressCallback != null) byteProgressCallback.accept(0.15);
             }
         } else if (part.isMimeType("image/*")) {
-            extractImagePart(part, result, stageCallback);
+            if (!textOnly) {
+                extractImagePart(part, result, stageCallback);
+            }
         } else if (part.isMimeType("multipart/*")) {
             Multipart mp = (Multipart) part.getContent();
             for (int i = 0; i < mp.getCount(); i++) {
-                extractFromPart(mp.getBodyPart(i), result, depth + 1, continueCallback,
+                extractFromPart(mp.getBodyPart(i), result, depth + 1, textOnly, continueCallback,
                         stageCallback, byteProgressCallback, partsProcessed, totalParts);
                 // 每处理 PROGRESS_INTERVAL 个 part 报告一次细粒度进度
                 int processed = partsProcessed.incrementAndGet();

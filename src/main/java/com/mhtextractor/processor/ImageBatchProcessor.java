@@ -34,13 +34,21 @@ public class ImageBatchProcessor extends BatchProcessor {
      * 处理多个 MHT 文件，提取图片（支持进度回调）
      */
     public ProcessStats process(String inputFolder, String outputFolder, ProgressCallback callback) {
+        return process(collectMhtFiles(inputFolder), outputFolder, callback);
+    }
+
+    /**
+     * 处理多个 MHT 文件（按传入顺序处理，支持进度回调）
+     */
+    public ProcessStats process(List<MhtFileInfo> orderedFiles, String outputFolder,
+                                ProgressCallback callback) {
         this.progressCallback = callback;
         ProcessStats stats = new ProcessStats();
         stats.setStartTime(System.currentTimeMillis());
 
         log.info("========================================");
         log.info("MHT 批量图片处理开始");
-        log.info("输入文件夹：{}", inputFolder);
+        log.info("输入文件夹：{}", config.getInputFolder());
         log.info("输出文件夹：{}", outputFolder);
         logImageConfigInfo();
         log.info("========================================");
@@ -51,24 +59,23 @@ public class ImageBatchProcessor extends BatchProcessor {
             return stats;
         }
 
-        var mhtFiles = collectMhtFiles(inputFolder);
-        stats.setTotalFiles(mhtFiles.size());
+        stats.setTotalFiles(orderedFiles.size());
 
-        if (mhtFiles.isEmpty()) {
+        if (orderedFiles.isEmpty()) {
             log.warn("[警告] 未找到任何 MHT 文件");
             stats.setEndTime(System.currentTimeMillis());
             return stats;
         }
 
-        log.info("找到 {} 个 MHT 文件", mhtFiles.size());
+        log.info("找到 {} 个 MHT 文件", orderedFiles.size());
         log.info("========================================");
 
         MimeParser mimeParser = new MimeParser();
 
         if (config.isHighSpeedMemoryMode()) {
-            return processWithPreload(mhtFiles, outputFolder, mimeParser, stats);
+            return processWithPreload(orderedFiles, outputFolder, mimeParser, stats);
         } else {
-            return processStreaming(mhtFiles, outputFolder, mimeParser, stats);
+            return processStreaming(orderedFiles, outputFolder, mimeParser, stats);
         }
     }
 
@@ -415,7 +422,7 @@ public class ImageBatchProcessor extends BatchProcessor {
             fireProgress(idx, totalFiles, name, 0.85);
             log.info("[成功] {} → {} ({} 张)", name, fileOutputDir, saved);
 
-            // 逐文件 ZIP/CBZ 打包
+            // 逐文件 ZIP/CBZ 打包（由全局配置决定）
             archiveWithCleanup(fileOutputDir, outputFolder, baseName,
                     idx, totalFiles, name, 0.85, 0.05, 0.05);
             fireProgress(idx, totalFiles, name, 0.95);
@@ -459,34 +466,46 @@ public class ImageBatchProcessor extends BatchProcessor {
 
     private String determineMergedFolderName(MimeParser.ParsedMht firstParsed,
                                              List<MhtFileInfo> mhtFiles, ProcessStats stats) {
-        String folderName;
-        boolean nameExtractEnabled = config.isEnableNameExtraction();
-
-        if (nameExtractEnabled && firstParsed != null && firstParsed.getHtmlContent() != null) {
-            try {
-                ImageExtractor firstExtractor = new ImageExtractor(firstParsed,
-                        config.getImageNameStartMarker(), config.getImageNameEndMarker(),
-                        config.getImageRegionStartMarker(), config.getImageRegionEndMarker());
-                String extractedTitle = firstExtractor.extractTitle();
-                if (extractedTitle != null && !extractedTitle.isEmpty()) {
-                    return SanitizeUtils.sanitize(extractedTitle);
-                }
-            } catch (Exception e) {
-                log.warn("从第一个文件提取标题失败: {}", e.getMessage(), e);
+        String folderName = determineMergedFolderName(firstParsed, config.isEnableNameExtraction(),
+                config.getImageNameStartMarker(), config.getImageNameEndMarker());
+        if (folderName == null) {
+            folderName = determineDefaultFolderName(config.getInputFolder());
+            if (config.isEnableNameExtraction() && firstParsed != null && firstParsed.getHtmlContent() != null) {
+                stats.incrementWarn();
+                stats.addWarnDetail(String.format("文件：%s 出现警告，警告信息：未从第一个文件提取到标题，使用默认名称：%s",
+                        mhtFiles.get(0).getName(), folderName));
+                log.warn("[警告] 未从第一个文件提取到标题，使用默认名称：{}", folderName);
             }
-            folderName = determineDefaultFolderName();
-            stats.incrementWarn();
-            stats.addWarnDetail(String.format("文件：%s 出现警告，警告信息：未从第一个文件提取到标题，使用默认名称：%s",
-                    mhtFiles.get(0).getName(), folderName));
-            log.warn("[警告] 未从第一个文件提取到标题，使用默认名称：{}", folderName);
-        } else {
-            folderName = determineDefaultFolderName();
         }
         return folderName;
     }
 
-    private String determineDefaultFolderName() {
-        String inputFolder = config.getInputFolder();
+    /**
+     * 从第一个文件的解析结果确定合并目录名（sanitize 后返回）；提取失败返回 null
+     */
+    public static String determineMergedFolderName(MimeParser.ParsedMht firstParsed,
+                                                   boolean nameExtractEnabled,
+                                                   String nameStartMarker, String nameEndMarker) {
+        if (!nameExtractEnabled || firstParsed == null || firstParsed.getHtmlContent() == null) {
+            return null;
+        }
+        try {
+            ImageExtractor firstExtractor = new ImageExtractor(firstParsed,
+                    nameStartMarker, nameEndMarker, null, null);
+            String extractedTitle = firstExtractor.extractTitle();
+            if (extractedTitle != null && !extractedTitle.isEmpty()) {
+                return SanitizeUtils.sanitize(extractedTitle);
+            }
+        } catch (Exception e) {
+            log.warn("从第一个文件提取标题失败: {}", e.getMessage(), e);
+        }
+        return null;
+    }
+
+    /**
+     * 默认合并目录名：输入目录名（sanitize），回退 All_Images
+     */
+    public static String determineDefaultFolderName(String inputFolder) {
         if (inputFolder != null && !inputFolder.isEmpty()) {
             String name = new File(inputFolder).getName();
             if (name != null && !name.isEmpty()) {

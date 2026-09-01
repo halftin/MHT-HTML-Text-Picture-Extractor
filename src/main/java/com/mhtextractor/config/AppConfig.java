@@ -68,6 +68,8 @@ public class AppConfig {
 
     // ==================== 运行时状态 ====================
     private boolean openFolderAfterComplete;
+    /** 开始提取前打开预览并调整窗口 */
+    private boolean previewBeforeExtract;
 
     // ==================== 兼容旧版废弃字段（保留反序列化兼容） ====================
     @Deprecated

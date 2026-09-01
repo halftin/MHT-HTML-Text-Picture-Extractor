@@ -35,31 +35,14 @@ public class ImageWriter {
                                    String fallbackExt, boolean rename, int[] counter, String filePrefix) {
         if (imageData == null || imageData.getData() == null) return null;
 
-        String ext = SanitizeUtils.detectExtensionByMagicNumber(imageData.getData(), fallbackExt);
-        String finalFileName;
-
-        if (rename) {
-            int num = counter[0]++;
-            // 使用全局序号：格式 001、002、003...
-            finalFileName = String.format("%05d.%s", num, ext);
-        } else if (filePrefix != null && !filePrefix.isEmpty()) {
-            // 合并模式不重命名：文件前缀 + 原始文件名
-            String cleanName = SanitizeUtils.sanitize(imageData.getFilename());
-            cleanName = stripExtension(cleanName);
-            finalFileName = filePrefix + cleanName + "." + ext;
-        } else {
-            String cleanName = SanitizeUtils.sanitize(imageData.getFilename());
-            cleanName = stripExtension(cleanName);
-            if (cleanName.matches("\\d+")) {
-                cleanName = "img_" + cleanName;
-            }
-            finalFileName = cleanName + "." + ext;
-        }
+        int renameIndex = rename ? counter[0]++ : 0;
+        String finalFileName = computeFileName(imageData, fallbackExt, rename, renameIndex, filePrefix);
 
         File dest = new File(outputDir, finalFileName);
 
         // 处理文件名冲突（仅不重命名时）
         if (dest.exists() && !rename) {
+            String ext = SanitizeUtils.detectExtensionByMagicNumber(imageData.getData(), fallbackExt);
             dest = findUniqueFileName(outputDir, finalFileName.substring(0, finalFileName.lastIndexOf('.')), ext);
             finalFileName = dest.getName();
         }
@@ -72,6 +55,36 @@ public class ImageWriter {
         } catch (IOException e) {
             log.error("[图片] 保存失败：{}", finalFileName, e);
             return null;
+        }
+    }
+
+    /**
+     * 计算图片最终输出文件名（纯命名逻辑，预览窗口与写盘共用；磁盘冲突后缀属运行时行为，不在此处理）
+     *
+     * @param imageData 图片数据
+     * @param fallbackExt 默认扩展名
+     * @param rename 是否批量重命名（序号格式 00001.ext）
+     * @param renameIndex 重命名序号（1 起）
+     * @param filePrefix 文件名前缀（合并模式区分不同源文件）
+     */
+    public static String computeFileName(ImageExtractor.ImageData imageData, String fallbackExt,
+                                         boolean rename, int renameIndex, String filePrefix) {
+        String ext = SanitizeUtils.detectExtensionByMagicNumber(imageData.getData(), fallbackExt);
+
+        if (rename) {
+            return String.format("%05d.%s", renameIndex, ext);
+        } else if (filePrefix != null && !filePrefix.isEmpty()) {
+            // 合并模式不重命名：文件前缀 + 原始文件名
+            String cleanName = SanitizeUtils.sanitize(imageData.getFilename());
+            cleanName = stripExtension(cleanName);
+            return filePrefix + cleanName + "." + ext;
+        } else {
+            String cleanName = SanitizeUtils.sanitize(imageData.getFilename());
+            cleanName = stripExtension(cleanName);
+            if (cleanName.matches("\\d+")) {
+                cleanName = "img_" + cleanName;
+            }
+            return cleanName + "." + ext;
         }
     }
 

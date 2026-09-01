@@ -9,7 +9,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.nio.file.Paths;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -29,8 +31,16 @@ public class TextBatchProcessor extends BatchProcessor {
      * 合并模式：所有文件输出到一个 TXT（支持进度回调）
      */
     public ProcessStats processMerged(String inputFolder, String outputTxtPath, ProgressCallback callback) {
+        return processMerged(collectMhtFiles(inputFolder), outputTxtPath, callback, Collections.emptyMap());
+    }
+
+    /**
+     * 合并模式（按传入顺序处理，支持每文件覆盖项）
+     */
+    public ProcessStats processMerged(List<MhtFileInfo> orderedFiles, String outputTxtPath,
+                                      ProgressCallback callback, Map<String, PerFileOverrides> overrides) {
         this.progressCallback = callback;
-        ProcessStats stats = initStats("合并模式", inputFolder);
+        ProcessStats stats = initStats("合并模式", config.getInputFolder());
         log.info("输出文件：{}", outputTxtPath);
         logConfigInfo();
         log.info("========================================");
@@ -40,15 +50,23 @@ public class TextBatchProcessor extends BatchProcessor {
             return stats;
         }
 
-        return processFiles(inputFolder, stats, i -> outputTxtPath);
+        return processFiles(orderedFiles, stats, i -> outputTxtPath, overrides);
     }
 
     /**
      * 单独模式：每个文件输出到独立 TXT（支持进度回调）
      */
     public ProcessStats processSeparate(String inputFolder, String outputFolder, ProgressCallback callback) {
+        return processSeparate(collectMhtFiles(inputFolder), outputFolder, callback, Collections.emptyMap());
+    }
+
+    /**
+     * 单独模式（按传入顺序处理，支持每文件覆盖项）
+     */
+    public ProcessStats processSeparate(List<MhtFileInfo> orderedFiles, String outputFolder,
+                                        ProgressCallback callback, Map<String, PerFileOverrides> overrides) {
         this.progressCallback = callback;
-        ProcessStats stats = initStats("单独输出模式", inputFolder);
+        ProcessStats stats = initStats("单独输出模式", config.getInputFolder());
         log.info("输出文件夹：{}", outputFolder);
         logConfigInfo();
         log.info("========================================");
@@ -60,18 +78,19 @@ public class TextBatchProcessor extends BatchProcessor {
             return stats;
         }
 
-        return processFiles(inputFolder, stats,
-                i -> Paths.get(outputFolder, getOutputDirName(i.getName()) + ".txt").toString());
+        return processFiles(orderedFiles, stats,
+                i -> Paths.get(outputFolder, getOutputDirName(i.getName()) + ".txt").toString(), overrides);
     }
 
     /**
      * 核心处理循环（合并与单独模式的共用逻辑）
      *
      * @param outputPathResolver 根据 MhtFileInfo 计算输出路径
+     * @param overrides 每文件覆盖项（按文件路径索引）
      */
-    private ProcessStats processFiles(String inputFolder, ProcessStats stats,
-                                      java.util.function.Function<MhtFileInfo, String> outputPathResolver) {
-        List<MhtFileInfo> mhtFiles = collectMhtFiles(inputFolder);
+    private ProcessStats processFiles(List<MhtFileInfo> mhtFiles, ProcessStats stats,
+                                      java.util.function.Function<MhtFileInfo, String> outputPathResolver,
+                                      Map<String, PerFileOverrides> overrides) {
         stats.setTotalFiles(mhtFiles.size());
 
         if (mhtFiles.isEmpty()) {
@@ -81,7 +100,6 @@ public class TextBatchProcessor extends BatchProcessor {
         }
 
         log.info("找到 {} 个 MHT 文件", mhtFiles.size());
-        log.info("文件已按修改时间排序");
         log.info("========================================");
 
         AtomicInteger chapterIndex = new AtomicInteger(1);
@@ -124,12 +142,16 @@ public class TextBatchProcessor extends BatchProcessor {
                     continue;
                 }
 
-                // 生成章节头
+                // 生成章节头（预览窗口可逐文件关闭；关闭的文件不输出章节头且不占序号）
                 fireProgress(idx, mhtFiles.size(), fileInfo.getName(), 0.7);
-                String chapterHeader = buildChapterHeaderFromParsed(parsed, fileInfo.getName(),
-                        chapterIndex.get(), stats);
+                boolean addNumber = config.isAddChapterNumber();
+                PerFileOverrides ov = overrides.getOrDefault(fileInfo.getPath(), PerFileOverrides.DEFAULTS);
+                boolean withChapter = !addNumber || ov.chapterEnabled();
+                String chapterHeader = withChapter
+                        ? buildChapterHeaderFromParsed(parsed, fileInfo.getName(), chapterIndex.get(), stats)
+                        : null;
 
-                if (config.isAddChapterNumber() && chapterHeader != null) {
+                if (addNumber && withChapter) {
                     chapterIndex.incrementAndGet();
                 }
 
