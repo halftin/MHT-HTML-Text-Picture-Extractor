@@ -80,6 +80,13 @@
             <version>${jsoup.version}</version>
         </dependency>
 
+        <!-- ==================== WebP 解码（纯 Java，预览缩略图用） ==================== -->
+        <dependency>
+            <groupId>org.glavo</groupId>
+            <artifactId>webp</artifactId>
+            <version>0.2.0</version>
+        </dependency>
+
         <!-- ==================== 日志框架 ==================== -->
         <dependency>
             <groupId>org.slf4j</groupId>
