@@ -5,6 +5,7 @@ import com.mhtextractor.config.ConfigManager;
 import com.mhtextractor.gui.util.JavaFxUtil;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.ImageBatchProcessor;
+import com.mhtextractor.processor.PerFileOverrides;
 import com.mhtextractor.processor.TextBatchProcessor;
 import javafx.application.Platform;
 import javafx.beans.property.DoubleProperty;
@@ -21,6 +22,7 @@ import java.io.File;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -87,6 +89,7 @@ public class MainController {
     @FXML private ComboBox<String> configComboBox;
     @FXML private LogTextArea logTextArea;
     @FXML private ToggleSwitch openFolderAfterCompleteCheck;
+    @FXML private ToggleSwitch previewBeforeExtractCheck;
 
     private final ConfigManager configManager = new ConfigManager();
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -101,7 +104,7 @@ public class MainController {
                 separateFilesCheck, autoFixEncodingCheck, imageNameExtractCheck,
                 imageRegionExtractCheck, imageRenameCheck, imageZipCheck,
                 imageCbzCheck, singleOutputCheck, highSpeedMemoryCheck,
-                openFolderAfterCompleteCheck};
+                openFolderAfterCompleteCheck, previewBeforeExtractCheck};
         for (ToggleSwitch t : toggles) {
             t.setLabelPosition(HorizontalDirection.RIGHT);
         }
@@ -114,6 +117,7 @@ public class MainController {
         startButton.setDisable(true);
         separateFilesCheck.setDisable(true);
         openFolderAfterCompleteCheck.setDisable(true);
+        previewBeforeExtractCheck.setDisable(true);
 
         // 2. 文本模式 — 内容限定字段联动
         enableLimitCheck.selectedProperty().addListener((obs, old, newVal) -> toggleLimitSettings());
@@ -275,9 +279,43 @@ public class MainController {
             }
         }
 
-        // 生成时间戳会话目录，隔离每次提取运行
+        // 提取前预览分支
+        if (previewBeforeExtractCheck.isSelected()) {
+            if (com.mhtextractor.util.FileUtils.findMhtFiles(inputFolder).isEmpty()) {
+                showAlert(Alert.AlertType.WARNING, "未找到任何 MHT 文件");
+                return;
+            }
+            AppConfig snapshot = buildConfig();
+            try {
+                PreviewDialogController ctrl = PreviewDialogController.openAndWait(
+                        inputFolderField.getScene().getWindow(), snapshot);
+                if (ctrl != null && ctrl.isConfirmed()) {
+                    startExtractionTask(snapshot, ctrl.getOrderedPaths(), ctrl.getOverrides());
+                }
+            } catch (Exception e) {
+                log.error("预览窗口打开失败", e);
+                showAlert(Alert.AlertType.ERROR, "预览窗口打开失败: " + e.getMessage());
+            }
+            return;
+        }
+
+        startExtractionTask(buildConfig(), null, null);
+    }
+
+    /**
+     * 执行正式提取任务
+     *
+     * @param config 点击"开始提取"时刻的配置快照
+     * @param orderedPaths 预览窗口收集的有序文件路径；null 表示走现有收集排序流程
+     * @param overrides 预览窗口收集的每文件覆盖项；orderedPaths 为 null 时忽略
+     */
+    private void startExtractionTask(AppConfig config, List<String> orderedPaths,
+                                     Map<String, PerFileOverrides> overrides) {
+        boolean imageMode = config.isImageModeEnabled();
+
+        // 生成时间戳会话目录，隔离每次提取运行（点击【提取】后才创建）
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH：mm：ss"));
-        String sessionOutputFolder = new File(outputFolder, timestamp).getPath();
+        String sessionOutputFolder = new File(config.getOutputFolder(), timestamp).getPath();
         if (!new File(sessionOutputFolder).mkdirs()) {
             log.warn("会话输出目录创建失败或已存在：{}", sessionOutputFolder);
         }
@@ -293,8 +331,6 @@ public class MainController {
             @Override
             protected BatchProcessor.ProcessStats call() {
                 try {
-                    AppConfig config = buildConfig();
-
                     // 进度回调：每处理完一个文件时更新进度
                     BatchProcessor.ProgressCallback progressCallback = (current, total, fileName, subProgress) -> {
                         double overall = (current - 1 + subProgress) / total;
@@ -322,20 +358,36 @@ public class MainController {
                         ImageBatchProcessor processor = new ImageBatchProcessor(config);
                         processor.setCancelSupplier(this::isCancelled);
                         processor.setRecursionContinueCallback(recursionCallback);
-                        return processor.process(inputFolder, sessionOutputFolder, progressCallback);
+                        if (orderedPaths != null) {
+                            return processor.process(
+                                    BatchProcessor.buildMhtFileInfoList(orderedPaths),
+                                    sessionOutputFolder, progressCallback);
+                        }
+                        return processor.process(config.getInputFolder(), sessionOutputFolder, progressCallback);
                     } else {
                         TextBatchProcessor processor = new TextBatchProcessor(config);
                         processor.setCancelSupplier(this::isCancelled);
                         processor.setRecursionContinueCallback(recursionCallback);
                         if (config.isSeparateFiles()) {
-                            return processor.processSeparate(inputFolder, sessionOutputFolder, progressCallback);
+                            if (orderedPaths != null) {
+                                return processor.processSeparate(
+                                        BatchProcessor.buildMhtFileInfoList(orderedPaths),
+                                        sessionOutputFolder, progressCallback, overrides);
+                            }
+                            return processor.processSeparate(config.getInputFolder(),
+                                    sessionOutputFolder, progressCallback);
                         } else {
-                            String inputDirName = new File(inputFolder).getName();
+                            String inputDirName = new File(config.getInputFolder()).getName();
                             if (inputDirName == null || inputDirName.isEmpty()) {
                                 inputDirName = "mht_output";
                             }
                             String outputPath = new File(sessionOutputFolder, inputDirName + ".txt").toString();
-                            return processor.processMerged(inputFolder, outputPath, progressCallback);
+                            if (orderedPaths != null) {
+                                return processor.processMerged(
+                                        BatchProcessor.buildMhtFileInfoList(orderedPaths),
+                                        outputPath, progressCallback, overrides);
+                            }
+                            return processor.processMerged(config.getInputFolder(), outputPath, progressCallback);
                         }
                     }
                 } catch (Exception e) {
@@ -526,6 +578,7 @@ public class MainController {
         config.setSingleOutputMode(singleOutputCheck.isSelected());
         config.setHighSpeedMemoryMode(highSpeedMemoryCheck.isSelected());
         config.setOpenFolderAfterComplete(openFolderAfterCompleteCheck.isSelected());
+        config.setPreviewBeforeExtract(previewBeforeExtractCheck.isSelected());
 
         return config;
     }
@@ -574,6 +627,7 @@ public class MainController {
         singleOutputCheck.setSelected(config.isSingleOutputMode());
         highSpeedMemoryCheck.setSelected(config.isHighSpeedMemoryMode());
         openFolderAfterCompleteCheck.setSelected(config.isOpenFolderAfterComplete());
+        previewBeforeExtractCheck.setSelected(config.isPreviewBeforeExtract());
 
         // 导入配置后刷新联动状态，确保子控件启用/禁用与配置值匹配
         updateAllUIStates();
@@ -683,6 +737,7 @@ public class MainController {
         browseOutputButton.setDisable(!anyModeSelected);
         separateFilesCheck.setDisable(!anyModeSelected);
         openFolderAfterCompleteCheck.setDisable(!anyModeSelected);
+        previewBeforeExtractCheck.setDisable(!anyModeSelected);
         startButton.setDisable(!anyModeSelected);
 
         // 根据模式控制 TitledPane 的展开/折叠和启用/禁用
@@ -961,6 +1016,47 @@ public class MainController {
         log.info("Agent config serialization test: {}", restored.getInputFolder());
         Thread.sleep(300);
 
+        // Phase 7.5: 预览窗口演练（控制器直驱，非模态，避免阻塞 agent）
+        try {
+            java.nio.file.Path tempDir = java.nio.file.Files.createTempDirectory("mht-preview-agent");
+            createSampleMht(tempDir, "preview01.mht");
+
+            // 文本模式：章节复选框 + 文本渲染
+            AppConfig previewCfg = buildConfig();
+            previewCfg.setInputFolder(tempDir.toString());
+            previewCfg.setOutputFolder(tempDir.toString());
+            previewCfg.setImageModeEnabled(false);
+            previewCfg.setAddChapterNumber(true);
+            PreviewDialogController textPreview = PreviewDialogController.showDirect(null, previewCfg);
+            Thread.sleep(1500);
+            textPreview.fileListView.getSelectionModel().selectFirst();
+            textPreview.adjustCheck.setSelected(false);
+            Thread.sleep(200);
+            textPreview.adjustCheck.setSelected(true);
+            Thread.sleep(300);
+            textPreview.cancelButton.fire();
+            Thread.sleep(300);
+
+            // 图片模式：打包复选框 + 缩略图加载
+            previewCfg.setImageModeEnabled(true);
+            previewCfg.setSingleOutputMode(false);
+            previewCfg.setEnableZipPackaging(true);
+            previewCfg.setEnableCbzPackaging(false);
+            previewCfg.setEnableNameExtraction(false);
+            previewCfg.setEnableRegionExtraction(false);
+            previewCfg.setImageRegionStartMarker(null);
+            previewCfg.setImageRegionEndMarker(null);
+            PreviewDialogController imagePreview = PreviewDialogController.showDirect(null, previewCfg);
+            Thread.sleep(1500);
+            imagePreview.fileListView.getSelectionModel().selectFirst();
+            imagePreview.previewEffectButton.fire();
+            Thread.sleep(1500);
+            imagePreview.cancelButton.fire();
+            Thread.sleep(300);
+        } catch (Exception e) {
+            log.warn("预览窗口演练失败：{}", e.getMessage(), e);
+        }
+
         // Phase 8: Deselect all modes
         textModeToggle.setSelected(false);
         imageModeToggle.setSelected(false);
@@ -1031,10 +1127,87 @@ public class MainController {
                 out.println("[PASS] Image extraction started"); p++;
             } catch (Exception e) { out.println("[FAIL] Image extraction: " + e.getMessage()); f++; }
 
+            try { textModeToggle.setSelected(true); imageModeToggle.setSelected(false); Thread.sleep(300);
+                previewBeforeExtractCheck.setSelected(true);
+                inputFolderField.setText("Y:\\MHTtest\\文本提取测试");
+                AppConfig pc = buildConfig();
+                final java.util.concurrent.atomic.AtomicReference<PreviewDialogController> ref = new java.util.concurrent.atomic.AtomicReference<>();
+                javafx.application.Platform.runLater(() -> {
+                    try { ref.set(PreviewDialogController.showDirect(null, pc)); }
+                    catch (Exception e) { log.error("预览测试窗口打开失败", e); }
+                });
+                Thread.sleep(1000);
+                PreviewDialogController pctrl = ref.get();
+                if (pctrl == null) throw new IllegalStateException("预览窗口未打开");
+                Thread.sleep(2000);
+                pctrl.fileListView.getSelectionModel().selectFirst();
+                pctrl.adjustCheck.setSelected(false); Thread.sleep(200);
+                pctrl.adjustCheck.setSelected(true); Thread.sleep(200);
+                javafx.application.Platform.runLater(pctrl.cancelButton::fire);
+                Thread.sleep(500);
+                out.println("[PASS] Preview text dialog"); p++;
+            } catch (Exception e) { out.println("[FAIL] Preview text dialog: " + e.getMessage()); f++; }
+
+            try { textModeToggle.setSelected(false); imageModeToggle.setSelected(true); Thread.sleep(300);
+                singleOutputCheck.setSelected(false);
+                inputFolderField.setText("Y:\\MHTtest\\图片提取测试");
+                AppConfig pc2 = buildConfig();
+                final java.util.concurrent.atomic.AtomicReference<PreviewDialogController> ref2 = new java.util.concurrent.atomic.AtomicReference<>();
+                javafx.application.Platform.runLater(() -> {
+                    try { ref2.set(PreviewDialogController.showDirect(null, pc2)); }
+                    catch (Exception e) { log.error("预览测试窗口打开失败", e); }
+                });
+                Thread.sleep(1000);
+                PreviewDialogController pctrl2 = ref2.get();
+                if (pctrl2 == null) throw new IllegalStateException("预览窗口未打开");
+                Thread.sleep(2000);
+                pctrl2.fileListView.getSelectionModel().selectFirst();
+                javafx.application.Platform.runLater(pctrl2.previewEffectButton::fire);
+                Thread.sleep(3000);
+                javafx.application.Platform.runLater(pctrl2.cancelButton::fire);
+                Thread.sleep(500);
+                previewBeforeExtractCheck.setSelected(false);
+                out.println("[PASS] Preview image dialog"); p++;
+            } catch (Exception e) { out.println("[FAIL] Preview image dialog: " + e.getMessage()); f++; }
+
             out.println(); out.println("=== RESULTS: " + p + " passed, " + f + " failed ===");
             out.flush();
             log.info("Automated tests complete: {} passed, {} failed", p, f);
         } catch (Exception e) { log.error("Test framework error", e); }
+    }
+
+    /**
+     * 在指定目录生成一个最小 MHT 文件（手写 MIME 结构，含 HTML 与一张内嵌 WebP），供演练与测试使用
+     */
+    private static File createSampleMht(java.nio.file.Path dir, String fileName) throws java.io.IOException {
+        byte[] webpBytes;
+        try (java.io.InputStream is = MainController.class.getResourceAsStream("/sample-preview.webp")) {
+            if (is == null) {
+                throw new java.io.IOException("sample-preview.webp 资源缺失");
+            }
+            webpBytes = is.readAllBytes();
+        }
+        String boundary = "----=_preview_agent_boundary";
+        StringBuilder sb = new StringBuilder();
+        sb.append("From: <agent@example.com>\r\n");
+        sb.append("Subject: preview sample\r\n");
+        sb.append("MIME-Version: 1.0\r\n");
+        sb.append("Content-Type: multipart/related; boundary=\"").append(boundary).append("\"\r\n\r\n");
+        sb.append("--").append(boundary).append("\r\n");
+        sb.append("Content-Type: text/html; charset=\"utf-8\"\r\n");
+        sb.append("Content-Transfer-Encoding: 8bit\r\n\r\n");
+        sb.append("<html><head><title>预览测试标题</title></head><body>这是正文内容，用于预览窗口文本展示测试。")
+                .append("<img src=\"cid:img001\"></body></html>\r\n");
+        sb.append("--").append(boundary).append("\r\n");
+        sb.append("Content-Type: image/webp\r\n");
+        sb.append("Content-ID: <img001>\r\n");
+        sb.append("Content-Transfer-Encoding: base64\r\n\r\n");
+        sb.append(java.util.Base64.getEncoder().encodeToString(webpBytes)).append("\r\n");
+        sb.append("--").append(boundary).append("--\r\n");
+        File f = dir.resolve(fileName).toFile();
+        java.nio.file.Files.write(f.toPath(),
+                sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return f;
     }
 
     /** Minimal Jackson ObjectMapper wrapper for agent exercise */

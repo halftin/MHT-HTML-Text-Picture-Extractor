@@ -2,6 +2,7 @@
   "resources": {
     "includes": [
       {"pattern": "\\Qcom/mhtextractor/gui/view/MainView.fxml\\E"},
+      {"pattern": "\\Qcom/mhtextractor/gui/view/PreviewDialog.fxml\\E"},
       {"pattern": "\\Qcustom.css\\E"},
       {"pattern": "\\Qlogback.xml\\E"},
       {"pattern": "\\Qatlantafx/base/theme/\\E.*\\.(css|bss)$"},

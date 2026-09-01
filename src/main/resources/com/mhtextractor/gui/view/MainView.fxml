@@ -226,6 +226,9 @@
             <!-- 完成后操作 -->
             <ToggleSwitch fx:id="openFolderAfterCompleteCheck" text="提取完成后打开输出文件夹"/>
 
+            <!-- 提取前预览 -->
+            <ToggleSwitch fx:id="previewBeforeExtractCheck" text="开始提取前预览并调整提取效果"/>
+
 
             <!-- 操作按钮 -->
             <!-- 操作按钮 -->

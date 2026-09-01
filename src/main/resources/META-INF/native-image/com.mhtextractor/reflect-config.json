@@ -264,6 +264,94 @@
     "allDeclaredConstructors": true
   },
   {
+    "name": "com.mhtextractor.gui.controller.PreviewDialogController",
+    "allDeclaredFields": true,
+    "allDeclaredMethods": true,
+    "allDeclaredConstructors": true
+  },
+  {
+    "name": "javafx.scene.control.ListView",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.sun.javafx.scene.control.skin.ListViewSkin",
+    "allDeclaredConstructors": true
+  },
+  {
+    "name": "javafx.scene.control.ListCell",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "javafx.scene.control.TextArea",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.sun.javafx.scene.control.skin.TextAreaSkin",
+    "allDeclaredConstructors": true
+  },
+  {
+    "name": "javafx.scene.control.CheckBox",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.sun.javafx.scene.control.skin.CheckBoxSkin",
+    "allDeclaredConstructors": true
+  },
+  {
+    "name": "javafx.scene.image.ImageView",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "javafx.scene.image.Image",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "javafx.scene.layout.StackPane",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "javafx.scene.input.DragEvent",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "javafx.scene.input.Dragboard",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "javafx.scene.input.ClipboardContent",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "javafx.scene.input.DataFormat",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "javafx.scene.input.TransferMode",
+    "allDeclaredFields": true
+  },
+  {
     "name": "com.mhtextractor.config.AppConfig",
     "allDeclaredFields": true,
     "allDeclaredMethods": true,
