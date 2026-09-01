@@ -32,7 +32,6 @@ public class SanitizeUtils {
             return "unnamed";
         }
         return fileName.replaceAll("[\\\\/:*?\"<>|]", "_")
-                .replaceAll("\\s+", "_")
                 .replaceAll("_+", "_")
                 .trim();
     }
