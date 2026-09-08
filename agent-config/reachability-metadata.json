@@ -287,19 +287,11 @@
           "parameterTypes": []
         },
         {
-          "name": "getInputFolder",
-          "parameterTypes": []
-        },
-        {
           "name": "getNameLimitEnd",
           "parameterTypes": []
         },
         {
           "name": "getNameLimitStart",
-          "parameterTypes": []
-        },
-        {
-          "name": "getOutputFolder",
           "parameterTypes": []
         },
         {
@@ -360,14 +352,6 @@
         },
         {
           "name": "isHighSpeedMemoryMode",
-          "parameterTypes": []
-        },
-        {
-          "name": "isImageModeEnabled",
-          "parameterTypes": []
-        },
-        {
-          "name": "isOpenFolderAfterComplete",
           "parameterTypes": []
         },
         {
@@ -477,12 +461,6 @@
           ]
         },
         {
-          "name": "setImageModeEnabled",
-          "parameterTypes": [
-            "boolean"
-          ]
-        },
-        {
           "name": "setImageNameEndMarker",
           "parameterTypes": [
             "java.lang.String"
@@ -507,12 +485,6 @@
           ]
         },
         {
-          "name": "setInputFolder",
-          "parameterTypes": [
-            "java.lang.String"
-          ]
-        },
-        {
           "name": "setNameLimitEnd",
           "parameterTypes": [
             "java.lang.String"
@@ -520,18 +492,6 @@
         },
         {
           "name": "setNameLimitStart",
-          "parameterTypes": [
-            "java.lang.String"
-          ]
-        },
-        {
-          "name": "setOpenFolderAfterComplete",
-          "parameterTypes": [
-            "boolean"
-          ]
-        },
-        {
-          "name": "setOutputFolder",
           "parameterTypes": [
             "java.lang.String"
           ]
@@ -587,6 +547,55 @@
       ]
     },
     {
+      "type": "com.mhtextractor.config.GuiState",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "getInputFolder",
+          "parameterTypes": []
+        },
+        {
+          "name": "getOutputFolder",
+          "parameterTypes": []
+        },
+        {
+          "name": "isImageModeEnabled",
+          "parameterTypes": []
+        },
+        {
+          "name": "isOpenFolderAfterComplete",
+          "parameterTypes": []
+        },
+        {
+          "name": "setImageModeEnabled",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setInputFolder",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setOpenFolderAfterComplete",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setOutputFolder",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
       "type": "com.mhtextractor.gui.component.LogTextArea",
       "methods": [
         {
@@ -599,10 +608,10 @@
       "type": "com.mhtextractor.gui.controller.MainController",
       "fields": [
         {
-          "name": "addChapterNumberCheck"
+          "name": "adjustCheck"
         },
         {
-          "name": "autoFixEncodingCheck"
+          "name": "badgeHeaderLabel"
         },
         {
           "name": "browseInputButton"
@@ -611,10 +620,153 @@
           "name": "browseOutputButton"
         },
         {
+          "name": "dragOverlay"
+        },
+        {
+          "name": "fileCountLabel"
+        },
+        {
+          "name": "fileListView"
+        },
+        {
+          "name": "groupButton"
+        },
+        {
+          "name": "groupNameBox"
+        },
+        {
+          "name": "groupNameField"
+        },
+        {
+          "name": "imageHintLabel"
+        },
+        {
+          "name": "imageModeToggle"
+        },
+        {
+          "name": "imagePreviewBox"
+        },
+        {
+          "name": "imageScrollPane"
+        },
+        {
+          "name": "inputFolderField"
+        },
+        {
+          "name": "logTextArea"
+        },
+        {
+          "name": "modeLabel"
+        },
+        {
+          "name": "openFolderAfterCompleteCheck"
+        },
+        {
+          "name": "outputFolderField"
+        },
+        {
+          "name": "outputModeLabel"
+        },
+        {
+          "name": "outputNameLabel"
+        },
+        {
+          "name": "outputResultLabel"
+        },
+        {
+          "name": "paramSettingsButton"
+        },
+        {
+          "name": "previewEffectButton"
+        },
+        {
+          "name": "progressBar"
+        },
+        {
+          "name": "removeButton"
+        },
+        {
+          "name": "renameNoteLabel"
+        },
+        {
+          "name": "selectAllCheck"
+        },
+        {
+          "name": "startButton"
+        },
+        {
+          "name": "statusLabel"
+        },
+        {
+          "name": "stopButton"
+        },
+        {
+          "name": "textModeToggle"
+        },
+        {
+          "name": "textPreviewArea"
+        },
+        {
+          "name": "thumbnailPane"
+        },
+        {
+          "name": "titleInfoLabel"
+        },
+        {
+          "name": "undoButton"
+        },
+        {
+          "name": "ungroupButton"
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "initialize",
+          "parameterTypes": []
+        },
+        {
+          "name": "onGroupClicked",
+          "parameterTypes": []
+        },
+        {
+          "name": "onPreviewEffect",
+          "parameterTypes": []
+        },
+        {
+          "name": "onRemoveClicked",
+          "parameterTypes": []
+        },
+        {
+          "name": "onUndoClicked",
+          "parameterTypes": []
+        },
+        {
+          "name": "onUngroupClicked",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.mhtextractor.gui.controller.ParamDialogController",
+      "fields": [
+        {
+          "name": "addChapterNumberCheck"
+        },
+        {
+          "name": "autoFixEncodingCheck"
+        },
+        {
+          "name": "cancelButton"
+        },
+        {
           "name": "configComboBox"
         },
         {
-          "name": "configTabPane"
+          "name": "confirmButton"
         },
         {
           "name": "enableLimitCheck"
@@ -638,12 +790,6 @@
           "name": "imageCbzCheck"
         },
         {
-          "name": "imageConfigTab"
-        },
-        {
-          "name": "imageModeToggle"
-        },
-        {
           "name": "imageNameEndField"
         },
         {
@@ -657,6 +803,9 @@
         },
         {
           "name": "imageOutputModePane"
+        },
+        {
+          "name": "imageParamsBox"
         },
         {
           "name": "imagePerformancePane"
@@ -683,28 +832,10 @@
           "name": "imageZipCheck"
         },
         {
-          "name": "inputFolderField"
-        },
-        {
-          "name": "logTextArea"
-        },
-        {
-          "name": "openFolderAfterCompleteCheck"
-        },
-        {
-          "name": "outputFolderField"
-        },
-        {
-          "name": "progressBar"
-        },
-        {
           "name": "separateFilesCheck"
         },
         {
           "name": "singleOutputCheck"
-        },
-        {
-          "name": "startButton"
         },
         {
           "name": "startMarkerField"
@@ -713,22 +844,13 @@
           "name": "startTemplateField"
         },
         {
-          "name": "statusLabel"
-        },
-        {
-          "name": "stopButton"
-        },
-        {
-          "name": "textConfigTab"
-        },
-        {
           "name": "textContentLimitPane"
         },
         {
-          "name": "textModeToggle"
+          "name": "textOutputModePane"
         },
         {
-          "name": "textOutputModePane"
+          "name": "textParamsBox"
         },
         {
           "name": "textTemplatePane"
@@ -756,6 +878,14 @@
         },
         {
           "name": "initialize",
+          "parameterTypes": []
+        },
+        {
+          "name": "onCancel",
+          "parameterTypes": []
+        },
+        {
+          "name": "onConfirm",
           "parameterTypes": []
         }
       ]
@@ -1460,6 +1590,33 @@
       ]
     },
     {
+      "type": "com.sun.mail.handlers.multipart_mixed",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.mail.imap.IMAPProvider"
+    },
+    {
+      "type": "com.sun.mail.imap.IMAPSSLProvider"
+    },
+    {
+      "type": "com.sun.mail.pop3.POP3Provider"
+    },
+    {
+      "type": "com.sun.mail.pop3.POP3SSLProvider"
+    },
+    {
+      "type": "com.sun.mail.smtp.SMTPProvider"
+    },
+    {
+      "type": "com.sun.mail.smtp.SMTPSSLProvider"
+    },
+    {
       "type": "com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl",
       "methods": [
         {
@@ -1506,7 +1663,7 @@
       ]
     },
     {
-      "type": "com.sun.prism.shader.DrawRoundRect_Color_Loader",
+      "type": "com.sun.prism.shader.DrawPgram_Color_Loader",
       "methods": [
         {
           "name": "loadShader",
@@ -1659,14 +1816,6 @@
         {
           "name": "TRUE"
         }
-      ],
-      "methods": [
-        {
-          "name": "getBoolean",
-          "parameterTypes": [
-            "java.lang.String"
-          ]
-        }
       ]
     },
     {
@@ -1734,9 +1883,6 @@
           ]
         }
       ]
-    },
-    {
-      "type": "java.lang.String[]"
     },
     {
       "type": "java.lang.System",
@@ -1894,7 +2040,31 @@
           ]
         },
         {
+          "name": "setFocusTraversable",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
           "name": "setId",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setManaged",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setMouseTransparent",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setStyle",
           "parameterTypes": [
             "java.lang.String"
           ]
@@ -1925,6 +2095,12 @@
         {
           "name": "<init>",
           "parameterTypes": []
+        },
+        {
+          "name": "setDefaultButton",
+          "parameterTypes": [
+            "boolean"
+          ]
         }
       ]
     },
@@ -1936,6 +2112,15 @@
           "parameterTypes": [
             "javafx.event.EventHandler"
           ]
+        }
+      ]
+    },
+    {
+      "type": "javafx.scene.control.CheckBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
         }
       ]
     },
@@ -1963,7 +2148,18 @@
       ]
     },
     {
-      "type": "javafx.scene.control.Control"
+      "type": "javafx.scene.control.Control",
+      "methods": [
+        {
+          "name": "setTooltip",
+          "parameterTypes": [
+            "javafx.scene.control.Tooltip"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "javafx.scene.control.FlowPane"
     },
     {
       "type": "javafx.scene.control.GridPane"
@@ -1984,6 +2180,12 @@
       "type": "javafx.scene.control.Labeled",
       "methods": [
         {
+          "name": "setAlignment",
+          "parameterTypes": [
+            "javafx.geometry.Pos"
+          ]
+        },
+        {
           "name": "setGraphic",
           "parameterTypes": [
             "javafx.scene.Node"
@@ -1994,8 +2196,35 @@
           "parameterTypes": [
             "java.lang.String"
           ]
+        },
+        {
+          "name": "setTextAlignment",
+          "parameterTypes": [
+            "javafx.scene.text.TextAlignment"
+          ]
+        },
+        {
+          "name": "setWrapText",
+          "parameterTypes": [
+            "boolean"
+          ]
         }
       ]
+    },
+    {
+      "type": "javafx.scene.control.ListView",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "javafx.scene.control.Pane"
+    },
+    {
+      "type": "javafx.scene.control.PopupControl"
     },
     {
       "type": "javafx.scene.control.ProgressBar",
@@ -2046,72 +2275,22 @@
       ]
     },
     {
-      "type": "javafx.scene.control.Tab",
+      "type": "javafx.scene.control.StackPane"
+    },
+    {
+      "type": "javafx.scene.control.TextArea",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": []
         },
         {
-          "name": "getContent",
-          "parameterTypes": []
-        },
-        {
-          "name": "getId",
-          "parameterTypes": []
-        },
-        {
-          "name": "setContent",
+          "name": "setWrapText",
           "parameterTypes": [
-            "javafx.scene.Node"
-          ]
-        },
-        {
-          "name": "setId",
-          "parameterTypes": [
-            "java.lang.String"
-          ]
-        },
-        {
-          "name": "setText",
-          "parameterTypes": [
-            "java.lang.String"
+            "boolean"
           ]
         }
       ]
-    },
-    {
-      "type": "javafx.scene.control.TabPane",
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": []
-        },
-        {
-          "name": "getTabs",
-          "parameterTypes": []
-        },
-        {
-          "name": "setTabClosingPolicy",
-          "parameterTypes": [
-            "javafx.scene.control.TabPane$TabClosingPolicy"
-          ]
-        }
-      ]
-    },
-    {
-      "type": "javafx.scene.control.TabPane$TabClosingPolicy",
-      "methods": [
-        {
-          "name": "valueOf",
-          "parameterTypes": [
-            "java.lang.String"
-          ]
-        }
-      ]
-    },
-    {
-      "type": "javafx.scene.control.TextArea"
     },
     {
       "type": "javafx.scene.control.TextField",
@@ -2125,6 +2304,12 @@
     {
       "type": "javafx.scene.control.TextInputControl",
       "methods": [
+        {
+          "name": "setEditable",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
         {
           "name": "setPromptText",
           "parameterTypes": [
@@ -2164,6 +2349,21 @@
         {
           "name": "<init>",
           "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "javafx.scene.control.Tooltip",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "setText",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
         }
       ]
     },
@@ -2229,6 +2429,27 @@
     },
     {
       "type": "javafx.scene.layout.ConstraintsBase"
+    },
+    {
+      "type": "javafx.scene.layout.FlowPane",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "setHgap",
+          "parameterTypes": [
+            "double"
+          ]
+        },
+        {
+          "name": "setVgap",
+          "parameterTypes": [
+            "double"
+          ]
+        }
+      ]
     },
     {
       "type": "javafx.scene.layout.GridPane",
@@ -2301,6 +2522,10 @@
       "type": "javafx.scene.layout.Pane",
       "methods": [
         {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
           "name": "getChildren",
           "parameterTypes": []
         }
@@ -2325,6 +2550,18 @@
           "parameterTypes": []
         },
         {
+          "name": "setMaxWidth",
+          "parameterTypes": [
+            "double"
+          ]
+        },
+        {
+          "name": "setMinWidth",
+          "parameterTypes": [
+            "double"
+          ]
+        },
+        {
           "name": "setPadding",
           "parameterTypes": [
             "javafx.geometry.Insets"
@@ -2345,11 +2582,26 @@
       ]
     },
     {
+      "type": "javafx.scene.layout.StackPane",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "javafx.scene.layout.VBox",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": []
+        },
+        {
+          "name": "setAlignment",
+          "parameterTypes": [
+            "javafx.geometry.Pos"
+          ]
         },
         {
           "name": "setSpacing",
@@ -2409,6 +2661,17 @@
       "type": "javafx.scene.text.Text"
     },
     {
+      "type": "javafx.scene.text.TextAlignment",
+      "methods": [
+        {
+          "name": "valueOf",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
       "type": "javafx.scene.transform.Transform"
     },
     {
@@ -2457,36 +2720,6 @@
       ]
     },
     {
-      "type": "sun.launcher.LauncherHelper",
-      "jniAccessible": true,
-      "fields": [
-        {
-          "name": "isStaticMain"
-        },
-        {
-          "name": "noArgMain"
-        }
-      ],
-      "methods": [
-        {
-          "name": "getApplicationClass",
-          "parameterTypes": []
-        }
-      ]
-    },
-    {
-      "type": "sun.launcher.LauncherHelper$FXHelper",
-      "jniAccessible": true,
-      "methods": [
-        {
-          "name": "main",
-          "parameterTypes": [
-            "java.lang.String[]"
-          ]
-        }
-      ]
-    },
-    {
       "type": "sun.security.provider.DRBG",
       "methods": [
         {
@@ -2494,6 +2727,15 @@
           "parameterTypes": [
             "java.security.SecureRandomParameters"
           ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.MD5",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
         }
       ]
     },
@@ -2539,6 +2781,27 @@
       "glob": "META-INF/fonts.mf"
     },
     {
+      "glob": "META-INF/javamail.address.map"
+    },
+    {
+      "glob": "META-INF/javamail.charset.map"
+    },
+    {
+      "glob": "META-INF/javamail.default.address.map"
+    },
+    {
+      "glob": "META-INF/javamail.default.providers"
+    },
+    {
+      "glob": "META-INF/javamail.providers"
+    },
+    {
+      "glob": "META-INF/mailcap"
+    },
+    {
+      "glob": "META-INF/mailcap.default"
+    },
+    {
       "glob": "META-INF/resources/fontawesome5/5.15.3/fonts/fa-brands-400.ttf"
     },
     {
@@ -2552,6 +2815,9 @@
     },
     {
       "glob": "META-INF/services/ch.qos.logback.classic.spi.Configurator"
+    },
+    {
+      "glob": "META-INF/services/jakarta.mail.Provider"
     },
     {
       "glob": "META-INF/services/java.time.zone.ZoneRulesProvider"
@@ -2579,6 +2845,9 @@
     },
     {
       "glob": "com/mhtextractor/gui/view/MainView.fxml"
+    },
+    {
+      "glob": "com/mhtextractor/gui/view/ParamDialog.fxml"
     },
     {
       "glob": "com/sun/glass/ui/win/themes_af.properties"
@@ -6745,6 +7014,9 @@
       "glob": "com/sun/glass/ui/win/themes_zu_ZA.properties"
     },
     {
+      "glob": "com/sun/javafx/scene/control/skin/modena/modena.bss"
+    },
+    {
       "glob": "com/sun/javafx/scene/control/skin/resources/controls_zh.properties"
     },
     {
@@ -6763,9 +7035,6 @@
       "glob": "com/sun/javafx/tk/quantum/QuantumMessagesBundle_zh_Hans_CN.properties"
     },
     {
-      "glob": "custom.bss"
-    },
-    {
       "glob": "custom.css"
     },
     {
@@ -6773,6 +7042,9 @@
     },
     {
       "glob": "logback.xml"
+    },
+    {
+      "glob": "sample-preview.webp"
     },
     {
       "module": "java.base",
@@ -12600,7 +12872,7 @@
     },
     {
       "module": "javafx.graphics",
-      "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_Color.obj"
+      "glob": "com/sun/prism/d3d/hlsl/DrawPgram_Color.obj"
     },
     {
       "module": "javafx.graphics",

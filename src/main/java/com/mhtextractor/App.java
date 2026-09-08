@@ -65,7 +65,17 @@ public class App extends Application {
         if ("true".equals(System.getProperty("test.mode"))) {
             final com.mhtextractor.gui.controller.MainController c = loader.getController();
             new java.util.Timer(true).schedule(new java.util.TimerTask() {
-                public void run() { c.runAutomatedTests(); Platform.exit(); System.exit(0); }
+                public void run() {
+                    // 自动化测试直接操作 JavaFX 控件，必须回到 FX 线程执行
+                    Platform.runLater(() -> {
+                        try {
+                            c.runAutomatedTests();
+                        } finally {
+                            Platform.exit();
+                            System.exit(0);
+                        }
+                    });
+                }
             }, 2000);
         }
     }

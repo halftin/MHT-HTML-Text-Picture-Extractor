@@ -42,6 +42,17 @@ public class ImageBatchProcessor extends BatchProcessor {
      */
     public ProcessStats process(List<MhtFileInfo> orderedFiles, String outputFolder,
                                 ProgressCallback callback) {
+        return process(orderedFiles, outputFolder, null, callback);
+    }
+
+    /**
+     * 处理多个 MHT 文件（按传入顺序处理，支持进度回调）。
+     *
+     * @param mergedOutputName 合并输出模式的显式输出目录名（sanitize 后使用）；
+     *                         null 时沿用现有命名逻辑（首个文件标题，回退输入目录名）
+     */
+    public ProcessStats process(List<MhtFileInfo> orderedFiles, String outputFolder,
+                                String mergedOutputName, ProgressCallback callback) {
         this.progressCallback = callback;
         ProcessStats stats = new ProcessStats();
         stats.setStartTime(System.currentTimeMillis());
@@ -73,16 +84,17 @@ public class ImageBatchProcessor extends BatchProcessor {
         MimeParser mimeParser = new MimeParser();
 
         if (config.isHighSpeedMemoryMode()) {
-            return processWithPreload(orderedFiles, outputFolder, mimeParser, stats);
+            return processWithPreload(orderedFiles, outputFolder, mergedOutputName, mimeParser, stats);
         } else {
-            return processStreaming(orderedFiles, outputFolder, mimeParser, stats);
+            return processStreaming(orderedFiles, outputFolder, mergedOutputName, mimeParser, stats);
         }
     }
 
     // ==================== 高速内存模式 ====================
 
     private ProcessStats processWithPreload(List<MhtFileInfo> mhtFiles, String outputFolder,
-                                             MimeParser mimeParser, ProcessStats stats) {
+                                             String mergedOutputName, MimeParser mimeParser,
+                                             ProcessStats stats) {
         log.info("高速内存模式：正在预加载所有 MHT 文件到内存...");
 
         List<ParsedFileEntry> parsedList = preloadAll(mhtFiles, mimeParser, stats);
@@ -100,7 +112,7 @@ public class ImageBatchProcessor extends BatchProcessor {
 
         if (config.isSingleOutputMode()) {
             var mh = new MergedOutputHandler();
-            setupMergedOutput(outputFolder, mhtFiles, parsedList.get(0).parsed(), stats, mh);
+            setupMergedOutput(outputFolder, mhtFiles, parsedList.get(0).parsed(), stats, mh, mergedOutputName);
             handler = mh;
         } else {
             handler = new SeparateOutputHandler(outputFolder);
@@ -150,7 +162,8 @@ public class ImageBatchProcessor extends BatchProcessor {
     // ==================== 流式模式 ====================
 
     private ProcessStats processStreaming(List<MhtFileInfo> mhtFiles, String outputFolder,
-                                           MimeParser mimeParser, ProcessStats stats) {
+                                           String mergedOutputName, MimeParser mimeParser,
+                                           ProcessStats stats) {
         if (config.isSingleOutputMode()) {
             // 预解析第一个文件用于确定合并目录名
             MimeParser.ParsedMht firstParsed = null;
@@ -161,7 +174,7 @@ public class ImageBatchProcessor extends BatchProcessor {
             }
 
             var handler = new MergedOutputHandler();
-            setupMergedOutput(outputFolder, mhtFiles, firstParsed, stats, handler);
+            setupMergedOutput(outputFolder, mhtFiles, firstParsed, stats, handler, mergedOutputName);
             var provider = new StreamingProvider(mimeParser, mhtFiles, firstParsed);
             return processUnified(mhtFiles, outputFolder, provider, handler, stats, 0.35, 0.25);
         } else {
@@ -177,8 +190,17 @@ public class ImageBatchProcessor extends BatchProcessor {
 
     private void setupMergedOutput(String outputFolder, List<MhtFileInfo> mhtFiles,
                                     MimeParser.ParsedMht firstParsed, ProcessStats stats,
-                                    MergedOutputHandler handler) {
-        String folderName = determineMergedFolderName(firstParsed, mhtFiles, stats);
+                                    MergedOutputHandler handler, String explicitName) {
+        String folderName = explicitName;
+        if (folderName != null && !folderName.isEmpty()) {
+            folderName = SanitizeUtils.sanitize(folderName);
+            if (folderName.equals("unnamed")) {
+                folderName = null;
+            }
+        }
+        if (folderName == null) {
+            folderName = determineMergedFolderName(firstParsed, mhtFiles, stats);
+        }
         String mergedDir = Paths.get(outputFolder, folderName).toString();
         FileUtils.ensureDirectory(mergedDir);
         handler.init(mergedDir, folderName);

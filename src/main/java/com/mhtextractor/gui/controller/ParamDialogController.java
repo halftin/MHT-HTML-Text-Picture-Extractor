@@ -3,6 +3,7 @@ package com.mhtextractor.gui.controller;
 import atlantafx.base.controls.ToggleSwitch;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.config.ConfigManager;
+import com.mhtextractor.util.ParamScope;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -29,13 +30,15 @@ import java.util.List;
 /**
  * 提取参数设置弹窗控制器（模态）。
  *
- * <p>按当前提取模式显示文本参数组或图片参数组；两组的控件值分别由主窗口传入的
- * 已确认缓存初始化，切模式不丢失。仅"确定"提交生效：把两组控件值构建为参数快照返回，
- * 由主窗口写入对应模式的已确认缓存；"取消"/右上角 X 丢弃本次编辑。
- * 配置加载只填充当前模式参数组（不点确定不生效）；配置保存为纯参数（不含目录/模式）。</p>
+ * <p>按当前提取模式显示文本参数组或图片参数组；当前模式控件由参数目标（全局或某组，见
+ * {@link ParamScope.Target}）的已确认参数初始化（组未设置时回退全局参数），另一模式控件由全局
+ * 缓存初始化，切模式不丢失。仅"确定"提交生效：把两组控件值构建为参数快照返回，
+ * 由主窗口写入对应目标（组目标写入 GroupItem 的参数缓存）；"取消"/右上角 X 丢弃本次编辑。
+ * 组参数弹窗不持久化"编辑中"状态。配置加载只填充当前模式参数组（不点确定不生效）；
+ * 配置保存为纯参数（不含目录/模式）。</p>
  *
- * <p>入口：真实用户流程 {@link #openAndWait(Window, boolean, AppConfig, AppConfig)}（模态）；
- * agent 演练/自动化测试 {@link #showDirect(Window, boolean, AppConfig, AppConfig)}（非模态）。</p>
+ * <p>入口：真实用户流程 {@link #openAndWait(Window, boolean, AppConfig, AppConfig, ParamScope.Target)}（模态）；
+ * agent 演练/自动化测试 {@link #showDirect(Window, boolean, AppConfig, AppConfig, ParamScope.Target)}（非模态）。</p>
  */
 @Slf4j
 public class ParamDialogController {
@@ -88,18 +91,21 @@ public class ParamDialogController {
     private final ConfigManager configManager = new ConfigManager();
     private Stage stage;
     private boolean imageMode;
+    private ParamScope.Target target = ParamScope.GLOBAL;
     private boolean confirmed = false;
 
     // ==================== 窗口入口 ====================
 
     /**
      * 模态打开参数设置窗口（真实用户流程），窗口关闭后返回控制器；
-     * 通过 {@link #isConfirmed()} 判定是否点过"确定"。
+     * 通过 {@link #isConfirmed()} 判定是否点过"确定"。target 指定参数目标：
+     * 全局或某组（当前模式控件从该目标的已确认参数取初值）。
      */
     public static ParamDialogController openAndWait(Window owner, boolean imageMode,
-                                                   AppConfig textCache, AppConfig imageCache)
+                                                   AppConfig textCache, AppConfig imageCache,
+                                                   ParamScope.Target target)
             throws IOException {
-        ParamDialogController ctrl = create(imageMode, textCache, imageCache);
+        ParamDialogController ctrl = create(imageMode, textCache, imageCache, target);
         ctrl.stage.initOwner(owner);
         ctrl.stage.initModality(Modality.APPLICATION_MODAL);
         ctrl.stage.showAndWait();
@@ -110,9 +116,10 @@ public class ParamDialogController {
      * 非模态直驱入口（agent 演练 / 自动化测试用，避免阻塞调用线程）
      */
     public static ParamDialogController showDirect(Window owner, boolean imageMode,
-                                                   AppConfig textCache, AppConfig imageCache)
+                                                   AppConfig textCache, AppConfig imageCache,
+                                                   ParamScope.Target target)
             throws IOException {
-        ParamDialogController ctrl = create(imageMode, textCache, imageCache);
+        ParamDialogController ctrl = create(imageMode, textCache, imageCache, target);
         if (owner != null) {
             ctrl.stage.initOwner(owner);
         }
@@ -121,7 +128,8 @@ public class ParamDialogController {
     }
 
     private static ParamDialogController create(boolean imageMode,
-                                                AppConfig textCache, AppConfig imageCache)
+                                                AppConfig textCache, AppConfig imageCache,
+                                                ParamScope.Target target)
             throws IOException {
         FXMLLoader loader = new FXMLLoader(
                 ParamDialogController.class.getResource("/com/mhtextractor/gui/view/ParamDialog.fxml"));
@@ -138,7 +146,7 @@ public class ParamDialogController {
         stage.setOnCloseRequest(e -> ctrl.confirmed = false);
 
         ctrl.stage = stage;
-        ctrl.configure(imageMode, textCache, imageCache);
+        ctrl.configure(imageMode, textCache, imageCache, target);
         return ctrl;
     }
 
@@ -176,12 +184,26 @@ public class ParamDialogController {
         refreshConfigList();
     }
 
-    private void configure(boolean imageMode, AppConfig textCache, AppConfig imageCache) {
+    private void configure(boolean imageMode, AppConfig textCache, AppConfig imageCache,
+                           ParamScope.Target target) {
         this.imageMode = imageMode;
-        stage.setTitle("提取参数设置 — " + (imageMode ? "图片模式" : "文本模式"));
-        // 两组控件分别从各自模式的已确认缓存初始化；未确认过则用默认参数
-        applyTextParamsToGui(textCache != null ? textCache : new AppConfig());
-        applyImageParamsToGui(imageCache != null ? imageCache : new AppConfig());
+        this.target = target;
+        String scope = target instanceof ParamScope.GroupTarget gt
+                ? "（" + gt.group().getName() + "）" : "（全局）";
+        stage.setTitle("提取参数设置 — " + (imageMode ? "图片模式" : "文本模式") + scope);
+        // 当前模式控件从目标初值初始化（组未设置时回退全局已确认参数，均无则用默认参数）；
+        // 另一模式控件仍从全局已确认缓存初始化（隐藏不可见，两组隔离互不影响）
+        AppConfig currentInitial = ParamScope.initialParams(target, imageMode, textCache, imageCache);
+        if (currentInitial == null) {
+            currentInitial = new AppConfig();
+        }
+        if (imageMode) {
+            applyTextParamsToGui(textCache != null ? textCache : new AppConfig());
+            applyImageParamsToGui(currentInitial);
+        } else {
+            applyTextParamsToGui(currentInitial);
+            applyImageParamsToGui(imageCache != null ? imageCache : new AppConfig());
+        }
         // 触发联动，保证子控件启用/禁用与初始值一致（含模板默认值回填）
         toggleLimitSettings();
         toggleTemplateSettings();

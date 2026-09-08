@@ -69,11 +69,17 @@
                 <Insets top="0" right="8" bottom="8" left="16"/>
             </padding>
             <VBox HBox.hgrow="ALWAYS" spacing="4" prefWidth="640">
-                <!-- 列头：章号 / 顺序 / 文件名 / 状态 -->
+                <!-- 列头：全选 / 章号 / 顺序 / 文件名 / 状态 -->
                 <HBox spacing="6" alignment="CENTER_LEFT">
                     <padding>
                         <Insets top="2" right="10" bottom="2" left="10"/>
                     </padding>
+                    <CheckBox fx:id="selectAllCheck" minWidth="40" prefWidth="40" maxWidth="40"
+                              alignment="CENTER" focusTraversable="false" style="-fx-padding: 0;">
+                        <tooltip>
+                            <Tooltip text="全选 / 取消全选"/>
+                        </tooltip>
+                    </CheckBox>
                     <Label fx:id="badgeHeaderLabel" text="章号" prefWidth="40" styleClass="text-muted"/>
                     <Label text="顺序" prefWidth="40" styleClass="text-muted"/>
                     <Label text="文件名" styleClass="text-muted"/>
@@ -84,6 +90,33 @@
                     <ListView fx:id="fileListView"/>
                     <Pane fx:id="dragOverlay" mouseTransparent="true"/>
                 </StackPane>
+
+                <!-- 按钮行：移除 / 撤销 / 合并为组 / 拆分组（顺序固定；合并为组阶段 4、拆分组阶段 6 启用） -->
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <padding>
+                        <Insets top="4" right="10" bottom="2" left="10"/>
+                    </padding>
+                    <Button fx:id="removeButton" text="移除" onAction="#onRemoveClicked" disable="true">
+                        <graphic>
+                            <FontIcon iconLiteral="fas-trash-alt" iconSize="14"/>
+                        </graphic>
+                    </Button>
+                    <Button fx:id="undoButton" text="撤销" onAction="#onUndoClicked" disable="true">
+                        <graphic>
+                            <FontIcon iconLiteral="fas-undo" iconSize="14"/>
+                        </graphic>
+                    </Button>
+                    <Button fx:id="groupButton" text="合并为组" onAction="#onGroupClicked" disable="true">
+                        <graphic>
+                            <FontIcon iconLiteral="fas-object-group" iconSize="14"/>
+                        </graphic>
+                    </Button>
+                    <Button fx:id="ungroupButton" text="拆分组" onAction="#onUngroupClicked" disable="true">
+                        <graphic>
+                            <FontIcon iconLiteral="fas-object-ungroup" iconSize="14"/>
+                        </graphic>
+                    </Button>
+                </HBox>
             </VBox>
             <VBox spacing="10" HBox.hgrow="ALWAYS" prefWidth="400">
                 <padding>
@@ -106,6 +139,10 @@
                 <VBox spacing="4">
                     <Label fx:id="outputModeLabel" text="输出模式："/>
                     <Label fx:id="outputNameLabel" wrapText="true" visible="false" managed="false"/>
+                    <HBox fx:id="groupNameBox" spacing="6" alignment="CENTER_LEFT" visible="false" managed="false">
+                        <Label text="输出组文件名："/>
+                        <TextField fx:id="groupNameField" HBox.hgrow="ALWAYS"/>
+                    </HBox>
                     <Label fx:id="titleInfoLabel" wrapText="true" visible="false" managed="false"/>
                     <Label fx:id="outputResultLabel" wrapText="true" visible="false" managed="false"/>
                     <CheckBox fx:id="adjustCheck" text="" visible="false" managed="false"/>

@@ -1,0 +1,224 @@
+package com.mhtextractor.util;
+
+import com.mhtextractor.config.AppConfig;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 输出单元计划构建（F5 6.4/6.8，阶段 8）：数据模型 → 输出单元列表。
+ *
+ * <p>单元划分：未分组项目在合并输出模式下按 sourceFolder 来源拆分（同来源合并为一个输出，
+ * 输出名 = 来源目录名）；单独输出模式下未分组项目维持现有逻辑（一个单元，直接写入会话目录）。
+ * 每个组为一个独立单元（组名经 {@link SanitizeUtils#sanitize} 清洗后命名输出；空组跳过）。
+ * 单元参数解析沿用 {@link ParamScope#effectiveParams} 覆盖层（组参数优先，否则继承全局；
+ * 均未确认时回退默认参数实例）。单元按"首个构成条目在数据序中的位置"排序。</p>
+ *
+ * <p>本类不感知 GUI 状态，全部方法为纯函数，供 MainController 与单元测试共用。</p>
+ */
+public final class OutputUnitPlanner {
+
+    private OutputUnitPlanner() {
+    }
+
+    /** 项目信息视图：将任意项目类型映射为规划所需字段 */
+    public interface ItemView<I> {
+        String path(I item);
+
+        String sourceFolder(I item);
+
+        boolean removed(I item);
+    }
+
+    /** 输出单元：一组按数据序排列的文件 + 生效参数 + 输出路径 */
+    public static final class OutputUnit {
+        /** sanitize 后的输出名（合并模式的输出文件/目录名、组单独模式的子文件夹名）；未分组单独单元为 null */
+        private final String outputName;
+        /** 是否组单元（false = 未分组来源单元） */
+        private final boolean group;
+        /** 生效参数（已回退默认实例，调用方补充运行时 GUI 字段） */
+        private final AppConfig params;
+        /** 单元内文件路径（保持数据序） */
+        private final List<String> paths;
+        /** 输出路径：合并文本 = 文件路径；其余 = 目录路径 */
+        private final String outputPath;
+
+        OutputUnit(String outputName, boolean group, AppConfig params, List<String> paths,
+                   String outputPath) {
+            this.outputName = outputName;
+            this.group = group;
+            this.params = params;
+            this.paths = List.copyOf(paths);
+            this.outputPath = outputPath;
+        }
+
+        public String getOutputName() {
+            return outputName;
+        }
+
+        public boolean isGroup() {
+            return group;
+        }
+
+        public AppConfig getParams() {
+            return params;
+        }
+
+        public List<String> getPaths() {
+            return paths;
+        }
+
+        public String getOutputPath() {
+            return outputPath;
+        }
+
+        public int fileCount() {
+            return paths.size();
+        }
+
+        /** 日志/展示用单元名：未分组单独单元显示"未分组" */
+        public String label() {
+            return outputName != null ? outputName : "未分组";
+        }
+    }
+
+    /**
+     * 构建输出单元计划。
+     *
+     * @param dataOrder    数据序列表（I 与 GroupItem&lt;I&gt; 混合）
+     * @param view         项目字段视图
+     * @param imageMode    当前提取模式（文本/图片）
+     * @param textGlobal   全局文本参数（null = 未确认）
+     * @param imageGlobal  全局图片参数（null = 未确认）
+     * @param sessionDir   会话输出目录
+     */
+    public static <I> List<OutputUnit> plan(List<?> dataOrder, ItemView<I> view,
+                                            boolean imageMode, AppConfig textGlobal,
+                                            AppConfig imageGlobal, String sessionDir) {
+        List<UnitEntry> entries = new ArrayList<>();
+        // 未分组项目按来源分桶（LinkedHashMap 保持首次出现序）
+        Map<String, List<I>> ungroupedBySource = new LinkedHashMap<>();
+        Map<String, Integer> sourceFirstPos = new java.util.HashMap<>();
+        List<I> ungroupedAll = new ArrayList<>();
+        int ungroupedFirstPos = -1;
+        int pos = 0;
+
+        for (Object o : dataOrder) {
+            if (o instanceof GroupItem<?> g) {
+                OutputUnit groupUnit = groupUnit(g, view, imageMode, textGlobal, imageGlobal, sessionDir);
+                if (groupUnit != null) {
+                    entries.add(new UnitEntry(pos, groupUnit));
+                }
+            } else {
+                @SuppressWarnings("unchecked")
+                I item = (I) o;
+                if (!view.removed(item)) {
+                    if (ungroupedAll.isEmpty()) {
+                        ungroupedFirstPos = pos;
+                    }
+                    ungroupedAll.add(item);
+                    String key = sourceKey(view.sourceFolder(item));
+                    sourceFirstPos.putIfAbsent(key, pos);
+                    ungroupedBySource.computeIfAbsent(key, k -> new ArrayList<>()).add(item);
+                }
+            }
+            pos++;
+        }
+
+        if (!ungroupedAll.isEmpty()) {
+            AppConfig params = resolve(null, imageMode, textGlobal, imageGlobal);
+            boolean separate = imageMode ? !params.isSingleOutputMode() : params.isSeparateFiles();
+            if (separate) {
+                entries.add(new UnitEntry(ungroupedFirstPos,
+                        new OutputUnit(null, false, params, pathsOf(ungroupedAll, view), sessionDir)));
+            } else {
+                for (Map.Entry<String, List<I>> e : ungroupedBySource.entrySet()) {
+                    String name = sourceOutputName(e.getKey(), imageMode);
+                    String outputPath = imageMode
+                            ? new File(sessionDir, name).getPath()
+                            : new File(sessionDir, name + ".txt").getPath();
+                    entries.add(new UnitEntry(sourceFirstPos.get(e.getKey()),
+                            new OutputUnit(name, false, params, pathsOf(e.getValue(), view), outputPath)));
+                }
+            }
+        }
+
+        entries.sort(java.util.Comparator.comparingInt(e -> e.position));
+        return entries.stream().map(e -> e.unit).toList();
+    }
+
+    /** 单元 + 首个构成条目在数据序中的位置（用于按首次出现排序） */
+    private static final class UnitEntry {
+        final int position;
+        final OutputUnit unit;
+
+        UnitEntry(int position, OutputUnit unit) {
+            this.position = position;
+            this.unit = unit;
+        }
+    }
+
+    /** 组单元：成员全部移除（空组）时返回 null */
+    private static <I> OutputUnit groupUnit(GroupItem<?> g, ItemView<I> view, boolean imageMode,
+                                            AppConfig textGlobal, AppConfig imageGlobal,
+                                            String sessionDir) {
+        List<I> members = new ArrayList<>();
+        for (Object m : g.getMembers()) {
+            @SuppressWarnings("unchecked")
+            I item = (I) m;
+            if (!view.removed(item)) {
+                members.add(item);
+            }
+        }
+        if (members.isEmpty()) {
+            return null;
+        }
+
+        AppConfig params = resolve(g, imageMode, textGlobal, imageGlobal);
+        boolean separate = imageMode ? !params.isSingleOutputMode() : params.isSeparateFiles();
+        String name = sanitizedGroupName(g);
+        String outputPath = (!imageMode && !separate)
+                ? new File(sessionDir, name + ".txt").getPath()
+                : new File(sessionDir, name).getPath();
+        return new OutputUnit(name, true, params, pathsOf(members, view), outputPath);
+    }
+
+    private static String sanitizedGroupName(GroupItem<?> g) {
+        String s = SanitizeUtils.sanitize(g.getName());
+        if (s.isEmpty() || s.equals("unnamed")) {
+            return "组" + g.getGroupNo();
+        }
+        return s;
+    }
+
+    private static String sourceOutputName(String sourceFolder, boolean imageMode) {
+        String dirName = sourceFolder == null || sourceFolder.isEmpty()
+                ? "" : new File(sourceFolder).getName();
+        String s = SanitizeUtils.sanitize(dirName);
+        if (s.isEmpty() || s.equals("unnamed")) {
+            return imageMode ? "All_Images" : "mht_output";
+        }
+        return s;
+    }
+
+    private static String sourceKey(String sourceFolder) {
+        return sourceFolder == null ? "" : sourceFolder;
+    }
+
+    private static AppConfig resolve(GroupItem<?> parentGroup, boolean imageMode,
+                                     AppConfig textGlobal, AppConfig imageGlobal) {
+        AppConfig p = ParamScope.effectiveParams(parentGroup, imageMode, textGlobal, imageGlobal);
+        return p != null ? p : new AppConfig();
+    }
+
+    private static <I> List<String> pathsOf(List<I> items, ItemView<I> view) {
+        List<String> out = new ArrayList<>(items.size());
+        for (I it : items) {
+            out.add(view.path(it));
+        }
+        return out;
+    }
+}
