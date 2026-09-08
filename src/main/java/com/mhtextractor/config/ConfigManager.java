@@ -1,5 +1,6 @@
 package com.mhtextractor.config;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -25,6 +26,8 @@ public class ConfigManager {
         objectMapper.registerModule(new JavaTimeModule());
         objectMapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
         objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+        // 旧版配置含 imageMode/inputFolder/previewBeforeExtract 等已废弃字段，加载时忽略
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     public ConfigManager() {

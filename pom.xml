@@ -108,6 +108,7 @@
         </dependency>
 
         <!-- ==================== Ikonli 图标库 ==================== -->
+
         <!-- Ikonli 核心库 -->
         <dependency>
             <groupId>org.kordamp.ikonli</groupId>
@@ -120,6 +121,14 @@
             <groupId>org.kordamp.ikonli</groupId>
             <artifactId>ikonli-fontawesome5-pack</artifactId>
             <version>12.3.1</version>
+        </dependency>
+
+        <!-- ==================== 单元测试 ==================== -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>6.0.3</version>
+            <scope>test</scope>
         </dependency>
 
     </dependencies>
@@ -145,7 +154,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <release>25</release>
+                    <!-- 引用属性便于开发机覆盖（-Dmaven.compiler.release=21）；打包机默认 25 -->
+                    <release>${maven.compiler.release}</release>
                     <compilerArgs>
                         <arg>-Xlint:unchecked</arg>
                     </compilerArgs>
@@ -157,6 +167,13 @@
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
+            </plugin>
+
+            <!-- 单元测试运行插件（JUnit 5） -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
             </plugin>
 
             <!-- 打包插件：生成包含所有依赖的可执行 JAR -->

@@ -1,1393 +1,1476 @@
 [
-  {
-    "name": "com.mhtextractor.core.MimeParser",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.mhtextractor.core.ContentExtractor",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.core.ChapterGenerator",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.processor.BatchProcessor",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.mhtextractor.processor.TextBatchProcessor",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.processor.ImageBatchProcessor",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.extractor.BaseExtractor",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.extractor.TextExtractor",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.extractor.ImageExtractor",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.extractor.WarningProvider",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.output.Archiver",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.output.FileWriter",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.output.ImageWriter",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.util.EncodingUtils",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.util.FileUtils",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.util.HtmlUtils",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.util.SanitizeUtils",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.gui.util.JavaFxUtil",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.gui.util.JavaFxUtil$SmoothProgressProperty",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.mhtextractor.processor.BatchProcessor$ProcessStats",
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.processor.BatchProcessor$ProgressCallback",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "jakarta.mail.Session",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "jakarta.mail.internet.MimeMultipart",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "jakarta.mail.internet.MimeBodyPart",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "jakarta.mail.internet.MimePart",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "jakarta.mail.internet.MimePartDataSource",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "jakarta.mail.internet.ContentType",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "jakarta.mail.internet.ParameterList",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "jakarta.mail.internet.SharedInputStream",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "jakarta.mail.util.SharedByteArrayInputStream",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "jakarta.activation.MimetypesFileTypeMap",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "jakarta.activation.CommandMap",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "jakarta.activation.MailcapCommandMap",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "jakarta.activation.DataHandler",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "jakarta.activation.DataSource",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.mail.handlers.multipart_mixed",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.mail.handlers.text_plain",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.mail.handlers.text_html",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.mail.handlers.message_rfc822",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "org.jsoup.Jsoup",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "org.jsoup.nodes.Document",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "org.jsoup.nodes.Element",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "org.jsoup.select.Elements",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.beans.property.BooleanProperty",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.beans.property.SimpleBooleanProperty",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.beans.property.StringProperty",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.beans.property.SimpleStringProperty",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.beans.property.ObjectProperty",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.beans.property.DoubleProperty",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.beans.property.SimpleDoubleProperty",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.beans.value.WritableValue",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.beans.value.ObservableValue",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.mhtextractor.App",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true,
-    "methods": [{"name": "main", "parameterTypes": ["java.lang.String[]"]}]
-  },
-  {
-    "name": "com.mhtextractor.gui.controller.MainController",
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.gui.controller.PreviewDialogController",
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.scene.control.ListView",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.javafx.scene.control.skin.ListViewSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.scene.control.ListCell",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.control.TextArea",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.javafx.scene.control.skin.TextAreaSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.scene.control.CheckBox",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.javafx.scene.control.skin.CheckBoxSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.scene.image.ImageView",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.image.Image",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.layout.StackPane",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.input.DragEvent",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.input.Dragboard",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.input.ClipboardContent",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.input.DataFormat",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.input.TransferMode",
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.mhtextractor.config.AppConfig",
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.config.ConfigManager",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.gui.component.LogTextArea",
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.logging.TextAreaAppender",
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.gui.util.JavaFxUtil",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.gui.util.JavaFxUtil$SmoothProgressProperty",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.mhtextractor.processor.BatchProcessor$ProcessStats",
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.mhtextractor.processor.BatchProcessor$ProgressCallback",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "atlantafx.base.theme.NordLight",
-    "allDeclaredConstructors": true,
-    "methods": [
-      {"name": "getUserAgentStylesheet", "parameterTypes": []}
+ {
+  "name": "com.mhtextractor.core.MimeParser",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.mhtextractor.core.ContentExtractor",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.core.ChapterGenerator",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.processor.BatchProcessor",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.mhtextractor.processor.TextBatchProcessor",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.processor.ImageBatchProcessor",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.extractor.BaseExtractor",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.extractor.TextExtractor",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.extractor.ImageExtractor",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.extractor.WarningProvider",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.output.Archiver",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.output.FileWriter",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.output.ImageWriter",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.util.EncodingUtils",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.util.FileUtils",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.util.HtmlUtils",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.util.SanitizeUtils",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.gui.util.JavaFxUtil",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.gui.util.JavaFxUtil$SmoothProgressProperty",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.mhtextractor.processor.BatchProcessor$ProcessStats",
+  "allDeclaredFields": true,
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.processor.BatchProcessor$ProgressCallback",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "jakarta.mail.Session",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "jakarta.mail.internet.MimeMultipart",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "jakarta.mail.internet.MimeBodyPart",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "jakarta.mail.internet.MimePart",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "jakarta.mail.internet.MimePartDataSource",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "jakarta.mail.internet.ContentType",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "jakarta.mail.internet.ParameterList",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "jakarta.mail.internet.SharedInputStream",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "jakarta.mail.util.SharedByteArrayInputStream",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "jakarta.activation.MimetypesFileTypeMap",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "jakarta.activation.CommandMap",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "jakarta.activation.MailcapCommandMap",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "jakarta.activation.DataHandler",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "jakarta.activation.DataSource",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.mail.handlers.multipart_mixed",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.mail.handlers.text_plain",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.mail.handlers.text_html",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.mail.handlers.message_rfc822",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "org.jsoup.Jsoup",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "org.jsoup.nodes.Document",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "org.jsoup.nodes.Element",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "org.jsoup.select.Elements",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.beans.property.BooleanProperty",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.beans.property.SimpleBooleanProperty",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.beans.property.StringProperty",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.beans.property.SimpleStringProperty",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.beans.property.ObjectProperty",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.beans.property.DoubleProperty",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.beans.property.SimpleDoubleProperty",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.beans.value.WritableValue",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.beans.value.ObservableValue",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.mhtextractor.App",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true,
+  "methods": [
+   {
+    "name": "main",
+    "parameterTypes": [
+     "java.lang.String[]"
     ]
-  },
-  {
-    "name": "atlantafx.base.controls.ToggleSwitch",
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "org.kordamp.ikonli.javafx.FontIcon",
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "org.kordamp.ikonli.fontawesome5.FontAwesomeSolid",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "org.kordamp.ikonli.fontawesome5.FontAwesomeRegular",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "org.kordamp.ikonli.fontawesome5.FontAwesomeBrands",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.fasterxml.jackson.databind.ObjectMapper",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.fasterxml.jackson.databind.ser.std.ToStringSerializer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.fasterxml.jackson.datatype.jsr310.JavaTimeModule",
-    "allDeclaredConstructors": true,
-    "methods": [{"name": "<init>", "parameterTypes": []}]
-  },
-  {
-    "name": "com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.scene.control.Alert",
-    "allDeclaredConstructors": true,
-    "methods": [
-      {"name": "<init>", "parameterTypes": ["javafx.scene.control.Alert$AlertType", "java.lang.String", "javafx.scene.control.ButtonType[]"]},
-      {"name": "showAndWait", "parameterTypes": []},
-      {"name": "getButtonTypes", "parameterTypes": []},
-      {"name": "setHeaderText", "parameterTypes": ["java.lang.String"]},
-      {"name": "setContentText", "parameterTypes": ["java.lang.String"]},
-      {"name": "setTitle", "parameterTypes": ["java.lang.String"]}
+   }
+  ]
+ },
+ {
+  "name": "com.mhtextractor.gui.controller.MainController",
+  "allDeclaredFields": true,
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.gui.controller.ParamDialogController",
+  "allDeclaredFields": true,
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.scene.control.ListView",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.javafx.scene.control.skin.ListViewSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.scene.control.ListCell",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.control.TextArea",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.javafx.scene.control.skin.TextAreaSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.scene.control.CheckBox",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.javafx.scene.control.skin.CheckBoxSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.scene.image.ImageView",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.image.Image",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.layout.StackPane",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.input.DragEvent",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.input.Dragboard",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.input.ClipboardContent",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.input.DataFormat",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.input.TransferMode",
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.mhtextractor.config.AppConfig",
+  "allDeclaredFields": true,
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.config.ConfigManager",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.gui.component.LogTextArea",
+  "allDeclaredFields": true,
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.logging.TextAreaAppender",
+  "allDeclaredFields": true,
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.gui.util.JavaFxUtil",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.gui.util.JavaFxUtil$SmoothProgressProperty",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.processor.BatchProcessor$ProcessStats",
+  "allDeclaredFields": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.mhtextractor.processor.BatchProcessor$ProgressCallback",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "atlantafx.base.theme.NordLight",
+  "allDeclaredConstructors": true,
+  "methods": [
+   {
+    "name": "getUserAgentStylesheet",
+    "parameterTypes": []
+   }
+  ]
+ },
+ {
+  "name": "atlantafx.base.controls.ToggleSwitch",
+  "allDeclaredFields": true,
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "org.kordamp.ikonli.javafx.FontIcon",
+  "allDeclaredFields": true,
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "org.kordamp.ikonli.fontawesome5.FontAwesomeSolid",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "org.kordamp.ikonli.fontawesome5.FontAwesomeRegular",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "org.kordamp.ikonli.fontawesome5.FontAwesomeBrands",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.fasterxml.jackson.databind.ObjectMapper",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.fasterxml.jackson.databind.ser.std.ToStringSerializer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.fasterxml.jackson.datatype.jsr310.JavaTimeModule",
+  "allDeclaredConstructors": true,
+  "methods": [
+   {
+    "name": "<init>",
+    "parameterTypes": []
+   }
+  ]
+ },
+ {
+  "name": "com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.scene.control.Alert",
+  "allDeclaredConstructors": true,
+  "methods": [
+   {
+    "name": "<init>",
+    "parameterTypes": [
+     "javafx.scene.control.Alert$AlertType",
+     "java.lang.String",
+     "javafx.scene.control.ButtonType[]"
     ]
-  },
-  {
-    "name": "javafx.scene.control.TextInputDialog",
-    "allDeclaredConstructors": true,
-    "methods": [
-      {"name": "<init>", "parameterTypes": ["java.lang.String"]},
-      {"name": "showAndWait", "parameterTypes": []},
-      {"name": "setTitle", "parameterTypes": ["java.lang.String"]},
-      {"name": "setHeaderText", "parameterTypes": ["java.lang.String"]}
+   },
+   {
+    "name": "showAndWait",
+    "parameterTypes": []
+   },
+   {
+    "name": "getButtonTypes",
+    "parameterTypes": []
+   },
+   {
+    "name": "setHeaderText",
+    "parameterTypes": [
+     "java.lang.String"
     ]
-  },
-  {
-    "name": "javafx.scene.control.ButtonType",
-    "allDeclaredFields": true,
-    "methods": [
-      {"name": "YES", "parameterTypes": []},
-      {"name": "NO", "parameterTypes": []},
-      {"name": "OK", "parameterTypes": []},
-      {"name": "CANCEL", "parameterTypes": []}
+   },
+   {
+    "name": "setContentText",
+    "parameterTypes": [
+     "java.lang.String"
     ]
-  },
-  {
-    "name": "javafx.scene.control.ToggleButton",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.scene.control.TextField",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.scene.control.Button",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.scene.control.Label",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.scene.control.ComboBox",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.scene.control.ProgressBar",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.scene.control.Tooltip",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.scene.control.TitledPane",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.scene.control.TabPane",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.scene.control.Tab",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.scene.Node",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.Parent",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.layout.Region",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.layout.Pane",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.layout.VBox",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.layout.HBox",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.layout.GridPane",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.layout.BorderPane",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.layout.AnchorPane",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.layout.FlowPane",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.layout.ColumnConstraints",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.geometry.Insets",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.collections.FXCollections",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.collections.ObservableList",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.application.Platform",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.concurrent.Task",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.Scene",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.stage.Stage",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.stage.Window",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "java.util.concurrent.CompletableFuture",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "java.util.concurrent.atomic.AtomicBoolean",
-    "allDeclaredConstructors": true,
-    "methods": [
-      {"name": "get", "parameterTypes": []},
-      {"name": "set", "parameterTypes": ["boolean"]}
+   },
+   {
+    "name": "setTitle",
+    "parameterTypes": [
+     "java.lang.String"
     ]
-  },
-  {
-    "name": "java.io.File",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.fxml.FXMLLoader",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.javafx.fxml.FXMLLoaderHelper",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.tk.quantum.QuantumToolkit",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.javafx.tk.Toolkit",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.tk.quantum.QuantumRenderer",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.tk.quantum.WindowStage",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.javafx.tk.quantum.GlassAppletWindow",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.tk.quantum.EmbeddedStage",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.application.PlatformImpl",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.application.LauncherImpl",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.runtime.eula.Eula",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.font.PrismFontFactory",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.font.directwrite.DWFactory",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.css.StyleManager",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.scene.control.skin.ToggleButtonSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.scene.control.skin.TextFieldSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.scene.control.skin.ButtonSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.scene.control.skin.ComboBoxListViewSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.scene.control.skin.TitledPaneSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.scene.control.skin.TabPaneSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.scene.control.skin.ProgressBarSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.scene.text.TextLayout",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.Application",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinPlatformFactory",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinApplication",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.glass.ui.Screen",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinWindow",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinView",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinDnDClipboard",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinTimer",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinPixels",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinMenu",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinCommonDialogs",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinSystemClipboard",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinGestureSupport",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinAccessible",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.utils.NativeLibLoader",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.EventLoop",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.d3d.D3DPipeline",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.sw.SWPipeline",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.impl.PrismSettings",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.PresentableState",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.hw.d3d.D3DShader",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.iio.ImageLoaderFactory",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.iio.ios.IosImageLoaderFactory",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.iio.jpg.JPEGImageLoaderFactory",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.iio.png.PNGImageLoaderFactory",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.iio.gif.GIFImageLoaderFactory",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.iio.bmp.BMPImageLoaderFactory",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.logging.PlatformLogger",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.util.Utils",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.scene.control.skin.ToggleButtonSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.scene.control.skin.TextFieldSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.scene.control.skin.ButtonSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.scene.control.skin.ComboBoxListViewSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.scene.control.skin.TitledPaneSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.scene.control.skin.TabPaneSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "javafx.scene.control.skin.ProgressBarSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.marlin.DRenderer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.marlin.DRendererContext",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.marlin.MarlinRenderingEngine",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.marlin.MarlinUtils",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.scene.input.KeyEvent",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.scene.input.MouseEvent",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.event.EventType",
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.input.KeyCode",
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.stage.DirectoryChooser",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "javafx.stage.Modality",
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.control.Alert$AlertType",
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.control.SelectionMode",
-    "allDeclaredFields": true
-  },
-  {
-    "name": "javafx.scene.control.ScrollPane",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.scene.control.skin.ScrollPaneSkin",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinCursor",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinRobot",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinChildWindow",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinScreen",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.Size",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.glass.ui.PlatformFactory",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.CommonDialogs",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.Clipboard",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.Menu",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.MenuBar",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.glass.ui.MenuItem",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.d3d.D3DResourceFactory",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.d3d.D3DContext",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.d3d.D3DGraphics",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.d3d.D3DRenderTarget",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.d3d.D3DTexture",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.d3d.D3DShader",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.d3d.D3DMeshView",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.d3d.D3DSwapChain",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.sw.SWResourceFactory",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.sw.SWContext",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.sw.SWGraphics",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.sw.SWRenderTarget",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.sw.SWTexture",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.sw.SWMaskTexture",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.impl.BaseResourceFactory",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.impl.BaseContext",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.impl.BaseGraphics",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.impl.shape.BasicRoundRectRep",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.prism.impl.shape.BasicEllipseRep",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.prism.GraphicsPipeline",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.prism.ResourceFactory",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.scenario.effect.Effect",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.PrRenderer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.hw.d3d.D3DContext",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.hw.d3d.D3DRenderer",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.scenario.Settings",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.font.directwrite.DWGlyph",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.font.directwrite.DWGlyphLayout",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.font.directwrite.DWRITE_GLYPH_RUN",
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.javafx.font.directwrite.IDWriteFactory",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.font.directwrite.JFXTextRenderer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.font.directwrite.D2D1_COLOR_F",
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.javafx.font.FontConfigManager$FcCompFont",
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.javafx.font.FontConfigManager$FontConfigFont",
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.javafx.embed.EmbeddedStageInterface",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.stage.WindowHelper",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.stage.StageHelper",
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.tk.quantum.QuantumClipboard",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.tk.quantum.GlassScene",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.tk.quantum.ViewScene",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.tk.quantum.PaintCollector",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.javafx.tk.quantum.PresentingPainter",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.javafx.tk.quantum.UploadingPainter",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.glass.ui.CommonDialogs",
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.glass.ui.CommonDialogs$ExtensionFilter",
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.glass.ui.CommonDialogs$FileChooserResult",
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.glass.ui.CommonDialogs$FolderChooserResult",
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.PrRenderer",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSRenderer",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSLinearConvolveShadowPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSBlendPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSBlend_SRC_INPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSBloomPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSDisplacementMapPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSFloodPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSGaussianBlurPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSGaussianShadowPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSGlowPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSIdentityPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSInvertMaskPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSMotionBlurPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSPhongLightingPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSReflectionPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSSepiaTonePeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.ps.PPSShadowPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWRenderer",
-    "allDeclaredConstructors": true,
-    "allDeclaredMethods": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWLinearConvolveShadowPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWBlendPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWBlend_SRC_INPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWBloomPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWDisplacementMapPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWFloodPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWGaussianBlurPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWGaussianShadowPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWGlowPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWIdentityPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWInvertMaskPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWMotionBlurPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWPhongLightingPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWReflectionPeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWSepiaTonePeer",
-    "allDeclaredConstructors": true
-  },
-  {
-    "name": "com.sun.scenario.effect.impl.prism.sw.SWShadowPeer",
-    "allDeclaredConstructors": true
-  }
+   }
+  ]
+ },
+ {
+  "name": "javafx.scene.control.TextInputDialog",
+  "allDeclaredConstructors": true,
+  "methods": [
+   {
+    "name": "<init>",
+    "parameterTypes": [
+     "java.lang.String"
+    ]
+   },
+   {
+    "name": "showAndWait",
+    "parameterTypes": []
+   },
+   {
+    "name": "setTitle",
+    "parameterTypes": [
+     "java.lang.String"
+    ]
+   },
+   {
+    "name": "setHeaderText",
+    "parameterTypes": [
+     "java.lang.String"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "javafx.scene.control.ButtonType",
+  "allDeclaredFields": true,
+  "methods": [
+   {
+    "name": "YES",
+    "parameterTypes": []
+   },
+   {
+    "name": "NO",
+    "parameterTypes": []
+   },
+   {
+    "name": "OK",
+    "parameterTypes": []
+   },
+   {
+    "name": "CANCEL",
+    "parameterTypes": []
+   }
+  ]
+ },
+ {
+  "name": "javafx.scene.control.ToggleButton",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.control.TextField",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.control.Button",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.scene.control.Label",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.scene.control.ComboBox",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.control.ProgressBar",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.control.Tooltip",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.scene.control.TitledPane",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.control.TabPane",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.control.Tab",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.Node",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.Parent",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.layout.Region",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.layout.Pane",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.layout.VBox",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.layout.HBox",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.layout.GridPane",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.layout.BorderPane",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.layout.AnchorPane",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.layout.FlowPane",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.layout.ColumnConstraints",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.geometry.Insets",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.collections.FXCollections",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.collections.ObservableList",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.application.Platform",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.concurrent.Task",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.Scene",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.stage.Stage",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.stage.Window",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "java.util.concurrent.CompletableFuture",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "java.util.concurrent.atomic.AtomicBoolean",
+  "allDeclaredConstructors": true,
+  "methods": [
+   {
+    "name": "get",
+    "parameterTypes": []
+   },
+   {
+    "name": "set",
+    "parameterTypes": [
+     "boolean"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "java.io.File",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.fxml.FXMLLoader",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.javafx.fxml.FXMLLoaderHelper",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.tk.quantum.QuantumToolkit",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.javafx.tk.Toolkit",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.tk.quantum.QuantumRenderer",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.tk.quantum.WindowStage",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.javafx.tk.quantum.GlassAppletWindow",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.tk.quantum.EmbeddedStage",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.application.PlatformImpl",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.application.LauncherImpl",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.runtime.eula.Eula",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.font.PrismFontFactory",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.font.directwrite.DWFactory",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.css.StyleManager",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.scene.control.skin.ToggleButtonSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.scene.control.skin.TextFieldSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.scene.control.skin.ButtonSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.scene.control.skin.ComboBoxListViewSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.scene.control.skin.TitledPaneSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.scene.control.skin.TabPaneSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.scene.control.skin.ProgressBarSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.scene.text.TextLayout",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.Application",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinPlatformFactory",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinApplication",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.glass.ui.Screen",
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinWindow",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinView",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinDnDClipboard",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinTimer",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinPixels",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinMenu",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinCommonDialogs",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinSystemClipboard",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinGestureSupport",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinAccessible",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.utils.NativeLibLoader",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.EventLoop",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.d3d.D3DPipeline",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.sw.SWPipeline",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.impl.PrismSettings",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.PresentableState",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.hw.d3d.D3DShader",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.iio.ImageLoaderFactory",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.iio.ios.IosImageLoaderFactory",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.iio.jpg.JPEGImageLoaderFactory",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.iio.png.PNGImageLoaderFactory",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.iio.gif.GIFImageLoaderFactory",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.iio.bmp.BMPImageLoaderFactory",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.logging.PlatformLogger",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.util.Utils",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.scene.control.skin.ToggleButtonSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.scene.control.skin.TextFieldSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.scene.control.skin.ButtonSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.scene.control.skin.ComboBoxListViewSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.scene.control.skin.TitledPaneSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.scene.control.skin.TabPaneSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "javafx.scene.control.skin.ProgressBarSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.marlin.DRenderer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.marlin.DRendererContext",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.marlin.MarlinRenderingEngine",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.marlin.MarlinUtils",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.scene.input.KeyEvent",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.scene.input.MouseEvent",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.event.EventType",
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.input.KeyCode",
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.stage.DirectoryChooser",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "javafx.stage.Modality",
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.control.Alert$AlertType",
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.control.SelectionMode",
+  "allDeclaredFields": true
+ },
+ {
+  "name": "javafx.scene.control.ScrollPane",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.scene.control.skin.ScrollPaneSkin",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinCursor",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinRobot",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinChildWindow",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.win.WinScreen",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.Size",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.glass.ui.PlatformFactory",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.CommonDialogs",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.Clipboard",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.Menu",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.MenuBar",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.glass.ui.MenuItem",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.d3d.D3DResourceFactory",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.d3d.D3DContext",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.d3d.D3DGraphics",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.d3d.D3DRenderTarget",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.d3d.D3DTexture",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.d3d.D3DShader",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.d3d.D3DMeshView",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.d3d.D3DSwapChain",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.sw.SWResourceFactory",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.sw.SWContext",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.sw.SWGraphics",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.sw.SWRenderTarget",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.sw.SWTexture",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.sw.SWMaskTexture",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.impl.BaseResourceFactory",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.impl.BaseContext",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.impl.BaseGraphics",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.impl.shape.BasicRoundRectRep",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.prism.impl.shape.BasicEllipseRep",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.prism.GraphicsPipeline",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.prism.ResourceFactory",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.scenario.effect.Effect",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.PrRenderer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.hw.d3d.D3DContext",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.hw.d3d.D3DRenderer",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.scenario.Settings",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.font.directwrite.DWGlyph",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.font.directwrite.DWGlyphLayout",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.font.directwrite.DWRITE_GLYPH_RUN",
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.javafx.font.directwrite.IDWriteFactory",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.font.directwrite.JFXTextRenderer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.font.directwrite.D2D1_COLOR_F",
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.javafx.font.FontConfigManager$FcCompFont",
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.javafx.font.FontConfigManager$FontConfigFont",
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.javafx.embed.EmbeddedStageInterface",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.stage.WindowHelper",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.stage.StageHelper",
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.tk.quantum.QuantumClipboard",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.tk.quantum.GlassScene",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.tk.quantum.ViewScene",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.tk.quantum.PaintCollector",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.javafx.tk.quantum.PresentingPainter",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.javafx.tk.quantum.UploadingPainter",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.glass.ui.CommonDialogs",
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.glass.ui.CommonDialogs$ExtensionFilter",
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.glass.ui.CommonDialogs$FileChooserResult",
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.glass.ui.CommonDialogs$FolderChooserResult",
+  "allDeclaredMethods": true,
+  "allDeclaredFields": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.PrRenderer",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSRenderer",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSLinearConvolveShadowPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSBlendPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSBlend_SRC_INPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSBloomPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSDisplacementMapPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSFloodPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSGaussianBlurPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSGaussianShadowPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSGlowPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSIdentityPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSInvertMaskPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSMotionBlurPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSPhongLightingPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSReflectionPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSSepiaTonePeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.ps.PPSShadowPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWRenderer",
+  "allDeclaredConstructors": true,
+  "allDeclaredMethods": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWLinearConvolveShadowPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWBlendPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWBlend_SRC_INPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWBloomPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWDisplacementMapPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWFloodPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWGaussianBlurPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWGaussianShadowPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWGlowPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWIdentityPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWInvertMaskPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWMotionBlurPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWPhongLightingPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWReflectionPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWSepiaTonePeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.sun.scenario.effect.impl.prism.sw.SWShadowPeer",
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.config.GuiState",
+  "allDeclaredFields": true,
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ },
+ {
+  "name": "com.mhtextractor.config.GuiStateManager",
+  "allDeclaredFields": true,
+  "allDeclaredMethods": true,
+  "allDeclaredConstructors": true
+ }
 ]
-
