@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,11 +24,13 @@ class GroupStructureTest {
         return g;
     }
 
+    private static final Predicate<Object> NEVER_REMOVED = o -> false;
+
     @Test
     void flattenExpandedGroupShowsMembers() {
         GroupItem<String> g = group(1, "组1", "m1", "m2");
         List<Object> top = new ArrayList<>(List.of("a", g, "b"));
-        assertEquals(List.of("a", g, "m1", "m2", "b"), GroupStructure.flatten(top));
+        assertEquals(List.of("a", g, "m1", "m2", "b"), GroupStructure.flatten(top, NEVER_REMOVED));
     }
 
     @Test
@@ -35,7 +38,7 @@ class GroupStructureTest {
         GroupItem<String> g = group(1, "组1", "m1", "m2");
         g.setExpanded(false);
         List<Object> top = new ArrayList<>(List.of("a", g, "b"));
-        assertEquals(List.of("a", g, "b"), GroupStructure.flatten(top));
+        assertEquals(List.of("a", g, "b"), GroupStructure.flatten(top, NEVER_REMOVED));
     }
 
     @Test
@@ -44,8 +47,16 @@ class GroupStructureTest {
         GroupItem<String> g2 = group(2, "组2", "m3");
         g2.setExpanded(false);
         List<Object> top = new ArrayList<>(List.of(g1, "x", g2));
-        // 已移除成员照常包含在展平结果中（由列表单元格隐藏）
-        assertEquals(List.of(g1, "m1", "m2", "x", g2), GroupStructure.flatten(top));
+        assertEquals(List.of(g1, "m1", "m2", "x", g2), GroupStructure.flatten(top, NEVER_REMOVED));
+    }
+
+    @Test
+    void flattenFiltersRemovedItems() {
+        GroupItem<String> g = group(1, "组1", "m1", "m2");
+        List<Object> top = new ArrayList<>(List.of("a", g, "b"));
+        // m1、b 标记移除：顶层与组内成员均不进入显示序（数据序保留，撤销恢复位置不受影响）
+        assertEquals(List.of("a", g, "m2"),
+                GroupStructure.flatten(top, o -> o == "m1" || o == "b"));
     }
 
     @Test

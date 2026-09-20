@@ -27,17 +27,12 @@ import com.mhtextractor.util.SelectionState;
 import com.mhtextractor.util.UndoManager;
 import com.mhtextractor.util.UnitProgressAggregator;
 import javafx.animation.Interpolator;
-import javafx.animation.KeyFrame;
-import javafx.animation.KeyValue;
 import javafx.animation.ParallelTransition;
-import javafx.animation.Timeline;
 import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
-import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
@@ -141,6 +136,8 @@ public class MainController {
     private static final Insets ROW_PAD = new Insets(7, 10, 7, 10);
     /** 组行左内边距 2px：内容朝左顶格（成员行维持 10px 列对齐） */
     private static final Insets GROUP_ROW_PAD = new Insets(1, 2, 1, 10);
+    /** 组内成员行内边距（拍板）：行高略低于顶层项目行（顶层 ROW_PAD 34px → 组内约 30px） */
+    private static final Insets GROUP_MEMBER_PAD = new Insets(2, 10, 2, 10);
     /** 插入指示线颜色（拖拽排序反馈） */
     private static final String DROP_LINE_STYLE = "-fx-background-color: #3b82f6;";
     /** 组行"入组/合并"整行高亮（琥珀色底+边框，与成员行蓝色插入线视觉区分，6.6 视觉细节） */
@@ -322,19 +319,19 @@ public class MainController {
     private List<PreviewListCell> liftCells = null;
     private List<ImageView> liftViews = null;
 
-    // ===== 折叠/展开动画状态（组行紧凑化拍板需求） =====
+    // ===== 折叠/展开动画状态（方案 B 抽屉式，快照平移手法与拖拽一致） =====
     /** 动画全局锁：动画期间列表项目不可交互（按钮可点但无效果），快速连点折叠箭头直接忽略 */
     private boolean listAnimating = false;
     /** 正在动画的组；null = 无动画 */
     private GroupItem<PreviewItem> animatingGroup = null;
     /** true = 展开动画；false = 折叠动画 */
     private boolean animExpanding = false;
-    /** 动画进度 0..1（Timeline 驱动；每帧同步到可见动画成员行） */
-    private final DoubleProperty animProgress = new SimpleDoubleProperty(1.0);
-    /** 动画 Timeline（200ms；完成/快进后置 null） */
-    private Timeline expandTimeline = null;
-    /** 动画成员行目标高度（动画开始时实测；无可见行时用兜底常量） */
-    private double animBaseHeight = MEMBER_ROW_HEIGHT_FALLBACK;
+    /** 动画 ParallelTransition（200ms ease-out；完成/快进后置 null） */
+    private ParallelTransition collapseAnim = null;
+    /** 动画中的快照视图（成员行 + 下方行；结束后从覆盖层移除） */
+    private List<ImageView> collapseViews = null;
+    /** 动画期间被隐藏的真实 cell（结束后恢复可见） */
+    private List<PreviewListCell> collapseCells = null;
     /** 动画期间锁定的选中项：列表选择变化被回选至此项 */
     private Object animLockedSelection = null;
     /** 动画自身触发的显示序重建豁免标记（防快进兜底把动画自己的 rebuild 打断） */
@@ -351,6 +348,8 @@ public class MainController {
         // 1. 列表：单元格工厂、选择联动、逐文件章节勾选、拖拽动画滚动联动
         fileListView.setCellFactory(lv -> createPreviewCell());
         fileListView.setItems(displayItems);
+
+        // 空白/非预期区域松手：不处理 drop（无蓝条、无吸附），走取消路径瞬时恢复原位不消失
 
         // 列头全选 CheckBox 三态联动（F1）：单项勾选变化实时刷新列头与组复选框，新导入项目自动挂监听
         selectAllCheck.setOnAction(e -> onSelectAllToggled());
@@ -405,9 +404,6 @@ public class MainController {
                 }
             }
         });
-
-        // 折叠/展开动画进度每帧同步到可见的动画组成员行
-        animProgress.addListener((obs, old, newVal) -> applyAnimToGroupCells());
 
         // 2. 模式切换互斥（不再清空另一模式参数：GUI 状态与已确认缓存按模式隔离保留）
         textModeToggle.selectedProperty().addListener((obs, old, newVal) -> {
@@ -537,22 +533,31 @@ public class MainController {
             log.info("目录中未找到 .mht 文件，列表保持不变：{}", dir);
             return;
         }
-        List<File> newFiles = IncrementalImport.findNewFiles(scanned,
+        importFiles(scanned, "目录 " + dir);
+    }
+
+    /**
+     * 文件级增量导入（浏览多选与目录批量共用）：按绝对路径去重，新文件追加列表末尾，
+     * IMPORT 入撤销栈；sourceFolder 取各自父目录（目录批量模式下即所选目录，输出单元分桶语义一致）
+     */
+    private void importFiles(List<File> chosen, String sourceDesc) {
+        List<File> newFiles = IncrementalImport.findNewFiles(chosen,
                 allPreviewItems().stream().map(i -> i.path).toList());
         if (newFiles.isEmpty()) {
-            log.info("目录中的文件均已导入，列表保持不变：{}", dir);
+            log.info("{}中的文件均已导入，列表保持不变", sourceDesc);
             return;
         }
         List<PreviewItem> added = new ArrayList<>();
         for (File f : newFiles) {
             BatchProcessor.MhtFileInfo info = BatchProcessor.toMhtFileInfo(f);
-            added.add(new PreviewItem(info.getPath(), info.getName(), info.getModifiedTime(), dir));
+            added.add(new PreviewItem(info.getPath(), info.getName(), info.getModifiedTime(),
+                    f.getParent()));
         }
         boolean wasEmpty = visibleCount() == 0;
         items.addAll(added);
         undoManager.push(UndoManager.RecordType.IMPORT, added);
         refreshAfterListChange();
-        log.info("增量导入：{} 新增 {} 个文件，当前可见 {} 个", dir, added.size(), visibleCount());
+        log.info("增量导入：{} 新增 {} 个文件，当前可见 {} 个", sourceDesc, added.size(), visibleCount());
         if (wasEmpty) {
             fileListView.getSelectionModel().selectFirst();
         }
@@ -1179,8 +1184,6 @@ public class MainController {
             setOnMouseReleased(null);
             setOnMousePressed(null);
             clearInsertIndicator();
-            // 复位单元格复用可能残留的动画高度约束/clip（动画行在渲染时按当前进度重新设置）
-            applyAnimProgress(1.0, animBaseHeight);
             // 折叠/展开动画期间列表项目不可交互：所有可见单元格复选框禁用
             checkBox.setDisable(listAnimating);
             if (empty || item == null) {
@@ -1193,14 +1196,8 @@ public class MainController {
             }
             if (item instanceof GroupItem<?> g) {
                 renderGroupRow((GroupItem<PreviewItem>) g);
-                // 折叠点击走 cell 级判定（箭头槽位 cell x 22-38，含 ±4 容差）：Label 的 pick 依赖
-                // 字形轮廓，物理点击易落空；released 比 clicked 更可靠（clicked 合成可能被拦截）
-                setOnMouseReleased(e -> {
-                    if (getItem() instanceof GroupItem<?> gg && e.getX() >= 18 && e.getX() <= 46) {
-                        e.consume();
-                        toggleGroupExpanded((GroupItem<PreviewItem>) gg);
-                    }
-                });
+                // 折叠点击走 cell 级 pressed 判定（箭头槽位 cell x 22-46）：released 会被
+                // checkbox 吞掉（间歇丢失），pressed 到达更可靠；判定由 onCellPressed 统一处理
             } else if (item instanceof PreviewItem it) {
                 if (it.removed) {
                     setGraphic(null);
@@ -1271,8 +1268,9 @@ public class MainController {
         private void renderItemRow(PreviewItem it) {
             setVisible(true);
             setManaged(true);
-            // 单元格可能刚渲染过组条目，恢复标准行内边距与自适应高度、复选框原始尺寸与字体
-            box.setPadding(ROW_PAD);
+            boolean inGroup = it.parentGroup != null;
+            // 组内成员（拍板）：行高略低、名称字体变小加粗；顶层项目维持现状
+            box.setPadding(inGroup ? GROUP_MEMBER_PAD : ROW_PAD);
             box.setMinHeight(Region.USE_COMPUTED_SIZE);
             box.setPrefHeight(Region.USE_COMPUTED_SIZE);
             box.setMaxHeight(Region.USE_COMPUTED_SIZE);
@@ -1281,7 +1279,7 @@ public class MainController {
             checkBox.setMaxWidth(CHECK_COL_WIDTH);
             checkBox.setScaleX(1.0);
             checkBox.setScaleY(1.0);
-            nameLabel.setStyle("");
+            nameLabel.setStyle(inGroup ? "-fx-font-size: 12px; -fx-font-weight: bold;" : "");
             // 单元格可能刚渲染过组条目，先按项目勾选状态对齐再绑定，避免双向绑定初始同步串值
             checkBox.setSelected(it.selected.get());
             checkBox.setIndeterminate(false);
@@ -1298,7 +1296,7 @@ public class MainController {
             posLabel.setManaged(true);
             int pos = (int) unitIndex(it) + 1;
             posLabel.setText(pos + ".");
-            nameLabel.setPadding(it.parentGroup == null ? Insets.EMPTY : new Insets(0, 0, 0, 16));
+            nameLabel.setPadding(inGroup ? new Insets(0, 0, 0, 16) : Insets.EMPTY);
             nameLabel.setText(it.name);
             statusLabel.setText(switch (it.status.get()) {
                 case WAITING -> "⏳";
@@ -1322,28 +1320,7 @@ public class MainController {
                 setTooltip(it.status.get() == Status.EMPTY
                         ? new Tooltip("内容为空，正式提取时将被跳过") : null);
             }
-            // 折叠/展开动画中的成员行：按当前进度设置高度约束与裁剪（展开 0→1 / 折叠 1→0）
-            if (listAnimating && it.parentGroup == animatingGroup) {
-                applyAnimProgress(animProgress.get(), animBaseHeight);
-            }
             setGraphic(wrapper);
-        }
-
-        /** 折叠/展开动画：设置内容高度约束与裁剪（p≥1 复位为自适应；p<1 锁定高度并裁剪到 base×p） */
-        void applyAnimProgress(double p, double base) {
-            if (p >= 1.0) {
-                wrapper.setMinHeight(Region.USE_COMPUTED_SIZE);
-                wrapper.setPrefHeight(Region.USE_COMPUTED_SIZE);
-                wrapper.setMaxHeight(Region.USE_COMPUTED_SIZE);
-                wrapper.setClip(null);
-                return;
-            }
-            double h = Math.max(0, base * p);
-            wrapper.setMinHeight(h);
-            wrapper.setPrefHeight(h);
-            wrapper.setMaxHeight(h);
-            double w = wrapper.getWidth() > 0 ? wrapper.getWidth() : fileListView.getWidth();
-            wrapper.setClip(new javafx.scene.shape.Rectangle(Math.max(0, w), h));
         }
 
         /** 8.5 条目背景色：无生效参数 = 现状色；生效参数为全局参数 = 浅绿；生效参数为组参数 = 深绿 */
@@ -1458,7 +1435,6 @@ public class MainController {
      * 释放动画 → 父组变化项目重新预解析（生效参数切换，阶段 5 机制）。
      * cell 非空 = 真实 DnD 路径（含动画）；cell 为 null = 程序化演练路径（跳过动画）。
      */
-    @SuppressWarnings("unchecked")
     private boolean performDrop(Object dragged, Object target, DropResolver.Zone zone,
                                 PreviewListCell cell) {
         if (dragged == null || target == null || (target instanceof PreviewItem it && it.removed)) {
@@ -1477,6 +1453,13 @@ public class MainController {
             gapTopY = cellBoundsInOverlay(cell).getMinY()
                     + (zone == DropResolver.Zone.TOP ? 0 : cell.getHeight());
         }
+        return performResolvedDrop(dragged, op, gapTopY, cell);
+    }
+
+    /** 已解析操作的执行核心：快照 → apply → 撤销记录 → 动画/瞬时重建 → 父组变化重解析 */
+    @SuppressWarnings("unchecked")
+    private boolean performResolvedDrop(Object dragged, DropResolver.Operation op,
+                                        double gapTopY, PreviewListCell cell) {
         // 快照与合并载荷须在数据序修改前采集
         List<Object> before = GroupStructure.snapshotStructure(items);
         List<PreviewItem> affected = parentChangeTargets(op);
@@ -1512,11 +1495,14 @@ public class MainController {
                                         ? List.of(p2)
                                         : List.of(),
                         null, -1, List.of(), List.of(), before));
-                log.info("拖拽排序完成：{}", op.getClass().getSimpleName());
             }
         }
         if (cell != null) {
             animateReleaseInsert(dragged, gapTopY);
+        } else {
+            // 空白吸附：瞬时重建显示序并复位拖拽状态
+            rebuildDisplay();
+            finishDragReset();
         }
         // 项目入组/出组/组合并 → 生效参数切换：受影响项目清缓存重新预解析（阶段 5 机制）
         List<PreviewItem> reparse = new ArrayList<>();
@@ -1707,15 +1693,12 @@ public class MainController {
         onOrderChanged();
     }
 
-    /** 取消拖拽：条目回到原显示位置（数据序未动，重建显示序即可），动画与松手一致；列表已滚动则瞬时恢复 */
+    /** 取消拖拽：瞬时恢复到原显示位置（数据序未动，重建显示序即可）。
+     *  曾用快照释放动画，但列表外松手的恢复路径存在间歇性丢失（条目消失），改为瞬时恢复保证可靠 */
     private void cancelDrag() {
         finishLift();
-        if (dragPositionStale) {
-            rebuildDisplay();
-            finishDragReset();
-            return;
-        }
-        animateReleaseInsert(draggedObject, dragGapTopY);
+        rebuildDisplay();
+        finishDragReset();
     }
 
     private void onOrderChanged() {
@@ -1831,6 +1814,12 @@ public class MainController {
         }
         if (item instanceof GroupItem<?> g) {
             GroupItem<PreviewItem> group = (GroupItem<PreviewItem>) g;
+            // 箭头槽位（cell x 22-46）：折叠/展开，优先于 Ctrl/Shift 多选手势；
+            // pressed 判定比 released 可靠（released 会被 checkbox 吞掉导致间歇丢失）
+            if (e.getX() >= 22 && e.getX() <= 46) {
+                toggleGroupExpanded(group);
+                return;
+            }
             if (e.isControlDown() && !e.isShiftDown()) {
                 onGroupCheckToggled(group);
                 selectionAnchor = group;
@@ -2000,7 +1989,7 @@ public class MainController {
             finishExpandAnim();
         }
         rebuildParentPointers();
-        displayItems.setAll(GroupStructure.flatten(items));
+        displayItems.setAll(GroupStructure.flatten(items, this::isRemovedObject));
     }
 
     /** 组内有效成员数（removed == false） */
@@ -2361,6 +2350,15 @@ public class MainController {
         items.add(Math.max(0, Math.min(insertIdx, items.size())), group);
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.GROUP, targets, group,
                 items.indexOf(group), List.of(), List.of(), before));
+        // 拍板：合并为组后勾选集合复位，避免勾选残留导致下一批建组误合并
+        updatingSelection = true;
+        try {
+            for (PreviewItem t : targets) {
+                t.selected.set(false);
+            }
+        } finally {
+            updatingSelection = false;
+        }
         fileListView.getSelectionModel().select(group);
         refreshAfterListChange();
         log.info("已创建组 {}（{} 个项目）", group.getName(), targets.size());
@@ -2414,7 +2412,8 @@ public class MainController {
     }
 
     /**
-     * 组条目折叠/展开（拍板）：200ms 高度插值 + clip 动画（仿 TitledPane）。
+     * 组条目折叠/展开（方案 B 拍板）：抽屉式滑出/滑入——内容不裁切，成员行整体平移，
+     * 下方行同步补位/让位（快照动画手法与拖拽一致）。200ms ease-out。
      * 动画期间列表项目不可交互（按钮可点但无效果）；快速连点/拖拽会话中直接忽略。
      */
     private void toggleGroupExpanded(GroupItem<PreviewItem> g) {
@@ -2428,7 +2427,120 @@ public class MainController {
         }
     }
 
-    /** 展开动画：成员行立即入列（显示序重建），新行高度从 0 动画到正常行高 */
+    /**
+     * 折叠动画（抽屉收起）：成员行快照整体下滑滑出，下方行快照上滑补位。
+     * 数据终态（expanded=false + 显示序移除成员）在动画开始时立即生效；
+     * 外部重建触发快进兜底时只清理快照即可。
+     */
+    private void collapseGroupAnimated(GroupItem<PreviewItem> g) {
+        Object sel = fileListView.getSelectionModel().getSelectedItem();
+        if (sel instanceof PreviewItem it && it.parentGroup == g) {
+            fileListView.getSelectionModel().select(g);
+        }
+        listAnimating = true;
+        animatingGroup = g;
+        animExpanding = false;
+        animLockedSelection = g;
+        groupNameField.setDisable(true);
+
+        // 采集快照（动画前：成员行与下方行均在原位置）；组行底部 = 成员收进抽屉的目标位置
+        List<ImageView> memberViews = new ArrayList<>();
+        List<ImageView> belowViews = new ArrayList<>();
+        List<PreviewListCell> belowCells = new ArrayList<>();
+        double groupBottom = -1;
+        double memberBottom = -1;
+        double totalHeight = 0;
+        try {
+            for (javafx.scene.Node n : fileListView.lookupAll(".list-cell")) {
+                if (!(n instanceof PreviewListCell c) || c.getItem() == null
+                        || (c.getItem() instanceof PreviewItem it && it.removed)) {
+                    continue;
+                }
+                Bounds b = cellBoundsInOverlay(c);
+                if (c.getItem() == g) {
+                    groupBottom = b.getMaxY();
+                } else if (c.getItem() instanceof PreviewItem it && it.parentGroup == g) {
+                    Image snap = c.snapshot(transparentSnapParams(), null);
+                    if (snap == null) {
+                        continue;   // 快照失败跳过该行，避免空白视图盖住列表
+                    }
+                    ImageView iv = new ImageView(snap);
+                    iv.setLayoutX(b.getMinX());
+                    iv.setLayoutY(b.getMinY());
+                    dragOverlay.getChildren().add(iv);
+                    memberViews.add(iv);
+                    memberBottom = Math.max(memberBottom, b.getMaxY());
+                    totalHeight += c.getHeight();
+                } else if (memberBottom > 0 && b.getMinY() >= memberBottom - 1) {
+                    // 成员块下方的行（原位置快照，动画中上滑补位）
+                    Image snap = c.snapshot(transparentSnapParams(), null);
+                    if (snap == null) {
+                        continue;
+                    }
+                    ImageView iv = new ImageView(snap);
+                    iv.setLayoutX(b.getMinX());
+                    iv.setLayoutY(b.getMinY());
+                    dragOverlay.getChildren().add(iv);
+                    belowViews.add(iv);
+                    belowCells.add(c);
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("折叠快照失败，退化为瞬时重建：{}", ex.getMessage(), ex);
+            dragOverlay.getChildren().removeAll(memberViews);
+            dragOverlay.getChildren().removeAll(belowViews);
+            g.setExpanded(false);
+            rebuildDisplay();
+            finishExpandAnim();
+            return;
+        }
+
+        // 数据终态：成员行移出显示序
+        g.setExpanded(false);
+        suppressAnimRebuild = true;
+        try {
+            rebuildDisplay();
+        } finally {
+            suppressAnimRebuild = false;
+        }
+        belowCells.forEach(c -> c.setVisible(false));
+
+        double slide = totalHeight > 0 ? totalHeight : MEMBER_ROW_HEIGHT_FALLBACK;
+        ParallelTransition pt = new ParallelTransition();
+        for (ImageView iv : memberViews) {
+            // 抽屉收起：每个成员滑到组行底部（位移 = 各自到组行底的距离，互不相同）
+            double dist = Math.max(0, iv.getLayoutY() - groupBottom);
+            TranslateTransition tt = new TranslateTransition(EXPAND_ANIM_DURATION, iv);
+            tt.setByY(-dist);
+            tt.setInterpolator(Interpolator.EASE_OUT);
+            pt.getChildren().add(tt);
+        }
+        for (ImageView iv : belowViews) {
+            TranslateTransition tt = new TranslateTransition(EXPAND_ANIM_DURATION, iv);
+            tt.setByY(-slide);
+            tt.setInterpolator(Interpolator.EASE_OUT);
+            pt.getChildren().add(tt);
+        }
+        if (memberViews.isEmpty() && belowViews.isEmpty()) {
+            // 无可见成员可动画：直接终态
+            dragOverlay.getChildren().removeAll(memberViews);
+            dragOverlay.getChildren().removeAll(belowViews);
+            belowCells.forEach(c -> c.setVisible(true));
+            finishExpandAnim();
+            return;
+        }
+        collapseAnim = pt;
+        collapseViews = memberViews;
+        collapseViews.addAll(belowViews);
+        collapseCells = belowCells;
+        pt.setOnFinished(e -> finishExpandAnim());
+        pt.play();
+    }
+
+    /**
+     * 展开动画（抽屉拉出）：显示序先重建到终态，成员行快照从上方滑入到位，
+     * 下方行快照下滑让位。快进兜底只清理快照。
+     */
     private void expandGroupAnimated(GroupItem<PreviewItem> g) {
         listAnimating = true;
         animatingGroup = g;
@@ -2442,87 +2554,119 @@ public class MainController {
         } finally {
             suppressAnimRebuild = false;
         }
-        // 动画基准高度用常量（成员行实测 34px）；运行中实测依赖 VirtualFlow 布局时机不可靠
-        animBaseHeight = MEMBER_ROW_HEIGHT_FALLBACK;
-        animProgress.set(0.0);
-        startExpandTimeline();
-    }
+        fileListView.layout();
 
-    /** 折叠动画：显示序不动（成员行保留），高度从正常动画到 0，结束瞬间才移出显示序 */
-    private void collapseGroupAnimated(GroupItem<PreviewItem> g) {
-        Object sel = fileListView.getSelectionModel().getSelectedItem();
-        if (sel instanceof PreviewItem it && it.parentGroup == g) {
-            fileListView.getSelectionModel().select(g);
+        List<ImageView> memberViews = new ArrayList<>();
+        List<ImageView> belowViews = new ArrayList<>();
+        List<PreviewListCell> hiddenCells = new ArrayList<>();
+        double groupBottom = -1;
+        double memberBottom = -1;
+        double totalHeight = 0;
+        try {
+            for (javafx.scene.Node n : fileListView.lookupAll(".list-cell")) {
+                if (!(n instanceof PreviewListCell c) || c.getItem() == null
+                        || (c.getItem() instanceof PreviewItem it && it.removed)) {
+                    continue;
+                }
+                Bounds b = cellBoundsInOverlay(c);
+                if (c.getItem() == g) {
+                    groupBottom = b.getMaxY();
+                } else if (c.getItem() instanceof PreviewItem it && it.parentGroup == g) {
+                    Image snap = c.snapshot(transparentSnapParams(), null);
+                    if (snap == null) {
+                        continue;   // 快照失败跳过该行，避免空白视图盖住列表
+                    }
+                    ImageView iv = new ImageView(snap);
+                    iv.setLayoutX(b.getMinX());
+                    iv.setLayoutY(b.getMinY());
+                    dragOverlay.getChildren().add(iv);
+                    memberViews.add(iv);
+                    memberBottom = Math.max(memberBottom, b.getMaxY());
+                    totalHeight += c.getHeight();
+                    hiddenCells.add(c);
+                } else if (memberBottom > 0 && b.getMinY() >= memberBottom - 1) {
+                    Image snap = c.snapshot(transparentSnapParams(), null);
+                    if (snap == null) {
+                        continue;
+                    }
+                    ImageView iv = new ImageView(snap);
+                    iv.setLayoutX(b.getMinX());
+                    iv.setLayoutY(b.getMinY());
+                    dragOverlay.getChildren().add(iv);
+                    belowViews.add(iv);
+                    hiddenCells.add(c);
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("展开快照失败，退化为瞬时重建：{}", ex.getMessage(), ex);
+            dragOverlay.getChildren().removeAll(memberViews);
+            dragOverlay.getChildren().removeAll(belowViews);
+            hiddenCells.forEach(c -> c.setVisible(true));
+            finishExpandAnim();
+            return;
         }
-        listAnimating = true;
-        animatingGroup = g;
-        animExpanding = false;
-        animLockedSelection = g;
-        groupNameField.setDisable(true);
-        animBaseHeight = MEMBER_ROW_HEIGHT_FALLBACK;
-        animProgress.set(1.0);
-        startExpandTimeline();
+
+        hiddenCells.forEach(c -> c.setVisible(false));
+
+        double slide = totalHeight > 0 ? totalHeight : MEMBER_ROW_HEIGHT_FALLBACK;
+        // 抽屉拉出：每个成员快照从组行底部出发（初始位移 = 各自到组行底的距离），滑到各自位置
+        for (ImageView iv : memberViews) {
+            double dist = Math.max(0, iv.getLayoutY() - groupBottom);
+            iv.setTranslateY(-dist);
+        }
+        for (ImageView iv : belowViews) {
+            iv.setTranslateY(-slide);
+        }
+        ParallelTransition pt = new ParallelTransition();
+        for (ImageView iv : memberViews) {
+            TranslateTransition tt = new TranslateTransition(EXPAND_ANIM_DURATION, iv);
+            tt.setByY(slide);
+            tt.setInterpolator(Interpolator.EASE_OUT);
+            pt.getChildren().add(tt);
+        }
+        for (ImageView iv : belowViews) {
+            TranslateTransition tt = new TranslateTransition(EXPAND_ANIM_DURATION, iv);
+            tt.setByY(slide);
+            tt.setInterpolator(Interpolator.EASE_OUT);
+            pt.getChildren().add(tt);
+        }
+        if (memberViews.isEmpty() && belowViews.isEmpty()) {
+            dragOverlay.getChildren().removeAll(memberViews);
+            dragOverlay.getChildren().removeAll(belowViews);
+            hiddenCells.forEach(c -> c.setVisible(true));
+            finishExpandAnim();
+            return;
+        }
+        collapseAnim = pt;
+        collapseViews = memberViews;
+        collapseViews.addAll(belowViews);
+        collapseCells = hiddenCells;
+        pt.setOnFinished(e -> finishExpandAnim());
+        pt.play();
     }
 
-    /** 启动 200ms 进度 Timeline（LINEAR 缓动照搬 TitledPaneSkin） */
-    private void startExpandTimeline() {
-        expandTimeline = new Timeline(
-                new KeyFrame(Duration.ZERO, new KeyValue(animProgress, animProgress.get())),
-                new KeyFrame(EXPAND_ANIM_DURATION,
-                        new KeyValue(animProgress, animExpanding ? 1.0 : 0.0,
-                                Interpolator.LINEAR)));
-        expandTimeline.setOnFinished(e -> finishExpandAnim());
-        expandTimeline.play();
-    }
-
-    /** 动画结束（正常完成或被外部重建快进）：执行折叠终态、复位 cell 约束、解锁 */
+    /** 折叠/展开动画结束（正常完成或外部重建快进）：清理快照、恢复 cell、解锁 */
     private void finishExpandAnim() {
-        if (expandTimeline != null) {
-            expandTimeline.stop();
-            expandTimeline = null;
+        if (collapseAnim != null) {
+            collapseAnim.stop();
+            collapseAnim = null;
         }
-        GroupItem<PreviewItem> g = animatingGroup;
-        boolean wasExpanding = animExpanding;
+        if (collapseViews != null) {
+            dragOverlay.getChildren().removeAll(collapseViews);
+            collapseViews = null;
+        }
+        if (collapseCells != null) {
+            collapseCells.forEach(c -> c.setVisible(true));
+            collapseCells = null;
+        }
         animatingGroup = null;
         animExpanding = false;
         animLockedSelection = null;
         listAnimating = false;
-        animProgress.set(1.0);
         groupNameField.setDisable(false);
-        if (g != null) {
-            if (!wasExpanding) {
-                // 折叠动画结束：成员行移出显示序
-                g.setExpanded(false);
-            }
-            // 折叠/展开统一重建显示序：展开时高度 0 的成员 cell 可能被 VirtualFlow 跳过，
-            // 靠重建触发 updateItem 清除动画约束
-            rebuildDisplay();
-        }
-        resetAnimCells();
+        // 解锁后刷新单元格：动画开始时按 listAnimating=true 渲染的 checkbox 禁用状态需重渲染恢复
+        fileListView.refresh();
         fileListView.requestLayout();
-    }
-
-    /** 每帧把动画进度同步到可见的动画组成员行（高度约束 + clip 裁剪） */
-    private void applyAnimToGroupCells() {
-        if (animatingGroup == null) {
-            return;
-        }
-        for (javafx.scene.Node n : fileListView.lookupAll(".list-cell")) {
-            if (n instanceof PreviewListCell c && c.getItem() instanceof PreviewItem it
-                    && it.parentGroup == animatingGroup) {
-                c.applyAnimProgress(animProgress.get(), animBaseHeight);
-            }
-        }
-        fileListView.requestLayout();
-    }
-
-    /** 复位全部可见 cell 的动画高度约束与 clip（动画结束/快进后调用） */
-    private void resetAnimCells() {
-        for (javafx.scene.Node n : fileListView.lookupAll(".list-cell")) {
-            if (n instanceof PreviewListCell c) {
-                c.applyAnimProgress(1.0, animBaseHeight);
-            }
-        }
     }
 
     // ==================== 组名编辑（F5 6.3） ====================

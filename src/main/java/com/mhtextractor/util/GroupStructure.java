@@ -23,17 +23,23 @@ public final class GroupStructure {
 
     /**
      * 显示序构建：顶层条目与组条目平铺，展开的组后跟随其组内成员。
-     * 已移除（removed）成员照常包含，由列表单元格隐藏（与顶层已移除项目一致）。
+     * 已移除（removed）项由谓词过滤——不进入显示序（VirtualFlow 布局会强制恢复 cell 的
+     * visible，靠单元格隐藏不可靠，会产生占位空洞）；数据序仍保留 removed 项，撤销恢复
+     * 位置不受影响。
      */
-    public static List<Object> flatten(List<?> topLevel) {
+    public static List<Object> flatten(List<?> topLevel, Predicate<Object> removed) {
         List<Object> flat = new ArrayList<>();
         for (Object o : topLevel) {
             if (o instanceof GroupItem<?> g) {
                 flat.add(g);
                 if (g.isExpanded()) {
-                    flat.addAll(g.getMembers());
+                    for (Object m : g.getMembers()) {
+                        if (!removed.test(m)) {
+                            flat.add(m);
+                        }
+                    }
                 }
-            } else {
+            } else if (!removed.test(o)) {
                 flat.add(o);
             }
         }
