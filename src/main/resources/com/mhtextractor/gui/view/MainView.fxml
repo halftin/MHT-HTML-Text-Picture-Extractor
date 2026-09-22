@@ -116,6 +116,13 @@
                             <FontIcon iconLiteral="fas-object-ungroup" iconSize="14"/>
                         </graphic>
                     </Button>
+                    <Button fx:id="applyGlobalButton" text="提取参数应用到全局" onAction="#onApplyGlobalClicked" disable="true">
+                        <graphic>
+                            <FontIcon iconLiteral="fas-globe" iconSize="14"/>
+                        </graphic>
+                    </Button>
+                    <!-- 占位：后续版本"查看HTML源码"按钮（预留空间，当前隐藏） -->
+                    <Button text="查看HTML源码" visible="false" managed="false"/>
                 </HBox>
             </VBox>
             <VBox spacing="10" HBox.hgrow="ALWAYS" prefWidth="400">
@@ -161,6 +168,10 @@
                             <FlowPane fx:id="thumbnailPane" hgap="10" vgap="10"/>
                         </ScrollPane>
                     </VBox>
+                    <!-- 提取结果提示 banner（提取结果状态需求）：预览区顶部，选中含红条目时显示详情 -->
+                    <Label fx:id="extractResultBanner" wrapText="true" visible="false" managed="false"
+                           maxWidth="Infinity" StackPane.alignment="TOP_LEFT"
+                           style="-fx-background-color: #f8d7da; -fx-text-fill: #721c24; -fx-font-weight: bold; -fx-padding: 8 10;"/>
                 </StackPane>
             </VBox>
         </HBox>

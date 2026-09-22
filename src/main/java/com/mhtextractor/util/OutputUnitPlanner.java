@@ -4,6 +4,7 @@ import com.mhtextractor.config.AppConfig;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,10 +12,11 @@ import java.util.Map;
 /**
  * 输出单元计划构建（F5 6.4/6.8，阶段 8）：数据模型 → 输出单元列表。
  *
- * <p>单元划分：未分组项目在合并输出模式下按 sourceFolder 来源拆分（同来源合并为一个输出，
- * 输出名 = 来源目录名）；单独输出模式下未分组项目维持现有逻辑（一个单元，直接写入会话目录）。
- * 每个组为一个独立单元（组名经 {@link SanitizeUtils#sanitize} 清洗后命名输出；空组跳过）。
- * 单元参数解析沿用 {@link ParamScope#effectiveParams} 覆盖层（组参数优先，否则继承全局；
+ * <p>单元划分：未分组项目按"来源目录 + 生效参数内容"分桶（条目独立参数需求拍板）——参数内容
+ * 相同（如均继承全局）的同来源条目合并为一个输出，输出名 = 来源目录名（同源多桶时第二个起追加序号）；
+ * 单独输出模式的桶直写会话目录（输出名 null）。每个组为一个独立单元（组名经
+ * {@link SanitizeUtils#sanitize} 清洗后命名输出；空组跳过）。
+ * 单元参数解析沿用 {@link ParamScope#effectiveParams} 三层覆盖（组 &gt; 条目 &gt; 全局；
  * 均未确认时回退默认参数实例）。单元按"首个构成条目在数据序中的位置"排序。</p>
  *
  * <p>本类不感知 GUI 状态，全部方法为纯函数，供 MainController 与单元测试共用。</p>
@@ -31,6 +33,12 @@ public final class OutputUnitPlanner {
         String sourceFolder(I item);
 
         boolean removed(I item);
+
+        /** 条目级文本参数（null = 未设置；条目独立参数需求） */
+        AppConfig textItemParams(I item);
+
+        /** 条目级图片参数（null = 未设置；条目独立参数需求） */
+        AppConfig imageItemParams(I item);
     }
 
     /** 输出单元：一组按数据序排列的文件 + 生效参数 + 输出路径 */
@@ -99,11 +107,10 @@ public final class OutputUnitPlanner {
                                             boolean imageMode, AppConfig textGlobal,
                                             AppConfig imageGlobal, String sessionDir) {
         List<UnitEntry> entries = new ArrayList<>();
-        // 未分组项目按来源分桶（LinkedHashMap 保持首次出现序）
-        Map<String, List<I>> ungroupedBySource = new LinkedHashMap<>();
-        Map<String, Integer> sourceFirstPos = new java.util.HashMap<>();
-        List<I> ungroupedAll = new ArrayList<>();
-        int ungroupedFirstPos = -1;
+        // 未分组项目按"来源+生效参数内容"分桶（条目独立参数需求拍板；LinkedHashMap 保持首次出现序）
+        Map<BucketKey, List<I>> ungroupedByKey = new LinkedHashMap<>();
+        Map<BucketKey, Integer> keyFirstPos = new HashMap<>();
+        boolean anyUngrouped = false;
         int pos = 0;
 
         for (Object o : dataOrder) {
@@ -116,38 +123,49 @@ public final class OutputUnitPlanner {
                 @SuppressWarnings("unchecked")
                 I item = (I) o;
                 if (!view.removed(item)) {
-                    if (ungroupedAll.isEmpty()) {
-                        ungroupedFirstPos = pos;
-                    }
-                    ungroupedAll.add(item);
-                    String key = sourceKey(view.sourceFolder(item));
-                    sourceFirstPos.putIfAbsent(key, pos);
-                    ungroupedBySource.computeIfAbsent(key, k -> new ArrayList<>()).add(item);
+                    anyUngrouped = true;
+                    AppConfig itemParams = resolveItem(item, view, imageMode, textGlobal, imageGlobal);
+                    boolean separate = imageMode ? !itemParams.isSingleOutputMode() : itemParams.isSeparateFiles();
+                    // 单独输出桶不区分来源（直写会话目录，跨来源同参数合一单元，与改造前一致）
+                    BucketKey key = new BucketKey(separate ? "" : sourceKey(view.sourceFolder(item)), itemParams);
+                    keyFirstPos.putIfAbsent(key, pos);
+                    ungroupedByKey.computeIfAbsent(key, k -> new ArrayList<>()).add(item);
                 }
             }
             pos++;
         }
 
-        if (!ungroupedAll.isEmpty()) {
-            AppConfig params = resolve(null, imageMode, textGlobal, imageGlobal);
-            boolean separate = imageMode ? !params.isSingleOutputMode() : params.isSeparateFiles();
-            if (separate) {
-                entries.add(new UnitEntry(ungroupedFirstPos,
-                        new OutputUnit(null, false, params, pathsOf(ungroupedAll, view), sessionDir)));
-            } else {
-                for (Map.Entry<String, List<I>> e : ungroupedBySource.entrySet()) {
-                    String name = sourceOutputName(e.getKey(), imageMode);
-                    String outputPath = imageMode
+        if (anyUngrouped) {
+            // 同名（同来源）合并桶计数：第二个起追加序号（小说A.txt、小说A(2).txt）
+            Map<String, Integer> usedNames = new HashMap<>();
+            for (Map.Entry<BucketKey, List<I>> e : ungroupedByKey.entrySet()) {
+                AppConfig params = e.getKey().params();
+                boolean separate = imageMode ? !params.isSingleOutputMode() : params.isSeparateFiles();
+                String name;
+                String outputPath;
+                if (separate) {
+                    // 单独输出：各单元直写会话目录（输出名 null，成员文件名互不冲突）
+                    name = null;
+                    outputPath = sessionDir;
+                } else {
+                    String base = sourceOutputName(e.getKey().source(), imageMode);
+                    int n = usedNames.merge(base, 1, Integer::sum);
+                    name = n == 1 ? base : base + "(" + n + ")";
+                    outputPath = imageMode
                             ? new File(sessionDir, name).getPath()
                             : new File(sessionDir, name + ".txt").getPath();
-                    entries.add(new UnitEntry(sourceFirstPos.get(e.getKey()),
-                            new OutputUnit(name, false, params, pathsOf(e.getValue(), view), outputPath)));
                 }
+                entries.add(new UnitEntry(keyFirstPos.get(e.getKey()),
+                        new OutputUnit(name, false, params, pathsOf(e.getValue(), view), outputPath)));
             }
         }
 
         entries.sort(java.util.Comparator.comparingInt(e -> e.position));
         return entries.stream().map(e -> e.unit).toList();
+    }
+
+    /** 未分组分桶键：来源目录 + 生效参数（AppConfig 按内容 equals，参数内容相同即同桶） */
+    private record BucketKey(String source, AppConfig params) {
     }
 
     /** 单元 + 首个构成条目在数据序中的位置（用于按首次出现排序） */
@@ -177,7 +195,7 @@ public final class OutputUnitPlanner {
             return null;
         }
 
-        AppConfig params = resolve(g, imageMode, textGlobal, imageGlobal);
+        AppConfig params = resolve(g, null, null, imageMode, textGlobal, imageGlobal);
         boolean separate = imageMode ? !params.isSingleOutputMode() : params.isSeparateFiles();
         String name = sanitizedGroupName(g);
         String outputPath = (!imageMode && !separate)
@@ -208,10 +226,18 @@ public final class OutputUnitPlanner {
         return sourceFolder == null ? "" : sourceFolder;
     }
 
-    private static AppConfig resolve(GroupItem<?> parentGroup, boolean imageMode,
-                                     AppConfig textGlobal, AppConfig imageGlobal) {
-        AppConfig p = ParamScope.effectiveParams(parentGroup, imageMode, textGlobal, imageGlobal);
+    private static AppConfig resolve(GroupItem<?> parentGroup, AppConfig itemText, AppConfig itemImage,
+                                     boolean imageMode, AppConfig textGlobal, AppConfig imageGlobal) {
+        AppConfig p = ParamScope.effectiveParams(parentGroup, itemText, itemImage,
+                imageMode, textGlobal, imageGlobal);
         return p != null ? p : new AppConfig();
+    }
+
+    /** 未分组条目的生效参数（组参数恒为 null，条目参数取 ItemView 快照） */
+    private static <I> AppConfig resolveItem(I item, ItemView<I> view, boolean imageMode,
+                                             AppConfig textGlobal, AppConfig imageGlobal) {
+        return resolve(null, view.textItemParams(item), view.imageItemParams(item),
+                imageMode, textGlobal, imageGlobal);
     }
 
     private static <I> List<String> pathsOf(List<I> items, ItemView<I> view) {

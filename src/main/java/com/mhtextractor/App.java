@@ -68,12 +68,15 @@ public class App extends Application {
                 public void run() {
                     // 自动化测试直接操作 JavaFX 控件，必须回到 FX 线程执行
                     Platform.runLater(() -> {
+                        boolean success = true;
                         try {
                             c.runAutomatedTests();
-                        } finally {
-                            Platform.exit();
-                            System.exit(0);
+                        } catch (Throwable t) {
+                            success = false;
+                            log.error("自动化测试执行失败", t);
                         }
+                        Platform.exit();
+                        System.exit(success ? 0 : 1);
                     });
                 }
             }, 2000);

@@ -5,6 +5,7 @@ import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.output.Archiver;
 import com.mhtextractor.output.ImageWriter;
+import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.FileUtils;
 import com.mhtextractor.util.SanitizeUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -109,15 +110,18 @@ public class ImageBatchProcessor extends BatchProcessor {
 
         ParsedMhtProvider provider = new PreloadedProvider(parsedList);
         ImageOutputHandler handler;
+        String mergedNameWarning = null;
 
         if (config.isSingleOutputMode()) {
             var mh = new MergedOutputHandler();
-            setupMergedOutput(outputFolder, mhtFiles, parsedList.get(0).parsed(), stats, mh, mergedOutputName);
+            mergedNameWarning =
+                    setupMergedOutput(outputFolder, mhtFiles, parsedList.get(0).parsed(), stats, mh, mergedOutputName);
             handler = mh;
         } else {
             handler = new SeparateOutputHandler(outputFolder);
         }
-        return processUnified(mhtFiles, outputFolder, provider, handler, stats, 0.3, 0.3);
+        return processUnified(mhtFiles, outputFolder, provider, handler, stats, 0.3, 0.3,
+                mergedNameWarning);
     }
 
     private List<ParsedFileEntry> preloadAll(List<MhtFileInfo> mhtFiles, MimeParser mimeParser,
@@ -146,12 +150,15 @@ public class ImageBatchProcessor extends BatchProcessor {
                     log.warn("文件 {} 无法解析，跳过", name);
                     stats.incrementSkip();
                     stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：无法解析", name));
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "无法解析", List.of());
                 }
             } catch (Exception e) {
                 log.error("加载 MHT 文件 {} 失败: {}", fileInfo.getName(), e.getMessage(), e);
                 stats.incrementFail();
                 stats.addFailDetail(String.format("文件：%s 失败，失败原因：加载 MHT 文件失败: %s",
                         fileInfo.getName(), e.getMessage()));
+                recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED,
+                        "加载 MHT 文件失败: " + e.getMessage(), List.of());
             } finally {
                 fireProgress(i + 1, mhtFiles.size(), fileInfo.getName(), 1.0);
             }
@@ -174,24 +181,27 @@ public class ImageBatchProcessor extends BatchProcessor {
             }
 
             var handler = new MergedOutputHandler();
-            setupMergedOutput(outputFolder, mhtFiles, firstParsed, stats, handler, mergedOutputName);
+            String mergedNameWarning =
+                    setupMergedOutput(outputFolder, mhtFiles, firstParsed, stats, handler, mergedOutputName);
             var provider = new StreamingProvider(mimeParser, mhtFiles, firstParsed);
-            return processUnified(mhtFiles, outputFolder, provider, handler, stats, 0.35, 0.25);
+            return processUnified(mhtFiles, outputFolder, provider, handler, stats, 0.35, 0.25,
+                    mergedNameWarning);
         } else {
             log.info("流式单独输出模式：共 {} 个文件待处理", mhtFiles.size());
             log.info("========================================");
             var handler = new SeparateOutputHandler(outputFolder);
             var provider = new StreamingProvider(mimeParser, mhtFiles, null);
-            return processUnified(mhtFiles, outputFolder, provider, handler, stats, 0.3, 0.3);
+            return processUnified(mhtFiles, outputFolder, provider, handler, stats, 0.3, 0.3, null);
         }
     }
 
     // ==================== 合并输出设置 ====================
 
-    private void setupMergedOutput(String outputFolder, List<MhtFileInfo> mhtFiles,
-                                    MimeParser.ParsedMht firstParsed, ProcessStats stats,
-                                    MergedOutputHandler handler, String explicitName) {
+    private String setupMergedOutput(String outputFolder, List<MhtFileInfo> mhtFiles,
+                                     MimeParser.ParsedMht firstParsed, ProcessStats stats,
+                                     MergedOutputHandler handler, String explicitName) {
         String folderName = explicitName;
+        String nameWarning = null;
         if (folderName != null && !folderName.isEmpty()) {
             folderName = SanitizeUtils.sanitize(folderName);
             if (folderName.equals("unnamed")) {
@@ -199,7 +209,18 @@ public class ImageBatchProcessor extends BatchProcessor {
             }
         }
         if (folderName == null) {
-            folderName = determineMergedFolderName(firstParsed, mhtFiles, stats);
+            folderName = determineMergedFolderName(firstParsed, config.isEnableNameExtraction(),
+                    config.getImageNameStartMarker(), config.getImageNameEndMarker());
+            if (folderName == null) {
+                folderName = determineDefaultFolderName(config.getInputFolder());
+                if (config.isEnableNameExtraction() && firstParsed != null && firstParsed.getHtmlContent() != null) {
+                    nameWarning = String.format("未从第一个文件提取到标题，使用默认名称：%s", folderName);
+                    stats.incrementWarn();
+                    stats.addWarnDetail(String.format("文件：%s 出现警告，警告信息：%s",
+                            mhtFiles.get(0).getName(), nameWarning));
+                    log.warn("[警告] 未从第一个文件提取到标题，使用默认名称：{}", folderName);
+                }
+            }
         }
         String mergedDir = Paths.get(outputFolder, folderName).toString();
         FileUtils.ensureDirectory(mergedDir);
@@ -208,13 +229,15 @@ public class ImageBatchProcessor extends BatchProcessor {
         log.info("合并输出模式：所有图片合并到目录: {}", mergedDir);
         log.info("共 {} 个文件待处理", mhtFiles.size());
         log.info("========================================");
+        return nameWarning;
     }
 
     // ==================== 统一处理循环 ====================
 
     private ProcessStats processUnified(List<MhtFileInfo> mhtFiles, String outputFolder,
                                          ParsedMhtProvider parseProvider, ImageOutputHandler outputHandler,
-                                         ProcessStats stats, double extractionBaseProgress, double extractionRange) {
+                                         ProcessStats stats, double extractionBaseProgress,
+                                         double extractionRange, String mergedNameWarning) {
         int total = mhtFiles.size();
         int totalImageCount = 0;
 
@@ -238,6 +261,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                     log.warn("文件 {} 无法解析，跳过", name);
                     stats.incrementSkip();
                     stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：无法解析", name));
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "无法解析", List.of());
                     fireProgress(idx, total, name, 1.0);
                     continue;
                 }
@@ -247,6 +271,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                     log.info("[跳过] 无图片内容：{}", name);
                     stats.incrementSkip();
                     stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：无图片内容", name));
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "无图片内容", List.of());
                     fireProgress(idx, total, name, 1.0);
                     continue;
                 }
@@ -262,12 +287,14 @@ public class ImageBatchProcessor extends BatchProcessor {
                 var images = imageExtractor.extractImages(
                         progress -> fireProgress(fi + 1, total, fn,
                                 extractionBaseProgress + extractionRange * progress));
+                List<String> fileWarnings = new ArrayList<>(imageExtractor.getLastWarnings());
                 reportExtractorWarnings(name, imageExtractor, stats);
 
                 if (images.isEmpty()) {
                     log.info("[跳过] 未提取到图片：{}", name);
                     stats.incrementSkip();
                     stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：未提取到图片", name));
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "未提取到图片", fileWarnings);
                     fireProgress(idx, total, name, 1.0);
                     continue;
                 }
@@ -285,14 +312,21 @@ public class ImageBatchProcessor extends BatchProcessor {
                 if (saved > 0) {
                     totalImageCount += saved;
                 }
+                recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SUCCESS, null, fileWarnings);
 
             } catch (Exception e) {
                 stats.incrementFail();
                 stats.addFailDetail(String.format("文件：%s 失败，失败原因：%s", name, e.getMessage()));
+                recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, e.getMessage(), List.of());
                 log.error("[异常] 处理文件失败：{}", name, e);
             } finally {
                 fireProgress(idx, total, name, 1.0);
             }
+        }
+
+        // 合并目录命名警告（未从第一个文件提取到标题）并入该文件结果
+        if (mergedNameWarning != null) {
+            stats.attachWarningTo(mhtFiles.get(0).getPath(), mergedNameWarning);
         }
 
         outputHandler.afterAll(outputFolder);
@@ -484,22 +518,6 @@ public class ImageBatchProcessor extends BatchProcessor {
         if (config.isHighSpeedMemoryMode()) {
             log.info("高速内存模式：已启用");
         }
-    }
-
-    private String determineMergedFolderName(MimeParser.ParsedMht firstParsed,
-                                             List<MhtFileInfo> mhtFiles, ProcessStats stats) {
-        String folderName = determineMergedFolderName(firstParsed, config.isEnableNameExtraction(),
-                config.getImageNameStartMarker(), config.getImageNameEndMarker());
-        if (folderName == null) {
-            folderName = determineDefaultFolderName(config.getInputFolder());
-            if (config.isEnableNameExtraction() && firstParsed != null && firstParsed.getHtmlContent() != null) {
-                stats.incrementWarn();
-                stats.addWarnDetail(String.format("文件：%s 出现警告，警告信息：未从第一个文件提取到标题，使用默认名称：%s",
-                        mhtFiles.get(0).getName(), folderName));
-                log.warn("[警告] 未从第一个文件提取到标题，使用默认名称：{}", folderName);
-            }
-        }
-        return folderName;
     }
 
     /**

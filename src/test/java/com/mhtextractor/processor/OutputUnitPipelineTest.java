@@ -1,6 +1,7 @@
 package com.mhtextractor.processor;
 
 import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.OutputUnitPlanner;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,7 +29,11 @@ class OutputUnitPipelineTest {
     @TempDir
     Path tmp;
 
-    private record TItem(String path, String source, boolean removed) {
+    private record TItem(String path, String source, boolean removed,
+                         AppConfig textParams, AppConfig imageParams) {
+        TItem(String path, String source, boolean removed) {
+            this(path, source, removed, null, null);
+        }
     }
 
     private static final OutputUnitPlanner.ItemView<TItem> VIEW = new OutputUnitPlanner.ItemView<>() {
@@ -44,6 +50,16 @@ class OutputUnitPipelineTest {
         @Override
         public boolean removed(TItem item) {
             return item.removed();
+        }
+
+        @Override
+        public AppConfig textItemParams(TItem item) {
+            return item.textParams();
+        }
+
+        @Override
+        public AppConfig imageItemParams(TItem item) {
+            return item.imageParams();
         }
     };
 
@@ -184,6 +200,89 @@ class OutputUnitPipelineTest {
         }
         assertTrue(session.resolve("组1.txt").toFile().exists());
         assertTrue(session.resolve("组2.txt").toFile().exists());
+    }
+
+    // ==================== 提取结果记录（提取结果状态需求） ====================
+
+    private static Map<String, FileResult> resultsByName(BatchProcessor.ProcessStats stats) {
+        Map<String, FileResult> m = new HashMap<>();
+        for (FileResult r : stats.getFileResults()) {
+            m.put(new File(r.path()).getName(), r);
+        }
+        return m;
+    }
+
+    @Test
+    void extractResultsRecordedPerFileOutcome() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path ok = writeTextMht(source, "ok.mht", "正常内容 hello world");
+        Path empty = writeTextMht(source, "empty.mht", "");
+        Path warn = writeTextMht(source, "warn.mht", "带警告的内容 abc");
+        Path session = Files.createDirectories(tmp.resolve("S"));
+
+        // 单元一：无标记配置 → ok 成功（SUCCESS）、empty 跳过（SKIPPED）
+        List<Object> unit1Data = List.of(
+                new TItem(ok.toString(), source.toString(), false),
+                new TItem(empty.toString(), source.toString(), false));
+        List<OutputUnitPlanner.OutputUnit> u1 =
+                OutputUnitPlanner.plan(unit1Data, VIEW, false, new AppConfig(), null, session.toString());
+        assertEquals(1, u1.size());
+        TextBatchProcessor p1 = new TextBatchProcessor(u1.get(0).getParams());
+        BatchProcessor.ProcessStats s1 = p1.processMerged(
+                BatchProcessor.buildMhtFileInfoList(u1.get(0).getPaths()),
+                u1.get(0).getOutputPath(), null, Map.of());
+        assertEquals(1, s1.getSuccessCount());
+        assertEquals(1, s1.getSkipCount());
+        Map<String, FileResult> r1 = resultsByName(s1);
+        assertEquals(ExtractOutcome.SUCCESS, r1.get("ok.mht").outcome());
+        assertEquals(ExtractOutcome.SKIPPED, r1.get("empty.mht").outcome());
+
+        // 单元二：内容限定标记配置但不存在 → HtmlUtils 警告（起始标记未找到）→ SUCCESS_WARNED
+        AppConfig markers = new AppConfig();
+        markers.setStartMarker("___不存在的起始标记___");
+        markers.setEndMarker("___不存在的结束标记___");
+        Path session2 = Files.createDirectories(tmp.resolve("S2"));
+        List<Object> unit2Data = List.of(new TItem(warn.toString(), source.toString(), false));
+        List<OutputUnitPlanner.OutputUnit> u2 =
+                OutputUnitPlanner.plan(unit2Data, VIEW, false, markers, null, session2.toString());
+        assertEquals(1, u2.size());
+        TextBatchProcessor p2 = new TextBatchProcessor(u2.get(0).getParams());
+        BatchProcessor.ProcessStats s2 = p2.processMerged(
+                BatchProcessor.buildMhtFileInfoList(u2.get(0).getPaths()),
+                u2.get(0).getOutputPath(), null, Map.of());
+        assertEquals(1, s2.getSuccessCount());
+        assertEquals(1, s2.getWarnCount());
+        FileResult wr = s2.getFileResults().get(0);
+        assertEquals(warn.toString(), wr.path());
+        assertEquals(ExtractOutcome.SUCCESS_WARNED, wr.outcome());
+        assertTrue(wr.warnings().stream().anyMatch(w -> w.contains("起始标记未找到")));
+    }
+
+    @Test
+    void imageModeSkipsTextOnlyMhtAndRecordsResult() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path textOnly = writeTextMht(source, "plain.mht", "只有文字没有图片");
+        Path session = Files.createDirectories(tmp.resolve("S"));
+
+        AppConfig imageGlobal = new AppConfig();
+        imageGlobal.setSingleOutputMode(true);
+        List<Object> dataOrder = List.of(new TItem(textOnly.toString(), source.toString(), false));
+        List<OutputUnitPlanner.OutputUnit> units =
+                OutputUnitPlanner.plan(dataOrder, VIEW, true, null, imageGlobal, session.toString());
+        assertEquals(1, units.size());
+        OutputUnitPlanner.OutputUnit unit = units.get(0);
+
+        ImageBatchProcessor processor = new ImageBatchProcessor(unit.getParams());
+        BatchProcessor.ProcessStats stats = processor.process(
+                BatchProcessor.buildMhtFileInfoList(unit.getPaths()), session.toString(),
+                unit.getOutputName(), null);
+        assertEquals(1, stats.getSkipCount());
+        assertEquals(1, stats.getFileResults().size());
+        FileResult r = stats.getFileResults().get(0);
+        assertEquals(textOnly.toString(), r.path());
+        assertEquals(ExtractOutcome.SKIPPED, r.outcome());
     }
 
     @Test

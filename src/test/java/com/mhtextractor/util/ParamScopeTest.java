@@ -9,7 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 参数作用域纯逻辑测试（F5 阶段 5）：目标路由、弹窗初值、生效参数覆盖层、背景色三态。
+ * 参数作用域纯逻辑测试（F5 阶段 5 + 条目独立参数需求）：目标路由、弹窗初值、
+ * 生效参数三层覆盖（组 &gt; 条目 &gt; 全局）、背景色三态。
  * 用 String 模拟项目对象，无需 JavaFX 运行时（GroupItem 属性为纯 JavaFX beans 属性，可直接实例化）。
  */
 class ParamScopeTest {
@@ -84,13 +85,42 @@ class ParamScopeTest {
                 ParamScope.initialParams(ParamScope.GLOBAL, true, textGlobal, imageGlobal));
     }
 
-    // ==================== 生效参数（6.5 覆盖层） ====================
+    @Test
+    void initialParamsItemTargetReadsItemParamsWithGlobalFallback() {
+        AppConfig itemCfg = cfg();
+        AppConfig global = cfg();
+        ParamScope.ItemTarget<String> t = new ParamScope.ItemTarget<>("条目", itemCfg, null);
+        assertSame(itemCfg, ParamScope.initialParams(t, false, global, null));
+        assertSame(global, ParamScope.initialParams(t, true, null, global));
+        assertNull(ParamScope.initialParams(new ParamScope.ItemTarget<>("条目", null, null),
+                false, null, null));
+    }
+
+    // ==================== 生效参数（三层覆盖：组 > 条目 > 全局） ====================
 
     @Test
     void effectiveParamsTopLevelUsesGlobal() {
         AppConfig global = cfg();
-        assertSame(global, ParamScope.effectiveParams(null, false, global, null));
-        assertNull(ParamScope.effectiveParams(null, false, null, null));
+        assertSame(global, ParamScope.effectiveParams(null, null, null, false, global, null));
+        assertNull(ParamScope.effectiveParams(null, null, null, false, null, null));
+    }
+
+    @Test
+    void effectiveParamsItemOverridesGlobal() {
+        AppConfig global = cfg();
+        AppConfig itemCfg = cfg();
+        assertSame(itemCfg, ParamScope.effectiveParams(null, itemCfg, null, false, global, null));
+        assertSame(itemCfg, ParamScope.effectiveParams(null, null, itemCfg, true, null, global));
+    }
+
+    @Test
+    void effectiveParamsGroupBeatsItemAndGlobal() {
+        GroupItem<String> g = group(1, "组1");
+        AppConfig groupCfg = cfg();
+        g.setTextParamsCache(groupCfg);
+        AppConfig itemCfg = cfg();
+        AppConfig global = cfg();
+        assertSame(groupCfg, ParamScope.effectiveParams(g, itemCfg, null, false, global, null));
     }
 
     @Test
@@ -98,15 +128,15 @@ class ParamScopeTest {
         GroupItem<String> g = group(1, "组1");
         AppConfig groupCfg = cfg();
         g.setTextParamsCache(groupCfg);
-        assertSame(groupCfg, ParamScope.effectiveParams(g, false, cfg(), null));
+        assertSame(groupCfg, ParamScope.effectiveParams(g, null, null, false, cfg(), null));
     }
 
     @Test
     void effectiveParamsGroupUnsetInheritsGlobal() {
         GroupItem<String> g = group(1, "组1");
         AppConfig global = cfg();
-        assertSame(global, ParamScope.effectiveParams(g, false, global, null));
-        assertNull(ParamScope.effectiveParams(g, false, null, null));
+        assertSame(global, ParamScope.effectiveParams(g, null, null, false, global, null));
+        assertNull(ParamScope.effectiveParams(g, null, null, false, null, null));
     }
 
     @Test
@@ -116,18 +146,28 @@ class ParamScopeTest {
         g.setTextParamsCache(textCfg);
         AppConfig imageCfg = cfg();
         g.setImageParamsCache(imageCfg);
-        assertSame(textCfg, ParamScope.effectiveParams(g, false, null, null));
-        assertSame(imageCfg, ParamScope.effectiveParams(g, true, null, null));
+        assertSame(textCfg, ParamScope.effectiveParams(g, null, null, false, null, null));
+        assertSame(imageCfg, ParamScope.effectiveParams(g, null, null, true, null, null));
     }
 
-    // ==================== 背景色三态（8.5） ====================
+    @Test
+    void effectiveParamsItemModeIsolated() {
+        AppConfig textCfg = cfg();
+        AppConfig imageCfg = cfg();
+        assertSame(textCfg, ParamScope.effectiveParams(null, textCfg, imageCfg, false, null, null));
+        assertSame(imageCfg, ParamScope.effectiveParams(null, textCfg, imageCfg, true, null, null));
+    }
+
+    // ==================== 背景色三态（8.5 + 条目独立参数） ====================
 
     @Test
     void backgroundStatusNoEffectiveParams() {
         GroupItem<String> g = group(1, "组1");
         // 顶层项目且全局未确认；组内成员且组未设置、全局也未确认
-        assertEquals(ParamScope.Status.NONE, ParamScope.backgroundStatus(null, false, null, null));
-        assertEquals(ParamScope.Status.NONE, ParamScope.backgroundStatus(g, false, null, null));
+        assertEquals(ParamScope.Status.NONE,
+                ParamScope.backgroundStatus(null, null, null, false, null, null));
+        assertEquals(ParamScope.Status.NONE,
+                ParamScope.backgroundStatus(g, null, null, false, null, null));
     }
 
     @Test
@@ -136,25 +176,42 @@ class ParamScopeTest {
         AppConfig global = cfg();
         // 顶层项目且全局已确认；组内成员继承全局
         assertEquals(ParamScope.Status.GLOBAL,
-                ParamScope.backgroundStatus(null, false, global, null));
-        assertEquals(ParamScope.Status.GLOBAL, ParamScope.backgroundStatus(g, false, global, null));
+                ParamScope.backgroundStatus(null, null, null, false, global, null));
+        assertEquals(ParamScope.Status.GLOBAL,
+                ParamScope.backgroundStatus(g, null, null, false, global, null));
     }
 
     @Test
     void backgroundStatusEffectiveIsGroup() {
         GroupItem<String> g = group(1, "组1");
         g.setTextParamsCache(cfg());
-        // 组参数已设置 → 深绿（与全局是否确认无关）
-        assertEquals(ParamScope.Status.GROUP, ParamScope.backgroundStatus(g, false, null, null));
-        assertEquals(ParamScope.Status.GROUP, ParamScope.backgroundStatus(g, false, cfg(), null));
+        // 组参数已设置 → 浅蓝（与全局是否确认无关）
+        assertEquals(ParamScope.Status.GROUP,
+                ParamScope.backgroundStatus(g, null, null, false, null, null));
+        assertEquals(ParamScope.Status.GROUP,
+                ParamScope.backgroundStatus(g, null, null, false, cfg(), null));
+    }
+
+    @Test
+    void backgroundStatusEffectiveIsItem() {
+        // 条目级参数已设置 → 浅蓝（与全局是否确认无关）
+        assertEquals(ParamScope.Status.GROUP,
+                ParamScope.backgroundStatus(null, cfg(), null, false, null, null));
+        assertEquals(ParamScope.Status.GROUP,
+                ParamScope.backgroundStatus(null, null, cfg(), true, null, null));
+        // 模式隔离：仅文本条目参数，图片模式无 → 现状色
+        assertEquals(ParamScope.Status.NONE,
+                ParamScope.backgroundStatus(null, cfg(), null, true, null, null));
     }
 
     @Test
     void backgroundStatusModeIsolated() {
         GroupItem<String> g = group(1, "组1");
         g.setImageParamsCache(cfg());
-        // 组仅设置图片参数：图片模式深绿；文本模式按全局（未确认 → 现状色）
-        assertEquals(ParamScope.Status.GROUP, ParamScope.backgroundStatus(g, true, null, null));
-        assertEquals(ParamScope.Status.NONE, ParamScope.backgroundStatus(g, false, null, null));
+        // 组仅设置图片参数：图片模式浅蓝；文本模式按全局（未确认 → 现状色）
+        assertEquals(ParamScope.Status.GROUP,
+                ParamScope.backgroundStatus(g, null, null, true, null, null));
+        assertEquals(ParamScope.Status.NONE,
+                ParamScope.backgroundStatus(g, null, null, false, null, null));
     }
 }

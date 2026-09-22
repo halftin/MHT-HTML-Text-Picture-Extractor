@@ -1,8 +1,12 @@
 package com.mhtextractor.util;
 
+import com.mhtextractor.config.AppConfig;
+
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 撤销栈（F4）：按"操作类型 + 受影响项目"记录压栈，后进先出弹出。深度 35 步，超出时丢弃最旧记录。
@@ -10,7 +14,8 @@ import java.util.List;
  * <p>记录类型：REMOVE（隐藏式移除，含空组销毁）、IMPORT（增量导入）、
  * GROUP（合并为组，含操作前结构快照）、UNGROUP（拆分组，组名/参数随组对象保留）、
  * REMOVE_GROUP（整组移除，组名/参数随组对象保留）、REORDER（拖拽排序，含操作前结构快照）、
- * MERGE_GROUPS（拖拽组合并，含操作前结构快照，被拖组名/参数随组对象保留）。</p>
+ * MERGE_GROUPS（拖拽组合并，含操作前结构快照，被拖组名/参数随组对象保留）、
+ * APPLY_GLOBAL（提取参数应用到全局，含应用前全局参数与全部独立参数快照）。</p>
  *
  * @param <T> 列表项目类型
  */
@@ -19,8 +24,10 @@ public final class UndoManager<T> {
     /** 撤销栈深度上限（F4） */
     public static final int DEFAULT_LIMIT = 35;
 
-    /** 可撤销操作类型（F4 5.4 + R12 + 阶段 7） */
-    public enum RecordType { REMOVE, IMPORT, GROUP, UNGROUP, REMOVE_GROUP, REORDER, MERGE_GROUPS }
+    /** 可撤销操作类型（F4 5.4 + R12 + 阶段 7 + 条目独立参数需求） */
+    public enum RecordType {
+        REMOVE, IMPORT, GROUP, UNGROUP, REMOVE_GROUP, REORDER, MERGE_GROUPS, APPLY_GLOBAL, PARAM_SET
+    }
 
     /**
      * 一条撤销记录。
@@ -32,21 +39,50 @@ public final class UndoManager<T> {
      * @param destroyedGroups  REMOVE/REMOVE_GROUP：因成员全部被移除而销毁的组（撤销时按索引恢复）
      * @param destroyedIndexes 与 destroyedGroups 一一对应的顶层索引
      * @param structureBefore  GROUP/REORDER/MERGE_GROUPS：操作前的顶层结构快照（撤销时恢复用）
+     * @param applyGlobalImageMode            APPLY_GLOBAL：应用的是图片模式（false = 文本模式）
+     * @param applyGlobalBefore               APPLY_GLOBAL：应用前的该模式全局参数（null = 未确认）
+     * @param applyGlobalItemParamsBefore     APPLY_GLOBAL：应用前各条目该模式条目级参数快照（path → 参数，值可为 null）
+     * @param applyGlobalGroupParamsBefore    APPLY_GLOBAL：应用前各组该模式参数快照（groupNo → 参数，值可为 null）
+     * @param paramImageMode                  PARAM_SET：设置的是图片模式（false = 文本模式）
+     * @param paramTargetPath                 PARAM_SET：目标条目路径（条目级参数；全局时为 null）
+     * @param paramTargetGroupNo              PARAM_SET：目标组号（组参数；全局/条目级时为 null）
+     * @param paramBefore                     PARAM_SET：设置前的该模式参数（null = 未设置）
      */
     public record Record<T>(RecordType type, List<T> items,
                             GroupItem<T> group, int groupIndex,
                             List<GroupItem<T>> destroyedGroups, List<Integer> destroyedIndexes,
-                            List<Object> structureBefore) {
+                            List<Object> structureBefore,
+                            boolean applyGlobalImageMode,
+                            AppConfig applyGlobalBefore,
+                            Map<String, AppConfig> applyGlobalItemParamsBefore,
+                            Map<Integer, AppConfig> applyGlobalGroupParamsBefore,
+                            boolean paramImageMode,
+                            String paramTargetPath,
+                            Integer paramTargetGroupNo,
+                            AppConfig paramBefore) {
         public Record {
             items = List.copyOf(items);
             destroyedGroups = List.copyOf(destroyedGroups);
             destroyedIndexes = List.copyOf(destroyedIndexes);
             structureBefore = List.copyOf(structureBefore);
+            applyGlobalItemParamsBefore = applyGlobalItemParamsBefore == null
+                    ? Map.of() : new HashMap<>(applyGlobalItemParamsBefore);
+            applyGlobalGroupParamsBefore = applyGlobalGroupParamsBefore == null
+                    ? Map.of() : new HashMap<>(applyGlobalGroupParamsBefore);
         }
 
         /** 仅含类型与项目的记录（不含分组载荷） */
         public Record(RecordType type, List<T> items) {
-            this(type, items, null, -1, List.of(), List.of(), List.of());
+            this(type, items, null, -1, List.of(), List.of(), List.of(),
+                    false, null, null, null, false, null, null, null);
+        }
+
+        /** 结构类记录（GROUP/UNGROUP/REMOVE_GROUP/REORDER/MERGE_GROUPS） */
+        public Record(RecordType type, List<T> items, GroupItem<T> group, int groupIndex,
+                      List<GroupItem<T>> destroyedGroups, List<Integer> destroyedIndexes,
+                      List<Object> structureBefore) {
+            this(type, items, group, groupIndex, destroyedGroups, destroyedIndexes, structureBefore,
+                    false, null, null, null, false, null, null, null);
         }
     }
 

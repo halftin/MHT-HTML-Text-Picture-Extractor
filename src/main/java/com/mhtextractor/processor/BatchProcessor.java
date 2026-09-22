@@ -2,6 +2,7 @@ package com.mhtextractor.processor;
 
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.WarningProvider;
+import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.FileUtils;
 import lombok.Data;
 import lombok.Setter;
@@ -89,6 +90,31 @@ public abstract class BatchProcessor {
         private final List<String> failDetails = new ArrayList<>();
         private final List<String> skipDetails = new ArrayList<>();
         private final List<String> warnDetails = new ArrayList<>();
+        /** 结构化单文件结果（《提取结果状态需求文档.md》）：提取结束后按路径回写列表条目背景色 */
+        private final List<FileResult> fileResults = new ArrayList<>();
+
+        public void addFileResult(FileResult result) {
+            fileResults.add(result);
+        }
+
+        public void addAllFileResults(List<FileResult> results) {
+            fileResults.addAll(results);
+        }
+
+        /** 把警告并入指定路径的首条结果（SUCCESS 升级为 SUCCESS_WARNED）；无该路径记录则忽略 */
+        public void attachWarningTo(String path, String warning) {
+            for (int i = 0; i < fileResults.size(); i++) {
+                FileResult r = fileResults.get(i);
+                if (r.path().equals(path)) {
+                    List<String> w = new ArrayList<>(r.warnings());
+                    w.add(warning);
+                    ExtractOutcome o = r.outcome() == ExtractOutcome.SUCCESS
+                            ? ExtractOutcome.SUCCESS_WARNED : r.outcome();
+                    fileResults.set(i, new FileResult(r.path(), o, r.message(), w));
+                    return;
+                }
+            }
+        }
 
         public void addFailDetail(String detail) {
             failDetails.add(detail);
@@ -235,5 +261,17 @@ public abstract class BatchProcessor {
             stats.incrementWarn();
             stats.addWarnDetail(String.format("文件：%s 出现警告，警告信息：%s", fileName, warning));
         }
+    }
+
+    /**
+     * 记录单文件结果（《提取结果状态需求文档.md》）：警告非空时 SUCCESS 自动升级为 SUCCESS_WARNED。
+     * message 为失败/跳过原因（成功时传 null）；warnings 为该文件全部警告。
+     */
+    protected void recordFileResult(ProcessStats stats, String path, ExtractOutcome outcome,
+                                    String message, List<String> warnings) {
+        if (outcome == ExtractOutcome.SUCCESS && !warnings.isEmpty()) {
+            outcome = ExtractOutcome.SUCCESS_WARNED;
+        }
+        stats.addFileResult(new FileResult(path, outcome, message, warnings));
     }
 }

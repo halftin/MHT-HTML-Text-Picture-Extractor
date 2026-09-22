@@ -5,10 +5,13 @@ import com.mhtextractor.core.ChapterGenerator;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.TextExtractor;
 import com.mhtextractor.output.FileWriter;
+import com.mhtextractor.util.ExtractOutcome;
+import com.mhtextractor.util.SanitizeUtils;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +53,7 @@ public class TextBatchProcessor extends BatchProcessor {
             return stats;
         }
 
-        return processFiles(orderedFiles, stats, i -> outputTxtPath, overrides);
+        return processFiles(orderedFiles, stats, (i, parsed) -> outputTxtPath, overrides);
     }
 
     /**
@@ -78,18 +81,37 @@ public class TextBatchProcessor extends BatchProcessor {
             return stats;
         }
 
-        return processFiles(orderedFiles, stats,
-                i -> Paths.get(outputFolder, getOutputDirName(i.getName()) + ".txt").toString(), overrides);
+        // 条目独立参数需求拍板：单独输出文件名——启用标题提取且提取到标题时用标题（sanitize），
+        // 否则用原始 mht 文件名
+        return processFiles(orderedFiles, stats, (i, parsed) -> {
+            String base = getOutputDirName(i.getName());
+            if (config.isEnableTitleExtraction() && parsed != null && parsed.getHtmlContent() != null
+                    && config.getTitleStartMarker() != null && !config.getTitleStartMarker().isEmpty()) {
+                try {
+                    String title = new TextExtractor(parsed).extractTitle(
+                            config.getTitleStartMarker(), config.getTitleEndMarker(), config.isTitleUseRegex());
+                    if (title != null && !title.trim().isEmpty()) {
+                        String s = SanitizeUtils.sanitize(title.trim());
+                        if (!s.isEmpty() && !s.equals("unnamed")) {
+                            base = s;
+                        }
+                    }
+                } catch (Exception e) {
+                    log.debug("提取标题失败（文件名回退原名）：{}", e.getMessage(), e);
+                }
+            }
+            return Paths.get(outputFolder, base + ".txt").toString();
+        }, overrides);
     }
 
     /**
      * 核心处理循环（合并与单独模式的共用逻辑）
      *
-     * @param outputPathResolver 根据 MhtFileInfo 计算输出路径
+     * @param outputPathResolver 根据 MhtFileInfo 与解析结果计算输出路径
      * @param overrides 每文件覆盖项（按文件路径索引）
      */
     private ProcessStats processFiles(List<MhtFileInfo> mhtFiles, ProcessStats stats,
-                                      java.util.function.Function<MhtFileInfo, String> outputPathResolver,
+                                      java.util.function.BiFunction<MhtFileInfo, MimeParser.ParsedMht, String> outputPathResolver,
                                       Map<String, PerFileOverrides> overrides) {
         stats.setTotalFiles(mhtFiles.size());
 
@@ -122,6 +144,7 @@ public class TextBatchProcessor extends BatchProcessor {
                 if (parsed.getHtmlContent() == null) {
                     stats.incrementSkip();
                     stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：无法解析", fileInfo.getName()));
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "无法解析", List.of());
                     log.info("[跳过] 无法解析：{}", fileInfo.getName());
                     fireProgress(idx, mhtFiles.size(), fileInfo.getName(), 1.0);
                     continue;
@@ -132,11 +155,13 @@ public class TextBatchProcessor extends BatchProcessor {
                 TextExtractor textExtractor = new TextExtractor(parsed);
                 String text = textExtractor.extractText(config.isAutoFixEncoding(),
                         config.getStartMarker(), config.getEndMarker(), config.isUseRegex());
+                List<String> fileWarnings = new ArrayList<>(textExtractor.getLastWarnings());
                 reportExtractorWarnings(fileInfo.getName(), textExtractor, stats);
 
                 if (text == null || text.trim().isEmpty()) {
                     stats.incrementSkip();
                     stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：内容为空", fileInfo.getName()));
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "内容为空", fileWarnings);
                     log.info("[跳过] 内容为空：{}", fileInfo.getName());
                     fireProgress(idx, mhtFiles.size(), fileInfo.getName(), 1.0);
                     continue;
@@ -148,7 +173,7 @@ public class TextBatchProcessor extends BatchProcessor {
                 PerFileOverrides ov = overrides.getOrDefault(fileInfo.getPath(), PerFileOverrides.DEFAULTS);
                 boolean withChapter = !addNumber || ov.chapterEnabled();
                 String chapterHeader = withChapter
-                        ? buildChapterHeaderFromParsed(parsed, fileInfo.getName(), chapterIndex.get(), stats)
+                        ? buildChapterHeaderFromParsed(parsed, fileInfo.getName(), chapterIndex.get(), stats, fileWarnings)
                         : null;
 
                 if (addNumber && withChapter) {
@@ -157,7 +182,7 @@ public class TextBatchProcessor extends BatchProcessor {
 
                 // 写入文件
                 fireProgress(idx, mhtFiles.size(), fileInfo.getName(), 0.9);
-                String outputPath = outputPathResolver.apply(fileInfo);
+                String outputPath = outputPathResolver.apply(fileInfo, parsed);
                 String startTemplate = config.isEnableTemplate() ? config.getStartTemplate() : "";
                 String endTemplate = config.isEnableTemplate() ? config.getEndTemplate() : "";
                 boolean ok = FileWriter.appendTextToFile(
@@ -166,14 +191,17 @@ public class TextBatchProcessor extends BatchProcessor {
 
                 if (ok) {
                     stats.incrementSuccess();
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SUCCESS, null, fileWarnings);
                 } else {
                     stats.incrementFail();
                     stats.addFailDetail(String.format("文件：%s 失败，失败原因：写入文件失败", fileInfo.getName()));
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, "写入文件失败", fileWarnings);
                 }
 
             } catch (Exception e) {
                 stats.incrementFail();
                 stats.addFailDetail(String.format("文件：%s 失败，失败原因：%s", fileInfo.getName(), e.getMessage()));
+                recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, e.getMessage(), List.of());
                 log.error("[异常] 处理文件失败：{}", fileInfo.getName(), e);
             } finally {
                 fireProgress(i + 1, mhtFiles.size(), fileInfo.getName(), 1.0);
@@ -195,7 +223,8 @@ public class TextBatchProcessor extends BatchProcessor {
     }
 
     private String buildChapterHeaderFromParsed(MimeParser.ParsedMht parsed, String fileName,
-                                                int chapterIndex, ProcessStats stats) {
+                                                int chapterIndex, ProcessStats stats,
+                                                List<String> fileWarnings) {
         String extractedTitle = null;
         boolean enableTitleExtract = config.isEnableTitleExtraction();
         String titleStart = config.getTitleStartMarker();
@@ -212,6 +241,7 @@ public class TextBatchProcessor extends BatchProcessor {
                     stats.incrementWarn();
                     stats.addWarnDetail(String.format("文件：%s 出现警告，警告信息：未提取到标题（标记: %s ... %s）",
                             fileName, titleStart, titleEnd));
+                    fileWarnings.add(String.format("未提取到标题（标记: %s ... %s）", titleStart, titleEnd));
                     extractedTitle = null;
                 }
             } catch (Exception e) {

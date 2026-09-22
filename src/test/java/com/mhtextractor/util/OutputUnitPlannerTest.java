@@ -21,7 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class OutputUnitPlannerTest {
 
-    private record TItem(String path, String source, boolean removed) {
+    private record TItem(String path, String source, boolean removed,
+                         AppConfig textParams, AppConfig imageParams) {
+        TItem(String path, String source, boolean removed) {
+            this(path, source, removed, null, null);
+        }
     }
 
     private static final OutputUnitPlanner.ItemView<TItem> VIEW = new OutputUnitPlanner.ItemView<>() {
@@ -39,10 +43,24 @@ class OutputUnitPlannerTest {
         public boolean removed(TItem item) {
             return item.removed();
         }
+
+        @Override
+        public AppConfig textItemParams(TItem item) {
+            return item.textParams();
+        }
+
+        @Override
+        public AppConfig imageItemParams(TItem item) {
+            return item.imageParams();
+        }
     };
 
     private static TItem item(String path, String source) {
-        return new TItem(path, source, false);
+        return new TItem(path, source, false, null, null);
+    }
+
+    private static TItem item(String path, String source, AppConfig textParams, AppConfig imageParams) {
+        return new TItem(path, source, false, textParams, imageParams);
     }
 
     private static List<Object> order(Object... os) {
@@ -241,5 +259,75 @@ class OutputUnitPlannerTest {
         AppConfig p = units.get(0).getParams();
         assertNotNull(p);
         assertFalse(p.isSeparateFiles()); // 默认合并 → 与改造前默认行为一致
+    }
+
+    // ==================== 条目独立参数分桶（条目独立参数需求拍板） ====================
+
+    @Test
+    void ungroupedSameSourceDifferentParamsSplitUnitsWithSuffix() {
+        String source = "C:\\data\\小说A";
+        AppConfig paramsX = new AppConfig();
+        paramsX.setStartMarker("X");
+        AppConfig paramsY = new AppConfig();
+        paramsY.setStartMarker("Y");
+        List<OutputUnitPlanner.OutputUnit> units = plan(order(
+                item("C:\\data\\小说A\\1.mht", source, paramsX, null),
+                item("C:\\data\\小说A\\2.mht", source, paramsY, null)), false, null, null);
+        assertEquals(2, units.size());
+        assertEquals("小说A", units.get(0).getOutputName());
+        assertEquals("小说A(2)", units.get(1).getOutputName());
+        assertEquals(new File("S", "小说A.txt").getPath(), units.get(0).getOutputPath());
+        assertEquals(new File("S", "小说A(2).txt").getPath(), units.get(1).getOutputPath());
+        assertSame(paramsX, units.get(0).getParams());
+        assertSame(paramsY, units.get(1).getParams());
+    }
+
+    @Test
+    void ungroupedSameParamsContentMergesIntoOneUnit() {
+        String source = "C:\\data\\小说A";
+        AppConfig paramsX1 = new AppConfig();
+        paramsX1.setStartMarker("X");
+        AppConfig paramsX2 = new AppConfig();
+        paramsX2.setStartMarker("X"); // 内容相同 → 同桶
+        List<OutputUnitPlanner.OutputUnit> units = plan(order(
+                item("C:\\data\\小说A\\1.mht", source, paramsX1, null),
+                item("C:\\data\\小说A\\2.mht", source, paramsX2, null)), false, null, null);
+        assertEquals(1, units.size());
+        assertEquals(2, units.get(0).fileCount());
+        assertEquals("小说A", units.get(0).getOutputName());
+    }
+
+    @Test
+    void ungroupedSeparateModeSplitsByParamsOnly() {
+        AppConfig separate = new AppConfig();
+        separate.setSeparateFiles(true);
+        AppConfig merged = new AppConfig();
+        merged.setSeparateFiles(false);
+        List<OutputUnitPlanner.OutputUnit> units = plan(order(
+                item("A\\1.mht", "C:\\src\\A", separate, null),
+                item("A\\2.mht", "C:\\src\\A", merged, null)), false, null, null);
+        assertEquals(2, units.size());
+        // 单独输出桶：直写会话目录、输出名 null；合并输出桶：来源命名
+        assertNull(units.get(0).getOutputName());
+        assertEquals("S", units.get(0).getOutputPath());
+        assertTrue(units.get(0).getParams().isSeparateFiles());
+        assertEquals("A", units.get(1).getOutputName());
+        assertEquals(new File("S", "A.txt").getPath(), units.get(1).getOutputPath());
+        assertFalse(units.get(1).getParams().isSeparateFiles());
+    }
+
+    @Test
+    void itemParamsBeatsGlobalInUnitParams() {
+        AppConfig global = new AppConfig();
+        global.setStartMarker("GLOBAL");
+        AppConfig itemCfg = new AppConfig();
+        itemCfg.setStartMarker("ITEM");
+        List<OutputUnitPlanner.OutputUnit> units = plan(order(
+                item("A\\1.mht", "C:\\src\\A", itemCfg, null),
+                item("A\\2.mht", "C:\\src\\A")), false, global, null);
+        assertEquals(2, units.size());
+        // 参数内容不同 → 拆分；条目参数单元用条目参数，继承全局单元用全局
+        assertSame(itemCfg, units.get(0).getParams());
+        assertSame(global, units.get(1).getParams());
     }
 }
