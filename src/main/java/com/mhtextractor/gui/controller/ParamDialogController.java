@@ -189,7 +189,7 @@ public class ParamDialogController {
         this.imageMode = imageMode;
         this.target = target;
         String scope = target instanceof ParamScope.GroupTarget gt
-                ? "（" + gt.group().getName() + "）" : "（全局）";
+                ? "（" + gt.group().getName() + "）" : "";
         stage.setTitle("提取参数设置 — " + (imageMode ? "图片模式" : "文本模式") + scope);
         // 当前模式控件从目标初值初始化（组未设置时回退全局已确认参数，均无则用默认参数）；
         // 另一模式控件仍从全局已确认缓存初始化（隐藏不可见，两组隔离互不影响）

@@ -15,7 +15,9 @@ import java.util.Map;
  * GROUP（合并为组，含操作前结构快照）、UNGROUP（拆分组，组名/参数随组对象保留）、
  * REMOVE_GROUP（整组移除，组名/参数随组对象保留）、REORDER（拖拽排序，含操作前结构快照）、
  * MERGE_GROUPS（拖拽组合并，含操作前结构快照，被拖组名/参数随组对象保留）、
- * APPLY_GLOBAL（提取参数应用到全局，含应用前全局参数与全部独立参数快照）。</p>
+ * APPLY_GLOBAL（将参数应用到全局，含应用前全局参数与全部独立参数快照）、
+ * PARAM_SET（设置提取参数，条目/组/全局三作用域，含设置前参数）、
+ * CLEAR_PARAMS（清除参数，条目/组作用域，含清除前参数快照，一次撤销全部恢复）。</p>
  *
  * @param <T> 列表项目类型
  */
@@ -26,7 +28,7 @@ public final class UndoManager<T> {
 
     /** 可撤销操作类型（F4 5.4 + R12 + 阶段 7 + 条目独立参数需求） */
     public enum RecordType {
-        REMOVE, IMPORT, GROUP, UNGROUP, REMOVE_GROUP, REORDER, MERGE_GROUPS, APPLY_GLOBAL, PARAM_SET
+        REMOVE, IMPORT, GROUP, UNGROUP, REMOVE_GROUP, REORDER, MERGE_GROUPS, APPLY_GLOBAL, PARAM_SET, CLEAR_PARAMS
     }
 
     /**
@@ -47,6 +49,9 @@ public final class UndoManager<T> {
      * @param paramTargetPath                 PARAM_SET：目标条目路径（条目级参数；全局时为 null）
      * @param paramTargetGroupNo              PARAM_SET：目标组号（组参数；全局/条目级时为 null）
      * @param paramBefore                     PARAM_SET：设置前的该模式参数（null = 未设置）
+     * @param clearImageMode                  CLEAR_PARAMS：清除的是图片模式（false = 文本模式）
+     * @param clearItemParamsBefore           CLEAR_PARAMS：清除前各条目该模式条目级参数快照（path → 参数）
+     * @param clearGroupParamsBefore          CLEAR_PARAMS：清除前各组该模式参数快照（groupNo → 参数）
      */
     public record Record<T>(RecordType type, List<T> items,
                             GroupItem<T> group, int groupIndex,
@@ -59,7 +64,10 @@ public final class UndoManager<T> {
                             boolean paramImageMode,
                             String paramTargetPath,
                             Integer paramTargetGroupNo,
-                            AppConfig paramBefore) {
+                            AppConfig paramBefore,
+                            boolean clearImageMode,
+                            Map<String, AppConfig> clearItemParamsBefore,
+                            Map<Integer, AppConfig> clearGroupParamsBefore) {
         public Record {
             items = List.copyOf(items);
             destroyedGroups = List.copyOf(destroyedGroups);
@@ -69,12 +77,17 @@ public final class UndoManager<T> {
                     ? Map.of() : new HashMap<>(applyGlobalItemParamsBefore);
             applyGlobalGroupParamsBefore = applyGlobalGroupParamsBefore == null
                     ? Map.of() : new HashMap<>(applyGlobalGroupParamsBefore);
+            clearItemParamsBefore = clearItemParamsBefore == null
+                    ? Map.of() : new HashMap<>(clearItemParamsBefore);
+            clearGroupParamsBefore = clearGroupParamsBefore == null
+                    ? Map.of() : new HashMap<>(clearGroupParamsBefore);
         }
 
         /** 仅含类型与项目的记录（不含分组载荷） */
         public Record(RecordType type, List<T> items) {
             this(type, items, null, -1, List.of(), List.of(), List.of(),
-                    false, null, null, null, false, null, null, null);
+                    false, null, null, null, false, null, null, null,
+                    false, null, null);
         }
 
         /** 结构类记录（GROUP/UNGROUP/REMOVE_GROUP/REORDER/MERGE_GROUPS） */
@@ -82,7 +95,8 @@ public final class UndoManager<T> {
                       List<GroupItem<T>> destroyedGroups, List<Integer> destroyedIndexes,
                       List<Object> structureBefore) {
             this(type, items, group, groupIndex, destroyedGroups, destroyedIndexes, structureBefore,
-                    false, null, null, null, false, null, null, null);
+                    false, null, null, null, false, null, null, null,
+                    false, null, null);
         }
     }
 

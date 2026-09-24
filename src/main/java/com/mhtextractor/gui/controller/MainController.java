@@ -69,6 +69,7 @@ import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ToggleButton;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
@@ -106,6 +107,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -140,12 +142,17 @@ public class MainController {
     /** 提取结果背景画值（提取结果状态需求拍板，配色修订 2026-09-21）：浅红=失败/跳过；标准绿=成功；分割色=成功+警告（左1/3红右2/3绿） */
     private static final String EXTRACT_FAILED_PAINT = "#f8d7da";
     private static final String EXTRACT_FAILED_SELECTED_PAINT = "#e1cdcf";
-    private static final String EXTRACT_SUCCESS_PAINT = "#28a745";
-    private static final String EXTRACT_SUCCESS_SELECTED_PAINT = "#64b075";
+    private static final String EXTRACT_SUCCESS_PAINT = "#4CAF50";
+    private static final String EXTRACT_SUCCESS_SELECTED_PAINT = "#7AB57C";
     private static final String EXTRACT_WARNED_PAINT =
-            "linear-gradient(to right, #f8d7da 0%, #f8d7da 33%, #28a745 33%, #28a745 100%)";
+            "linear-gradient(to right, #f8d7da 0%, #f8d7da 33%, #4CAF50 33%, #4CAF50 100%)";
     private static final String EXTRACT_WARNED_SELECTED_PAINT =
-            "linear-gradient(to right, #e1cdcf 0%, #e1cdcf 33%, #64b075 33%, #64b075 100%)";
+            "linear-gradient(to right, #e1cdcf 0%, #e1cdcf 33%, #7AB57C 33%, #7AB57C 100%)";
+    /** 进度条活动样式类（进度条活动配色拍板 2026-09-24）：预解析=浅蓝；提取成功=绿；有警告=黄；有失败/跳过=浅红 */
+    private static final String STYLE_PROGRESS_PREPARSE = "progress-preparse";
+    private static final String STYLE_PROGRESS_EXTRACT_SUCCESS = "progress-extract-success";
+    private static final String STYLE_PROGRESS_EXTRACT_WARNED = "progress-extract-warned";
+    private static final String STYLE_PROGRESS_EXTRACT_FAILED = "progress-extract-failed";
 
     /** 行背景样式组装 */
     private static String rowStyle(String paint) {
@@ -271,6 +278,7 @@ public class MainController {
     };
 
     // ===== 顶部控制栏 =====
+    @FXML private ToggleGroup modeToggleGroup;
     @FXML private ToggleButton textModeToggle;
     @FXML private ToggleButton imageModeToggle;
     @FXML private TextField inputFolderField;
@@ -286,6 +294,7 @@ public class MainController {
     @FXML private Pane dragOverlay;
     // ===== 列表按钮行（移除/撤销/合并为组/拆分组；后两者阶段 4/6 启用） =====
     @FXML private Button removeButton;
+    @FXML private Button clearParamsButton;
     @FXML private Button undoButton;
     @FXML private Button groupButton;
     @FXML private Button ungroupButton;
@@ -384,6 +393,7 @@ public class MainController {
     private MenuItem ctxOpen;
     private MenuItem ctxOpenFolder;
     private MenuItem ctxParams;
+    private MenuItem ctxClearParams;
     private MenuItem ctxGroup;
     private MenuItem ctxUngroup;
     private MenuItem ctxRemove;
@@ -486,19 +496,9 @@ public class MainController {
             }
         });
 
-        // 2. 模式切换互斥（不再清空另一模式参数：GUI 状态与已确认缓存按模式隔离保留）
-        textModeToggle.selectedProperty().addListener((obs, old, newVal) -> {
-            if (newVal) {
-                imageModeToggle.setSelected(false);
-            }
-            onModeChanged();
-        });
-        imageModeToggle.selectedProperty().addListener((obs, old, newVal) -> {
-            if (newVal) {
-                textModeToggle.setSelected(false);
-            }
-            onModeChanged();
-        });
+        // 2. 模式切换：互斥由 modeToggleGroup 承担，点击已选按钮可取消回到"未选择"态；
+        //    不清空另一模式参数：GUI 状态与已确认缓存按模式隔离保留
+        modeToggleGroup.selectedToggleProperty().addListener((obs, old, newVal) -> onModeChanged());
 
         // 3. 目录/开关变更：刷新列表 + 持久化 GUI 状态
         inputFolderField.textProperty().addListener((obs, old, newVal) -> onInputFolderChanged());
@@ -718,6 +718,8 @@ public class MainController {
         openFolderAfterCompleteCheck.setDisable(!anyModeSelected);
         paramSettingsButton.setDisable(!anyModeSelected);
         updateStartButtonState();
+        // 清除参数拍板：按钮启用状态随当前模式刷新（同时修复"应用到全局"按钮切模式后陈旧态）
+        updateListButtons();
 
         // 预览工作区
         modeLabel.setText("模式：" + (imageModeToggle.isSelected() ? "图片"
@@ -735,6 +737,8 @@ public class MainController {
         if (anyModeSelected && anyVisibleItemHasEffectiveParams() && visibleCount() > 0) {
             startPreParse();
         }
+        // 方案A：切模式后同步进度条状态（新模式无参数条目 → 隐藏；否则显示新模式解析进度）
+        updateProgressStatus(parseToken);
     }
 
     private void showCurrentModeArea() {
@@ -829,7 +833,8 @@ public class MainController {
         }
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
                 null, -1, List.of(), List.of(), List.of(),
-                false, null, null, null, imageMode, item.path, null, before));
+                false, null, null, null, imageMode, item.path, null, before,
+                false, null, null));
         clearExtractOutcomes(List.of(item));
         clearPreviewCache(item);
         startPreParseFor(List.of(item));
@@ -850,7 +855,8 @@ public class MainController {
         }
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
                 null, -1, List.of(), List.of(), List.of(),
-                false, null, null, null, imageMode, null, null, before));
+                false, null, null, null, imageMode, null, null, before,
+                false, null, null));
         // 拍板：全局参数重新确认 → 全部条目旧提取结果色失效
         clearExtractOutcomes(allPreviewItems());
         refreshAfterParamsChanged();
@@ -869,24 +875,26 @@ public class MainController {
         // 入撤销栈（PARAM_SET，组参数设置可撤销）
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
                 null, -1, List.of(), List.of(), List.of(),
-                false, null, null, null, imageMode, null, group.getGroupNo(), before));
+                false, null, null, null, imageMode, null, group.getGroupNo(), before,
+                false, null, null));
         // 拍板：组参数重新确认 → 该组成员旧提取结果色失效
         clearExtractOutcomes(group.getMembers().stream().filter(m -> !m.removed).toList());
-        refreshAfterGroupParamsChanged(group);
+        refreshAfterTargetedParamsChange(group.getMembers().stream().filter(m -> !m.removed).toList());
         updateListButtons();
         updateExtractBanner(currentSelection());
     }
 
     // ==================== 右键菜单（右键菜单功能需求） ====================
 
-    /** 构建右键菜单（拍板 Q1 命名统一"移除"；Q5 一律禁用制：菜单恒 14 项同序，查看HTML源码搁置不在其中） */
+    /** 构建右键菜单（拍板 Q1 命名统一"移除"；Q5 一律禁用制：菜单恒 15 项同序，查看HTML源码搁置不在其中） */
     private void buildContextMenu() {
         ctxSelect = new MenuItem("选中");
         ctxSelectAll = new MenuItem("全选");
         ctxOpen = new MenuItem("打开");
         ctxOpenFolder = new MenuItem("打开所在文件夹");
         ctxParams = new MenuItem("设置提取参数");
-        ctxApplyGlobal = new MenuItem("提取参数应用到全局");
+        ctxClearParams = new MenuItem("清除参数");
+        ctxApplyGlobal = new MenuItem("将参数应用到全局");
         ctxGroup = new MenuItem("合并为组");
         ctxUngroup = new MenuItem("拆分组");
         ctxRemove = new MenuItem("移除");
@@ -897,6 +905,7 @@ public class MainController {
         ctxOpen.setOnAction(e -> onContextOpen());
         ctxOpenFolder.setOnAction(e -> onContextOpenFolder());
         ctxParams.setOnAction(e -> onContextParams());
+        ctxClearParams.setOnAction(e -> onContextClearParams());
         ctxApplyGlobal.setOnAction(e -> onContextApplyGlobal());
         ctxGroup.setOnAction(e -> onGroupClicked());
         ctxUngroup.setOnAction(e -> onUngroupClicked());
@@ -908,7 +917,7 @@ public class MainController {
                 new SeparatorMenuItem(),
                 ctxOpen, ctxOpenFolder,
                 new SeparatorMenuItem(),
-                ctxParams, ctxApplyGlobal,
+                ctxParams, ctxClearParams, ctxApplyGlobal,
                 new SeparatorMenuItem(),
                 ctxGroup, ctxUngroup,
                 new SeparatorMenuItem(),
@@ -966,7 +975,7 @@ public class MainController {
         return null;
     }
 
-    /** 菜单项禁用状态按右键目标类型刷新（拍板 Q4/Q5/Q7 + 条目独立参数需求：恒 14 项同序） */
+    /** 菜单项禁用状态按右键目标类型刷新（拍板 Q4/Q5/Q7 + 条目独立参数需求：恒 15 项同序） */
     private void updateContextMenuState(Object target) {
         boolean blank = target == null;
         boolean topItem = target instanceof PreviewItem it && it.parentGroup == null;
@@ -980,6 +989,8 @@ public class MainController {
         // 条目独立参数需求拍板：空白区域为全局参数入口，文本与独立参数设置区分
         ctxParams.setText(blank ? "设置提取参数（全局）" : "设置提取参数");
         ctxParams.setDisable(false);                  // 恒可用
+        // 清除参数拍板：启用看右键目标（空白/无参数 → 禁用），动作走勾选优先（与"移除"菜单既有模式一致）
+        ctxClearParams.setDisable(!hasIndependentParams(target));
         ctxApplyGlobal.setDisable(!hasIndependentParams(target)); // 仅目标有独立参数时可用
         ctxGroup.setDisable(!(topItem || member));    // 仅项目条目
         ctxUngroup.setDisable(!group);                // 仅组条目
@@ -1208,11 +1219,112 @@ public class MainController {
         }
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.APPLY_GLOBAL, List.of(),
                 null, -1, List.of(), List.of(), List.of(),
-                imageMode, globalBefore, itemBefore, groupBefore, false, null, null, null));
+                imageMode, globalBefore, itemBefore, groupBefore, false, null, null, null,
+                false, null, null));
         clearExtractOutcomes(allPreviewItems());
         log.info("已应用到全局（{}模式）：所有独立参数已清空，全部条目继承新全局参数",
                 imageMode ? "图片" : "文本");
         refreshAfterParamsChanged();
+        updateListButtons();
+        updateExtractBanner(currentSelection());
+    }
+
+    // ==================== 清除参数（清除参数功能） ====================
+
+    /** 按钮行"清除参数"：目标 = 勾选集合（若有）否则单选，与"移除"一致 */
+    @FXML
+    private void onClearParamsClicked() {
+        if (listAnimating) {
+            return;
+        }
+        clearParamsForTargets(resolveClearTargets(currentSelection()));
+    }
+
+    /** 右键菜单"清除参数"：动作逻辑与按钮一致（勾选优先 → 右键目标；启用看右键目标） */
+    private void onContextClearParams() {
+        if (listAnimating) {
+            return;
+        }
+        clearParamsForTargets(resolveClearTargets(contextTarget));
+    }
+
+    /** 勾选集合优先 → 回退对象（与"移除"的勾选优先拍板一致） */
+    private List<Object> resolveClearTargets(Object fallback) {
+        List<PreviewItem> checked = allVisibleItems().stream()
+                .filter(i -> i.selected.get()).toList();
+        if (!checked.isEmpty()) {
+            return new ArrayList<>(checked);
+        }
+        return fallback == null ? new ArrayList<>() : new ArrayList<>(List.of(fallback));
+    }
+
+    /**
+     * 清除参数（拍板 Q1-Q4）：只清当前模式。组外条目 → 清条目级参数；组内成员/组条目 → 清整组组参数
+     * （按组去重）；无参数目标自然跳过；一次操作一条 CLEAR_PARAMS 撤销记录（before 快照），一次撤销全部恢复。
+     */
+    private void clearParamsForTargets(List<Object> rawTargets) {
+        boolean imageMode = imageModeToggle.isSelected();
+        List<PreviewItem> topItems = new ArrayList<>();
+        Set<GroupItem<PreviewItem>> groups = new LinkedHashSet<>();
+        for (Object o : rawTargets) {
+            if (o instanceof PreviewItem it && !it.removed) {
+                if (it.parentGroup != null) {
+                    if ((imageMode ? it.parentGroup.getImageParamsCache()
+                                   : it.parentGroup.getTextParamsCache()) != null) {
+                        groups.add(it.parentGroup);
+                    }
+                } else if ((imageMode ? it.imageItemParams : it.textItemParams) != null) {
+                    topItems.add(it);
+                }
+            } else if (o instanceof GroupItem<?> g) {
+                GroupItem<PreviewItem> grp = (GroupItem<PreviewItem>) g;
+                if ((imageMode ? grp.getImageParamsCache() : grp.getTextParamsCache()) != null) {
+                    groups.add(grp);
+                }
+            }
+        }
+        if (topItems.isEmpty() && groups.isEmpty()) {
+            return;
+        }
+        // 撤销快照：清除前该模式参数（只收录本次实际清除的目标）
+        Map<String, AppConfig> itemBefore = new HashMap<>();
+        for (PreviewItem it : topItems) {
+            itemBefore.put(it.path, imageMode ? it.imageItemParams : it.textItemParams);
+        }
+        Map<Integer, AppConfig> groupBefore = new HashMap<>();
+        for (GroupItem<PreviewItem> grp : groups) {
+            groupBefore.put(grp.getGroupNo(),
+                    imageMode ? grp.getImageParamsCache() : grp.getTextParamsCache());
+        }
+        if (imageMode) {
+            for (PreviewItem it : topItems) {
+                it.imageItemParams = null;
+            }
+            for (GroupItem<PreviewItem> grp : groups) {
+                grp.setImageParamsCache(null);
+            }
+        } else {
+            for (PreviewItem it : topItems) {
+                it.textItemParams = null;
+            }
+            for (GroupItem<PreviewItem> grp : groups) {
+                grp.setTextParamsCache(null);
+            }
+        }
+        undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.CLEAR_PARAMS, List.of(),
+                null, -1, List.of(), List.of(), List.of(),
+                false, null, null, null, false, null, null, null,
+                imageMode, itemBefore, groupBefore));
+        // 受影响条目：清除条目参数的项目 + 清除组参数的各组全部有效成员
+        List<PreviewItem> affected = new ArrayList<>(topItems);
+        for (GroupItem<PreviewItem> grp : groups) {
+            affected.addAll(grp.getMembers().stream().filter(m -> !m.removed).toList());
+        }
+        // 拍板：参数变更 → 受影响条目旧提取结果色失效
+        clearExtractOutcomes(affected);
+        log.info("已清除 {} 个条目、{} 个组的{}模式参数", topItems.size(), groups.size(),
+                imageMode ? "图片" : "文本");
+        refreshAfterTargetedParamsChange(affected);
         updateListButtons();
         updateExtractBanner(currentSelection());
     }
@@ -1299,15 +1411,13 @@ public class MainController {
     }
 
     /**
-     * 组参数确认后刷新（R8）：旧缓存失效、仅重解析该组项目。
+     * 局部参数变更后刷新（R8 泛化，清除参数功能复用）：受影响条目旧缓存失效、按新生效参数重解析。
      * 先取消在途后台活动（parseToken +1）作废旧代次在途解析结果；其它项目被代次打断的
      * 在途解析以同一新代次补偿续跑（只补仍处等待中的项，不重新解析已完成项，不误伤其它项目）。
      */
-    private void refreshAfterGroupParamsChanged(GroupItem<PreviewItem> group) {
+    private void refreshAfterTargetedParamsChange(List<PreviewItem> affected) {
         cancelWorkspaceActivity();
-        List<PreviewItem> members = group.getMembers().stream()
-                .filter(m -> !m.removed).toList();
-        for (PreviewItem m : members) {
+        for (PreviewItem m : affected) {
             m.cachedText = null;
             m.cachedTitle = null;
             m.cachedImages = null;
@@ -1324,11 +1434,11 @@ public class MainController {
         updateInfoArea(sel);
         updateContentArea(sel);
         updateProgressStatus(parseToken);
-        if (!members.isEmpty()) {
-            preParseItems(new ArrayList<>(members), parseToken);
+        if (!affected.isEmpty()) {
+            preParseItems(new ArrayList<>(affected), parseToken);
         }
         List<PreviewItem> interrupted = allVisibleItems().stream()
-                .filter(i -> i.status.get() == Status.WAITING && !members.contains(i)).toList();
+                .filter(i -> i.status.get() == Status.WAITING && !affected.contains(i)).toList();
         if (!interrupted.isEmpty()) {
             preParseItems(new ArrayList<>(interrupted), parseToken);
         }
@@ -1449,6 +1559,7 @@ public class MainController {
         stopButton.setDisable(false);
         progressBar.setVisible(true);
         progressBar.setProgress(0);
+        setProgressBarActivity(STYLE_PROGRESS_EXTRACT_SUCCESS);   // 提取中 = 开始提取按钮绿
 
         Task<BatchProcessor.ProcessStats> task = new Task<>() {
             @Override
@@ -1499,6 +1610,7 @@ public class MainController {
                             total.getFailDetails().addAll(unitStats.getFailDetails());
                             total.getSkipDetails().addAll(unitStats.getSkipDetails());
                             total.getWarnDetails().addAll(unitStats.getWarnDetails());
+                            total.addAllFileResults(unitStats.getFileResults());
                         } catch (Exception e) {
                             log.error("输出单元[{}]处理失败", unit.label(), e);
                             for (int k = 0; k < unit.fileCount(); k++) {
@@ -1534,6 +1646,11 @@ public class MainController {
             BatchProcessor.ProcessStats stats = task.getValue();
             if (stats != null) {
                 statusLabel.setText(stats.getSummaryLine());
+                // 满格条按结果配色（拍板 2026-09-24）：有失败/跳过 → 浅红；有警告 → 黄；否则保持绿
+                setProgressBarActivity(stats.getFailCount() + stats.getSkipCount() > 0
+                        ? STYLE_PROGRESS_EXTRACT_FAILED
+                        : stats.getWarnCount() > 0 ? STYLE_PROGRESS_EXTRACT_WARNED
+                        : STYLE_PROGRESS_EXTRACT_SUCCESS);
                 // 提取结果一次性回写（拍板）：完成后列表条目背景反映本次提取结果
                 applyExtractResults(stats);
             }
@@ -1556,6 +1673,7 @@ public class MainController {
             startButton.setDisable(false);
             stopButton.setDisable(true);
             progressBar.setVisible(false);
+            setProgressBarActivity(null);
             statusLabel.setText("处理异常");
             Throwable ex = task.getException();
             log.error("处理异常", ex);
@@ -1615,6 +1733,7 @@ public class MainController {
         startButton.setDisable(false);
         stopButton.setDisable(true);
         progressBar.setVisible(false);
+        setProgressBarActivity(null);
         statusLabel.setText("已停止");
         log.info("用户手动停止处理");
     }
@@ -2645,6 +2764,12 @@ public class MainController {
         ungroupButton.setDisable(!(sel instanceof GroupItem<?>));
         // 条目独立参数需求拍板：仅当选中条目生效参数为独立参数时可"应用到全局"
         applyGlobalButton.setDisable(!hasIndependentParams(sel));
+        // 清除参数拍板 Q3：勾选集合任一目标带参数（无勾选 → 单选目标）即启用
+        boolean anyClearable = anyChecked
+                ? allVisibleItems().stream().filter(i -> i.selected.get())
+                        .anyMatch(this::hasIndependentParams)
+                : hasIndependentParams(sel);
+        clearParamsButton.setDisable(!anyClearable);
     }
 
     private void updateStartButtonState() {
@@ -2665,9 +2790,8 @@ public class MainController {
         updateStartButtonState();
         refreshSelectionUi();
         recomputeBadges();
-        if (anyVisibleItemHasEffectiveParams()) {
-            updateProgressStatus(parseToken);
-        }
+        // 方案A：无条件刷新——全部无参数时 updateProgressStatus 会隐藏进度条且不动状态栏
+        updateProgressStatus(parseToken);
         Object selAfter = fileListView.getSelectionModel().getSelectedItem();
         updateInfoArea(selAfter);
         updateContentArea(selAfter);
@@ -2941,6 +3065,44 @@ public class MainController {
                 updateExtractBanner(currentSelection());
                 updateListButtons();
                 log.info("撤销设置提取参数：{}模式参数已恢复", im ? "图片" : "文本");
+            }
+            case CLEAR_PARAMS -> {
+                // 清除参数拍板 Q4：按 before 快照一次恢复全部被清除的条目/组参数，并重走联动刷新
+                boolean im = record.clearImageMode();
+                Map<String, AppConfig> itemBefore = record.clearItemParamsBefore();
+                List<PreviewItem> restoredItems = new ArrayList<>();
+                for (PreviewItem it : allPreviewItems()) {
+                    if (itemBefore.containsKey(it.path)) {
+                        if (im) {
+                            it.imageItemParams = itemBefore.get(it.path);
+                        } else {
+                            it.textItemParams = itemBefore.get(it.path);
+                        }
+                        restoredItems.add(it);
+                    }
+                }
+                Map<Integer, AppConfig> groupBefore = record.clearGroupParamsBefore();
+                List<PreviewItem> affected = new ArrayList<>(restoredItems);
+                for (Object o : items) {
+                    if (o instanceof GroupItem<?> g) {
+                        GroupItem<PreviewItem> grp = (GroupItem<PreviewItem>) g;
+                        if (groupBefore.containsKey(grp.getGroupNo())) {
+                            if (im) {
+                                grp.setImageParamsCache(groupBefore.get(grp.getGroupNo()));
+                            } else {
+                                grp.setTextParamsCache(groupBefore.get(grp.getGroupNo()));
+                            }
+                            affected.addAll(grp.getMembers().stream()
+                                    .filter(m -> !m.removed).toList());
+                        }
+                    }
+                }
+                clearExtractOutcomes(affected);
+                refreshAfterTargetedParamsChange(affected);
+                updateListButtons();
+                updateExtractBanner(currentSelection());
+                log.info("撤销清除参数：{}模式 {} 个条目、{} 个组的参数已恢复",
+                        im ? "图片" : "文本", restoredItems.size(), groupBefore.size());
             }
             case APPLY_GLOBAL -> {
                 // 条目独立参数需求拍板：恢复应用前的全局参数与全部独立参数快照
@@ -3908,9 +4070,13 @@ public class MainController {
         loadingItem = item;
         imageHintLabel.setText("正在加载...");
         previewEffectButton.setDisable(true);
-        progressBar.setVisible(true);
-        progressBar.setProgress(-1);
-        statusLabel.setText("正在加载图片：" + item.name);
+        // 相邻修复：提取运行期间进度条/状态栏归提取任务独占，图片加载不动它们
+        if (!running.get()) {
+            progressBar.setVisible(true);
+            progressBar.setProgress(-1);
+            setProgressBarActivity(null);   // 预览加载 = 默认色（完成后回落预解析显示）
+            statusLabel.setText("正在加载图片：" + item.name);
+        }
 
         Thread t = new Thread(() -> {
             try {
@@ -3985,8 +4151,12 @@ public class MainController {
         if (targets.isEmpty()) {
             return;
         }
-        progressBar.setVisible(true);
-        progressBar.setProgress(0);
+        // 提取运行期间进度条归提取任务独占（相邻修复），预解析照常跑但不动进度条
+        if (!running.get()) {
+            progressBar.setVisible(true);
+            progressBar.setProgress(0);
+            setProgressBarActivity(STYLE_PROGRESS_PREPARSE);
+        }
         // 快照迭代目标，避免解析期间列表被增量导入/移除修改导致并发异常
         preParseItems(new ArrayList<>(targets), ++parseToken);
     }
@@ -4088,21 +4258,45 @@ public class MainController {
         if (token != parseToken) {
             return;
         }
-        List<PreviewItem> vis = allVisibleItems();
-        long total = vis.size();
-        long done = vis.stream().filter(i -> i.status.get() != Status.WAITING).count();
+        // 相邻修复（拍板 2026-09-24）：提取运行期间进度条/状态栏归提取任务独占，
+        // 预解析完成等回调一律不更新（避免覆盖提取进度显示）
+        if (running.get()) {
+            return;
+        }
         if (imageLoadActive) {
             progressBar.setVisible(true);
             progressBar.setProgress(-1);
             return;
         }
+        // 拍板 2026-09-24（方案A）：只统计有生效参数的条目。无参数条目由 preParseItems 跳过
+        // （留待参数确认后解析），不参与进度，否则独立参数场景下进度条会卡在中间。
+        List<PreviewItem> vis = allVisibleItems().stream()
+                .filter(i -> effectiveForObject(i) != null).toList();
+        long total = vis.size();
+        long done = vis.stream().filter(i -> i.status.get() != Status.WAITING).count();
+        if (total == 0) {
+            progressBar.setVisible(false);   // 全部无生效参数：不预解析，不动状态栏文案
+            setProgressBarActivity(null);
+            return;
+        }
         if (done >= total) {
             progressBar.setVisible(false);
+            setProgressBarActivity(null);
         } else {
             progressBar.setVisible(true);
-            progressBar.setProgress(total == 0 ? 1.0 : (double) done / total);
+            progressBar.setProgress((double) done / total);
+            setProgressBarActivity(STYLE_PROGRESS_PREPARSE);
         }
         statusLabel.setText("解析完成 " + done + "/" + total);
+    }
+
+    /** 进度条活动样式切换（拍板 2026-09-24）：一次只保留一个活动类；null = 默认色 */
+    private void setProgressBarActivity(String styleClass) {
+        progressBar.getStyleClass().removeAll(STYLE_PROGRESS_PREPARSE, STYLE_PROGRESS_EXTRACT_SUCCESS,
+                STYLE_PROGRESS_EXTRACT_WARNED, STYLE_PROGRESS_EXTRACT_FAILED);
+        if (styleClass != null) {
+            progressBar.getStyleClass().add(styleClass);
+        }
     }
 
     // ==================== 辅助 ====================
@@ -4486,6 +4680,14 @@ public class MainController {
         log.info("Agent exercise complete - all UI features exercised");
     }
 
+    /** 测试专用：在 FX 线程上排空事件队列（进入嵌套事件循环，处理完当前已排队回调后返回）。
+     *  runAutomatedTests 本身运行在 FX 线程，普通 sleep 会阻塞事件回调（如提取 onSucceeded）无法执行 */
+    private void pumpFxEvents() {
+        Object key = new Object();
+        Platform.runLater(() -> Platform.exitNestedEventLoop(key, null));
+        Platform.enterNestedEventLoop(key);
+    }
+
     /** 自动化测试：依次执行所有功能并记录结果到文件（test.mode=true 触发） */
     public void runAutomatedTests() {
         String logPath = "logs/test-results.txt";
@@ -4695,6 +4897,136 @@ public class MainController {
                 out.println("[PASS] Item params + apply-global + undo chain"); p++;
             } catch (Exception e) { out.println("[FAIL] Item params undo chain: " + e.getMessage()); f++; }
 
+            // 清除参数（清除参数功能）：按钮/菜单禁用态 + 条目清除 + 撤销恢复（拍板 Q1-Q3）
+            try {
+                List<PreviewItem> vis = allVisibleItems();
+                if (vis.size() < 3) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
+                textModeToggle.setSelected(true); Thread.sleep(300);
+                allVisibleItems().forEach(i -> i.selected.set(false));
+                updateListButtons();
+                PreviewItem a = vis.get(0), b = vis.get(1);
+                if (!clearParamsButton.isDisabled()) { throw new IllegalStateException("无独立参数时按钮应禁用"); }
+                ParamDialogController itemDlg = ParamDialogController.showDirect(
+                        null, false, textParamsCache, imageParamsCache,
+                        new ParamScope.ItemTarget<>(a, a.textItemParams, a.imageItemParams));
+                itemDlg.enableTitleExtractCheck.setSelected(true);
+                itemDlg.confirmButton.fire(); Thread.sleep(300);
+                if (!itemDlg.isConfirmed()) { throw new IllegalStateException("条目参数窗口未确认"); }
+                applyItemParams(a, false, itemDlg.getResult());
+                if (a.textItemParams == null) { throw new IllegalStateException("条目参数未写入"); }
+                fileListView.getSelectionModel().select(a); Thread.sleep(200);
+                if (clearParamsButton.isDisabled()) { throw new IllegalStateException("选中带参数条目时按钮应启用"); }
+                fileListView.getSelectionModel().select(b); updateListButtons();
+                if (!clearParamsButton.isDisabled()) { throw new IllegalStateException("选中无参数条目时按钮应禁用"); }
+                a.selected.set(true); b.selected.set(true); updateListButtons();
+                if (clearParamsButton.isDisabled()) { throw new IllegalStateException("勾选集合含参数目标时按钮应启用"); }
+                clearParamsButton.fire(); Thread.sleep(300);
+                if (a.textItemParams != null) { throw new IllegalStateException("清除条目参数未生效"); }
+                if (!clearParamsButton.isDisabled()) { throw new IllegalStateException("清除后按钮应禁用"); }
+                allVisibleItems().forEach(i -> i.selected.set(false)); updateListButtons();
+                undoButton.fire(); Thread.sleep(300);
+                if (a.textItemParams == null) { throw new IllegalStateException("撤销清除参数未恢复"); }
+                // 菜单启用态：空白/无参数禁用、带参数启用（启用看右键目标）
+                updateContextMenuState(null);
+                if (!ctxClearParams.isDisable()) { throw new IllegalStateException("空白区清除参数应禁用"); }
+                updateContextMenuState(a);
+                if (ctxClearParams.isDisable()) { throw new IllegalStateException("带参数条目清除参数应启用"); }
+                updateContextMenuState(b);
+                if (!ctxClearParams.isDisable()) { throw new IllegalStateException("无参数条目清除参数应禁用"); }
+                out.println("[PASS] Clear params (item scope + enable matrix)"); p++;
+            } catch (Exception e) { out.println("[FAIL] Clear params item: " + e.getMessage()); f++; }
+
+            // 清除参数组语义：组内成员/组条目 → 清整组；混合多选（组内+组外）→ 都清；一次撤销全部恢复
+            try {
+                List<PreviewItem> vis = allVisibleItems();
+                if (vis.size() < 3) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
+                allVisibleItems().forEach(i -> i.selected.set(false));
+                PreviewItem a = vis.get(0), b = vis.get(1), c = vis.get(2);
+                b.selected.set(true); c.selected.set(true);
+                groupButton.fire(); Thread.sleep(400);
+                List<GroupItem<PreviewItem>> groups = topLevelGroups();
+                if (groups.size() != 1) { throw new IllegalStateException("建组失败: " + groups.size()); }
+                GroupItem<PreviewItem> g = groups.get(0);
+                ParamDialogController groupDlg = ParamDialogController.showDirect(
+                        null, false, textParamsCache, imageParamsCache, new ParamScope.GroupTarget(g));
+                groupDlg.enableTitleExtractCheck.setSelected(true);
+                groupDlg.confirmButton.fire(); Thread.sleep(300);
+                if (!groupDlg.isConfirmed()) { throw new IllegalStateException("组参数窗口未确认"); }
+                applyGroupParams(g, false, groupDlg.getResult());
+                if (g.getTextParamsCache() == null) { throw new IllegalStateException("组参数未写入"); }
+                // a（组外带参数）+ b（组内成员）混合多选 → 清 a 条目参数 + 清整组 g 参数（同组去重）
+                a.selected.set(true); b.selected.set(true); updateListButtons();
+                if (clearParamsButton.isDisabled()) { throw new IllegalStateException("混合多选按钮应启用"); }
+                clearParamsButton.fire(); Thread.sleep(300);
+                if (a.textItemParams != null) { throw new IllegalStateException("组外条目参数未清除"); }
+                if (g.getTextParamsCache() != null) { throw new IllegalStateException("组参数未清除"); }
+                undoButton.fire(); Thread.sleep(300);
+                if (a.textItemParams == null || g.getTextParamsCache() == null) {
+                    throw new IllegalStateException("撤销混合清除未全部恢复");
+                }
+                // 清场恢复：撤销组参数、建组、条目参数，回到本段前状态
+                undoButton.fire(); Thread.sleep(300);
+                undoButton.fire(); Thread.sleep(300);
+                undoButton.fire(); Thread.sleep(300);
+                if (topLevelGroups().size() != 0 || a.textItemParams != null) {
+                    throw new IllegalStateException("清除参数测试段清场失败");
+                }
+                out.println("[PASS] Clear params (group + mixed multi-select + single undo)"); p++;
+            } catch (Exception e) { out.println("[FAIL] Clear params group: " + e.getMessage()); f++; }
+
+            // 进度条口径（修复：独立参数场景无参数条目导致进度条卡中间）——只统计有生效参数条目
+            try {
+                List<PreviewItem> vis = allVisibleItems();
+                if (vis.size() < 2) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
+                textModeToggle.setSelected(true); Thread.sleep(300);
+                cancelWorkspaceActivity();   // 作废在途解析代次，保证断言确定性
+                AppConfig savedGlobal = textParamsCache;
+                for (PreviewItem it : allPreviewItems()) {
+                    it.textItemParams = null;
+                    it.status.set(Status.WAITING);
+                }
+                PreviewItem p0 = vis.get(0);
+                textParamsCache = null;               // 全局未确认
+                p0.textItemParams = new AppConfig();  // 仅该条目有独立参数
+                updateProgressStatus(parseToken);
+                if (!progressBar.isVisible() || Math.abs(progressBar.getProgress()) > 0.001) {
+                    throw new IllegalStateException("无参数条目不应参与进度（期望可见且 0/1）");
+                }
+                if (!progressBar.getStyleClass().contains("progress-preparse")) {
+                    throw new IllegalStateException("预解析进度条应为浅蓝样式");
+                }
+                p0.status.set(Status.READY);
+                updateProgressStatus(parseToken);
+                if (progressBar.isVisible()) {
+                    throw new IllegalStateException("有参数条目全部完成后进度条应隐藏");
+                }
+                if (progressBar.getStyleClass().contains("progress-preparse")) {
+                    throw new IllegalStateException("预解析完成后应移除浅蓝样式");
+                }
+                p0.textItemParams = null;
+                updateProgressStatus(parseToken);
+                if (progressBar.isVisible()) {
+                    throw new IllegalStateException("全部无参数时进度条应隐藏");
+                }
+                // 相邻修复：提取运行期间进度条/状态栏归提取任务独占，解析回调不得覆盖
+                running.set(true);
+                progressBar.setVisible(true);
+                progressBar.setProgress(0.5);
+                String labelBefore = statusLabel.getText();
+                updateProgressStatus(parseToken);
+                if (Math.abs(progressBar.getProgress() - 0.5) > 0.001
+                        || !statusLabel.getText().equals(labelBefore)) {
+                    running.set(false);
+                    throw new IllegalStateException("提取期间解析回调不应覆盖进度条/状态栏");
+                }
+                running.set(false);
+                // 恢复全局参数并重解析
+                textParamsCache = savedGlobal;
+                refreshAfterParamsChanged();
+                Thread.sleep(500);
+                out.println("[PASS] Progress bar counts only effective-param items"); p++;
+            } catch (Exception e) { out.println("[FAIL] Progress bar param-scope: " + e.getMessage()); f++; }
+
             // 双击 toggle 勾选（回归：CLICKED 事件按键判定须用 getButton，isPrimaryButtonDown 恒为 false）
             try {
                 List<PreviewItem> vis = allVisibleItems();
@@ -4777,12 +5109,30 @@ public class MainController {
                 out.println("[PASS] Text preview workspace"); p++;
             } catch (Exception e) { out.println("[FAIL] Text preview workspace: " + e.getMessage()); f++; }
 
-            // 文本提取（参数已确认 → 不弹提示）
+            // 文本提取（参数已确认 → 不弹提示；断言单元合并后 fileResults 完整，供回写背景色）
             try { textModeToggle.setSelected(true); Thread.sleep(300);
                 inputFolderField.setText(textDir.toString());
                 outputFolderField.setText(new File(System.getProperty("java.io.tmpdir"),
                         "mht-auto-output-text").getPath());
-                startButton.fire(); Thread.sleep(3000);
+                startButton.fire();
+                // 提取回调（onSucceeded 等）在 FX 线程事件队列中，须嵌套泵排空后再断言
+                long deadline = System.currentTimeMillis() + 20000;
+                while (System.currentTimeMillis() < deadline
+                        && (lastExtractStats.get() == null || startButton.isDisabled())) {
+                    pumpFxEvents();
+                }
+                BatchProcessor.ProcessStats merged = lastExtractStats.get();
+                if (merged == null || merged.getFileResults().size() != visibleCount()
+                        || !merged.getFileResults().stream()
+                                .allMatch(r -> r.outcome() == ExtractOutcome.SUCCESS)) {
+                    throw new IllegalStateException("单元合并后 fileResults 缺失或状态异常："
+                            + (merged == null ? "null" : merged.getFileResults().size()));
+                }
+                // 进度条配色拍板：全部成功 → 满格绿色
+                if (!progressBar.isVisible() || Math.abs(progressBar.getProgress() - 1.0) > 0.001
+                        || !progressBar.getStyleClass().contains("progress-extract-success")) {
+                    throw new IllegalStateException("全部成功后进度条应满格且为绿色");
+                }
                 out.println("[PASS] Text extraction started"); p++;
             } catch (Exception e) { out.println("[FAIL] Text extraction: " + e.getMessage()); f++; }
 
@@ -4793,12 +5143,26 @@ public class MainController {
                 out.println("[PASS] Image preview workspace"); p++;
             } catch (Exception e) { out.println("[FAIL] Image preview workspace: " + e.getMessage()); f++; }
 
-            // 图片提取
+            // 图片提取（含损坏文件 → 满格条应转为浅红，进度条配色拍板）
             try { imageModeToggle.setSelected(true); Thread.sleep(300);
+                java.nio.file.Files.write(imageDir.resolve("bad.mht"),
+                        "garbage-not-a-mht".getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 inputFolderField.setText(imageDir.toString());
                 outputFolderField.setText(new File(System.getProperty("java.io.tmpdir"),
                         "mht-auto-output-image").getPath());
-                startButton.fire(); Thread.sleep(3000);
+                startButton.fire();
+                long deadline = System.currentTimeMillis() + 20000;
+                while (System.currentTimeMillis() < deadline
+                        && (lastExtractStats.get() == null || startButton.isDisabled())) {
+                    pumpFxEvents();
+                }
+                if (lastExtractStats.get() == null) {
+                    throw new IllegalStateException("图片提取未在时限内完成");
+                }
+                if (!progressBar.isVisible() || Math.abs(progressBar.getProgress() - 1.0) > 0.001
+                        || !progressBar.getStyleClass().contains("progress-extract-failed")) {
+                    throw new IllegalStateException("存在失败条目时满格条应为浅红");
+                }
                 out.println("[PASS] Image extraction started"); p++;
             } catch (Exception e) { out.println("[FAIL] Image extraction: " + e.getMessage()); f++; }
 

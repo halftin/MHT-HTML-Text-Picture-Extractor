@@ -3,6 +3,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import java.lang.String?>
 <?import com.mhtextractor.gui.component.LogTextArea?>
 <?import atlantafx.base.controls.ToggleSwitch?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
@@ -18,19 +19,34 @@
                 <Insets top="10" right="10" bottom="10" left="10"/>
             </padding>
 
+            <!-- 模式选择 ToggleGroup：互斥由 group 承担，允许取消选中回到"未选择"态 -->
+            <fx:define>
+                <ToggleGroup fx:id="modeToggleGroup"/>
+            </fx:define>
+
             <!-- 标题栏 -->
-            <HBox spacing="10" alignment="CENTER_LEFT">
-                <Label text="模式选择:"/>
-                <ToggleButton fx:id="textModeToggle" text="文本提取">
-                    <graphic>
-                        <FontIcon iconLiteral="fas-file-alt" iconSize="16"/>
-                    </graphic>
-                </ToggleButton>
-                <ToggleButton fx:id="imageModeToggle" text="图片提取">
-                    <graphic>
-                        <FontIcon iconLiteral="fas-file-image" iconSize="16"/>
-                    </graphic>
-                </ToggleButton>
+            <HBox spacing="12" alignment="CENTER_LEFT">
+                <Label text="模式选择:" styleClass="title-3"/>
+                <HBox spacing="0">
+                    <ToggleButton fx:id="textModeToggle" text="文本提取" toggleGroup="$modeToggleGroup">
+                        <styleClass>
+                            <String fx:value="left-pill"/>
+                            <String fx:value="mode-pill"/>
+                        </styleClass>
+                        <graphic>
+                            <FontIcon iconLiteral="fas-file-alt" iconSize="24"/>
+                        </graphic>
+                    </ToggleButton>
+                    <ToggleButton fx:id="imageModeToggle" text="图片提取" toggleGroup="$modeToggleGroup">
+                        <styleClass>
+                            <String fx:value="right-pill"/>
+                            <String fx:value="mode-pill"/>
+                        </styleClass>
+                        <graphic>
+                            <FontIcon iconLiteral="fas-file-image" iconSize="24"/>
+                        </graphic>
+                    </ToggleButton>
+                </HBox>
                 <Region HBox.hgrow="ALWAYS"/>
                 <Label text="MHT 资源提取器" styleClass="heading-3"/>
             </HBox>
@@ -91,16 +107,11 @@
                     <Pane fx:id="dragOverlay" mouseTransparent="true"/>
                 </StackPane>
 
-                <!-- 按钮行：移除 / 撤销 / 合并为组 / 拆分组（顺序固定；合并为组阶段 4、拆分组阶段 6 启用） -->
+                <!-- 按钮行：撤销 / 合并为组 / 拆分组 / 移除 / 清除参数 / 将参数应用到全局（顺序固定；合并为组阶段 4、拆分组阶段 6 启用） -->
                 <HBox spacing="10" alignment="CENTER_LEFT">
                     <padding>
                         <Insets top="4" right="10" bottom="2" left="10"/>
                     </padding>
-                    <Button fx:id="removeButton" text="移除" onAction="#onRemoveClicked" disable="true">
-                        <graphic>
-                            <FontIcon iconLiteral="fas-trash-alt" iconSize="14"/>
-                        </graphic>
-                    </Button>
                     <Button fx:id="undoButton" text="撤销" onAction="#onUndoClicked" disable="true">
                         <graphic>
                             <FontIcon iconLiteral="fas-undo" iconSize="14"/>
@@ -116,7 +127,17 @@
                             <FontIcon iconLiteral="fas-object-ungroup" iconSize="14"/>
                         </graphic>
                     </Button>
-                    <Button fx:id="applyGlobalButton" text="提取参数应用到全局" onAction="#onApplyGlobalClicked" disable="true">
+                    <Button fx:id="removeButton" text="移除" onAction="#onRemoveClicked" disable="true">
+                        <graphic>
+                            <FontIcon iconLiteral="fas-trash-alt" iconSize="14"/>
+                        </graphic>
+                    </Button>
+                    <Button fx:id="clearParamsButton" text="清除参数" onAction="#onClearParamsClicked" disable="true">
+                        <graphic>
+                            <FontIcon iconLiteral="fas-eraser" iconSize="14"/>
+                        </graphic>
+                    </Button>
+                    <Button fx:id="applyGlobalButton" text="将参数应用到全局" onAction="#onApplyGlobalClicked" disable="true">
                         <graphic>
                             <FontIcon iconLiteral="fas-globe" iconSize="14"/>
                         </graphic>

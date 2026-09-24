@@ -4,6 +4,12 @@ target/
 !**/src/test/**/target/
 dependency-reduced-pom.xml
 
+### 运行时目录（本地状态与输出，不入库） ###
+config/
+logs/
+输出文件/
+temp/
+
 ### IntelliJ IDEA ###
 .idea/
 *.iws

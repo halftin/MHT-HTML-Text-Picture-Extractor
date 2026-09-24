@@ -412,6 +412,24 @@
     -fx-accent: black;
 }
 
+/* 进度条活动配色（2026-09-24 拍板）：预解析=浅蓝（同独立参数条目背景）；
+ * 提取成功=绿（同开始提取按钮）；有警告=黄；有失败/跳过=浅红 */
+.progress-bar.progress-preparse > .track > .bar {
+    -fx-background-color: #d6eaf8;
+}
+
+.progress-bar.progress-extract-success > .track > .bar {
+    -fx-background-color: #4CAF50;
+}
+
+.progress-bar.progress-extract-warned > .track > .bar {
+    -fx-background-color: #fff3cd;
+}
+
+.progress-bar.progress-extract-failed > .track > .bar {
+    -fx-background-color: #f8d7da;
+}
+
 .text-area .content {
     -fx-highlight-fill: black;
     -fx-highlight-text-fill: white;
@@ -421,4 +439,18 @@
    0 与 -1 语义相同（禁用固定行高，按 cell 实际 prefHeight 布局），combo-box 弹窗已验证 0 可用 */
 .list-view .list-cell {
     -fx-cell-size: 0;
+}
+
+/* 模式选择药丸按钮：特大醒目（按钮为顶部视觉中心，字号反超 title-3 标签）
+   显式微软雅黑：避免 System 回退字体链合成粗体导致中文锯齿；去掉加粗后雅黑 Regular 本身已够重 */
+.mode-pill {
+    -fx-font-family: "Microsoft YaHei";
+    -fx-font-size: 24px;
+    -fx-font-smoothing-type: lcd;
+    -fx-padding: 12px 30px 12px 30px;
+}
+
+/* 图标放大须直接作用于 FontIcon：主题 .ikonli-font-icon 的 18px 规则会压过父级继承值 */
+.mode-pill .ikonli-font-icon {
+    -fx-icon-size: 24px;
 }
