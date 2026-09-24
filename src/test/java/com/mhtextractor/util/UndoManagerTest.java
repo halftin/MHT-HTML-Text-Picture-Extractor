@@ -163,6 +163,39 @@ class UndoManagerTest {
     }
 
     @Test
+    void importRecordKeepsMultipleGroupsPayload() {
+        GroupItem<String> g1 = new GroupItem<>(1, "组1");
+        GroupItem<String> g2 = new GroupItem<>(2, "组2");
+        UndoManager<String> m = new UndoManager<>();
+        m.push(new UndoManager.Record<>(UndoManager.RecordType.IMPORT,
+                List.of("a", "b"), List.of(g1, g2)));
+
+        UndoManager.Record<String> r = m.pop();
+        assertEquals(UndoManager.RecordType.IMPORT, r.type());
+        assertEquals(List.of("a", "b"), r.items());
+        assertEquals(List.of(g1, g2), r.groups());
+        assertNull(r.group());
+        assertEquals(-1, r.groupIndex());
+        assertTrue(r.destroyedGroups().isEmpty());
+        assertTrue(r.destroyedIndexes().isEmpty());
+        assertTrue(r.structureBefore().isEmpty());
+    }
+
+    @Test
+    void convenienceRecordsCarryEmptyGroups() {
+        UndoManager<String> m = new UndoManager<>();
+        m.push(UndoManager.RecordType.REMOVE, List.of("a"));
+        GroupItem<String> g = new GroupItem<>(1, "组1");
+        m.push(new UndoManager.Record<>(UndoManager.RecordType.UNGROUP, List.of("m"),
+                g, 1, List.of(), List.of(), List.of()));
+
+        UndoManager.Record<String> ungroup = m.pop();
+        assertTrue(ungroup.groups().isEmpty());
+        UndoManager.Record<String> remove = m.pop();
+        assertTrue(remove.groups().isEmpty());
+    }
+
+    @Test
     void limitAppliesToGroupRecordsToo() {
         UndoManager<String> m = new UndoManager<>(2);
         GroupItem<String> g1 = new GroupItem<>(1, "组1");

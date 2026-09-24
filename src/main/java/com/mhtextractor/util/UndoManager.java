@@ -38,6 +38,7 @@ public final class UndoManager<T> {
      * @param items            受影响项目（按操作时顺序）；REORDER：被拖项目（组移动时为空，供撤销后重解析）；MERGE_GROUPS：被拖组成员副本
      * @param group            GROUP：新建的组；UNGROUP：被解散的组；REMOVE_GROUP：被移除的组；MERGE_GROUPS：被拖（销毁）的组；其余为 null
      * @param groupIndex       group 在顶层数据序中的位置（无组时为 -1）
+     * @param groups           IMPORT：本次导入自动创建的组（撤销时随成员移除一并销毁）；其余为空
      * @param destroyedGroups  REMOVE/REMOVE_GROUP：因成员全部被移除而销毁的组（撤销时按索引恢复）
      * @param destroyedIndexes 与 destroyedGroups 一一对应的顶层索引
      * @param structureBefore  GROUP/REORDER/MERGE_GROUPS：操作前的顶层结构快照（撤销时恢复用）
@@ -55,6 +56,7 @@ public final class UndoManager<T> {
      */
     public record Record<T>(RecordType type, List<T> items,
                             GroupItem<T> group, int groupIndex,
+                            List<GroupItem<T>> groups,
                             List<GroupItem<T>> destroyedGroups, List<Integer> destroyedIndexes,
                             List<Object> structureBefore,
                             boolean applyGlobalImageMode,
@@ -70,6 +72,7 @@ public final class UndoManager<T> {
                             Map<Integer, AppConfig> clearGroupParamsBefore) {
         public Record {
             items = List.copyOf(items);
+            groups = groups == null ? List.of() : List.copyOf(groups);
             destroyedGroups = List.copyOf(destroyedGroups);
             destroyedIndexes = List.copyOf(destroyedIndexes);
             structureBefore = List.copyOf(structureBefore);
@@ -83,18 +86,26 @@ public final class UndoManager<T> {
                     ? Map.of() : new HashMap<>(clearGroupParamsBefore);
         }
 
-        /** 仅含类型与项目的记录（不含分组载荷） */
+        /** 仅含类型与项目的记录（不含分组载荷；groups = 空） */
         public Record(RecordType type, List<T> items) {
-            this(type, items, null, -1, List.of(), List.of(), List.of(),
+            this(type, items, null, -1, List.of(), List.of(), List.of(), List.of(),
                     false, null, null, null, false, null, null, null,
                     false, null, null);
         }
 
-        /** 结构类记录（GROUP/UNGROUP/REMOVE_GROUP/REORDER/MERGE_GROUPS） */
+        /** 结构类记录（GROUP/UNGROUP/REMOVE_GROUP/REORDER/MERGE_GROUPS；groups = 空） */
         public Record(RecordType type, List<T> items, GroupItem<T> group, int groupIndex,
                       List<GroupItem<T>> destroyedGroups, List<Integer> destroyedIndexes,
                       List<Object> structureBefore) {
-            this(type, items, group, groupIndex, destroyedGroups, destroyedIndexes, structureBefore,
+            this(type, items, group, groupIndex, List.of(), destroyedGroups, destroyedIndexes,
+                    structureBefore,
+                    false, null, null, null, false, null, null, null,
+                    false, null, null);
+        }
+
+        /** IMPORT 多组载荷：一次导入 = 一条记录携带全部自动创建的组（BC-5） */
+        public Record(RecordType type, List<T> items, List<GroupItem<T>> groups) {
+            this(type, items, null, -1, groups, List.of(), List.of(), List.of(),
                     false, null, null, null, false, null, null, null,
                     false, null, null);
         }

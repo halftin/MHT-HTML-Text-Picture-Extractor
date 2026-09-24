@@ -454,3 +454,11 @@
 .mode-pill .ikonli-font-icon {
     -fx-icon-size: 24px;
 }
+/* 外部文件/文件夹拖入列表时的落点高亮（作用于整个列表外框，非某一行；
+   虚线区别于内部排序的 2px 实心蓝线与整行蓝色覆盖层） */
+.list-view.list-import-hover {
+    -fx-border-color: #3b82f6;
+    -fx-border-width: 2px;
+    -fx-border-style: segments(6, 4) line-cap round;
+    -fx-background-color: #eff6ff;
+}

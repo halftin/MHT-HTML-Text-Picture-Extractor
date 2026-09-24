@@ -18,10 +18,10 @@ import com.mhtextractor.processor.PerFileOverrides;
 import com.mhtextractor.processor.TextBatchProcessor;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.ExtractOutcome;
-import com.mhtextractor.util.FileUtils;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.IncrementalImport;
+import com.mhtextractor.util.MhtImportPlanner;
 import com.mhtextractor.util.OutputUnitPlanner;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.SanitizeUtils;
@@ -76,6 +76,7 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.ContextMenuEvent;
+import javafx.scene.input.DragEvent;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
@@ -100,6 +101,7 @@ import java.awt.Desktop;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -383,6 +385,32 @@ public class MainController {
     private List<PreviewListCell> liftCells = null;
     private List<ImageView> liftViews = null;
 
+    // ==================== 统一导入会话 ====================
+    /** 当前导入会话：非 null = 导入进行中（用于禁用开始提取 + 恢复判定） */
+    private ImportSession importPending = null;
+    /** 本次导入累计新增的项目（收尾统一预解析，避免 O(n²)） */
+    private final List<PreviewItem> importAccumulated = new ArrayList<>();
+    /** 外部导入拖拽进行中（与内部排序通道互斥；hasFiles() 判定） */
+    private boolean importDragOver = false;
+    /** 拖拽目标嵌套深度计数（DRAG_ENTERED_TARGET/DRAG_EXITED_TARGET 成对计数） */
+    private int importDragDepth = 0;
+    /** 外部导入拖拽的列表高亮样式类 */
+    private static final String STYLE_LIST_IMPORT_HOVER = "list-import-hover";
+    /** 每轮配额（与 MhtImportPlanner 常量一致） */
+    private static final int IMPORT_QUOTA_GROUPS = MhtImportPlanner.DEFAULT_MAX_GROUPS;
+    private static final int IMPORT_QUOTA_FILES  = MhtImportPlanner.DEFAULT_MAX_FILES;
+    /** 本次导入累计自动创建的组数（配额确认框/收尾汇总用） */
+    private int importGroupCount = 0;
+    /** 本次导入扫描计数器（applyImportPlan 每轮同步；Plan 的计数为扫描器累计值） */
+    private int importIgnoredNonMht = 0;
+    private int importHiddenDirs = 0;
+    private int importEmptyDirs = 0;
+    private int importUnreadable = 0;
+    private int importDepthLimited = 0;
+
+    /** 导入会话（不可变） */
+    private record ImportSession(List<String> addresses, String sourceDesc, boolean fromDrag) {}
+
     // ===== 右键菜单（右键菜单功能需求：13 项 = 9 动作 + 4 分隔线） =====
     /** 菜单实例（项禁用状态在弹出前按右键目标类型刷新） */
     private ContextMenu contextMenu;
@@ -435,6 +463,7 @@ public class MainController {
         // 1. 列表：单元格工厂、选择联动、逐文件章节勾选、拖拽动画滚动联动
         fileListView.setCellFactory(lv -> createPreviewCell());
         fileListView.setItems(displayItems);
+        setupExternalImportDnD();
 
         // 空白/非预期区域松手：不处理 drop（无蓝条、无吸附），走取消路径瞬时恢复原位不消失
 
@@ -612,46 +641,339 @@ public class MainController {
         saveGuiState();
     }
 
-    /** 增量导入：扫描目录并按绝对路径去重，新文件追加到列表末尾（原有项目顺序/状态/缓存不变） */
+    /** 增量导入：统一入口（BC-1：改为递归扫描 + 自动建组） */
     private void importFromFolder(String dir) {
-        List<File> scanned = FileUtils.findMhtFiles(dir);
-        if (scanned.isEmpty()) {
-            log.info("目录中未找到 .mht 文件，列表保持不变：{}", dir);
-            return;
-        }
-        importFiles(scanned, "目录 " + dir);
+        importByPaths(List.of(dir), "目录 " + dir, false);
+    }
+
+    // ==================== 统一导入（拖拽 + 浏览共用入口） ====================
+
+    /** 是否正在导入 */
+    private boolean isImporting() {
+        return importPending != null;
     }
 
     /**
-     * 文件级增量导入（浏览多选与目录批量共用）：按绝对路径去重，新文件追加列表末尾，
-     * IMPORT 入撤销栈；sourceFolder 取各自父目录（目录批量模式下即所选目录，输出单元分桶语义一致）
+     * 统一导入入口：来源只接受地址字段。
+     * 拖拽路径（fromDrag=true）在盘符根目录时弹确认框（BC-8）；浏览路径不弹。
      */
-    private void importFiles(List<File> chosen, String sourceDesc) {
-        List<File> newFiles = IncrementalImport.findNewFiles(chosen,
-                allPreviewItems().stream().map(i -> i.path).toList());
-        if (newFiles.isEmpty()) {
-            log.info("{}中的文件均已导入，列表保持不变", sourceDesc);
+    private void importByPaths(List<String> addresses, String sourceDesc, boolean fromDrag) {
+        if (addresses == null || addresses.isEmpty()) {
             return;
         }
-        List<PreviewItem> added = new ArrayList<>();
-        for (File f : newFiles) {
-            BatchProcessor.MhtFileInfo info = BatchProcessor.toMhtFileInfo(f);
-            added.add(new PreviewItem(info.getPath(), info.getName(), info.getModifiedTime(),
-                    f.getParent()));
+        if (isImporting()) {
+            log.warn("已有导入进行中，忽略本次请求");
+            return;
         }
-        boolean wasEmpty = visibleCount() == 0;
-        items.addAll(added);
-        undoManager.push(UndoManager.RecordType.IMPORT, added);
-        refreshAfterListChange();
-        log.info("增量导入：{} 新增 {} 个文件，当前可见 {} 个", sourceDesc, added.size(), visibleCount());
-        if (wasEmpty) {
-            fileListView.getSelectionModel().selectFirst();
+        // 地址规范化（RISK-6）：祖先/后代包含关系合并为祖先，防重复扫描与重复批次
+        List<String> normalized = normalizeAddresses(addresses);
+        if (normalized.isEmpty()) {
+            return;
         }
-        // 当前模式参数已确认 → 仅预解析新增项目（原有项目不重新解析）
-        if (currentModeConfirmed()) {
-            startPreParseFor(added);
-            updateProgressStatus(parseToken);
+        log.info("导入开始：来源={}，地址 {} 个", sourceDesc, normalized.size());
+
+        // BC-8：仅拖拽来源 + 盘符根目录 → 确认
+        if (fromDrag) {
+            List<String> roots = MhtImportPlanner.findDriveRoots(normalized);
+            if (!roots.isEmpty()) {
+                Alert a = new Alert(Alert.AlertType.CONFIRMATION);
+                a.setTitle("盘符根目录导入确认");
+                a.setHeaderText(null);
+                a.setContentText("正在使用盘符根目录进行导入，是否执行？\n\n" + String.join("\n", roots)
+                        + "\n\n（将递归扫描该盘，可能导入大量文件）");
+                a.getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
+                if (a.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+                    log.info("用户取消盘符根目录导入：{}", roots);
+                    return;
+                }
+            }
         }
+
+        ImportSession session = new ImportSession(normalized, sourceDesc, fromDrag);
+        importPending = session;
+        importAccumulated.clear();
+        importGroupCount = 0;
+        importIgnoredNonMht = 0;
+        importHiddenDirs = 0;
+        importEmptyDirs = 0;
+        importUnreadable = 0;
+        importDepthLimited = 0;
+        updateStartButtonState();                 // C-1：禁用开始提取
+
+        Thread t = new Thread(() -> runImportRounds(session), "mht-import-scan");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * 地址规范化：重复地址合并；祖先/后代包含关系合并为祖先（丢弃后代）并 info 日志说明。
+     * 无效路径格式原样保留（扫描器按"不存在"计 unreadable）。
+     */
+    private List<String> normalizeAddresses(List<String> addresses) {
+        List<String> kept = new ArrayList<>();
+        for (String a : addresses) {
+            if (a == null || a.isBlank()) {
+                continue;
+            }
+            if (kept.stream().anyMatch(k -> a.equals(k))) {
+                log.info("地址 {} 重复，已合并，不再重复导入", a);
+                continue;
+            }
+            String ancestor = kept.stream().filter(k -> isDescendantOf(a, k)).findFirst().orElse(null);
+            if (ancestor != null) {
+                log.info("地址 {} 已包含在 {} 中，合并为祖先，不再单独导入", a, ancestor);
+                continue;
+            }
+            kept.removeIf(k -> isDescendantOf(k, a));
+            kept.add(a);
+        }
+        return kept;
+    }
+
+    private static boolean isDescendantOf(String child, String ancestor) {
+        try {
+            Path cp = Path.of(child);
+            Path ap = Path.of(ancestor);
+            return !cp.equals(ap) && cp.startsWith(ap);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 应用一个计划（一批或一轮）；FX 线程；生产与自动化测试共用。
+     * 撤销与预解析职责在本层上移：一次导入累计压一条 IMPORT 记录（BC-5），
+     * 预解析由 finishImport 统一执行（RISK-7）。
+     */
+    private void applyImportPlan(MhtImportPlanner.Plan plan) {
+        // 计数器为扫描器累计值：即使本轮无批次也同步（finishImport 汇总用）
+        importIgnoredNonMht = plan.ignoredNonMht();
+        importHiddenDirs = plan.hiddenDirs();
+        importEmptyDirs = plan.emptyDirs();
+        importUnreadable = plan.unreadable();
+        importDepthLimited = plan.depthLimited();
+
+        List<GroupItem<PreviewItem>> createdGroups = new ArrayList<>();
+
+        for (MhtImportPlanner.Batch batch : plan.batches()) {
+            // 去重：与列表已有项比对（复用 F4），只保留真正的新文件
+            List<File> fresh = IncrementalImport.findNewFiles(
+                    batch.files(), allPreviewItems().stream().map(i -> i.path).toList());
+            if (fresh.isEmpty()) {
+                // RISK-1 硬约束：无新文件则该批次不建组
+                log.debug("批次跳过（{} 内文件均已导入）", batch.dirPath());
+                continue;
+            }
+
+            boolean wasEmpty = visibleCount() == 0;
+            List<PreviewItem> added = new ArrayList<>();
+            for (File f : fresh) {
+                BatchProcessor.MhtFileInfo info = BatchProcessor.toMhtFileInfo(f);
+                added.add(new PreviewItem(info.getPath(), info.getName(),
+                        info.getModifiedTime(), f.getParent()));
+            }
+
+            if (batch instanceof MhtImportPlanner.GroupBatch gb) {
+                // 组成员只入组、不入顶层（数据模型：组成员仅存于 GroupItem.members；
+                // 若同时入顶层，visibleCount/显示序/输出单元都会双计——§5.6 断言口径为单重表示）
+                GroupItem<PreviewItem> group = createGroupForImport(added, gb.folderName());
+                createdGroups.add(group);
+            } else {
+                items.addAll(added);              // TopLevelBatch：平铺
+            }
+            importAccumulated.addAll(added);
+
+            if (wasEmpty) {
+                fileListView.getSelectionModel().selectFirst();
+            }
+        }
+        importGroupCount += createdGroups.size();
+
+        // 撤销栈：一次导入 = 一条记录（BC-5；多轮导入时每轮记录均携带全量累计，一次撤销撤整批）
+        if (!importAccumulated.isEmpty()) {
+            undoManager.push(new UndoManager.Record<>(
+                    UndoManager.RecordType.IMPORT, new ArrayList<>(importAccumulated),
+                    new ArrayList<>(createdGroups)));
+        }
+
+        refreshAfterListChange();                 // 每轮一次（RISK-8，不是每批一次）
+    }
+
+    /**
+     * 建组：组名 sanitize → 唯一化 → 注册名字刷新监听 → 追加顶层（BC-4 默认展开）。
+     * 注意：不清 members 的条目级参数——成员均为本次新导入项，本就没有条目级参数；
+     * 不要照抄 onGroupClicked 的条目参数清除（那会清掉既有条目的参数，RISK-1）。
+     */
+    private GroupItem<PreviewItem> createGroupForImport(List<PreviewItem> members, String folderName) {
+        // ① 组名：sanitize（保证"列表显示名 == 输出名"，F10/BC-6）
+        String base = SanitizeUtils.sanitize(folderName);
+        if (base.isEmpty() || base.equals("unnamed")) {
+            base = "组" + GroupStructure.nextGroupNo(groupNoCounter);
+        }
+        // ② 唯一化：复用既有实现（F7）
+        String name = GroupStructure.uniqueGroupName(base, allGroupNames());
+        if (!name.equals(base)) {
+            log.info("组名冲突：{} 已被其它组使用，自动改为 {}", base, name);
+        }
+        // ③ 建组 + 注册名字刷新监听（F8——漏了会导致改名后列表不刷新）
+        int groupNo = GroupStructure.nextGroupNo(groupNoCounter);
+        groupNoCounter = groupNo;
+        GroupItem<PreviewItem> group = new GroupItem<>(groupNo, name);
+        registerGroupNameRefresh(group);
+        group.setExpanded(true);                  // BC-4：默认展开
+        // ④ 成员入组
+        group.getMembers().addAll(members);
+        // ⑤ 追加顶层（导入一律追加到末尾，不与落点/既有项目交互）
+        items.add(group);
+        return group;
+    }
+
+    /** 组名刷新监听注册（手动/自动建组共用；F8/RISK-11） */
+    private void registerGroupNameRefresh(GroupItem<PreviewItem> group) {
+        group.nameProperty().addListener((obs, old, newVal) -> fileListView.refresh());
+    }
+
+    /** 全部组名集合（供自动建组唯一化使用） */
+    private List<String> allGroupNames() {
+        List<String> names = new ArrayList<>();
+        for (Object o : items) {
+            if (o instanceof GroupItem<?> g) {
+                names.add(((GroupItem<?>) g).getName());
+            }
+        }
+        return names;
+    }
+
+    /** 后台线程：轮扫描 + 询问 FX 确认；不经手 GUI 控件 */
+    private void runImportRounds(ImportSession session) {
+        MhtImportPlanner.Scanner scanner = MhtImportPlanner.scanner(
+                session.addresses(), MhtImportPlanner.DEFAULT_MAX_DEPTH,
+                IMPORT_QUOTA_GROUPS, IMPORT_QUOTA_FILES);
+        try {
+            while (true) {
+                MhtImportPlanner.Plan round = scanner.nextRound();
+                Platform.runLater(() -> applyImportPlan(round));
+                if (!round.hasMore()) {
+                    break;
+                }
+                if (!round.quotaHit()) {
+                    continue;                     // 防御：无配额命中却还有剩余
+                }
+                log.info("已达每轮上限（{} 组 / {} 文件），询问用户是否继续",
+                        IMPORT_QUOTA_GROUPS, IMPORT_QUOTA_FILES);
+                boolean go = awaitQuotaConfirm(round);
+                if (!go) {
+                    log.info("用户选择停止导入；已完成部分保留");
+                    break;
+                }
+            }
+        } catch (Exception ex) {
+            log.error("导入扫描失败", ex);
+            Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "导入失败：" + ex.getMessage()));
+        } finally {
+            Platform.runLater(this::finishImport);   // 唯一恢复点
+        }
+    }
+
+    /** 后台线程阻塞等待 FX 线程上的配额确认框 */
+    private boolean awaitQuotaConfirm(MhtImportPlanner.Plan round) {
+        CompletableFuture<Boolean> future = new CompletableFuture<>();
+        Platform.runLater(() -> {
+            Alert a = new Alert(Alert.AlertType.CONFIRMATION);
+            a.setTitle("导入数量确认");
+            a.setHeaderText(null);
+            a.setContentText(String.format(
+                    "本次导入已达上限（每轮 %d 个组 / %d 个文件），是否继续导入？%n%n"
+                    + "继续：从断点扫描下一轮（每满一轮会再次询问）%n"
+                    + "停止：保留已导入的 %d 个文件 / %d 个组",
+                    IMPORT_QUOTA_GROUPS, IMPORT_QUOTA_FILES,
+                    importAccumulated.size(), importGroupCount));
+            a.getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
+            future.complete(a.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK);
+        });
+        return future.join();
+    }
+
+    /** 收尾：唯一恢复点 + 统一预解析 + 汇总日志 */
+    private void finishImport() {
+        try {
+            // 预解析在导入期间抑制，收尾统一跑一次（RISK-7，避免 O(n²)）
+            if (!importAccumulated.isEmpty() && currentModeConfirmed()) {
+                startPreParseFor(new ArrayList<>(importAccumulated));
+            }
+            log.info("导入完成：新增 {} 个项目、自动创建 {} 个组；忽略非 MHT {} 个、隐藏目录 {} 个、"
+                            + "空目录 {} 个、不可读 {} 个、超深 {} 个",
+                    importAccumulated.size(), importGroupCount,
+                    importIgnoredNonMht, importHiddenDirs, importEmptyDirs,
+                    importUnreadable, importDepthLimited);
+        } finally {
+            importPending = null;
+            importAccumulated.clear();
+            updateStartButtonState();             // ★ 必须走派生更新，不裸 setDisable
+        }
+    }
+
+    /** 外部导入拖拽落点高亮（去抖：状态未变化不重复操作样式类） */
+    private void updateImportDropHighlight(boolean on) {
+        if (on == importDragOver) {
+            return;
+        }
+        importDragOver = on;
+        if (on) {
+            fileListView.getStyleClass().add(STYLE_LIST_IMPORT_HOVER);
+        } else {
+            fileListView.getStyleClass().remove(STYLE_LIST_IMPORT_HOVER);
+        }
+    }
+
+    /** 硬复位（深度计数归零 + 清除高亮）：dragDropped/dragDone 无条件调用 */
+    private void clearImportDropHighlight() {
+        importDragDepth = 0;
+        updateImportDropHighlight(false);
+    }
+
+    /** 外部文件/文件夹拖入的 ListView 级处理器（接受点唯一在 ListView；单元格放行分支见 setupDnD） */
+    private void setupExternalImportDnD() {
+        fileListView.setOnDragOver(e -> {
+            if (e.getDragboard().hasFiles() && !dragActive) {
+                e.acceptTransferModes(TransferMode.COPY);     // 接受点唯一：ListView
+                updateImportDropHighlight(true);
+            }
+        });
+        fileListView.setOnDragEntered(e -> {
+            if (e.getDragboard().hasFiles() && !dragActive) {
+                importDragDepth++;
+                updateImportDropHighlight(true);
+            }
+        });
+        fileListView.setOnDragExited(e -> clearImportDropHighlight());
+        fileListView.setOnDragDropped(this::onExternalFilesDropped);
+        fileListView.setOnDragDone(e -> clearImportDropHighlight());
+    }
+
+    private void onExternalFilesDropped(DragEvent e) {
+        if (dragActive) {
+            e.setDropCompleted(false);
+            e.consume();
+            return;
+        }
+        boolean ok = false;
+        try {
+            List<File> dropped = e.getDragboard().getFiles();
+            if (dropped != null && !dropped.isEmpty()) {
+                List<String> addresses = dropped.stream().map(File::getAbsolutePath).toList();
+                // ★ 拖放回调在 FX 线程；盘符根目录确认框需 showAndWait。
+                //   延后到 runLater，避免在 dragDropped 分发过程中开嵌套事件循环干扰 DnD 状态机。
+                Platform.runLater(() -> importByPaths(addresses, "拖拽导入", true));
+                ok = true;
+            }
+        } catch (Exception ex) {
+            log.warn("拖拽导入失败：{}", ex.getMessage(), ex);
+        } finally {
+            clearImportDropHighlight();
+        }
+        e.setDropCompleted(ok);
+        e.consume();
     }
 
     /** 取消进行中的预解析/图片懒加载等后台工作区活动 */
@@ -832,7 +1154,7 @@ public class MainController {
             item.textItemParams = params;
         }
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
-                null, -1, List.of(), List.of(), List.of(),
+                null, -1, List.of(), List.of(), List.of(), List.of(),
                 false, null, null, null, imageMode, item.path, null, before,
                 false, null, null));
         clearExtractOutcomes(List.of(item));
@@ -854,7 +1176,7 @@ public class MainController {
             textParamsCache = params;
         }
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
-                null, -1, List.of(), List.of(), List.of(),
+                null, -1, List.of(), List.of(), List.of(), List.of(),
                 false, null, null, null, imageMode, null, null, before,
                 false, null, null));
         // 拍板：全局参数重新确认 → 全部条目旧提取结果色失效
@@ -874,7 +1196,7 @@ public class MainController {
         log.info("组 {} 已确认{}模式独立参数，组内项目重新解析", group.getName(), imageMode ? "图片" : "文本");
         // 入撤销栈（PARAM_SET，组参数设置可撤销）
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
-                null, -1, List.of(), List.of(), List.of(),
+                null, -1, List.of(), List.of(), List.of(), List.of(),
                 false, null, null, null, imageMode, null, group.getGroupNo(), before,
                 false, null, null));
         // 拍板：组参数重新确认 → 该组成员旧提取结果色失效
@@ -1218,7 +1540,7 @@ public class MainController {
             }
         }
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.APPLY_GLOBAL, List.of(),
-                null, -1, List.of(), List.of(), List.of(),
+                null, -1, List.of(), List.of(), List.of(), List.of(),
                 imageMode, globalBefore, itemBefore, groupBefore, false, null, null, null,
                 false, null, null));
         clearExtractOutcomes(allPreviewItems());
@@ -1312,7 +1634,7 @@ public class MainController {
             }
         }
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.CLEAR_PARAMS, List.of(),
-                null, -1, List.of(), List.of(), List.of(),
+                null, -1, List.of(), List.of(), List.of(), List.of(),
                 false, null, null, null, false, null, null, null,
                 imageMode, itemBefore, groupBefore));
         // 受影响条目：清除条目参数的项目 + 清除组参数的各组全部有效成员
@@ -2076,6 +2398,12 @@ public class MainController {
                 e.consume();
             });
             setOnDragOver(e -> {
+                // 外部文件/文件夹拖入：本单元格不参与落点判定，仅放行事件给 ListView 级导入处理器。
+                // 必须不 consume：本 handler 末尾无条件 e.consume() 会吞掉事件，列表级处理器永远收不到。
+                // 不放 acceptTransferModes —— 落点位置无语义（导入一律追加到列表末尾）。
+                if (e.getDragboard().hasFiles() && !dragActive) {
+                    return;
+                }
                 // 不能用 getGestureSource() != this 做守卫：拖起后源单元格被 ListView 虚拟化复用
                 // 去显示下一条目，光标悬停其上会被误判为"自身"而拒绝落点（向下拖拽必现）。
                 // 本应用拖拽会话以 draggedObject 为准；自身落点由 resolve（dragged == target）拦截。
@@ -2105,6 +2433,12 @@ public class MainController {
                 e.consume();
             });
             setOnDragDropped(e -> {
+                // 外部文件/文件夹拖入：与 setOnDragOver 的放行分支对应——本单元格不消费 drop，
+                // 事件冒泡到 ListView 级导入处理器（松手落在单元格上时若不放行，列表级处理器
+                // 永远收不到，外部导入表现为"有高亮但拖不进来"）。
+                if (e.getDragboard().hasFiles() && !dragActive) {
+                    return;
+                }
                 Dragboard db = e.getDragboard();
                 boolean ok = false;
                 clearInsertIndicator();
@@ -2125,8 +2459,10 @@ public class MainController {
                     lastDragOverCell.clearInsertIndicator();
                     lastDragOverCell = null;
                 }
-                // 未发生 drop 的拖拽结束（Esc / 拖出列表）→ 回到原位
-                if (dragActive && !dropHandled && draggedObject != null) {
+                // 未发生 drop 的拖拽结束（Esc / 拖出列表）→ 回到原位。
+                // 守卫不检查 draggedObject：cancelDrag 只做"重建显示序 + 复位状态"（数据序未动），
+                // draggedObject 为 null 时同样能恢复显示（防"条目消失 + 交互锁死"的卡死形态）
+                if (dragActive && !dropHandled) {
                     cancelDrag();
                 }
                 e.consume();
@@ -2296,9 +2632,10 @@ public class MainController {
                 }
             }
         } catch (Exception ex) {
-            // 快照失败兜底：跳过动画，瞬时重排
+            // 快照失败兜底：瞬时重排复位（cancelDrag 会清除 dragActive，防卡死）
             log.warn("拖拽快照失败，退化为瞬时重排：{}", ex.getMessage(), ex);
             dragOverlay.getChildren().removeAll(views);
+            cancelDrag();
             return;
         }
 
@@ -2533,6 +2870,12 @@ public class MainController {
      */
     @SuppressWarnings("unchecked")
     private void onCellPressed(Object item, javafx.scene.input.MouseEvent e) {
+        // 拖拽状态自愈：真实拖拽期间鼠标被 DnD 手势捕获，按压事件不会到达；
+        // 此处仍有 dragActive = 上次拖拽异常残留（如列表外松手后 DONE 丢失）→ 立即恢复显示与状态，
+        // 本次按压继续正常处理（数据序未动，cancelDrag 只是重建显示序 + 复位标志）
+        if (dragActive) {
+            cancelDrag();
+        }
         // 仅左键：右键按压不得触发折叠/多选手势（右键由 contextMenuRequested 处理）
         if (listAnimating || item == null || e.getButton() != MouseButton.PRIMARY) {
             return;
@@ -2772,9 +3115,10 @@ public class MainController {
         clearParamsButton.setDisable(!anyClearable);
     }
 
+    /** 开始按钮可用性的唯一派生函数 —— 所有禁用/恢复都必须经由此函数 */
     private void updateStartButtonState() {
         boolean anyMode = textModeToggle.isSelected() || imageModeToggle.isSelected();
-        startButton.setDisable(!anyMode || visibleCount() == 0);
+        startButton.setDisable(!anyMode || visibleCount() == 0 || isImporting());
     }
 
     /** 列表结构变化（移除/撤销/导入/建组）后的统一刷新：显示序重建、计数、按钮、序号/徽标、进度、信息区 */
@@ -2978,7 +3322,8 @@ public class MainController {
                 if (selRemoved) {
                     selectNearestVisible(selIndex);
                 }
-                log.info("撤销导入：本次新增的 {} 个项目已移除", record.items().size());
+                log.info("撤销导入：本次新增的 {} 个项目、{} 个自动创建的组已移除",
+                        record.items().size(), record.groups().size());
             }
             case GROUP, REORDER, MERGE_GROUPS -> {
                 // 撤销恢复拖拽前结构（顶层顺序、组位置、各组内顺序），组对象复用（组名/参数保留）
@@ -3194,7 +3539,7 @@ public class MainController {
         int groupNo = GroupStructure.nextGroupNo(groupNoCounter);
         groupNoCounter = groupNo;
         GroupItem<PreviewItem> group = new GroupItem<>(groupNo, "组" + groupNo);
-        group.nameProperty().addListener((obs, old, newVal) -> fileListView.refresh());
+        registerGroupNameRefresh(group);
 
         // 插入槽位：最早目标在显示序中的位置（顶层项目=自身位置；组内成员=其组之后），拆出时同步修正索引
         int insertIdx = Integer.MAX_VALUE;
@@ -4316,6 +4661,13 @@ public class MainController {
             undoManager.clear();
             refreshAfterListChange();
         }
+        // 统一导入为异步：等待启动时可能在途的导入收尾，再二次清场（防 applyImportPlan 回填列表）
+        waitForImportDone();
+        if (!items.isEmpty()) {
+            items.clear();
+            undoManager.clear();
+            refreshAfterListChange();
+        }
 
         // Phase 1: 模式切换演练
         textModeToggle.setSelected(true);
@@ -4677,6 +5029,15 @@ public class MainController {
         imageModeToggle.setSelected(false);
         Thread.sleep(300);
 
+        // Phase 14: 导入相关（统一导入改造）：高亮样式类 + 盘符根目录判定（不真正扫描盘符）
+        updateImportDropHighlight(true);
+        Thread.sleep(100);
+        clearImportDropHighlight();
+        MhtImportPlanner.findDriveRoots(List.of("D:\\", "C:\\test"));
+        MhtImportPlanner.scanner(List.of("C:\\test"), MhtImportPlanner.DEFAULT_MAX_DEPTH,
+                MhtImportPlanner.DEFAULT_MAX_GROUPS, MhtImportPlanner.DEFAULT_MAX_FILES);
+        Thread.sleep(100);
+
         log.info("Agent exercise complete - all UI features exercised");
     }
 
@@ -4686,6 +5047,15 @@ public class MainController {
         Object key = new Object();
         Platform.runLater(() -> Platform.exitNestedEventLoop(key, null));
         Platform.enterNestedEventLoop(key);
+    }
+
+    /** 测试专用：等待在途的统一导入收尾（统一导入为后台异步，断言列表状态前必须先排空） */
+    private void waitForImportDone() throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 15000;
+        while (isImporting() && System.currentTimeMillis() < deadline) {
+            pumpFxEvents();
+            Thread.sleep(20);
+        }
     }
 
     /** 自动化测试：依次执行所有功能并记录结果到文件（test.mode=true 触发） */
@@ -4698,6 +5068,13 @@ public class MainController {
             int p = 0, f = 0;
 
             // 清场：移除启动时 GUI 状态恢复导入的既有文件并重置撤销栈（保证断言可预测）
+            if (!items.isEmpty()) {
+                items.clear();
+                undoManager.clear();
+                refreshAfterListChange();
+            }
+            // 统一导入为异步：等待启动时可能在途的导入收尾，再二次清场（防 applyImportPlan 回填列表）
+            waitForImportDone();
             if (!items.isEmpty()) {
                 items.clear();
                 undoManager.clear();
@@ -4751,9 +5128,11 @@ public class MainController {
             // 增量导入：先导入 2 个，追加 1 个后再次导入 → 仅新增 1 个
             try { textModeToggle.setSelected(true); Thread.sleep(200);
                 inputFolderField.setText(textDir.toString()); Thread.sleep(1200);
+                waitForImportDone();
                 long before = visibleCount();
                 createSampleMht(textDir, "t03.mht");
                 importFromFolder(textDir.toString()); Thread.sleep(500);
+                waitForImportDone();
                 if (visibleCount() != before + 1) {
                     throw new IllegalStateException("增量导入数量不符：" + before + " -> " + visibleCount());
                 }
@@ -4767,11 +5146,124 @@ public class MainController {
                     throw new IllegalStateException("撤销导入数量不符：" + before + " -> " + visibleCount());
                 }
                 importFromFolder(textDir.toString()); Thread.sleep(500);
+                waitForImportDone();
                 if (visibleCount() != before) {
                     throw new IllegalStateException("撤销导入后重新导入失败：" + visibleCount());
                 }
                 out.println("[PASS] Undo import + re-import"); p++;
             } catch (Exception e) { out.println("[FAIL] Undo import re-import: " + e.getMessage()); f++; }
+
+            // 统一导入：递归 + 分层建组 + 根层平铺 + 组名唯一化 + 隐藏目录跳过
+            try {
+                java.nio.file.Path root = java.nio.file.Files.createTempDirectory("mht-auto-import");
+                java.nio.file.Path sub1 = java.nio.file.Files.createDirectories(root.resolve("sub1"));
+                java.nio.file.Path sub2 = java.nio.file.Files.createDirectories(root.resolve("sub2"));
+                java.nio.file.Path sub2deep = java.nio.file.Files.createDirectories(sub2.resolve("sub2"));  // 同名深层
+                java.nio.file.Path hidden = java.nio.file.Files.createDirectories(root.resolve(".hidden"));
+                java.nio.file.Path emptyLayer = java.nio.file.Files.createDirectories(root.resolve("noMhtHere"));
+                java.nio.file.Path deeper = java.nio.file.Files.createDirectories(emptyLayer.resolve("deeper"));
+
+                createSampleMht(root, "r1.mht");            // 根层 → 顶层平铺
+                createSampleMht(root, "r2.mht");            // 根层
+                createSampleMht(sub1, "s1.mht");            // 组 sub1
+                createSampleMht(sub2, "s2.mht");            // 组 sub2
+                createSampleMht(sub2deep, "s3.mht");        // 组 sub2(2)（同名 → 唯一化）
+                createSampleMht(hidden, "h1.mht");          // 应跳过
+                createSampleMht(deeper, "d1.mht");          // 组 deeper（noMhtHere 本层无 MHT → 不建组）
+                java.nio.file.Files.writeString(root.resolve("note.txt"), "x");  // 非 MHT → 忽略
+
+                int before = (int) visibleCount();
+                int groupsBefore = topLevelGroups().size();
+
+                // 阶段一：纯扫描断言（不走 GUI 事件）
+                MhtImportPlanner.Scanner sc = MhtImportPlanner.scanner(
+                        List.of(root.toString()), MhtImportPlanner.DEFAULT_MAX_DEPTH,
+                        MhtImportPlanner.DEFAULT_MAX_GROUPS, MhtImportPlanner.DEFAULT_MAX_FILES);
+                MhtImportPlanner.Plan plan = sc.nextRound();
+                long groupBatches = plan.batches().stream()
+                        .filter(b -> b instanceof MhtImportPlanner.GroupBatch).count();
+                if (groupBatches != 4) throw new IllegalStateException("组批次数不符：" + groupBatches);   // sub1,sub2,sub2(2),deeper
+                if (plan.ignoredNonMht() != 1) throw new IllegalStateException("非 MHT 计数不符");
+                if (plan.hiddenDirs() != 1) throw new IllegalStateException("隐藏目录计数不符");
+
+                // 阶段二：应用（与生产同一实现）
+                applyImportPlan(plan); Thread.sleep(600);
+                if (visibleCount() != before + 6) throw new IllegalStateException("导入总数不符：" + visibleCount()); // 2 根 + 4 组内
+                if (topLevelGroups().size() != groupsBefore + 4) throw new IllegalStateException("组数不符");
+                boolean noMhtGroup = topLevelGroups().stream().anyMatch(g -> "noMhtHere".equals(g.getName()));
+                if (noMhtGroup) throw new IllegalStateException("本层无 MHT 的目录不应建组");
+                if (topLevelGroups().stream().noneMatch(g -> "sub2(2)".equals(g.getName()))) {
+                    throw new IllegalStateException("同名文件夹组名未唯一化");
+                }
+                out.println("[PASS] Unified import: recursion + layering + dedupe naming"); p++;
+            } catch (Exception e) { out.println("[FAIL] Unified import: " + e.getMessage()); f++; }
+
+            // 统一导入：一次撤销撤整批（含自动创建的组）
+            try {
+                int itemsBefore = (int) visibleCount();
+                int groupsBefore = topLevelGroups().size();
+                undoButton.fire(); Thread.sleep(600);
+                if (visibleCount() != itemsBefore - 6) throw new IllegalStateException("整批撤销项目数不符：" + visibleCount());
+                if (topLevelGroups().size() != groupsBefore - 4) throw new IllegalStateException("整批撤销未带走自动创建的组");
+                out.println("[PASS] Unified import: single undo removes whole batch (items + groups)"); p++;
+            } catch (Exception e) { out.println("[FAIL] Unified import undo: " + e.getMessage()); f++; }
+
+            // 统一导入：重复导入同目录无新文件 → 列表不变、不建组、不清既有参数（RISK-1）
+            try {
+                java.nio.file.Path root = java.nio.file.Files.createTempDirectory("mht-auto-import");
+                java.nio.file.Path sub1 = java.nio.file.Files.createDirectories(root.resolve("sub1"));
+                createSampleMht(root, "r1.mht");
+                createSampleMht(sub1, "s1.mht");
+                int itemsBefore = (int) visibleCount();
+                int groupsBefore = topLevelGroups().size();
+                importByPaths(List.of(root.toString()), "自动化重复导入", false); Thread.sleep(800);
+                waitForImportDone();
+                if (visibleCount() != itemsBefore + 2 || topLevelGroups().size() != groupsBefore + 1) {
+                    throw new IllegalStateException("首次导入目录失败");
+                }
+                // 为导入条目设置条目级参数 → 重复导入不得清空（RISK-1 拍板）
+                PreviewItem r1 = allPreviewItems().stream()
+                        .filter(i -> i.path.endsWith("r1.mht")).findFirst().orElse(null);
+                if (r1 == null) {
+                    throw new IllegalStateException("未找到导入条目");
+                }
+                r1.textItemParams = new AppConfig();
+                importByPaths(List.of(root.toString()), "自动化重复导入", false); Thread.sleep(800);
+                waitForImportDone();
+                if (visibleCount() != itemsBefore + 2 || topLevelGroups().size() != groupsBefore + 1) {
+                    throw new IllegalStateException("重复导入不应改变列表");
+                }
+                if (r1.textItemParams == null) {
+                    throw new IllegalStateException("重复导入清空了既有条目级参数");
+                }
+                // 清场：撤销本次导入（后续测试段假设列表为 3 个顶层项目、无组）
+                undoButton.fire(); Thread.sleep(600);
+                out.println("[PASS] Unified import: re-import is a no-op"); p++;
+            } catch (Exception e) { out.println("[FAIL] Unified import re-import: " + e.getMessage()); f++; }
+
+            // 按钮状态：导入期间禁用 + 收尾恢复
+            try {
+                importPending = new ImportSession(List.of(), "自动化按钮状态", false);
+                updateStartButtonState();
+                if (!startButton.isDisabled()) throw new IllegalStateException("导入期间开始提取应禁用");
+                importPending = null;
+                updateStartButtonState();
+                boolean anyMode = textModeToggle.isSelected() || imageModeToggle.isSelected();
+                if (startButton.isDisabled() != (!anyMode || visibleCount() == 0)) {
+                    throw new IllegalStateException("导入结束后开始按钮状态未按派生规则恢复");
+                }
+                out.println("[PASS] Import disables/restores start button"); p++;
+            } catch (Exception e) { out.println("[FAIL] Import button state: " + e.getMessage()); f++; }
+
+            // 拖拽高亮：硬复位
+            try {
+                importDragDepth = 3; updateImportDropHighlight(true);
+                clearImportDropHighlight();
+                if (fileListView.getStyleClass().contains("list-import-hover")) {
+                    throw new IllegalStateException("拖拽高亮未清除");
+                }
+                out.println("[PASS] Drag-drop import highlight reset"); p++;
+            } catch (Exception e) { out.println("[FAIL] Drag-drop highlight: " + e.getMessage()); f++; }
 
             // 复选框列头全选/全不选（三态联动）
             try { selectAllCheck.fire(); Thread.sleep(200);
@@ -5112,6 +5604,7 @@ public class MainController {
             // 文本提取（参数已确认 → 不弹提示；断言单元合并后 fileResults 完整，供回写背景色）
             try { textModeToggle.setSelected(true); Thread.sleep(300);
                 inputFolderField.setText(textDir.toString());
+                waitForImportDone();   // 统一导入为异步：先排空（本例为全量已导入 no-op），避免收尾回调在提取期间重算按钮状态
                 outputFolderField.setText(new File(System.getProperty("java.io.tmpdir"),
                         "mht-auto-output-text").getPath());
                 startButton.fire();
@@ -5148,6 +5641,7 @@ public class MainController {
                 java.nio.file.Files.write(imageDir.resolve("bad.mht"),
                         "garbage-not-a-mht".getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 inputFolderField.setText(imageDir.toString());
+                waitForImportDone();   // 统一导入为异步：bad.mht 须完成导入后才开始提取，否则无失败条目
                 outputFolderField.setText(new File(System.getProperty("java.io.tmpdir"),
                         "mht-auto-output-image").getPath());
                 startButton.fire();
