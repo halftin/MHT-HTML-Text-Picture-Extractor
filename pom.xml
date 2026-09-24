@@ -7,7 +7,7 @@
 
     <groupId>com.mhtextractor</groupId>
     <artifactId>mhtExtractor</artifactId>
-    <version>2.5-beta</version>
+    <version>2.6-beta</version>
     <packaging>jar</packaging>
 
     <properties>
