@@ -1011,14 +1011,16 @@ public class MainController {
         return c != null ? c : new AppConfig();
     }
 
-    /** 当前模式下某条目的生效参数（三层覆盖，条目独立参数需求拍板）：组参数 > 条目级参数 > 全局；均未确认 → null */
+    /** 当前模式下某条目的生效参数（三层覆盖，条目独立参数需求拍板）：组参数 > 条目级参数 > 全局；均未确认 → null。
+     *  图片模式经 ParamScope.effectiveImageParams 唯一入口解析（会话 7 收敛，与提取路径一致） */
     private AppConfig effectiveForObject(Object o) {
         GroupItem<?> parent = o instanceof PreviewItem it ? it.parentGroup
                 : (o instanceof GroupItem<?> g ? g : null);
         AppConfig itemText = o instanceof PreviewItem it ? it.textItemParams : null;
         AppConfig itemImage = o instanceof PreviewItem it ? it.imageItemParams : null;
-        return ParamScope.effectiveParams(parent, itemText, itemImage, imageModeToggle.isSelected(),
-                textParamsCache, imageParamsCache);
+        return imageModeToggle.isSelected()
+                ? ParamScope.effectiveImageParams(parent, itemImage, imageParamsCache)
+                : ParamScope.effectiveParams(parent, itemText, itemImage, false, textParamsCache, imageParamsCache);
     }
 
     /** 任一有效项目存在生效参数（组参数或全局参数已确认） */

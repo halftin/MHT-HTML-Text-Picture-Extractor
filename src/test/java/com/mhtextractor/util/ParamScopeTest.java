@@ -3,6 +3,9 @@ package com.mhtextractor.util;
 import com.mhtextractor.config.AppConfig;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -213,5 +216,81 @@ class ParamScopeTest {
                 ParamScope.backgroundStatus(g, null, null, true, null, null));
         assertEquals(ParamScope.Status.NONE,
                 ParamScope.backgroundStatus(g, null, null, false, null, null));
+    }
+
+    // ==================== 会话 7：图片模式唯一入口 effectiveImageParams ====================
+
+    @Test
+    void effectiveImageParamsGroupBeatsItemAndGlobal() {
+        GroupItem<String> g = group(1, "组1");
+        AppConfig groupCfg = cfg();
+        g.setImageParamsCache(groupCfg);
+        assertSame(groupCfg, ParamScope.effectiveImageParams(g, cfg(), cfg()));
+    }
+
+    @Test
+    void effectiveImageParamsItemBeatsGlobal() {
+        AppConfig itemCfg = cfg();
+        assertSame(itemCfg, ParamScope.effectiveImageParams(null, itemCfg, cfg()));
+    }
+
+    @Test
+    void effectiveImageParamsFallsBackToGlobal() {
+        AppConfig global = cfg();
+        assertSame(global, ParamScope.effectiveImageParams(null, null, global));
+        assertSame(global, ParamScope.effectiveImageParams(group(1, "组1"), null, global));
+    }
+
+    @Test
+    void effectiveImageParamsNullWhenNothingConfirmed() {
+        assertNull(ParamScope.effectiveImageParams(null, null, null));
+        assertNull(ParamScope.effectiveImageParams(group(1, "组1"), null, null));
+    }
+
+    @Test
+    void effectiveImageParamsTextParamsNeverLeakIn() {
+        GroupItem<String> g = group(1, "组1");
+        g.setTextParamsCache(cfg());
+        AppConfig global = cfg();
+        // 组仅确认文本参数 → 图片模式回退全局
+        assertSame(global, ParamScope.effectiveImageParams(g, null, global));
+    }
+
+    /**
+     * 等价性锁定（会话 7）：提取路径（OutputUnitPlanner.resolve 经 effectiveParams 委托）
+     * 与预览路径（MainController.effectiveForObject 直接调用）必须解析出同一实例。
+     * 组合矩阵：组（无/未确认/已确认）× 条目（无/有）× 全局（未确认/已确认）。
+     * MainController 无法在纯单元测试中实例化（JavaFX 控件依赖），其包装逻辑仅 4 行且直接转发
+     * 本入口（见 docs/handoff/H7.md），故以唯一入口 + 委托等价性锁定两条路径一致；
+     * assertSame（同实例）强于逐字段相等。
+     */
+    @Test
+    void effectiveImageParamsMatchesLegacyPathForAllCombos() {
+        GroupItem<String> groupUnset = group(1, "组未确认");
+        GroupItem<String> groupSet = group(2, "组已确认");
+        AppConfig groupCfg = cfg();
+        groupSet.setImageParamsCache(groupCfg);
+        AppConfig itemCfg = cfg();
+        AppConfig global = cfg();
+        // 干扰项：文本参数不得影响图片模式解析
+        AppConfig textItem = cfg();
+        AppConfig textGlobal = cfg();
+
+        List<GroupItem<String>> parents = Arrays.asList(null, groupUnset, groupSet);
+        List<AppConfig> items = Arrays.asList(null, itemCfg);
+        List<AppConfig> globals = Arrays.asList(null, global);
+        for (GroupItem<String> parent : parents) {
+            for (AppConfig item : items) {
+                for (AppConfig gl : globals) {
+                    AppConfig viaEntry = ParamScope.effectiveImageParams(parent, item, gl);
+                    AppConfig viaParams = ParamScope.effectiveParams(parent, textItem, item, true, textGlobal, gl);
+                    assertSame(viaEntry, viaParams,
+                            "预览/提取两条路径解析结果必须为同一实例: parent=" + parent + " item=" + item);
+                    AppConfig expected = (parent != null && parent.getImageParamsCache() != null)
+                            ? parent.getImageParamsCache() : (item != null ? item : gl);
+                    assertSame(expected, viaEntry);
+                }
+            }
+        }
     }
 }

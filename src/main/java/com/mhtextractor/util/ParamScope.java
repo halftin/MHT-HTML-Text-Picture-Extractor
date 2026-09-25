@@ -66,23 +66,44 @@ public final class ParamScope {
     }
 
     /**
-     * 生效参数三层覆盖（条目独立参数需求拍板）：组参数优先，其次条目级参数，最后继承全局；
-     * 全局未确认 → null（无生效参数）。组内成员无条目级参数（itemText/itemImage 传 null）。
+     * 生效参数唯一入口（图片模式，会话 7 收敛）：组参数 &gt; 条目级图片参数 &gt; 全局图片参数；
+     * 均未确认 → null。预览（MainController.effectiveForObject）与提取（OutputUnitPlanner.resolve）
+     * 的图片参数解析必须且只能经由本方法——缓存复用（需求 2 P10）依赖两者解析出同一套参数。
      */
-    public static AppConfig effectiveParams(GroupItem<?> parentGroup, AppConfig itemText, AppConfig itemImage,
-                                            boolean imageMode, AppConfig textGlobal, AppConfig imageGlobal) {
+    public static AppConfig effectiveImageParams(GroupItem<?> parentGroup, AppConfig itemImage,
+                                                 AppConfig imageGlobal) {
         if (parentGroup != null) {
-            AppConfig groupParams = imageMode
-                    ? parentGroup.getImageParamsCache() : parentGroup.getTextParamsCache();
+            AppConfig groupParams = parentGroup.getImageParamsCache();
             if (groupParams != null) {
                 return groupParams;
             }
         }
-        AppConfig itemParams = imageMode ? itemImage : itemText;
-        if (itemParams != null) {
-            return itemParams;
+        if (itemImage != null) {
+            return itemImage;
         }
-        return imageMode ? imageGlobal : textGlobal;
+        return imageGlobal;
+    }
+
+    /**
+     * 生效参数三层覆盖（条目独立参数需求拍板）：组参数优先，其次条目级参数，最后继承全局；
+     * 全局未确认 → null（无生效参数）。组内成员无条目级参数（itemText/itemImage 传 null）。
+     * 图片模式委托 {@link #effectiveImageParams}（唯一入口，会话 7 收敛）。
+     */
+    public static AppConfig effectiveParams(GroupItem<?> parentGroup, AppConfig itemText, AppConfig itemImage,
+                                            boolean imageMode, AppConfig textGlobal, AppConfig imageGlobal) {
+        if (imageMode) {
+            return effectiveImageParams(parentGroup, itemImage, imageGlobal);
+        }
+        if (parentGroup != null) {
+            AppConfig groupParams = parentGroup.getTextParamsCache();
+            if (groupParams != null) {
+                return groupParams;
+            }
+        }
+        if (itemText != null) {
+            return itemText;
+        }
+        return textGlobal;
     }
 
     /**
