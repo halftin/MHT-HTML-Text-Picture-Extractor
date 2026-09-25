@@ -40,3 +40,6 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### DSH 驱动 claudecode 的工作目录 ###
+.claude-work/

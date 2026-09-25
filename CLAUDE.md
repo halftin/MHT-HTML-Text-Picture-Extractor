@@ -65,3 +65,16 @@ GraalVM reachability metadata lives in `src/main/resources/META-INF/native-image
 ### Key dependencies
 
 Jakarta Mail 2.0.2 (MIME parsing), Jsoup 1.18.1 (HTML), Jackson 2.18.6 (config JSON), AtlantaFX 2.1.0 (Nord Light theme), Logback 1.5.26 (logging).
+
+### 本机 DSH 环境陷阱（动手跑命令前先读）
+
+完整验证报告见 [`dsh子进程与claude-cli验证报告.md`](dsh子进程与claude-cli验证报告.md)。摘要：
+
+- 会话权限为 `read-only` / `workspace-write` 时，**所有子进程启动失败**：受限令牌下 DLL 初始化报
+  `0xC0000142`（十进制 `3221225794`）。需切到**完全权限 / `danger-full-access`** 才能跑 pwsh、mvn、claude。
+- 本机**没有 pwsh 7**，工具描述中的 `pwsh -Command` 实际由 **Windows PowerShell 5.1** 执行。
+- **DSH 传给 pwsh 的 stdin 是空的**，不要依赖管道向脚本喂数据；用文件或 argv 传参。
+- PS 5.1 经 stdin 传中文会乱码；`Set-Content -Encoding UTF8` 会写 BOM（Node 会解析失败），
+  需用 `[System.IO.File]::WriteAllText($p,$s,(New-Object System.Text.UTF8Encoding($false)))`。
+- 驱动 Claude Code 请**直连原生 exe**（`%APPDATA%\npm\node_modules\@anthropic-ai\claude-code\bin\claude.exe`），
+  不要用 `shell: true` 或 `.cmd` shim（会触发 `DEP0190` 注入风险警告）。
