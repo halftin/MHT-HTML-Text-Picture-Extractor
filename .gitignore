@@ -5,10 +5,11 @@ target/
 dependency-reduced-pom.xml
 
 ### 运行时目录（本地状态与输出，不入库） ###
-config/
-logs/
-输出文件/
-temp/
+### 必须用前导 / 锚定到仓库根：否则 config/ 会误伤 src/test/java/com/mhtextractor/config/（会话 7 实测）
+/config/
+/logs/
+/输出文件/
+/temp/
 
 ### IntelliJ IDEA ###
 .idea/
