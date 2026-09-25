@@ -72,6 +72,7 @@ public class ContentExtractor {
      */
     public String extractChapterTitle(String htmlContent,
                                       String startMarker, String endMarker, boolean useRegex) {
+        lastWarnings.clear();
         if (htmlContent == null || htmlContent.isEmpty()) return null;
 
         String patternStr = useRegex
@@ -100,7 +101,7 @@ public class ContentExtractor {
         try {
             if (useRegex) {
                 Pattern pattern = Pattern.compile(
-                        Pattern.quote(startMarker) + "(.*?)" + Pattern.quote(endMarker),
+                        startMarker + "(.*?)" + endMarker,
                         Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
                 Matcher matcher = pattern.matcher(html);
                 if (matcher.find()) {
