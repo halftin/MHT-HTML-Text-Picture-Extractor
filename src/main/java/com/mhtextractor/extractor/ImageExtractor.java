@@ -20,7 +20,7 @@ import java.util.function.Consumer;
 public class ImageExtractor extends BaseExtractor {
     private static final Logger logger = LoggerFactory.getLogger(ImageExtractor.class);
 
-    private static final List<String> AD_KEYWORDS = Arrays.asList(
+    private static final List<String> AD_KEYWORDS = List.of(
             "ad", "banner", "advert", "ads", "advertisement",
             "promo", "sponsored", "popup", "click", "banner-ad"
     );
@@ -71,7 +71,7 @@ public class ImageExtractor extends BaseExtractor {
 
         if (progressCallback != null) progressCallback.accept(0.2);
 
-        // 从HTML中提取图片引用（按声明顺序）
+        // 从HTML中提取图片引用（按声明顺序）；null 表示区域 HTML 解析失败
         List<String> orderedImageRefs = extractImageReferencesInOrder(targetHtml);
 
         if (progressCallback != null) progressCallback.accept(0.4);
@@ -86,6 +86,15 @@ public class ImageExtractor extends BaseExtractor {
                 return Collections.emptyList();
             }
             return extractAllImagesInOrder(progressCallback);
+        }
+
+        // 有区域限定：解析失败则中止该文件的区域限定提取，不静默放行区域外图片
+        if (orderedImageRefs == null) {
+            String msg = "区域图片引用解析失败，已中止该文件的区域限定提取";
+            logger.warn("[警告] {}", msg);
+            lastWarnings.add(msg);
+            if (progressCallback != null) progressCallback.accept(1.0);
+            return Collections.emptyList();
         }
 
         // 有区域限定：只保留 HTML 中出现在限定区域内的图片引用
@@ -138,8 +147,13 @@ public class ImageExtractor extends BaseExtractor {
         for (int i = 0; i < allImages.size(); i++) {
             MimeParser.ImageInfo info = allImages.get(i);
             String cid = info.getContentId();
-            // 过滤广告图片
-            if (cid != null && isAdImage(cid)) continue;
+            // 过滤广告图片（null/空标识符保留：无法判定为广告）
+            if (isAdImage(cid)) {
+                String msg = "已过滤广告图片: " + cid;
+                logger.warn("[警告] {}", msg);
+                lastWarnings.add(msg);
+                continue;
+            }
 
             String dedupKey = getDedupKey(info);
             if (dedupKey != null && !addedKeys.contains(dedupKey)) {
@@ -192,8 +206,10 @@ public class ImageExtractor extends BaseExtractor {
 
     /**
      * 按顺序提取 HTML 中的图片引用
+     *
+     * @return 引用列表；解析失败返回 null（调用方须中止区域限定，不得静默放行）
      */
-    private List<String> extractImageReferencesInOrder(String html) {
+    List<String> extractImageReferencesInOrder(String html) {
         List<String> refs = new ArrayList<>();
         try {
             Document doc = Jsoup.parse(html);
@@ -209,6 +225,7 @@ public class ImageExtractor extends BaseExtractor {
             }
         } catch (Exception e) {
             logger.warn("解析HTML图片引用失败：{}", e.getMessage(), e);
+            return null;
         }
         return refs;
     }
@@ -217,7 +234,8 @@ public class ImageExtractor extends BaseExtractor {
      * 判断 ImageInfo 是否在允许的引用列表中
      */
     private boolean isInfoAllowed(MimeParser.ImageInfo info, Set<String> allowedRefs) {
-        if (allowedRefs.isEmpty()) return true;
+        // 允许集为空 = 区域内确实无图片引用：任何区域外图片都不得放行
+        // （此前对空集合一律返回 true，导致区域限定整体失效）
 
         // 检查 Content-ID
         String cid = info.getContentId();
@@ -278,10 +296,29 @@ public class ImageExtractor extends BaseExtractor {
         return result;
     }
 
+    /**
+     * 广告关键词词边界匹配：关键词须独立成词（前后均为非字母数字字符或串首/串尾）。
+     * 仅凭子串匹配会把 header@…、download…、shadow… 乃至十六进制 CID 段（如 01D8AD12）误判为广告。
+     * null/空标识符无法判定为广告，返回 false（保留）。
+     */
     private boolean isAdImage(String urlOrCid) {
-        if (urlOrCid == null || urlOrCid.isEmpty()) return true;
+        if (urlOrCid == null || urlOrCid.isEmpty()) return false;
         String lower = urlOrCid.toLowerCase();
-        return AD_KEYWORDS.stream().anyMatch(lower::contains);
+        for (String keyword : AD_KEYWORDS) {
+            int idx = lower.indexOf(keyword);
+            while (idx >= 0) {
+                boolean beforeOk = idx == 0 || !isWordChar(lower.charAt(idx - 1));
+                int end = idx + keyword.length();
+                boolean afterOk = end >= lower.length() || !isWordChar(lower.charAt(end));
+                if (beforeOk && afterOk) return true;
+                idx = lower.indexOf(keyword, idx + 1);
+            }
+        }
+        return false;
+    }
+
+    private static boolean isWordChar(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
     }
 
     private void extractDataUriImages(String html, List<ImageData> images) {
