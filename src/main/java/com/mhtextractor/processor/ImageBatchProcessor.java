@@ -13,7 +13,9 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.File;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -24,6 +26,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ImageBatchProcessor extends BatchProcessor {
 
     private record ParsedFileEntry(MimeParser.ParsedMht parsed, int fileIndex) {}
+
+    /** 预加载结果：解析成功的条目 + 解析抛异常的文件（原始下标 → 异常消息，供 processUnified 记 FAILED） */
+    private record PreloadResult(List<ParsedFileEntry> parsedList, Map<Integer, String> loadFailures) {}
 
     private final AppConfig config;
 
@@ -98,24 +103,27 @@ public class ImageBatchProcessor extends BatchProcessor {
                                              ProcessStats stats) {
         log.info("高速内存模式：正在预加载所有 MHT 文件到内存...");
 
-        List<ParsedFileEntry> parsedList = preloadAll(mhtFiles, mimeParser, stats);
-        if (parsedList.isEmpty()) {
-            log.warn("无法从任何 MHT 文件中提取内容");
-            stats.setEndTime(System.currentTimeMillis());
-            return stats;
+        PreloadResult preload = preloadAll(mhtFiles, mimeParser);
+        if (preload.parsedList().isEmpty()) {
+            log.warn("无法从任何 MHT 文件中提取内容（各文件结果见下方处理明细）");
         }
 
-        log.info("所有文件已加载到内存（{} 个文件），开始处理...", parsedList.size());
+        log.info("所有文件已加载到内存（{} 个文件），开始处理...", preload.parsedList().size());
         log.info("========================================");
 
-        ParsedMhtProvider provider = new PreloadedProvider(parsedList);
+        ParsedMhtProvider provider = new PreloadedProvider(preload.parsedList(), preload.loadFailures());
         ImageOutputHandler handler;
         String mergedNameWarning = null;
 
         if (config.isSingleOutputMode()) {
             var mh = new MergedOutputHandler();
+            // 与流式模式一致：仅当第一个文件本身解析成功才用其标题，否则回退默认目录名
+            MimeParser.ParsedMht firstParsed = null;
+            if (!preload.parsedList().isEmpty() && preload.parsedList().get(0).fileIndex() == 0) {
+                firstParsed = preload.parsedList().get(0).parsed();
+            }
             mergedNameWarning =
-                    setupMergedOutput(outputFolder, mhtFiles, parsedList.get(0).parsed(), stats, mh, mergedOutputName);
+                    setupMergedOutput(outputFolder, mhtFiles, firstParsed, stats, mh, mergedOutputName);
             handler = mh;
         } else {
             handler = new SeparateOutputHandler(outputFolder);
@@ -124,9 +132,9 @@ public class ImageBatchProcessor extends BatchProcessor {
                 mergedNameWarning);
     }
 
-    private List<ParsedFileEntry> preloadAll(List<MhtFileInfo> mhtFiles, MimeParser mimeParser,
-                                              ProcessStats stats) {
+    private PreloadResult preloadAll(List<MhtFileInfo> mhtFiles, MimeParser mimeParser) {
         List<ParsedFileEntry> parsedList = new ArrayList<>();
+        Map<Integer, String> loadFailures = new HashMap<>();
         for (int i = 0; i < mhtFiles.size(); i++) {
             MhtFileInfo fileInfo = mhtFiles.get(i);
             if (isCancelled()) {
@@ -147,23 +155,17 @@ public class ImageBatchProcessor extends BatchProcessor {
                     fireProgress(idx, mhtFiles.size(), name, 0.5);
                     log.info("已加载：{}", name);
                 } else {
+                    // 不在此记录结果：统一由 processUnified 记录（GUI 按路径取最后一条，双记录会互相覆盖）
                     log.warn("文件 {} 无法解析，跳过", name);
-                    stats.incrementSkip();
-                    stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：无法解析", name));
-                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "无法解析", List.of());
                 }
             } catch (Exception e) {
                 log.error("加载 MHT 文件 {} 失败: {}", fileInfo.getName(), e.getMessage(), e);
-                stats.incrementFail();
-                stats.addFailDetail(String.format("文件：%s 失败，失败原因：加载 MHT 文件失败: %s",
-                        fileInfo.getName(), e.getMessage()));
-                recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED,
-                        "加载 MHT 文件失败: " + e.getMessage(), List.of());
+                loadFailures.put(i, e.getMessage() == null ? "未知错误" : e.getMessage());
             } finally {
                 fireProgress(i + 1, mhtFiles.size(), fileInfo.getName(), 1.0);
             }
         }
-        return parsedList;
+        return new PreloadResult(parsedList, loadFailures);
     }
 
     // ==================== 流式模式 ====================
@@ -311,8 +313,15 @@ public class ImageBatchProcessor extends BatchProcessor {
                 int saved = outputHandler.saveImages(images, extractedTitle, fileInfo, i, total, stats);
                 if (saved > 0) {
                     totalImageCount += saved;
+                    stats.incrementSuccess();
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SUCCESS, null, fileWarnings);
+                } else {
+                    String failReason = String.format("全部 %d 张图片写入失败", images.size());
+                    stats.incrementFail();
+                    stats.addFailDetail(String.format("文件：%s 失败，失败原因：%s", name, failReason));
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, failReason, fileWarnings);
+                    log.error("[失败] {}：{}", name, failReason);
                 }
-                recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SUCCESS, null, fileWarnings);
 
             } catch (Exception e) {
                 stats.incrementFail();
@@ -329,7 +338,7 @@ public class ImageBatchProcessor extends BatchProcessor {
             stats.attachWarningTo(mhtFiles.get(0).getPath(), mergedNameWarning);
         }
 
-        outputHandler.afterAll(outputFolder);
+        outputHandler.afterAll(outputFolder, stats);
 
         if (config.isSingleOutputMode()) {
             log.info("========================================");
@@ -351,21 +360,31 @@ public class ImageBatchProcessor extends BatchProcessor {
     private interface ImageOutputHandler {
         int saveImages(List<ImageExtractor.ImageData> images, String extractedTitle,
                        MhtFileInfo fileInfo, int fileIndex, int totalFiles, ProcessStats stats);
-        void afterAll(String outputFolder);
+        void afterAll(String outputFolder, ProcessStats stats);
     }
 
     // ==================== 解析策略实现 ====================
 
     private class PreloadedProvider implements ParsedMhtProvider {
-        private final List<ParsedFileEntry> entries;
+        // provide 的参数是完整文件列表下标：必须按 fileIndex 查表，不能按 entries 循环位置取
+        // （解析失败的文件不在表里 → 返回 null，由 processUnified 记 SKIPPED）
+        private final Map<Integer, MimeParser.ParsedMht> byFileIndex = new HashMap<>();
+        private final Map<Integer, String> loadFailures;
 
-        PreloadedProvider(List<ParsedFileEntry> entries) {
-            this.entries = entries;
+        PreloadedProvider(List<ParsedFileEntry> entries, Map<Integer, String> loadFailures) {
+            for (ParsedFileEntry entry : entries) {
+                byFileIndex.put(entry.fileIndex(), entry.parsed());
+            }
+            this.loadFailures = loadFailures;
         }
 
         @Override
-        public MimeParser.ParsedMht provide(int index) {
-            return entries.get(index).parsed();
+        public MimeParser.ParsedMht provide(int index) throws Exception {
+            String failure = loadFailures.get(index);
+            if (failure != null) {
+                throw new RuntimeException("加载 MHT 文件失败: " + failure);
+            }
+            return byFileIndex.get(index);
         }
     }
 
@@ -432,15 +451,22 @@ public class ImageBatchProcessor extends BatchProcessor {
                     });
 
             fireProgress(fi + 1, totalFiles, fn, 0.9);
-            log.info("[成功] {} → 合并目录 ({} 张，累计 {} 张)",
-                    fn, saved, globalIndex.get() - 1);
-            stats.incrementSuccess();
+            if (saved > 0) {
+                log.info("[成功] {} → 合并目录 ({} 张，累计 {} 张)",
+                        fn, saved, globalIndex.get() - 1);
+            } else {
+                log.warn("[失败] {} → 合并目录：{} 张图片全部写入失败", fn, imageCount);
+            }
             return saved;
         }
 
         @Override
-        public void afterAll(String outputFolder) {
-            archiveMergedOutput(mergedDir, folderName, outputFolder);
+        public void afterAll(String outputFolder, ProcessStats stats) {
+            if (!archiveMergedOutput(mergedDir, folderName, outputFolder)) {
+                stats.incrementFail();
+                stats.addFailDetail(String.format("合并输出归档失败，图片保留在目录：%s", mergedDir));
+                log.error("[归档] 合并输出归档失败，图片保留在目录：{}", mergedDir);
+            }
         }
     }
 
@@ -476,19 +502,24 @@ public class ImageBatchProcessor extends BatchProcessor {
                         fireProgress(idx, totalFiles, name, p);
                     });
             fireProgress(idx, totalFiles, name, 0.85);
-            log.info("[成功] {} → {} ({} 张)", name, fileOutputDir, saved);
+            if (saved > 0) {
+                log.info("[成功] {} → {} ({} 张)", name, fileOutputDir, saved);
+            } else {
+                log.warn("[失败] {} → {}：{} 张图片全部写入失败", name, fileOutputDir, imageCount);
+            }
 
-            // 逐文件 ZIP/CBZ 打包（由全局配置决定）
-            archiveWithCleanup(fileOutputDir, outputFolder, baseName,
-                    idx, totalFiles, name, 0.85, 0.05, 0.05);
+            // 逐文件 ZIP/CBZ 打包（由全局配置决定）；失败则保留源目录并抛异常 → processUnified 记 FAILED
+            if (!archiveWithCleanup(fileOutputDir, outputFolder, baseName,
+                    idx, totalFiles, name, 0.85, 0.05, 0.05)) {
+                throw new RuntimeException(String.format("图片归档失败，图片保留在目录：%s", fileOutputDir));
+            }
             fireProgress(idx, totalFiles, name, 0.95);
 
-            stats.incrementSuccess();
             return saved;
         }
 
         @Override
-        public void afterAll(String outputFolder) {
+        public void afterAll(String outputFolder, ProcessStats stats) {
             // 逐文件归档，无需批量操作
         }
     }
@@ -555,37 +586,50 @@ public class ImageBatchProcessor extends BatchProcessor {
         return "All_Images";
     }
 
-    private void archiveMergedOutput(String mergedDir, String folderName, String outputFolder) {
-        archiveWithCleanup(mergedDir, outputFolder, folderName, -1, 0, null, 0, 0, 0);
+    private boolean archiveMergedOutput(String mergedDir, String folderName, String outputFolder) {
+        return archiveWithCleanup(mergedDir, outputFolder, folderName, -1, 0, null, 0, 0, 0);
     }
 
-    private void archiveWithCleanup(String sourceDir, String outputFolder, String baseName,
-                                     int fileIdx, int totalFiles, String fileName,
-                                     double zipBase, double zipRange, double cbzRange) {
-        if (!config.isEnableZipPackaging() && !config.isEnableCbzPackaging()) return;
+    private boolean archiveWithCleanup(String sourceDir, String outputFolder, String baseName,
+                                       int fileIdx, int totalFiles, String fileName,
+                                       double zipBase, double zipRange, double cbzRange) {
+        if (!config.isEnableZipPackaging() && !config.isEnableCbzPackaging()) return true;
         File dir = new File(sourceDir);
-        int fileCount = dir.listFiles() == null ? 0 : dir.listFiles().length;
+        File[] children = dir.listFiles();
+        int childCount = children == null ? 0 : children.length;
+        if (childCount == 0) {
+            FileUtils.deleteDirectory(dir);
+            log.info("归档目录为空，已删除空目录：{}", sourceDir);
+            return true;
+        }
+        boolean zipOk = true;
+        boolean cbzOk = true;
         if (config.isEnableZipPackaging()) {
-            Archiver.createZip(sourceDir, Paths.get(outputFolder, baseName + ".zip").toString(), count -> {
+            zipOk = Archiver.createZip(sourceDir, Paths.get(outputFolder, baseName + ".zip").toString(), count -> {
                 if (fileIdx >= 0) {
                     fireProgress(fileIdx, totalFiles, fileName,
-                            zipBase + zipRange * ((double) count / Math.max(fileCount, 1)));
+                            zipBase + zipRange * ((double) count / Math.max(childCount, 1)));
                 } else {
-                    log.debug("ZIP 打包进度：{}/{}", count, fileCount);
+                    log.debug("ZIP 打包进度：{}/{}", count, childCount);
                 }
             });
         }
         if (config.isEnableCbzPackaging()) {
-            Archiver.createCbz(sourceDir, Paths.get(outputFolder, baseName + ".cbz").toString(), count -> {
+            cbzOk = Archiver.createCbz(sourceDir, Paths.get(outputFolder, baseName + ".cbz").toString(), count -> {
                 if (fileIdx >= 0) {
                     fireProgress(fileIdx, totalFiles, fileName,
-                            zipBase + zipRange + cbzRange * ((double) count / Math.max(fileCount, 1)));
+                            zipBase + zipRange + cbzRange * ((double) count / Math.max(childCount, 1)));
                 } else {
-                    log.debug("CBZ 打包进度：{}/{}", count, fileCount);
+                    log.debug("CBZ 打包进度：{}/{}", count, childCount);
                 }
             });
         }
+        if (!zipOk || !cbzOk) {
+            log.error("[归档] 归档失败（zip={}, cbz={}），保留源目录不删除：{}", zipOk, cbzOk, sourceDir);
+            return false;
+        }
         FileUtils.deleteDirectory(dir);
         log.info("已删除临时文件夹：{}", sourceDir);
+        return true;
     }
 }
