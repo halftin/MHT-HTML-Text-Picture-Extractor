@@ -16,7 +16,9 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,9 +54,10 @@ public class MimeParser {
      * 解析MHT文件，支持递归深度限制回调和进度报告
      *
      * @param mhtPath 文件路径
-     * @param continueCallback 递归超限时回调，返回 true 继续解析，false 终止解析
+     * @param continueCallback 递归超限时回调，用于询问用户；超限子树始终被截断（继续递归有 StackOverflowError 风险），
+     *                         返回 false 则终止解析
      *                         回调格式：Supplier<Boolean>
-     *                         传入 null 则不检查递归深度
+     *                         传入 null 则不询问，超限子树直接截断
      * @param progressCallback 进度报告回调，可传入 null 禁用进度报告
      */
     public ParsedMht parse(String mhtPath, Supplier<Boolean> continueCallback,
@@ -87,6 +90,19 @@ public class MimeParser {
         props.setProperty("mail.mime.charset", "UTF-8");
         Session session = Session.getInstance(props);
 
+        // 细粒度进度须单调不减：HTML 提取(0.15)可能晚于部分循环进度(最高 0.33)，
+        // 直接上报会造成进度条倒退
+        Consumer<Double> monotonicByteProgress = byteProgressCallback == null ? null : new Consumer<>() {
+            private double last = 0.0;
+
+            @Override
+            public void accept(Double value) {
+                double v = Math.max(last, value);
+                last = v;
+                byteProgressCallback.accept(v);
+            }
+        };
+
         try (FileInputStream fis = new FileInputStream(mhtPath)) {
             if (stageCallback != null) stageCallback.accept(ParsingStage.FILE_READ);
             MimeMessage message = new MimeMessage(session, fis);
@@ -98,29 +114,38 @@ public class MimeParser {
             // 原子计数器：跟踪已处理的 part 数，用于周期性报告进度
             AtomicInteger partsProcessed = new AtomicInteger(0);
 
-            return parseMimeMessage(message, textOnly, continueCallback, stageCallback, byteProgressCallback,
+            return parseMimeMessage(message, textOnly, continueCallback, stageCallback, monotonicByteProgress,
                     partsProcessed, totalParts);
         }
     }
 
     /**
-     * 快速遍历 MIME 树统计总 part 数，用于进度估算
+     * 迭代统计 MIME 树 part 数，用于进度估算。
+     * 显式栈实现且截断深度与 extractFromPart 一致：畸形深层嵌套不会在此处触发 StackOverflowError。
      */
-    private int countTotalParts(jakarta.mail.Part part) {
-        try {
-            if (part.isMimeType("multipart/*")) {
-                Multipart mp = (Multipart) part.getContent();
-                int count = 1;
-                for (int i = 0; i < mp.getCount(); i++) {
-                    count += countTotalParts(mp.getBodyPart(i));
+    private int countTotalParts(jakarta.mail.Part root) {
+        Deque<jakarta.mail.Part> parts = new ArrayDeque<>();
+        Deque<Integer> depths = new ArrayDeque<>();
+        parts.push(root);
+        depths.push(0);
+        int count = 0;
+        while (!parts.isEmpty()) {
+            jakarta.mail.Part part = parts.pop();
+            int depth = depths.pop();
+            count++;
+            try {
+                if (depth < RECURSION_LIMIT && part.isMimeType("multipart/*")) {
+                    Multipart mp = (Multipart) part.getContent();
+                    for (int i = mp.getCount() - 1; i >= 0; i--) {
+                        parts.push(mp.getBodyPart(i));
+                        depths.push(depth + 1);
+                    }
                 }
-                return count;
+            } catch (Exception e) {
+                logger.debug("统计MIME部件总数失败：{}", e.getMessage(), e);
             }
-            return 1;
-        } catch (Exception e) {
-            logger.debug("统计MIME部件总数失败：{}", e.getMessage(), e);
-            return 1;
         }
+        return count;
     }
 
     /**
@@ -161,17 +186,6 @@ public class MimeParser {
                                  Consumer<ParsingStage> stageCallback,
                                  Consumer<Double> byteProgressCallback,
                                  AtomicInteger partsProcessed, int totalParts) throws Exception {
-        if (depth > RECURSION_LIMIT && continueCallback != null) {
-            logger.warn("[递归警告] MIME树深度已达 {} 层（阈值 {}），可能为损坏文件", depth, RECURSION_LIMIT);
-            if (!continueCallback.get()) {
-                logger.warn("[递归警告] 用户取消解析，已提取 {} 个CID映射，{} 个资源",
-                        result.getCidMap().size(), result.getLocationDataMap().size());
-                return;
-            }
-            // 用户选择继续，后续不再回调
-            continueCallback = null;
-        }
-
         if (part.isMimeType("text/html")) {
             if (result.getHtmlContent() == null) {
                 result.setHtmlContent(extractHtmlFromPart(part));
@@ -185,7 +199,22 @@ public class MimeParser {
         } else if (part.isMimeType("multipart/*")) {
             Multipart mp = (Multipart) part.getContent();
             for (int i = 0; i < mp.getCount(); i++) {
-                extractFromPart(mp.getBodyPart(i), result, depth + 1, textOnly, continueCallback,
+                int childDepth = depth + 1;
+                if (childDepth > RECURSION_LIMIT) {
+                    logger.warn("[递归警告] MIME树深度已达 {} 层（阈值 {}），可能为损坏文件", childDepth, RECURSION_LIMIT);
+                    if (continueCallback != null) {
+                        if (!continueCallback.get()) {
+                            logger.warn("[递归警告] 用户取消解析，已提取 {} 个CID映射，{} 个资源",
+                                    result.getCidMap().size(), result.getLocationDataMap().size());
+                            continue;
+                        }
+                        // 用户选择继续：不再重复询问
+                        continueCallback = null;
+                    }
+                    // 深度超限一律截断该子树（与回调无关）：继续递归有 StackOverflowError 风险（Error 不被 catch Exception 捕获）
+                    continue;
+                }
+                extractFromPart(mp.getBodyPart(i), result, childDepth, textOnly, continueCallback,
                         stageCallback, byteProgressCallback, partsProcessed, totalParts);
                 // 每处理 PROGRESS_INTERVAL 个 part 报告一次细粒度进度
                 int processed = partsProcessed.incrementAndGet();
@@ -307,25 +336,31 @@ public class MimeParser {
     }
 
     /**
-     * 从 MIME Part 中提取文件名（支持多种头部）
+     * 从 MIME Part 中提取文件名
      */
     private String getFilenameFromPart(jakarta.mail.Part part) throws Exception {
-        // 方法1: 从 Content-Disposition 获取 filename
-        String name = extractMimeParam(part.getDisposition(), "filename");
+        // 优先使用 Jakarta Mail 的 getFileName()：正确解析引号与后续参数（如 filename="a.png"; size=1234），
+        // 并解码 RFC 2231 编码参数（filename*=UTF-8''...）
+        String name = part.getFileName();
+        if (name != null && !name.isEmpty()) {
+            // getFileName() 不解码 RFC 2047 编码词（=?UTF-8?B?...?=），需补一层 decodeText；
+            // 对无编码词的普通文件名是无害空操作
+            return MimeUtility.decodeText(name);
+        }
+
+        // 兜底：畸形头部（如引号不配对）下 getFileName() 可能返回 null，手写解析尽力恢复原始文件名
+        name = extractMimeParam(part.getDisposition(), "filename");
         if (name != null) return name;
 
-        // 方法2: 从 Content-Type 的 name 参数获取
         if (part instanceof MimePart) {
             name = extractMimeParam(part.getContentType(), "name");
             if (name != null) return name;
         }
-
-        // 方法3: 使用 getFileName() 作为后备
-        return part.getFileName();
+        return null;
     }
 
     /**
-     * 从 MIME 头部字符串中提取指定参数的值
+     * 从 MIME 头部字符串中提取指定参数的值（兜底用的尽力而为解析）
      */
     private static String extractMimeParam(String source, String paramName) {
         if (source == null) return null;
@@ -334,8 +369,16 @@ public class MimeParser {
         int eqIdx = source.indexOf('=', keywordIdx);
         if (eqIdx == -1 || eqIdx >= source.length() - 1) return null;
         String val = source.substring(eqIdx + 1).trim();
-        if (val.startsWith("\"") && val.endsWith("\"")) {
-            val = val.substring(1, val.length() - 1);
+        if (val.startsWith("\"")) {
+            int endQuote = val.indexOf('"', 1);
+            if (endQuote == -1) return null;
+            val = val.substring(1, endQuote);
+        } else {
+            // 未加引号的参数值到下一个 ';' 为止，避免把后续参数一并吞进文件名
+            int semiIdx = val.indexOf(';');
+            if (semiIdx != -1) {
+                val = val.substring(0, semiIdx).trim();
+            }
         }
         return val.isEmpty() ? null : val;
     }
