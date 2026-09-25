@@ -6,6 +6,33 @@ REM ============================================================================
 
 setlocal enabledelayedexpansion
 
+REM 统一以脚本所在目录（项目根）为工作目录：pom.xml / target 均为相对路径
+pushd "%~dp0"
+
+REM ============================================================================
+REM 版本号：pom.xml 是唯一来源，禁止在脚本里硬编码（历史问题：脚本曾写死
+REM mhtExtractor-2.3.1.jar，与 pom 的 2.6-beta 不一致导致打包找不到 jar）
+REM ============================================================================
+set "APP_VERSION="
+for /f "tokens=*" %%i in ('powershell -NoProfile -Command "([xml](Get-Content pom.xml -Raw)).project.version"') do set "APP_VERSION=%%i"
+if not defined APP_VERSION (
+    REM PowerShell 不可用时的兜底：findstr 直读 pom.xml 中 4 空格缩进的 <version>（唯一一行）
+    for /f "tokens=3 delims=<>" %%i in ('findstr /r /c:"^    <version>" pom.xml') do set "APP_VERSION=%%i"
+)
+if not defined APP_VERSION (
+    echo [ERROR] 无法从 pom.xml 读取项目版本号（PowerShell 与 findstr 均失败）
+    pause & exit /b 1
+)
+echo 项目版本: !APP_VERSION!
+
+REM JavaFX 版本（须与 pom.xml 的 javafx.version 一致，用于解出 JNI DLL）
+set "JFX_VERSION="
+for /f "tokens=3 delims=<>" %%i in ('findstr /r /c:"<javafx.version>" pom.xml') do set "JFX_VERSION=%%i"
+if not defined JFX_VERSION (
+    echo [ERROR] 无法从 pom.xml 读取 javafx.version
+    pause & exit /b 1
+)
+
 echo === Step 1: 设置环境变量 ===
 
 REM 编译用 JDK 25 (Lombok 兼容)
@@ -33,7 +60,7 @@ echo === Step 3: 提取 JavaFX 原生 DLLs ===
 if not exist "target\jfx-dlls" mkdir "target\jfx-dlls"
 cd target\lib
 for %%f in (glass.dll prism_common.dll prism_d3d.dll prism_sw.dll decora_sse.dll javafx_font.dll javafx_iio.dll msvcp140.dll msvcp140_1.dll msvcp140_2.dll vcruntime140.dll vcruntime140_1.dll) do (
-    "%GRAALVM_HOME%\bin\jar" xf javafx-graphics-25.0.3-win.jar %%f 2>nul
+    "%GRAALVM_HOME%\bin\jar" xf javafx-graphics-%JFX_VERSION%-win.jar %%f 2>nul
     if exist %%f move /Y %%f ..\jfx-dlls\ >nul 2>&1
 )
 cd ..\..
@@ -55,7 +82,7 @@ if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 
 echo 正在编译 Native Image...
 "%GRAALVM_HOME%\bin\native-image.cmd" ^
-  -jar target/mhtExtractor-2.3.1.jar ^
+  -jar target/mhtExtractor-%APP_VERSION%.jar ^
   --no-fallback ^
   -H:Path="%OUTPUT_DIR%" ^
   -H:Name=MhtExtractor ^
@@ -89,11 +116,12 @@ if defined EDITBIN (
 
 echo.
 echo ============================================================
-echo   构建成功!
+echo   构建成功! 版本: %APP_VERSION%
 echo   输出位置: %OUTPUT_DIR%
 echo   - MhtExtractor.exe (约 58MB, 无控制台窗口)
 echo   - *.dll (JNI + JavaFX 运行库)
 echo   直接分发 %OUTPUT_DIR% 文件夹即可, 无需安装 JDK/JRE
 echo ============================================================
 
+popd
 endlocal

@@ -5,6 +5,11 @@ $ProjectDir = "Y:\JAVA环境\MHT"
 $GraalVMHome = "Y:\JAVA环境\graalvm-jdk-25_windows-x64_bin\graalvm-jdk-25.0.2+10.1"
 $VcvarsPath = "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
 
+# 版本号以 pom.xml 为唯一来源（禁止硬编码：历史问题见 build-native.cmd 注释）
+$AppVersion = ([xml](Get-Content "$ProjectDir\pom.xml" -Raw)).project.version
+if (-not $AppVersion) { throw "无法从 $ProjectDir\pom.xml 读取版本号" }
+Write-Host "项目版本: $AppVersion"
+
 Write-Host "=== Initializing MSVC environment ==="
 
 # Run vcvars64.bat and capture its environment
@@ -23,7 +28,7 @@ set PATH=%JAVA_HOME%\bin;%PATH%
 cd /d "$ProjectDir"
 echo === Starting Native Image ===
 "%GraalVMHome%\bin\native-image.cmd" ^
-  -jar target/mhtExtractor-2.2-SNAPSHOT.jar ^
+  -jar target/mhtExtractor-$AppVersion.jar ^
   --no-fallback ^
   -H:Path=target/native-image ^
   -H:Name=MhtExtractor ^

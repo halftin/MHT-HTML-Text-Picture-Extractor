@@ -18,8 +18,21 @@ echo.
 echo === Starting Native Image compilation ===
 cd /d Y:\JAVA环境\MHT
 
+REM 版本号以 pom.xml 为唯一来源（禁止硬编码）
+set "APP_VERSION="
+for /f "tokens=*" %%i in ('powershell -NoProfile -Command "([xml](Get-Content pom.xml -Raw)).project.version"') do set "APP_VERSION=%%i"
+if not defined APP_VERSION (
+    REM PowerShell 不可用时的兜底：findstr 直读 pom.xml 中 4 空格缩进的 <version>
+    for /f "tokens=3 delims=<>" %%i in ('findstr /r /c:"^    <version>" pom.xml') do set "APP_VERSION=%%i"
+)
+if not defined APP_VERSION (
+    echo [ERROR] 无法从 pom.xml 读取项目版本号
+    exit /b 1
+)
+echo 项目版本: %APP_VERSION%
+
 "%JAVA_HOME%\bin\native-image.cmd" ^
-  -jar target/mhtExtractor-2.2-SNAPSHOT.jar ^
+  -jar target/mhtExtractor-%APP_VERSION%.jar ^
   --no-fallback ^
   -H:Path=target/native-image ^
   -H:Name=MhtExtractor ^

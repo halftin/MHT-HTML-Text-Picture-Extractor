@@ -5,6 +5,14 @@ set -e
 PROJECT_DIR="Y:/JAVA环境/MHT"
 GRAALVM_HOME="Y:/JAVA环境/graalvm-jdk-25_windows-x64_bin/graalvm-jdk-25.0.2+10.1"
 
+# 版本号以 pom.xml 为唯一来源（禁止硬编码；jar 名保留 -beta/-SNAPSHOT 等后缀，不做剥离）
+APP_VERSION=$(grep -oP '<version>\K[^<]+' "$PROJECT_DIR/pom.xml" | head -1)
+if [ -z "$APP_VERSION" ]; then
+    echo "[ERROR] 无法从 $PROJECT_DIR/pom.xml 读取版本号" >&2
+    exit 1
+fi
+echo "项目版本: $APP_VERSION"
+
 # Visual Studio paths
 VSINSTALLDIR="C:/Program Files/Microsoft Visual Studio/18/Community"
 VCINSTALLDIR="C:/Program Files/Microsoft Visual Studio/18/Community/VC"
@@ -59,7 +67,7 @@ echo "=== Starting Native Image compilation ==="
 cd "$PROJECT_DIR"
 
 "$GRAALVM_HOME/bin/native-image.cmd" \
-  -jar target/mhtExtractor-2.2-SNAPSHOT.jar \
+  -jar "target/mhtExtractor-${APP_VERSION}.jar" \
   --no-fallback \
   -H:Path=target/native-image \
   -H:Name=MhtExtractor \

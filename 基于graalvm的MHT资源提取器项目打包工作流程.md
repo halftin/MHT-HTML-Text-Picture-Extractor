@@ -2,7 +2,8 @@
 
 > **目标**: 将 JavaFX 25 + Maven 项目编译为 GraalVM Native Image 绿色免安装 Windows EXE。
 > **适用场景**: 从 Git 拉取代码后，在任何 Windows 设备上完成打包。
-> **最后更新**: 2026-07-05 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
+> **最后更新**: 2026-09-24 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
+> **项目版本**: 以 `pom.xml` 的 `<version>` 为**唯一来源**（当前 `2.6-beta`）。所有构建脚本（`build-native.cmd` / `.ps1` / `.sh` / `run-native-image.bat`）均从 pom 动态读取，**禁止**在脚本里硬编码 jar 名（历史问题：曾写死 `mhtExtractor-2.3.1.jar` / `-2.2-SNAPSHOT.jar`，与 pom 不一致导致打包找不到 jar）。
 
 ---
 
@@ -1129,6 +1130,10 @@ export PATH=$JAVA_HOME/bin:$PATH
 cd $PROJECT_DIR
 mvn clean package -DskipTests
 
+# 版本号以 pom.xml 为唯一来源（jar 产物名 = mhtExtractor-<version>.jar）
+APP_VERSION=$(grep -oP '<version>\K[^<]+' "$PROJECT_DIR/pom.xml" | head -1)
+echo "项目版本: $APP_VERSION"
+
 # ========== Step 3: 提取 JavaFX 原生 DLL ==========
 mkdir -p target/jfx-dlls
 cd target/lib
@@ -1149,7 +1154,7 @@ export JAVA_HOME=$GRAALVM_HOME
 export PATH=$JAVA_HOME/bin:$PATH
 
 native-image.cmd \
-  -jar target/mhtExtractor-*.jar \
+  -jar "target/mhtExtractor-${APP_VERSION}.jar" \
   --no-fallback \
   -H:Path=target/native-image \
   -H:Name=MhtExtractor \
@@ -1259,6 +1264,25 @@ if not exist "%VCVARS64%" (
     echo [WARNING] vcvars64.bat 未找到，构建可能失败
 )
 
+REM ===== Step 0: 读取版本号（pom.xml 为唯一来源，禁止硬编码，否则脚本与 pom 漂移） =====
+set "APP_VERSION="
+for /f "tokens=*" %%i in ('powershell -NoProfile -Command "([xml](Get-Content pom.xml -Raw)).project.version"') do set "APP_VERSION=%%i"
+if not defined APP_VERSION (
+    REM PowerShell 不可用时的兜底：findstr 直读 4 空格缩进的 <version>
+    for /f "tokens=3 delims=<>" %%i in ('findstr /r /c:"^    <version>" pom.xml') do set "APP_VERSION=%%i"
+)
+if not defined APP_VERSION (
+    echo [ERROR] 无法从 pom.xml 读取版本号
+    pause & exit /b 1
+)
+set "JFX_VERSION="
+for /f "tokens=3 delims=<>" %%i in ('findstr /r /c:"<javafx.version>" pom.xml') do set "JFX_VERSION=%%i"
+if not defined JFX_VERSION (
+    echo [ERROR] 无法从 pom.xml 读取 javafx.version
+    pause & exit /b 1
+)
+echo 项目版本: %APP_VERSION%  JavaFX: %JFX_VERSION%
+
 echo === Step 1: 初始化 MSVC 环境 ===
 call "%VCVARS64%" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
@@ -1280,7 +1304,7 @@ echo === Step 3: 提取 JavaFX DLLs ===
 if not exist "target\jfx-dlls" mkdir "target\jfx-dlls"
 cd target\lib
 for %%f in (glass.dll prism_common.dll prism_d3d.dll prism_sw.dll decora_sse.dll javafx_font.dll javafx_iio.dll msvcp140.dll msvcp140_1.dll msvcp140_2.dll vcruntime140.dll vcruntime140_1.dll) do (
-    "%GRAALVM_HOME%\bin\jar" xf javafx-graphics-25.0.3-win.jar %%f 2>nul
+    "%GRAALVM_HOME%\bin\jar" xf javafx-graphics-%JFX_VERSION%-win.jar %%f 2>nul
     if exist %%f move /Y %%f ..\jfx-dlls\ >nul 2>&1
 )
 cd ..\..
@@ -1290,7 +1314,7 @@ set JAVA_HOME=%GRAALVM_HOME%
 set PATH=%JAVA_HOME%\bin;%PATH%
 
 "%GRAALVM_HOME%\bin\native-image.cmd" ^
-  -jar target/mhtExtractor-*.jar ^
+  -jar target/mhtExtractor-%APP_VERSION%.jar ^
   --no-fallback ^
   -H:Path=target/native-image ^
   -H:Name=MhtExtractor ^
@@ -1352,7 +1376,9 @@ VERSION=$(grep -oP '<version>\K[^<]+' pom.xml | head -1 | sed 's/-SNAPSHOT//')
 echo "项目版本: $VERSION"
 ```
 
-输出示例: `2.2`
+输出示例: `2.6-beta`
+
+> **注意**: 上面用于**发行版目录/文件名**时才会剥离 `-SNAPSHOT`；用于定位 Maven 产物 jar 时必须保留原始版本（产物名为 `target/mhtExtractor-<version>.jar`，例如 `mhtExtractor-2.6-beta.jar`）。
 
 ### 7.2 打包命令
 
