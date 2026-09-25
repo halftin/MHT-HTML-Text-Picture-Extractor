@@ -3,6 +3,8 @@ package com.mhtextractor.output;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.function.IntConsumer;
 import java.util.zip.ZipEntry;
@@ -37,7 +39,14 @@ public class Archiver {
             return false;
         }
 
-        int totalFiles = files.length;
+        int totalFiles = 0;
+        for (File file : files) {
+            if (file.isFile()) totalFiles++;
+        }
+        if (totalFiles == 0) {
+            log.warn("[归档] 目录中没有文件，跳过：{}", sourceDir);
+            return false;
+        }
 
         try (ZipOutputStream zos = new ZipOutputStream(
                 new BufferedOutputStream(new FileOutputStream(outputPath)))) {
@@ -59,6 +68,8 @@ public class Archiver {
                     if (progressCallback != null) {
                         progressCallback.accept(processed);
                     }
+                } else {
+                    log.warn("[归档] 跳过子目录：{}", file.getName());
                 }
             }
 
@@ -67,7 +78,24 @@ public class Archiver {
 
         } catch (IOException e) {
             log.error("[归档] {} 创建失败：{}", format.toUpperCase(), outputPath, e);
+            deletePartialArchive(outputPath);
             return false;
+        }
+    }
+
+    /**
+     * 删除失败时写出的半截归档，避免留下看似正常但损坏的 zip/cbz。
+     * 只删除常规文件（防御 outputPath 恰好是目录时误删用户目录）。
+     */
+    private static void deletePartialArchive(String outputPath) {
+        try {
+            Path path = Paths.get(outputPath);
+            if (Files.isRegularFile(path)) {
+                Files.deleteIfExists(path);
+                log.warn("[归档] 已删除不完整的归档文件：{}", outputPath);
+            }
+        } catch (IOException e) {
+            log.warn("[归档] 清理不完整归档失败：{}", outputPath, e);
         }
     }
 

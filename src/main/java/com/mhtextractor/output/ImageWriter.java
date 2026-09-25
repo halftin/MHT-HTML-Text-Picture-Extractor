@@ -5,8 +5,11 @@ import com.mhtextractor.util.SanitizeUtils;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
@@ -37,25 +40,49 @@ public class ImageWriter {
 
         int renameIndex = rename ? counter[0]++ : 0;
         String finalFileName = computeFileName(imageData, fallbackExt, rename, renameIndex, filePrefix);
+        String ext = normalizeExt(SanitizeUtils.detectExtensionByMagicNumber(imageData.getData(), fallbackExt));
 
         File dest = new File(outputDir, finalFileName);
-
-        // 处理文件名冲突（仅不重命名时）
-        if (dest.exists() && !rename) {
-            String ext = SanitizeUtils.detectExtensionByMagicNumber(imageData.getData(), fallbackExt);
-            dest = findUniqueFileName(outputDir, finalFileName.substring(0, finalFileName.lastIndexOf('.')), ext);
+        try {
+            dest = writeWithoutOverwrite(dest, imageData.getData(), ext, rename);
             finalFileName = dest.getName();
-        }
-
-        try (FileOutputStream fos = new FileOutputStream(dest)) {
-            fos.write(imageData.getData());
-            fos.flush();
             log.debug("[图片] 已保存：{}", finalFileName);
             return finalFileName;
         } catch (IOException e) {
             log.error("[图片] 保存失败：{}", finalFileName, e);
             return null;
         }
+    }
+
+    /**
+     * 以 CREATE_NEW 原子创建并写入，绝不覆盖已存在文件（消除 check-then-create 竞态）。
+     * 不重命名模式撞名时探测 _1/_2 后缀重试；重命名模式撞名视为失败（不覆盖旧文件）。
+     */
+    private static File writeWithoutOverwrite(File dest, byte[] data, String ext, boolean rename) throws IOException {
+        while (true) {
+            try (OutputStream fos = Files.newOutputStream(dest.toPath(),
+                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+                fos.write(data);
+                fos.flush();
+                return dest;
+            } catch (FileAlreadyExistsException e) {
+                if (rename) {
+                    throw e;
+                }
+                dest = findUniqueFileName(dest.getParent(), stripLastExtension(dest.getName()), ext);
+            }
+        }
+    }
+
+    /** 去掉最后一个扩展名；无点则原样返回（防御 substring(0, -1)） */
+    private static String stripLastExtension(String fileName) {
+        int dotIndex = fileName.lastIndexOf('.');
+        return dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
+    }
+
+    /** 扩展名归一化：空值一律回退 jpg，保证拼接结果一定有扩展名分隔符 */
+    private static String normalizeExt(String ext) {
+        return (ext == null || ext.isEmpty()) ? "jpg" : ext;
     }
 
     /**
@@ -69,7 +96,10 @@ public class ImageWriter {
      */
     public static String computeFileName(ImageExtractor.ImageData imageData, String fallbackExt,
                                          boolean rename, int renameIndex, String filePrefix) {
-        String ext = SanitizeUtils.detectExtensionByMagicNumber(imageData.getData(), fallbackExt);
+        if (imageData == null || imageData.getData() == null) {
+            return "unnamed." + normalizeExt(fallbackExt);
+        }
+        String ext = normalizeExt(SanitizeUtils.detectExtensionByMagicNumber(imageData.getData(), fallbackExt));
 
         if (rename) {
             return String.format("%05d.%s", renameIndex, ext);
