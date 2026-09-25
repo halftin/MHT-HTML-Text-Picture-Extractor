@@ -412,22 +412,25 @@
     -fx-accent: black;
 }
 
-/* 进度条活动配色（2026-09-24 拍板）：预解析=浅蓝（同独立参数条目背景）；
- * 提取成功=绿（同开始提取按钮）；有警告=黄；有失败/跳过=浅红 */
-.progress-bar.progress-preparse > .track > .bar {
+/* 进度条活动配色（2026-09-24 拍板；2026-09-25 修复 + 颜色同步 Windows 语义）：
+ * 预解析=浅蓝（同独立参数条目背景）；提取成功=绿（同开始提取按钮）；
+ * 有警告=Windows 警告黄 #FFF9AE；有失败/跳过=Windows 错误红 #E81123。
+ * 选择器必须是 .progress-bar > .bar（JavaFX 25 中 bar 与 track 是兄弟节点，
+ * 旧写法 .track > .bar 从未匹配——进度条配色长期未生效的根因） */
+.progress-bar.progress-preparse > .bar {
     -fx-background-color: #d6eaf8;
 }
 
-.progress-bar.progress-extract-success > .track > .bar {
+.progress-bar.progress-extract-success > .bar {
     -fx-background-color: #4CAF50;
 }
 
-.progress-bar.progress-extract-warned > .track > .bar {
-    -fx-background-color: #fff3cd;
+.progress-bar.progress-extract-warned > .bar {
+    -fx-background-color: #fff9ae;
 }
 
-.progress-bar.progress-extract-failed > .track > .bar {
-    -fx-background-color: #f8d7da;
+.progress-bar.progress-extract-failed > .bar {
+    -fx-background-color: #E81123;
 }
 
 .text-area .content {

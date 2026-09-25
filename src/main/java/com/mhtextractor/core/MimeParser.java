@@ -5,6 +5,7 @@ import com.mhtextractor.util.SanitizeUtils;
 import jakarta.mail.Multipart;
 import jakarta.mail.Session;
 import jakarta.mail.internet.ContentType;
+import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimePart;
 import jakarta.mail.internet.MimeUtility;
@@ -201,9 +202,20 @@ public class MimeParser {
      * 支持多编码降级：当MIME头未声明charset或声明错误时，尝试多种编码并选择最优
      */
     private String extractHtmlFromPart(jakarta.mail.Part part) throws Exception {
-        try (InputStream is = part.getInputStream()) {
-            if (is == null) return null;
-
+        // 必须取原始流再交给 MimeUtility.decode 解码一次：Part.getInputStream() 已按
+        // Content-Transfer-Encoding 解码过，直接再用 MimeUtility.decode 会双重解码
+        // （quoted-printable 的 =3D 转义会被二次解析，如 width=3Ddevice-width 一次解码后
+        // 变成 width=device-width，再解一次 =de 被当十六进制转义成乱码）
+        InputStream raw;
+        if (part instanceof MimeBodyPart mimeBodyPart) {
+            raw = mimeBodyPart.getRawInputStream();
+        } else if (part instanceof MimeMessage mimeMessage) {
+            raw = mimeMessage.getRawInputStream();
+        } else {
+            raw = part.getInputStream();
+        }
+        if (raw == null) return null;
+        try (InputStream is = raw) {
             String encoding = (part instanceof MimePart)
                     ? ((MimePart) part).getEncoding() : null;
             if (encoding == null) encoding = "utf-8";

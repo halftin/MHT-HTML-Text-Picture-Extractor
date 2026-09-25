@@ -107,7 +107,7 @@
                     <Pane fx:id="dragOverlay" mouseTransparent="true"/>
                 </StackPane>
 
-                <!-- 按钮行：撤销 / 合并为组 / 拆分组 / 移除 / 清除参数 / 将参数应用到全局（顺序固定；合并为组阶段 4、拆分组阶段 6 启用） -->
+                <!-- 按钮行：撤销 / 合并为组 / 拆分组 / 移除 / 清除参数 / 将参数应用到全局 / 查看HTML源码（顺序固定；合并为组阶段 4、拆分组阶段 6 启用） -->
                 <HBox spacing="10" alignment="CENTER_LEFT">
                     <padding>
                         <Insets top="4" right="10" bottom="2" left="10"/>
@@ -142,8 +142,11 @@
                             <FontIcon iconLiteral="fas-globe" iconSize="14"/>
                         </graphic>
                     </Button>
-                    <!-- 占位：后续版本"查看HTML源码"按钮（预留空间，当前隐藏） -->
-                    <Button text="查看HTML源码" visible="false" managed="false"/>
+                    <Button fx:id="viewSourceButton" text="查看HTML源码" onAction="#onViewSourceButton" disable="true">
+                        <graphic>
+                            <FontIcon iconLiteral="fas-code" iconSize="14"/>
+                        </graphic>
+                    </Button>
                 </HBox>
             </VBox>
             <VBox spacing="10" HBox.hgrow="ALWAYS" prefWidth="400">

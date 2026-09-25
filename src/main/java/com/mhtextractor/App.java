@@ -39,9 +39,9 @@ public class App extends Application {
         scene.getStylesheets().add(customCssUrl);
         injectStylesToAllWindows();
 
-        // 窗口初始大小自适应屏幕70%，最小尺寸保持原有固定值
+        // 窗口初始大小自适应屏幕（宽度 80%：保证列表下方按钮行 7 个按钮完整显示；高度 85%）
         Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
-        double winWidth  = screenBounds.getWidth()  * 0.75;
+        double winWidth  = screenBounds.getWidth()  * 0.80;
         double winHeight = screenBounds.getHeight() * 0.85;
 
         primaryStage.setTitle("MHT 资源提取器");

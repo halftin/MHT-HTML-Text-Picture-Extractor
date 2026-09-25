@@ -8,6 +8,7 @@ import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.TextExtractor;
 import com.mhtextractor.gui.component.LogTextArea;
+import com.mhtextractor.gui.util.BrowserLauncher;
 import com.mhtextractor.gui.util.JavaFxUtil;
 import com.mhtextractor.output.FileWriter;
 import com.mhtextractor.output.ImageWriter;
@@ -20,6 +21,7 @@ import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
+import com.mhtextractor.util.HtmlExportBuilder;
 import com.mhtextractor.util.IncrementalImport;
 import com.mhtextractor.util.MhtImportPlanner;
 import com.mhtextractor.util.OutputUnitPlanner;
@@ -133,23 +135,24 @@ public class MainController {
 
     /** 单元格内边距清零（列头与单元格列对齐由各自 HBox 的内边距控制） */
     private static final String CELL_PAD = "-fx-padding: 0;";
-    /** 预解析失败样式（提取结果状态需求拍板：浅黄，由原浅红改色） */
-    private static final String FAILED_PAINT = "#fff3cd";
+    /** 预解析失败样式（提取结果状态需求拍板：浅黄；2026-09-25 用户反馈改为接近 Windows/WinUI 警告黄 #FFF9AE） */
+    private static final String FAILED_PAINT = "#fff9ae";
     /** 选中态 = 基础色混合 40% 浅灰 #bebebe（拍板 2026-09-22，与组行选中切换同机制） */
-    private static final String FAILED_SELECTED_PAINT = "#e5dec7";
+    private static final String FAILED_SELECTED_PAINT = "#e5e1b4";
     private static final String FAILED_ROW_STYLE = CELL_PAD + " -fx-background-color: " + FAILED_PAINT
             + "; -fx-text-background-color: #856404;";
     private static final String FAILED_SELECTED_ROW_STYLE = CELL_PAD + " -fx-background-color: "
             + FAILED_SELECTED_PAINT + "; -fx-text-background-color: #856404;";
-    /** 提取结果背景画值（提取结果状态需求拍板，配色修订 2026-09-21）：浅红=失败/跳过；标准绿=成功；分割色=成功+警告（左1/3红右2/3绿） */
-    private static final String EXTRACT_FAILED_PAINT = "#f8d7da";
-    private static final String EXTRACT_FAILED_SELECTED_PAINT = "#e1cdcf";
+    /** 提取结果背景画值（提取结果状态需求拍板，配色修订 2026-09-21、2026-09-25）：浅红=失败/跳过；标准绿=成功；分割色=成功+警告（左1/3红右2/3绿）。
+     *  2026-09-25 用户反馈：浅红改 Windows 错误红 #E81123（白字）；警告分割行右侧绿加深 #2E7D32 以承载白字 */
+    private static final String EXTRACT_FAILED_PAINT = "#E81123";
+    private static final String EXTRACT_FAILED_SELECTED_PAINT = "#D75661";
     private static final String EXTRACT_SUCCESS_PAINT = "#4CAF50";
     private static final String EXTRACT_SUCCESS_SELECTED_PAINT = "#7AB57C";
     private static final String EXTRACT_WARNED_PAINT =
-            "linear-gradient(to right, #f8d7da 0%, #f8d7da 33%, #4CAF50 33%, #4CAF50 100%)";
+            "linear-gradient(to right, #E81123 0%, #E81123 33%, #2E7D32 33%, #2E7D32 100%)";
     private static final String EXTRACT_WARNED_SELECTED_PAINT =
-            "linear-gradient(to right, #e1cdcf 0%, #e1cdcf 33%, #7AB57C 33%, #7AB57C 100%)";
+            "linear-gradient(to right, #D75661 0%, #D75661 33%, #68976A 33%, #68976A 100%)";
     /** 进度条活动样式类（进度条活动配色拍板 2026-09-24）：预解析=浅蓝；提取成功=绿；有警告=黄；有失败/跳过=浅红 */
     private static final String STYLE_PROGRESS_PREPARSE = "progress-preparse";
     private static final String STYLE_PROGRESS_EXTRACT_SUCCESS = "progress-extract-success";
@@ -298,6 +301,7 @@ public class MainController {
     @FXML private Button removeButton;
     @FXML private Button clearParamsButton;
     @FXML private Button undoButton;
+    @FXML private Button viewSourceButton;
     @FXML private Button groupButton;
     @FXML private Button ungroupButton;
     @FXML private Button applyGlobalButton;
@@ -418,8 +422,11 @@ public class MainController {
     private Object contextTarget = null;
     private MenuItem ctxSelect;
     private MenuItem ctxSelectAll;
-    private MenuItem ctxOpen;
     private MenuItem ctxOpenFolder;
+    private MenuItem ctxOpenInBrowser;
+    private MenuItem ctxViewSource;
+    /** 浏览器查看页生成并发闸（防重复点击并发导出） */
+    private final AtomicBoolean browserExporting = new AtomicBoolean(false);
     private MenuItem ctxParams;
     private MenuItem ctxClearParams;
     private MenuItem ctxGroup;
@@ -1208,12 +1215,13 @@ public class MainController {
 
     // ==================== 右键菜单（右键菜单功能需求） ====================
 
-    /** 构建右键菜单（拍板 Q1 命名统一"移除"；Q5 一律禁用制：菜单恒 15 项同序，查看HTML源码搁置不在其中） */
+    /** 构建右键菜单（拍板 Q1 命名统一"移除"；Q5 一律禁用制：菜单恒 16 项同序；浏览器查看HTML需求后移除"打开"） */
     private void buildContextMenu() {
         ctxSelect = new MenuItem("选中");
         ctxSelectAll = new MenuItem("全选");
-        ctxOpen = new MenuItem("打开");
         ctxOpenFolder = new MenuItem("打开所在文件夹");
+        ctxOpenInBrowser = new MenuItem("在浏览器中打开");
+        ctxViewSource = new MenuItem("在浏览器中查看源码");
         ctxParams = new MenuItem("设置提取参数");
         ctxClearParams = new MenuItem("清除参数");
         ctxApplyGlobal = new MenuItem("将参数应用到全局");
@@ -1224,8 +1232,9 @@ public class MainController {
 
         ctxSelect.setOnAction(e -> onContextSelect());
         ctxSelectAll.setOnAction(e -> onContextSelectAll());
-        ctxOpen.setOnAction(e -> onContextOpen());
         ctxOpenFolder.setOnAction(e -> onContextOpenFolder());
+        ctxOpenInBrowser.setOnAction(e -> onContextOpenInBrowser());
+        ctxViewSource.setOnAction(e -> onContextViewSource());
         ctxParams.setOnAction(e -> onContextParams());
         ctxClearParams.setOnAction(e -> onContextClearParams());
         ctxApplyGlobal.setOnAction(e -> onContextApplyGlobal());
@@ -1237,7 +1246,7 @@ public class MainController {
         contextMenu = new ContextMenu(
                 ctxSelect, ctxSelectAll,
                 new SeparatorMenuItem(),
-                ctxOpen, ctxOpenFolder,
+                ctxOpenInBrowser, ctxOpenFolder, ctxViewSource,
                 new SeparatorMenuItem(),
                 ctxParams, ctxClearParams, ctxApplyGlobal,
                 new SeparatorMenuItem(),
@@ -1297,7 +1306,7 @@ public class MainController {
         return null;
     }
 
-    /** 菜单项禁用状态按右键目标类型刷新（拍板 Q4/Q5/Q7 + 条目独立参数需求：恒 15 项同序） */
+    /** 菜单项禁用状态按右键目标类型刷新（拍板 Q4/Q5/Q7 + 条目独立参数需求：恒 16 项同序） */
     private void updateContextMenuState(Object target) {
         boolean blank = target == null;
         boolean topItem = target instanceof PreviewItem it && it.parentGroup == null;
@@ -1306,8 +1315,9 @@ public class MainController {
 
         ctxSelect.setDisable(blank);                  // 项目条目勾选自身；组条目整组勾选
         ctxSelectAll.setDisable(false);               // 恒可用：成员/组 → 该组；顶层/空白 → 全列表
-        ctxOpen.setDisable(!(topItem || member));     // 仅项目条目
         ctxOpenFolder.setDisable(!(topItem || member));
+        ctxOpenInBrowser.setDisable(!(topItem || member));
+        ctxViewSource.setDisable(!(topItem || member));
         // 条目独立参数需求拍板：空白区域为全局参数入口，文本与独立参数设置区分
         ctxParams.setText(blank ? "设置提取参数（全局）" : "设置提取参数");
         ctxParams.setDisable(false);                  // 恒可用
@@ -1368,37 +1378,6 @@ public class MainController {
         updateListButtons();
     }
 
-    /** 打开（全新能力 5.1）：系统默认程序打开该 mht；Desktop 不可用/失败兜底 cmd start（Q15 文件缺失提示） */
-    private void onContextOpen() {
-        if (contextTarget instanceof PreviewItem it && !it.removed) {
-            openMhtFile(it);
-        }
-    }
-
-    private void openMhtFile(PreviewItem it) {
-        File f = new File(it.path);
-        if (!f.exists()) {
-            log.warn("打开失败：文件不存在（可能已被移动或删除）{}", it.path);
-            showAlert(Alert.AlertType.WARNING, "文件不存在，可能已被移动或删除：\n" + it.path);
-            return;
-        }
-        try {
-            if (!Desktop.isDesktopSupported()) {
-                throw new UnsupportedOperationException("Desktop API 不可用");
-            }
-            Desktop.getDesktop().open(f);
-            log.info("已调用系统默认程序打开 {}", it.path);
-        } catch (Exception ex) {
-            log.warn("Desktop.open 失败，兜底 cmd start：{}", ex.getMessage());
-            try {
-                new ProcessBuilder("cmd", "/c", "start", "", f.getAbsolutePath()).start();
-            } catch (IOException ex2) {
-                log.error("cmd start 打开失败", ex2);
-                showAlert(Alert.AlertType.ERROR, "打开文件失败：" + ex2.getMessage());
-            }
-        }
-    }
-
     /** 打开所在文件夹（全新能力 5.2）：explorer /select 定位；Q15 拍板——文件缺失时不定位直接打开所在目录 */
     private void onContextOpenFolder() {
         if (contextTarget instanceof PreviewItem it && !it.removed) {
@@ -1428,6 +1407,70 @@ public class MainController {
             log.error("打开所在文件夹失败", ex);
             showAlert(Alert.AlertType.ERROR, "打开所在文件夹失败：" + ex.getMessage());
         }
+    }
+
+    /** 在浏览器中查看（浏览器查看HTML需求）：导出 MHT 内嵌 HTML 后用系统默认浏览器打开渲染视图 */
+    private void onContextOpenInBrowser() {
+        if (contextTarget instanceof PreviewItem it && !it.removed) {
+            openHtmlInBrowser(it, false);
+        }
+    }
+
+    /** 在浏览器中查看源码（浏览器查看HTML需求）：用 view-source: 打开导出页面的源码视图 */
+    private void onContextViewSource() {
+        if (contextTarget instanceof PreviewItem it && !it.removed) {
+            openHtmlInBrowser(it, true);
+        }
+    }
+
+    /** 在系统默认浏览器中查看该 MHT 内嵌 HTML（sourceMode=true 走 view-source 源码视图） */
+    private void openHtmlInBrowser(PreviewItem it, boolean sourceMode) {
+        File f = new File(it.path);
+        if (!f.exists()) {
+            log.warn("浏览器查看失败：文件不存在（可能已被移动或删除）{}", it.path);
+            showAlert(Alert.AlertType.WARNING, "文件不存在，可能已被移动或删除：\n" + it.path);
+            return;
+        }
+        if (!browserExporting.compareAndSet(false, true)) {
+            log.info("已有查看页生成任务在进行中，忽略本次请求");
+            return;
+        }
+        statusLabel.setText("正在生成浏览器查看页…");
+        Thread t = new Thread(() -> {
+            try {
+                MimeParser.ParsedMht parsed = new MimeParser().parse(it.path, false, () -> false, null, null);
+                if (parsed.getHtmlContent() == null) {
+                    throw new IllegalStateException("无法解析文件（HTML 内容缺失）");
+                }
+                HtmlExportBuilder.ExportResult r = HtmlExportBuilder.export(it.path, parsed);
+                if (!r.success()) {
+                    throw new IllegalStateException(r.error());
+                }
+                log.info("已生成浏览器查看页：{}（图片 {} 张，警告 {} 条）",
+                        r.htmlFile(), r.imageCount(), r.warnings().size());
+                // 浏览器启动可能耗时（注册表探测 / CDP 端点等待最长约 15 秒），独立后台线程避免冻结界面
+                Thread launcher = new Thread(() -> {
+                    boolean ok = sourceMode
+                            ? BrowserLauncher.openViewSource(r.htmlFile())
+                            : BrowserLauncher.openHtml(r.htmlFile());
+                    if (!ok) {
+                        log.warn("浏览器启动失败：{}", r.htmlFile());
+                        Platform.runLater(() -> showAlert(Alert.AlertType.WARNING,
+                                "未能启动浏览器，页面已生成：\n" + r.htmlFile()));
+                    }
+                }, "html-browser-launch");
+                launcher.setDaemon(true);
+                launcher.start();
+            } catch (Exception e) {
+                log.error("生成浏览器查看页失败：{}", it.path, e);
+                Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "生成查看页失败：" + e.getMessage()));
+            } finally {
+                browserExporting.set(false);
+                Platform.runLater(() -> statusLabel.setText("就绪"));
+            }
+        }, "html-browser-export");
+        t.setDaemon(true);
+        t.start();
     }
 
     /** 设置提取参数（拍板 Q7/G6）：空白区域 → 强制全局参数；其余复用选中项路由（Q8 已选中该行） */
@@ -2329,12 +2372,16 @@ public class MainController {
                 setTooltip(it.status.get() == Status.EMPTY
                         ? new Tooltip("内容为空，正式提取时将被跳过") : null);
             }
-            // 全局参数深蓝底需白字（-fx-text-background-color 不跨节点继承，直接设 label 填充色）
-            boolean whiteText = it.extractOutcome == ExtractOutcome.NONE
-                    && it.status.get() != Status.FAILED
-                    && ParamScope.backgroundStatus(it.parentGroup,
-                            it.textItemParams, it.imageItemParams, imageModeToggle.isSelected(),
-                            textParamsCache, imageParamsCache) == ParamScope.Status.GLOBAL;
+            // 深色底需白字（-fx-text-background-color 不跨节点继承，直接设 label 填充色）：
+            // 全局参数深蓝底、提取失败/跳过/警告行（Windows 错误红 #E81123 及红绿分割行）
+            boolean whiteText = (it.extractOutcome == ExtractOutcome.FAILED
+                    || it.extractOutcome == ExtractOutcome.SKIPPED
+                    || it.extractOutcome == ExtractOutcome.SUCCESS_WARNED)
+                    || (it.extractOutcome == ExtractOutcome.NONE
+                            && it.status.get() != Status.FAILED
+                            && ParamScope.backgroundStatus(it.parentGroup,
+                                    it.textItemParams, it.imageItemParams, imageModeToggle.isSelected(),
+                                    textParamsCache, imageParamsCache) == ParamScope.Status.GLOBAL);
             nameLabel.setStyle((inGroup ? "-fx-font-size: 12px; -fx-font-weight: bold;" : "")
                     + (whiteText ? " -fx-text-fill: #ffffff;" : ""));
             posLabel.setStyle(whiteText ? "-fx-text-fill: #ffffff;" : "");
@@ -3097,6 +3144,17 @@ public class MainController {
     }
 
     /** 列表操作按钮可用性：列表为空时移除禁用；撤销栈为空时撤销禁用；合并为组需勾选集合或选中项目；拆分组仅选中组条目时可用（F6） */
+    /** 查看HTML源码按钮（浏览器查看HTML需求）：对列表当前选中条目打开源码视图 */
+    @FXML
+    private void onViewSourceButton() {
+        if (listAnimating) {
+            return;
+        }
+        if (currentSelection() instanceof PreviewItem it && !it.removed) {
+            openHtmlInBrowser(it, true);
+        }
+    }
+
     private void updateListButtons() {
         removeButton.setDisable(visibleCount() == 0);
         undoButton.setDisable(undoManager.isEmpty());
@@ -3105,6 +3163,7 @@ public class MainController {
         boolean selItem = sel instanceof PreviewItem it && !it.removed;
         groupButton.setDisable(!anyChecked && !selItem);
         ungroupButton.setDisable(!(sel instanceof GroupItem<?>));
+        viewSourceButton.setDisable(!selItem);
         // 条目独立参数需求拍板：仅当选中条目生效参数为独立参数时可"应用到全局"
         applyGlobalButton.setDisable(!hasIndependentParams(sel));
         // 清除参数拍板 Q3：勾选集合任一目标带参数（无勾选 → 单选目标）即启用
@@ -4276,7 +4335,7 @@ public class MainController {
     private void resetImageArea(String hint, boolean showPreviewButton) {
         imageHintLabel.setText(hint != null
                 ? hint
-                : "图片预览需要加载整个 MHT 文件，为节省内存开销，采用按需预览。点击'查看预览效果'按钮可查看预览。");
+                : "图片预览需要加载整个 MHT 文件，为节省内存开销，采用按需预览。点击'查看预览效果'按钮可查看提取效果。");
         imageHintLabel.setVisible(true);
         previewEffectButton.setVisible(showPreviewButton);
         previewEffectButton.setDisable(false);
