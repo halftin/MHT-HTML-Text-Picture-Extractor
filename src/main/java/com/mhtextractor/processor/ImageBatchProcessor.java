@@ -3,6 +3,8 @@ package com.mhtextractor.processor;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.ImageExtractor;
+import com.mhtextractor.extractor.ImageSource;
+import com.mhtextractor.extractor.InMemoryImageSource;
 import com.mhtextractor.output.Archiver;
 import com.mhtextractor.output.ImageWriter;
 import com.mhtextractor.util.ExtractOutcome;
@@ -310,7 +312,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                 }
 
                 // 保存与归档（委托给输出处理器）
-                int saved = outputHandler.saveImages(images, extractedTitle, fileInfo, i, total, stats);
+                int saved = outputHandler.saveImages(new InMemoryImageSource(images), extractedTitle, fileInfo, i, total, stats);
                 if (saved > 0) {
                     totalImageCount += saved;
                     stats.incrementSuccess();
@@ -358,7 +360,7 @@ public class ImageBatchProcessor extends BatchProcessor {
     }
 
     private interface ImageOutputHandler {
-        int saveImages(List<ImageExtractor.ImageData> images, String extractedTitle,
+        int saveImages(ImageSource images, String extractedTitle,
                        MhtFileInfo fileInfo, int fileIndex, int totalFiles, ProcessStats stats);
         void afterAll(String outputFolder, ProcessStats stats);
     }
@@ -431,7 +433,7 @@ public class ImageBatchProcessor extends BatchProcessor {
         }
 
         @Override
-        public int saveImages(List<ImageExtractor.ImageData> images, String extractedTitle,
+        public int saveImages(ImageSource images, String extractedTitle,
                                MhtFileInfo fileInfo, int fileIndex, int totalFiles, ProcessStats stats) {
             String filePrefix = "";
             if (!config.isEnableBatchRenaming() && totalFiles > 1) {
@@ -478,7 +480,7 @@ public class ImageBatchProcessor extends BatchProcessor {
         }
 
         @Override
-        public int saveImages(List<ImageExtractor.ImageData> images, String extractedTitle,
+        public int saveImages(ImageSource images, String extractedTitle,
                                MhtFileInfo fileInfo, int fileIndex, int totalFiles, ProcessStats stats) {
             final int idx = fileIndex + 1;
             final String name = fileInfo.getName();

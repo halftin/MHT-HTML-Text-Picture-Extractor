@@ -1,6 +1,7 @@
 package com.mhtextractor.output;
 
 import com.mhtextractor.extractor.ImageExtractor;
+import com.mhtextractor.extractor.ImageSource;
 import com.mhtextractor.util.SanitizeUtils;
 import lombok.extern.slf4j.Slf4j;
 
@@ -10,7 +11,6 @@ import java.io.OutputStream;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
 
@@ -145,12 +145,12 @@ public class ImageWriter {
      * @param rename 是否启用批量重命名
      * @return 保存成功的数量
      */
-    public static int saveImages(List<ImageExtractor.ImageData> images, String outputDir,
+    public static int saveImages(ImageSource images, String outputDir,
                                  String fallbackExt, boolean rename) {
         int[] counter = {0};
         int saved = 0;
-        for (ImageExtractor.ImageData imageData : images) {
-            String result = saveImage(imageData, outputDir, fallbackExt, rename, counter, "");
+        for (int i = 0; i < images.size(); i++) {
+            String result = saveImage(images.get(i), outputDir, fallbackExt, rename, counter, "");
             if (result != null) saved++;
         }
         return saved;
@@ -166,7 +166,7 @@ public class ImageWriter {
      * @param filePrefix 文件名前缀
      * @return 保存成功的数量
      */
-    public static int saveImagesConcurrent(List<ImageExtractor.ImageData> images, String outputDir,
+    public static int saveImagesConcurrent(ImageSource images, String outputDir,
                                            String fallbackExt, boolean rename, String filePrefix) {
         return saveImagesConcurrent(images, outputDir, fallbackExt, rename, filePrefix, null);
     }
@@ -182,7 +182,7 @@ public class ImageWriter {
      * @param progressCallback 每保存一张图片后回调，参数为已保存数量
      * @return 保存成功的数量
      */
-    public static int saveImagesConcurrent(List<ImageExtractor.ImageData> images, String outputDir,
+    public static int saveImagesConcurrent(ImageSource images, String outputDir,
                                            String fallbackExt, boolean rename, String filePrefix,
                                            IntConsumer progressCallback) {
         int[] counter = {0};
@@ -209,7 +209,7 @@ public class ImageWriter {
      * @param globalIndex 全局计数器（跨文件递增）
      * @return 保存成功的数量
      */
-    public static int saveImagesWithGlobalIndex(List<ImageExtractor.ImageData> images, String outputDir,
+    public static int saveImagesWithGlobalIndex(ImageSource images, String outputDir,
                                                 String fallbackExt, boolean rename, String filePrefix,
                                                 AtomicInteger globalIndex) {
         return saveImagesWithGlobalIndex(images, outputDir, fallbackExt, rename, filePrefix, globalIndex, null);
@@ -227,13 +227,13 @@ public class ImageWriter {
      * @param progressCallback 每保存一张图片后回调，参数为已保存数量
      * @return 保存成功的数量
      */
-    public static int saveImagesWithGlobalIndex(List<ImageExtractor.ImageData> images, String outputDir,
+    public static int saveImagesWithGlobalIndex(ImageSource images, String outputDir,
                                                 String fallbackExt, boolean rename, String filePrefix,
                                                 AtomicInteger globalIndex, IntConsumer progressCallback) {
         int saved = 0;
-        for (ImageExtractor.ImageData imageData : images) {
+        for (int i = 0; i < images.size(); i++) {
             int[] idx = {globalIndex.getAndIncrement()};
-            String result = saveImage(imageData, outputDir, fallbackExt, rename, idx, filePrefix);
+            String result = saveImage(images.get(i), outputDir, fallbackExt, rename, idx, filePrefix);
             if (result != null) saved++;
             if (progressCallback != null) {
                 progressCallback.accept(saved);
