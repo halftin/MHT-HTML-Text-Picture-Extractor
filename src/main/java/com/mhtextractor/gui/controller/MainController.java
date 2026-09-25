@@ -1,6 +1,10 @@
 package com.mhtextractor.gui.controller;
 
 import atlantafx.base.controls.ToggleSwitch;
+import com.mhtextractor.cache.PreviewCacheKey;
+import com.mhtextractor.cache.PreviewCacheLifecycle;
+import com.mhtextractor.cache.PreviewCacheMeta;
+import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
@@ -91,6 +95,8 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.stage.Stage;
+import javafx.stage.WindowEvent;
 import javafx.util.Duration;
 import lombok.extern.slf4j.Slf4j;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -101,7 +107,10 @@ import org.glavo.webp.javafx.WebPFXImage;
 import java.awt.Desktop;
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -112,6 +121,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -235,6 +245,8 @@ public class MainController {
         volatile String cachedTitle;
         volatile List<ImageExtractor.ImageData> cachedImages;
         volatile List<ThumbEntry> cachedThumbs;
+        /** 预览缓存元数据（需求 2 会话 9）：磁盘落盘后的 meta（含图片清单，不含字节），C2「内存只留 meta + 缩略图」 */
+        volatile PreviewCacheMeta cachedMeta;
         /** 最近一次提取结果（提取结果状态需求）：NONE 无结果；仅在 FX 线程回写/清除 */
         ExtractOutcome extractOutcome = ExtractOutcome.NONE;
         /** 提取结果详情（失败/跳过原因 + 警告，分号拼接）；点击含红条目时预览区 banner 展示 */
@@ -355,6 +367,13 @@ public class MainController {
     private int requestToken = 0;
     private boolean imageLoadActive = false;
     private PreviewItem loadingItem = null;
+    /** 预览会话缓存（需求 2 会话 9）：存储层 + 四条生命周期规则；root = <java.io.tmpdir>/mht-extractor-preview（P6/P8，与 HtmlExportBuilder 的 mht-extractor-view 并列） */
+    private final PreviewCacheLifecycle previewCacheLifecycle = new PreviewCacheLifecycle(
+            new PreviewCacheStore(Paths.get(System.getProperty("java.io.tmpdir"), "mht-extractor-preview")));
+    /** 在途预览加载线程（规则 d 退出清空时等待其结束用；仅 FX 线程写） */
+    private volatile Thread previewLoadThread = null;
+    /** 退出清空已完成：二次 close 放行（规则 d） */
+    private boolean shutdownCacheCleared = false;
     private boolean updatingAdjustCheck = false;
     /** 全选/全不选批量写入期间的联动抑制标记（F1） */
     private boolean updatingSelection = false;
@@ -547,10 +566,56 @@ public class MainController {
         updateFileCount();
         updateListButtons();
 
+        // 6. 预览会话缓存（需求 2 会话 9）：启动扫孤儿（P7 崩溃恢复）；
+        //    关窗清空处理器经 scene/window 装配后挂接（initialize 阶段 scene 尚未存在，App.start 稍后装配）
+        previewCacheLifecycle.startupCleanup();
+        fileListView.sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene == null) {
+                return;
+            }
+            newScene.windowProperty().addListener((o2, oldW, newW) -> {
+                if (newW instanceof Stage stage) {
+                    stage.setOnCloseRequest(this::onWindowCloseRequest);
+                }
+            });
+        });
+
         Platform.runLater(() -> {
             logTextArea.appendText("欢迎使用 MHT 资源提取器！\n");
             logTextArea.appendText("请选择提取模式与输入目录，通过\"提取参数设置\"确认参数后即可预览并提取。\n");
         });
+    }
+
+    /** 规则 (d)：关窗清空（需求 2 §2.2）。有未清理缓存 → 弹提示 → 与在途预览线程协调后清空 → 放行关闭；
+     *  无缓存 → 直接放行（不弹窗）。test.mode 下跳过弹窗只清空（防自动化关窗阻塞）。
+     *  并发协调（§2.6(6)）：先置停止标志（cancelWorkspaceActivity → requestToken++ 令在途线程放弃结果），
+     *  再等其在途写入结束（join，最多 2s；超时则接受删除与写入竞争——原子写入方案下最坏是写入失败被吞），
+     *  最后清空。只清本应用专属根目录（PreviewCacheStore 的 root），绝不触碰 java.io.tmpdir 整体。 */
+    private void onWindowCloseRequest(WindowEvent e) {
+        if (shutdownCacheCleared || !previewCacheLifecycle.hasCachedEntries()) {
+            return;
+        }
+        e.consume();
+        if (!"true".equals(System.getProperty("test.mode"))) {
+            Alert alert = new Alert(Alert.AlertType.INFORMATION,
+                    "关闭程序前需要清空缓存，清空后关闭，请稍后");
+            alert.setTitle("退出前清空缓存");
+            alert.setHeaderText(null);
+            alert.showAndWait();
+        }
+        cancelWorkspaceActivity();
+        Thread t = previewLoadThread;
+        if (t != null && t.isAlive() && t != Thread.currentThread()) {
+            try {
+                t.join(2000);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        previewCacheLifecycle.onShutdown(() -> { });
+        shutdownCacheCleared = true;
+        Stage stage = (Stage) e.getSource();
+        stage.close();
     }
 
     // ==================== GUI 状态持久化（logs/gui-state.json） ====================
@@ -1166,6 +1231,9 @@ public class MainController {
                 false, null, null));
         clearExtractOutcomes(List.of(item));
         clearPreviewCache(item);
+        if (imageMode) {
+            previewCacheLifecycle.onParamsChanged(item.path);   // 规则 (a)：参数变化 → 删该项目缓存目录
+        }
         startPreParseFor(List.of(item));
         log.info("条目 {} 已设置{}模式独立参数", item.name, imageMode ? "图片" : "文本");
         fileListView.refresh();
@@ -1188,6 +1256,12 @@ public class MainController {
                 false, null, null));
         // 拍板：全局参数重新确认 → 全部条目旧提取结果色失效
         clearExtractOutcomes(allPreviewItems());
+        if (imageMode) {
+            // 规则 (a)：全局参数变化 → 全部条目缓存目录删除（保守全删：无独立参数的条目生效参数确实变了，
+            // 有独立参数的条目删除也只是下次预览重建，语义安全）
+            previewCacheLifecycle.onParamsChangedBatch(
+                    allPreviewItems().stream().map(i -> i.path).toList());
+        }
         refreshAfterParamsChanged();
         updateExtractBanner(currentSelection());
     }
@@ -1207,8 +1281,13 @@ public class MainController {
                 false, null, null, null, imageMode, null, group.getGroupNo(), before,
                 false, null, null));
         // 拍板：组参数重新确认 → 该组成员旧提取结果色失效
-        clearExtractOutcomes(group.getMembers().stream().filter(m -> !m.removed).toList());
-        refreshAfterTargetedParamsChange(group.getMembers().stream().filter(m -> !m.removed).toList());
+        List<PreviewItem> members = group.getMembers().stream().filter(m -> !m.removed).toList();
+        clearExtractOutcomes(members);
+        if (imageMode) {
+            // 规则 (a)：组参数变化 → 该组成员缓存目录删除
+            previewCacheLifecycle.onParamsChangedBatch(members.stream().map(m -> m.path).toList());
+        }
+        refreshAfterTargetedParamsChange(members);
         updateListButtons();
         updateExtractBanner(currentSelection());
     }
@@ -1587,6 +1666,11 @@ public class MainController {
                 imageMode, globalBefore, itemBefore, groupBefore, false, null, null, null,
                 false, null, null));
         clearExtractOutcomes(allPreviewItems());
+        if (imageMode) {
+            // 规则 (a)：全局参数写入 + 全部独立参数清空 → 全部条目生效参数变化 → 删除全部缓存目录
+            previewCacheLifecycle.onParamsChangedBatch(
+                    allPreviewItems().stream().map(i -> i.path).toList());
+        }
         log.info("已应用到全局（{}模式）：所有独立参数已清空，全部条目继承新全局参数",
                 imageMode ? "图片" : "文本");
         refreshAfterParamsChanged();
@@ -1687,6 +1771,10 @@ public class MainController {
         }
         // 拍板：参数变更 → 受影响条目旧提取结果色失效
         clearExtractOutcomes(affected);
+        if (imageMode) {
+            // 规则 (a)：清除参数也是参数变化（生效参数回落组/全局）→ 受影响条目缓存目录删除
+            previewCacheLifecycle.onParamsChangedBatch(affected.stream().map(i -> i.path).toList());
+        }
         log.info("已清除 {} 个条目、{} 个组的{}模式参数", topItems.size(), groups.size(),
                 imageMode ? "图片" : "文本");
         refreshAfterTargetedParamsChange(affected);
@@ -2876,12 +2964,13 @@ public class MainController {
         return g.getMembers().stream().filter(m -> !m.removed).toList();
     }
 
-    /** 清空预览缓存并回到待解析（生效参数切换后重新预解析，阶段 5 机制） */
+    /** 清空预览缓存并回到待解析（生效参数切换后重新预解析，阶段 5 机制）。只清内存态；磁盘缓存由 PreviewCacheLifecycle 四条规则管理 */
     private void clearPreviewCache(PreviewItem it) {
         it.cachedText = null;
         it.cachedTitle = null;
         it.cachedImages = null;
         it.cachedThumbs = null;
+        it.cachedMeta = null;
         it.status.set(Status.WAITING);
     }
 
@@ -3271,6 +3360,8 @@ public class MainController {
             t.removed = true;
             t.selected.set(false);
         }
+        // 规则 (c)：从列表移除 → 删该项目缓存目录
+        previewCacheLifecycle.onItemsRemoved(targets.stream().map(t -> t.path).toList());
         // 空组自动销毁：降序遍历记录原顶层索引，撤销时按原序恢复
         List<GroupItem<PreviewItem>> destroyed = new ArrayList<>();
         List<Integer> destroyedIdx = new ArrayList<>();
@@ -3306,6 +3397,8 @@ public class MainController {
             m.removed = true;
             m.selected.set(false);
         }
+        // 规则 (c)：整组移除 → 删组内成员缓存目录
+        previewCacheLifecycle.onItemsRemoved(members.stream().map(m -> m.path).toList());
         items.remove(group);
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.REMOVE_GROUP, members,
                 group, idx, List.of(group), List.of(idx), List.of()));
@@ -3370,6 +3463,9 @@ public class MainController {
                         pg.getMembers().remove(it);
                     }
                 }
+                // 规则 (c)：撤销导入 = 从列表移除这批项目 → 删其缓存目录
+                previewCacheLifecycle.onItemsRemoved(
+                        record.items().stream().map(i -> i.path).toList());
                 items.removeAll(record.items());
                 // 组内项目随撤销导入移除后可能产生空组：直接销毁（撤销导入本身不再记录）
                 for (int i = items.size() - 1; i >= 0; i--) {
@@ -3431,6 +3527,10 @@ public class MainController {
                             }
                             clearExtractOutcomes(List.of(it));
                             clearPreviewCache(it);
+                            if (im) {
+                                // 规则 (a)：撤销恢复旧参数 = 生效参数变化 → 删该项目缓存目录
+                                previewCacheLifecycle.onParamsChanged(it.path);
+                            }
                             startPreParseFor(List.of(it));
                             break;
                         }
@@ -3451,6 +3551,11 @@ public class MainController {
                             for (PreviewItem m : members) {
                                 clearPreviewCache(m);
                             }
+                            if (im) {
+                                // 规则 (a)：撤销恢复组参数 → 成员生效参数变化 → 删其缓存目录
+                                previewCacheLifecycle.onParamsChangedBatch(
+                                        members.stream().map(m -> m.path).toList());
+                            }
                             startPreParseFor(members);
                             break;
                         }
@@ -3462,6 +3567,11 @@ public class MainController {
                         textParamsCache = record.paramBefore();
                     }
                     clearExtractOutcomes(allPreviewItems());
+                    if (im) {
+                        // 规则 (a)：撤销恢复全局参数 → 全部条目生效参数可能变化 → 保守全删
+                        previewCacheLifecycle.onParamsChangedBatch(
+                                allPreviewItems().stream().map(i -> i.path).toList());
+                    }
                     refreshAfterParamsChanged();
                 }
                 fileListView.refresh();
@@ -3502,6 +3612,11 @@ public class MainController {
                     }
                 }
                 clearExtractOutcomes(affected);
+                if (im) {
+                    // 规则 (a)：撤销恢复被清除的参数 → 受影响条目生效参数变化 → 删其缓存目录
+                    previewCacheLifecycle.onParamsChangedBatch(
+                            affected.stream().map(i -> i.path).toList());
+                }
                 refreshAfterTargetedParamsChange(affected);
                 updateListButtons();
                 updateExtractBanner(currentSelection());
@@ -3542,6 +3657,11 @@ public class MainController {
                     }
                 }
                 clearExtractOutcomes(allPreviewItems());
+                if (im) {
+                    // 规则 (a)：撤销应用到全局 → 全部条目生效参数可能变化 → 保守全删
+                    previewCacheLifecycle.onParamsChangedBatch(
+                            allPreviewItems().stream().map(i -> i.path).toList());
+                }
                 refreshAfterParamsChanged();
                 updateListButtons();
                 updateExtractBanner(currentSelection());
@@ -4469,6 +4589,16 @@ public class MainController {
             }
         }
 
+        final PreviewCacheKey cacheKey;
+        try {
+            cacheKey = PreviewCacheKey.compute(Path.of(item.path),
+                    params.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
+        } catch (IOException e) {
+            log.error("计算缓存键失败：{}", item.path, e);
+            showAlert(Alert.AlertType.ERROR, "读取文件信息失败：" + e.getMessage());
+            return;
+        }
+
         final int token = requestToken;
         imageLoadActive = true;
         loadingItem = item;
@@ -4484,44 +4614,78 @@ public class MainController {
 
         Thread t = new Thread(() -> {
             try {
-                MimeParser parser = new MimeParser();
-                MimeParser.ParsedMht parsed = parser.parse(item.path, false, () -> false, null, null);
-                ImageExtractor imageExtractor = new ImageExtractor(parsed,
-                        params.getImageNameStartMarker(), params.getImageNameEndMarker(),
-                        params.getImageRegionStartMarker(), params.getImageRegionEndMarker());
-                List<ImageExtractor.ImageData> images = imageExtractor.extractImages(null);
-                if (token != requestToken) {
-                    return;
+                // 每项目写锁（§2.6(6)）：同项目「查缓存→提取→落盘」串行，不同项目并行
+                final PreviewCacheMeta meta;
+                synchronized (previewCacheLifecycle.lockFor(cacheKey.absolutePath())) {
+                    meta = loadOrWritePreviewCache(item, params, cacheKey, token);
                 }
-
-                // 后台逐张解码缩略图，渐进上屏（每张一次 runLater）
+                if (meta == null) {
+                    return;   // 代次失效：放弃（未写缓存）
+                }
+                // C2：缩略图从磁盘真实图片逐张解码，内存只留缩略图 + meta，不驻留全尺寸字节
                 List<ThumbEntry> thumbs = new ArrayList<>();
-                for (int i = 0; i < images.size(); i++) {
+                Path cacheDir = previewCacheLifecycle.store().dirFor(cacheKey);
+                for (int i = 0; i < meta.images().size(); i++) {
                     if (token != requestToken) {
                         return;
                     }
-                    ThumbEntry entry = decodeThumb(images.get(i), i, params);
-                    thumbs.add(entry);
-                    final ThumbEntry e = entry;
+                    PreviewCacheMeta.ImageEntry entry = meta.images().get(i);
+                    final ThumbEntry thumb;
+                    try {
+                        byte[] data = Files.readAllBytes(cacheDir.resolve(entry.file()));
+                        thumb = decodeThumb(new ImageExtractor.ImageData(
+                                entry.originalName(), entry.sourceId(), data), i, params);
+                    } catch (IOException e) {
+                        log.warn("读取缓存图片失败，跳过缩略图：{}", cacheDir.resolve(entry.file()), e);
+                        continue;
+                    }
+                    thumbs.add(thumb);
                     Platform.runLater(() -> {
                         if (token != requestToken
                                 || fileListView.getSelectionModel().getSelectedItem() != item) {
                             return;
                         }
-                        appendThumb(item, e);
+                        appendThumb(item, thumb);
                     });
                 }
 
                 Platform.runLater(() -> {
+                    previewLoadThread = null;
+                    // 落盘期间参数/条目可能已变化（参数弹窗确认、移除等）：真正失效
+                    // （条目已移除或生效图片参数指纹与写盘时不符）时删除刚落盘的目录，避免残留。
+                    // 注意用与模式无关的图片参数解析（切模式不影响图片缓存有效性）
+                    AppConfig imageParamsNow = ParamScope.effectiveImageParams(
+                            item.parentGroup, item.imageItemParams, imageParamsCache);
+                    boolean stale = item.removed || imageParamsNow == null
+                            || !imageParamsNow.imageExtractionFingerprint()
+                                    .equals(cacheKey.paramFingerprint());
+                    if (stale) {
+                        Thread cleanup = new Thread(() -> {
+                            try {
+                                previewCacheLifecycle.store().delete(cacheKey);
+                            } catch (IOException e) {
+                                log.warn("删除失效预览缓存失败：{}", cacheKey.toDirName(), e);
+                            }
+                        }, "preview-cache-stale-delete");
+                        cleanup.setDaemon(true);
+                        cleanup.start();
+                        imageLoadActive = false;
+                        loadingItem = null;
+                        previewEffectButton.setDisable(false);
+                        updateProgressStatus(parseToken);
+                        return;
+                    }
                     if (token != requestToken
                             || fileListView.getSelectionModel().getSelectedItem() != item) {
+                        // 既有语义：选中/代次变化时放弃上屏；缓存保留（与选中无关），重选时命中复用
                         return;
                     }
                     imageLoadActive = false;
                     loadingItem = null;
                     item.cachedThumbs = thumbs;
+                    item.cachedMeta = meta;
                     item.cachedImages = null;
-                    if (images.isEmpty()) {
+                    if (meta.images().isEmpty()) {
                         // 全量解析确认无图片 → 空内容标记
                         item.status.set(Status.EMPTY);
                         fileListView.refresh();
@@ -4531,6 +4695,7 @@ public class MainController {
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> {
+                    previewLoadThread = null;
                     if (token != requestToken
                             || fileListView.getSelectionModel().getSelectedItem() != item) {
                         return;
@@ -4544,8 +4709,66 @@ public class MainController {
                 });
             }
         }, "preview-image-load");
+        previewLoadThread = t;
         t.setDaemon(true);
         t.start();
+    }
+
+    /**
+     * 预览缓存读取或重建（必须在每项目写锁内调用；§2.6(8)：只有点「查看预览效果」才建立缓存，预解析不写）。
+     * 命中 → 返回磁盘 meta；未命中 → 解析 + 提取 + 原子落盘（P11）。
+     * meta 损坏（有 .complete 但解析失败）→ 删目录重建（会话 8 遗留风险兜底：否则同 key 下反复报错无法恢复）。
+     * 代次失效（token 变化）时不写缓存并返回 null（放弃本次预览）。
+     */
+    private PreviewCacheMeta loadOrWritePreviewCache(PreviewItem item, AppConfig params,
+                                                     PreviewCacheKey cacheKey, int token) throws Exception {
+        try {
+            Optional<PreviewCacheMeta> hit = previewCacheLifecycle.store().load(cacheKey);
+            if (hit.isPresent()) {
+                log.info("预览缓存命中：{}", item.name);
+                return hit.get();
+            }
+        } catch (IOException e) {
+            log.warn("预览缓存元数据损坏，删除重建：{}（{}）", cacheKey.toDirName(), e.getMessage());
+            try {
+                previewCacheLifecycle.store().delete(cacheKey);
+            } catch (IOException del) {
+                log.warn("删除损坏缓存失败：{}", del.getMessage());
+            }
+        }
+
+        MimeParser parser = new MimeParser();
+        MimeParser.ParsedMht parsed = parser.parse(item.path, false, () -> false, null, null);
+        ImageExtractor imageExtractor = new ImageExtractor(parsed,
+                params.getImageNameStartMarker(), params.getImageNameEndMarker(),
+                params.getImageRegionStartMarker(), params.getImageRegionEndMarker());
+        List<ImageExtractor.ImageData> images = imageExtractor.extractImages(null);
+        if (token != requestToken) {
+            return null;
+        }
+        // 元数据先行构建；imagesWriter 写盘文件名必须与 meta.images[].file 一致（store.load 据此校验）
+        List<String> plainNames = new ArrayList<>();
+        List<PreviewCacheMeta.ImageEntry> entries = new ArrayList<>();
+        for (int i = 0; i < images.size(); i++) {
+            ImageExtractor.ImageData img = images.get(i);
+            String ext = SanitizeUtils.detectExtensionByMagicNumber(img.getData(), "jpg");
+            String plain = String.format("%04d.%s", i + 1, ext);
+            plainNames.add(plain);
+            entries.add(new PreviewCacheMeta.ImageEntry(
+                    PreviewCacheStore.IMAGES_DIR_NAME + "/" + plain,
+                    img.getContentId(), img.getFilename(), ext, List.of()));
+        }
+        PreviewCacheMeta meta = new PreviewCacheMeta(PreviewCacheMeta.FORMAT_VERSION,
+                new PreviewCacheMeta.Source(cacheKey.absolutePath(), cacheKey.size(), cacheKey.mtime()),
+                cacheKey.paramFingerprint(), true, entries,
+                imageExtractor.getLastWarnings());
+        previewCacheLifecycle.store().write(cacheKey, meta, imagesDir -> {
+            for (int i = 0; i < images.size(); i++) {
+                Files.write(imagesDir.resolve(plainNames.get(i)), images.get(i).getData());
+            }
+        });
+        log.info("预览图片已落盘缓存：{}（{} 张）", item.name, images.size());
+        return meta;
     }
 
     // ==================== 预解析（文本全量 / 图片轻量） ====================
@@ -5688,11 +5911,38 @@ public class MainController {
                 out.println("[PASS] Text extraction started"); p++;
             } catch (Exception e) { out.println("[FAIL] Text extraction: " + e.getMessage()); f++; }
 
-            // 图片预览工作区：查看预览效果（懒加载）
+            // 图片预览工作区：查看预览效果（懒加载 + 需求 2 C1 预览落盘断言）
             try { imageModeToggle.setSelected(true); Thread.sleep(500);
-                fileListView.getSelectionModel().selectFirst(); Thread.sleep(300);
-                previewEffectButton.fire(); Thread.sleep(3000);
-                out.println("[PASS] Image preview workspace"); p++;
+                PreviewItem pvTarget = allVisibleItems().stream()
+                        .filter(i -> "t01.mht".equals(i.name)).findFirst()
+                        .orElseThrow(() -> new IllegalStateException("找不到 t01.mht"));
+                fileListView.getSelectionModel().select(pvTarget); Thread.sleep(300);
+                previewEffectButton.fire();
+                long previewDeadline = System.currentTimeMillis() + 20000;
+                while (System.currentTimeMillis() < previewDeadline && imageLoadActive) {
+                    pumpFxEvents();
+                }
+                Thread.sleep(200); pumpFxEvents();
+                Object selObj = fileListView.getSelectionModel().getSelectedItem();
+                if (!(selObj instanceof PreviewItem pi) || pi.cachedThumbs == null
+                        || pi.cachedThumbs.isEmpty()) {
+                    throw new IllegalStateException("预览后应有缩略图（来自磁盘图片解码）");
+                }
+                PreviewItem previewed = (PreviewItem) selObj;
+                // C1：缓存目录含 meta.json + images/ + .complete；C2：内存只留 meta + 缩略图
+                AppConfig pvParams = effectiveForObject(pi);
+                if (pvParams == null) {
+                    throw new IllegalStateException("预览条目无生效参数");
+                }
+                PreviewCacheKey pvKey = PreviewCacheKey.compute(Path.of(pi.path),
+                        pvParams.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
+                if (previewCacheLifecycle.store().load(pvKey).isEmpty()) {
+                    throw new IllegalStateException("预览后缓存应命中（meta.json/images/.complete）");
+                }
+                if (pi.cachedMeta == null || pi.cachedImages != null) {
+                    throw new IllegalStateException("内存应只留 meta + 缩略图（cachedMeta 非空、cachedImages 为空）");
+                }
+                out.println("[PASS] Image preview workspace (C1/C2)"); p++;
             } catch (Exception e) { out.println("[FAIL] Image preview workspace: " + e.getMessage()); f++; }
 
             // 图片提取（含损坏文件 → 满格条应转为浅红，进度条配色拍板）
@@ -5718,6 +5968,47 @@ public class MainController {
                 }
                 out.println("[PASS] Image extraction started"); p++;
             } catch (Exception e) { out.println("[FAIL] Image extraction: " + e.getMessage()); f++; }
+
+            // 预览缓存生命周期（需求 2 会话 9）：参数失效 C3 / 移除清理 C7 / 退出清理 C8
+            try { imageModeToggle.setSelected(true); Thread.sleep(300);
+                PreviewItem target = allVisibleItems().stream()
+                        .filter(i -> "i01.mht".equals(i.name)).findFirst()
+                        .orElseThrow(() -> new IllegalStateException("找不到 i01.mht"));
+                // C3：全局参数变化 → 全部缓存目录删除（含此前图片预览块落盘的目录）
+                AppConfig modified = new AppConfig();
+                modified.setImageNameStartMarker("__auto_test_changed__");
+                applyConfirmedParams(true, modified); Thread.sleep(300);
+                if (!previewCacheLifecycle.store().listKeys().isEmpty()) {
+                    throw new IllegalStateException("参数变化后缓存应全部删除（C3）");
+                }
+                // 预览 i01 → 落盘恰 1 个目录
+                fileListView.getSelectionModel().select(target); Thread.sleep(200);
+                previewEffectButton.fire();
+                long lcDeadline = System.currentTimeMillis() + 20000;
+                while (System.currentTimeMillis() < lcDeadline && imageLoadActive) {
+                    pumpFxEvents();
+                }
+                Thread.sleep(200); pumpFxEvents();
+                if (previewCacheLifecycle.store().listKeys().size() != 1) {
+                    throw new IllegalStateException("预览后应恰有 1 个缓存目录，实际 "
+                            + previewCacheLifecycle.store().listKeys().size());
+                }
+                // C7：移除项目 → 其缓存目录删除
+                removeItems(List.of(target)); Thread.sleep(200);
+                if (!previewCacheLifecycle.store().listKeys().isEmpty()) {
+                    throw new IllegalStateException("移除项目后其缓存应被删除（C7）");
+                }
+                // C8：退出清空（test.mode 跳过弹窗只清空，关窗处理器同样逻辑）
+                previewCacheLifecycle.onShutdown(() -> { });
+                java.nio.file.Path cacheRoot = previewCacheLifecycle.store().root();
+                if (java.nio.file.Files.isDirectory(cacheRoot)
+                        && java.nio.file.Files.list(cacheRoot).findAny().isPresent()) {
+                    throw new IllegalStateException("退出清空后缓存根目录应为空（C8）");
+                }
+                out.println("[PASS] Preview cache lifecycle (C3/C7/C8)"); p++;
+            } catch (Exception e) { out.println("[FAIL] Preview cache lifecycle: " + e.getMessage()); f++; }
+            // 兜底清场（无论成败）：自动化测试经 System.exit 退出不走关窗处理器，避免缓存残留跨会话
+            try { previewCacheLifecycle.onShutdown(() -> { }); } catch (Exception ignored) { }
 
             out.println(); out.println("=== RESULTS: " + p + " passed, " + f + " failed ===");
             out.flush();
