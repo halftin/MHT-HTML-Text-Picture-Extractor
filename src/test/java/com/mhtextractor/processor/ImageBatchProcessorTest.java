@@ -1,5 +1,9 @@
 package com.mhtextractor.processor;
 
+import com.mhtextractor.cache.PreviewCacheKey;
+import com.mhtextractor.cache.PreviewCacheLifecycle;
+import com.mhtextractor.cache.PreviewCacheMeta;
+import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.util.ExtractOutcome;
 import org.junit.jupiter.api.Test;
@@ -9,13 +13,21 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -285,5 +297,314 @@ class ImageBatchProcessorTest {
         assertTrue(r.message().contains("写入失败"), r.message());
         // 5 个占位文件仍在（未被覆盖/追加），且没有新文件写入
         assertEquals(5, Files.list(fileOutDir).count());
+    }
+
+    // ==================== 会话 10：提取复用（预览缓存命中） ====================
+
+    private PreviewCacheLifecycle newCacheLifecycle() {
+        return new PreviewCacheLifecycle(new PreviewCacheStore(tmp.resolve("cache")));
+    }
+
+    /**
+     * 模拟会话 9 预览落盘：为 mht 写入一份与预览产物一致的缓存
+     * （1 张 webp，sourceId/originalName 均为 "img001"——CID 推断名，与真实预览相同）。
+     */
+    private PreviewCacheKey writePreviewCache(Path mht, AppConfig params, byte[] webpBytes)
+            throws Exception {
+        PreviewCacheStore store = new PreviewCacheStore(tmp.resolve("cache"));
+        PreviewCacheKey key = PreviewCacheKey.compute(mht,
+                params.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
+        PreviewCacheMeta meta = new PreviewCacheMeta(PreviewCacheMeta.FORMAT_VERSION,
+                new PreviewCacheMeta.Source(key.absolutePath(), key.size(), key.mtime()),
+                key.paramFingerprint(), true,
+                List.of(new PreviewCacheMeta.ImageEntry(
+                        "images/0001.webp", "img001", "img001", "webp", List.of())),
+                List.of());
+        store.write(key, meta, dir -> Files.write(dir.resolve("0001.webp"), webpBytes));
+        return key;
+    }
+
+    /** 用等长垃圾覆盖文件并还原 mtime：size/mtime 不变 → 缓存 key 不变；解析必失败 → 可观测 parse 是否被跳过 */
+    private void replaceWithGarbageSameSize(Path mht) throws Exception {
+        long mtime = Files.getLastModifiedTime(mht).toMillis();
+        byte[] garbage = new byte[(int) Files.size(mht)];
+        Arrays.fill(garbage, (byte) 0x42);
+        Files.write(mht, garbage);
+        Files.setLastModifiedTime(mht, FileTime.fromMillis(mtime));
+    }
+
+    /** 递归快照（相对路径 + 文件 SHA-256 哈希 + 目录项），比较两棵输出树（文件名 + 字节） */
+    private static List<String> snapshotTree(Path root) throws Exception {
+        List<String> entries = new ArrayList<>();
+        if (!Files.isDirectory(root)) {
+            return entries;
+        }
+        try (Stream<Path> walk = Files.walk(root)) {
+            for (Path p : walk.sorted().toList()) {
+                String rel = root.relativize(p).toString();
+                if (Files.isDirectory(p)) {
+                    if (!p.equals(root)) {
+                        entries.add(rel + "/");
+                    }
+                } else {
+                    byte[] digest = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(p));
+                    entries.add(rel + "  sha256=" + HexFormat.of().formatHex(digest));
+                }
+            }
+        }
+        return entries;
+    }
+
+    private static void assertTreeEquals(Path expected, Path actual) throws Exception {
+        assertEquals(snapshotTree(expected), snapshotTree(actual),
+                "两棵输出树必须完全一致（文件名 + 字节）");
+    }
+
+    private static void deleteRecursivelyIfExists(Path p) throws Exception {
+        if (!Files.exists(p)) {
+            return;
+        }
+        try (Stream<Path> walk = Files.walk(p)) {
+            for (Path f : walk.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(f);
+            }
+        }
+    }
+
+    @Test
+    void cacheHitSkipsParseAndReusesImages() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeImageMht(source, "a.mht", null);
+        Path out = Files.createDirectories(tmp.resolve("out"));
+
+        byte[] webpBytes;
+        try (InputStream is = getClass().getResourceAsStream("/sample-preview.webp")) {
+            webpBytes = is.readAllBytes();
+        }
+        AppConfig config = preloadSeparateConfig(source);
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        writePreviewCache(a, config, webpBytes);
+        // 文件被等长垃圾覆盖（size/mtime 不变）：若实现仍解析 MHT，必然 FAILED/SKIPPED；
+        // 只有真正跳过解析走缓存才会 SUCCESS
+        replaceWithGarbageSameSize(a);
+
+        ImageBatchProcessor processor = new ImageBatchProcessor(config, lifecycle);
+        BatchProcessor.ProcessStats stats = processor.process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out.toString(), null, null);
+
+        assertEquals(0, stats.getFailCount(), stats.toString());
+        assertEquals(0, stats.getSkipCount(), stats.toString());
+        assertEquals(1, stats.getSuccessCount(), stats.toString());
+        assertEquals(ExtractOutcome.SUCCESS, stats.getFileResults().get(0).outcome());
+        Path saved = out.resolve("a").resolve("img001.webp");
+        assertTrue(Files.exists(saved), "缓存命中的输出应使用原始文件名 img001.webp");
+        assertTrue(Arrays.equals(webpBytes, Files.readAllBytes(saved)), "输出字节必须与缓存图片一致");
+        // 规则 (b)：SUCCESS → 缓存已删除
+        assertFalse(lifecycle.hasCachedEntries(), "提取成功后缓存目录应被删除");
+    }
+
+    @Test
+    void cacheHitSeparateOutputByteIdentical() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeImageMht(source, "a.mht", null);
+        Path out1 = Files.createDirectories(tmp.resolve("out1"));
+        Path out2 = Files.createDirectories(tmp.resolve("out2"));
+
+        AppConfig config = preloadSeparateConfig(source);
+        config.setEnableBatchRenaming(true);
+
+        // 第一次：无缓存 → 全量提取
+        BatchProcessor.ProcessStats stats1 = new ImageBatchProcessor(config).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out1.toString(), null, null);
+        // 模拟预览落盘（同一 config → 同一指纹）
+        byte[] webpBytes = Files.readAllBytes(out1.resolve("a").resolve("00001.webp"));
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        writePreviewCache(a, config, webpBytes);
+        // 第二次：保留缓存 → 应命中复用
+        BatchProcessor.ProcessStats stats2 = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out2.toString(), null, null);
+
+        assertEquals(1, stats1.getSuccessCount(), stats1.toString());
+        assertEquals(1, stats2.getSuccessCount(), stats2.toString());
+        assertEquals(stats1.getFileResults().get(0).outcome(), stats2.getFileResults().get(0).outcome());
+        assertTreeEquals(out1, out2);
+        assertFalse(lifecycle.hasCachedEntries(), "提取成功后缓存目录应被删除");
+    }
+
+    @Test
+    void cacheHitMergedOutputByteIdentical() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeImageMht(source, "a.mht", null);
+        Path out1 = Files.createDirectories(tmp.resolve("out1"));
+        Path out2 = Files.createDirectories(tmp.resolve("out2"));
+
+        AppConfig config = preloadSeparateConfig(source);
+        config.setSingleOutputMode(true);
+        config.setEnableBatchRenaming(true);
+
+        BatchProcessor.ProcessStats stats1 = new ImageBatchProcessor(config).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out1.toString(), null, null);
+        byte[] webpBytes = Files.readAllBytes(out1.resolve("src").resolve("00001.webp"));
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        writePreviewCache(a, config, webpBytes);
+        BatchProcessor.ProcessStats stats2 = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out2.toString(), null, null);
+
+        assertEquals(1, stats1.getSuccessCount(), stats1.toString());
+        assertEquals(1, stats2.getSuccessCount(), stats2.toString());
+        assertTreeEquals(out1, out2);
+        assertFalse(lifecycle.hasCachedEntries(), "提取成功后缓存目录应被删除");
+    }
+
+    @Test
+    void cacheHitSeparateTitleParsingByteIdentical() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        // 标题标记：单独模式 + 名称提取时输出目录名依赖 HTML 标题（缓存不含标题，须提取期重算）
+        Path a = writeImageMht(source, "a.mht", "TITLE-START漫画A标题TITLE-END");
+        Path out1 = Files.createDirectories(tmp.resolve("out1"));
+        Path out2 = Files.createDirectories(tmp.resolve("out2"));
+
+        AppConfig config = preloadSeparateConfig(source);
+        config.setEnableNameExtraction(true);
+        config.setImageNameStartMarker("TITLE-START");
+        config.setImageNameEndMarker("TITLE-END");
+
+        BatchProcessor.ProcessStats stats1 = new ImageBatchProcessor(config).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out1.toString(), null, null);
+        byte[] webpBytes = Files.readAllBytes(out1.resolve("漫画A标题").resolve("img001.webp"));
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        writePreviewCache(a, config, webpBytes);
+        BatchProcessor.ProcessStats stats2 = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out2.toString(), null, null);
+
+        assertEquals(1, stats1.getSuccessCount(), stats1.toString());
+        assertEquals(1, stats2.getSuccessCount(), stats2.toString());
+        // 标题目录命名（提取期重算，P13）：两次运行一致
+        assertTrue(Files.isDirectory(out2.resolve("漫画A标题")), "缓存命中仍须按标题命名输出目录");
+        assertTreeEquals(out1, out2);
+        assertFalse(lifecycle.hasCachedEntries(), "提取成功后缓存目录应被删除");
+    }
+
+    /** C5 固定目录版：跑两次（清缓存全量 / 保留缓存复用），输出落在 target/c5-compare 供外部 diff -r 复核 */
+    @Test
+    void c5RecursiveComparisonFixedDirs() throws Exception {
+        Path c5 = Path.of("target", "c5-compare");
+        deleteRecursivelyIfExists(c5);
+        Path out1 = Files.createDirectories(c5.resolve("out1"));
+        Path out2 = Files.createDirectories(c5.resolve("out2"));
+
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeImageMht(source, "a.mht", null);
+        Path b = writeImageMht(source, "b.mht", null);
+
+        AppConfig config = preloadSeparateConfig(source);
+        List<String> paths = List.of(a.toString(), b.toString());
+
+        // 第一次：无缓存 → 全量提取
+        BatchProcessor.ProcessStats stats1 = new ImageBatchProcessor(config).process(
+                BatchProcessor.buildMhtFileInfoList(paths), out1.toString(), null, null);
+        // 模拟两个文件都已预览落盘
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        byte[] webpBytes;
+        try (InputStream is = getClass().getResourceAsStream("/sample-preview.webp")) {
+            webpBytes = is.readAllBytes();
+        }
+        writePreviewCache(a, config, webpBytes);
+        writePreviewCache(b, config, webpBytes);
+        // 第二次：保留缓存 → 逐文件命中复用
+        BatchProcessor.ProcessStats stats2 = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(paths), out2.toString(), null, null);
+
+        assertEquals(2, stats1.getSuccessCount(), stats1.toString());
+        assertEquals(2, stats2.getSuccessCount(), stats2.toString());
+        assertTreeEquals(out1, out2);
+        assertFalse(lifecycle.hasCachedEntries(), "提取成功后缓存目录应被删除");
+    }
+
+    @Test
+    void paramChangeMissesCacheAndFailureKeepsCache() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeImageMht(source, "a.mht", null);
+        Path out = Files.createDirectories(tmp.resolve("out"));
+
+        AppConfig configA = preloadSeparateConfig(source);
+        byte[] webpBytes;
+        try (InputStream is = getClass().getResourceAsStream("/sample-preview.webp")) {
+            webpBytes = is.readAllBytes();
+        }
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        PreviewCacheKey keyA = writePreviewCache(a, configA, webpBytes);
+        // 文件被等长垃圾覆盖：若误命中缓存会 SUCCESS；参数变化（指纹不同）必须回全量路径 → 解析失败
+        replaceWithGarbageSameSize(a);
+
+        AppConfig configB = preloadSeparateConfig(source);
+        configB.setEnableBatchRenaming(true);   // 参与指纹的字段变化 → key 不同 → 不再命中
+
+        ImageBatchProcessor processor = new ImageBatchProcessor(configB, lifecycle);
+        BatchProcessor.ProcessStats stats = processor.process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out.toString(), null, null);
+
+        assertEquals(0, stats.getSuccessCount(), stats.toString());
+        assertEquals(1, stats.getFileResults().size(), stats.toString());
+        assertNotEquals(ExtractOutcome.SUCCESS, stats.getFileResults().get(0).outcome(),
+                "参数变化后不得命中旧缓存（命中会 SUCCESS，实际必须走全量解析失败路径）");
+        // C10：失败后缓存仍存在，可重试
+        assertTrue(lifecycle.store().load(keyA).isPresent(), "失败后缓存必须保留");
+    }
+
+    @Test
+    void cancelKeepsCache() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeImageMht(source, "a.mht", null);
+        Path out = Files.createDirectories(tmp.resolve("out"));
+
+        AppConfig config = preloadSeparateConfig(source);
+        byte[] webpBytes;
+        try (InputStream is = getClass().getResourceAsStream("/sample-preview.webp")) {
+            webpBytes = is.readAllBytes();
+        }
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        PreviewCacheKey key = writePreviewCache(a, config, webpBytes);
+
+        ImageBatchProcessor processor = new ImageBatchProcessor(config, lifecycle);
+        processor.setCancelSupplier(() -> true);   // 立即取消：循环在首个文件前中断
+        BatchProcessor.ProcessStats stats = processor.process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out.toString(), null, null);
+
+        assertEquals(0, stats.getFileResults().size(), stats.toString());
+        assertTrue(lifecycle.store().load(key).isPresent(), "取消后缓存必须保留以便重试");
+    }
+
+    @Test
+    void missWithStaleCacheDeletesOnSuccess() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeImageMht(source, "a.mht", null);
+        Path out = Files.createDirectories(tmp.resolve("out"));
+
+        AppConfig configA = preloadSeparateConfig(source);
+        byte[] webpBytes;
+        try (InputStream is = getClass().getResourceAsStream("/sample-preview.webp")) {
+            webpBytes = is.readAllBytes();
+        }
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        PreviewCacheKey keyA = writePreviewCache(a, configA, webpBytes);
+
+        // 参数变化 → 未命中，但文件完整可提取 → SUCCESS → 规则 (b) 仍删旧指纹缓存（按文件路径反查）
+        AppConfig configB = preloadSeparateConfig(source);
+        configB.setEnableBatchRenaming(true);
+        ImageBatchProcessor processor = new ImageBatchProcessor(configB, lifecycle);
+        BatchProcessor.ProcessStats stats = processor.process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out.toString(), null, null);
+
+        assertEquals(1, stats.getSuccessCount(), stats.toString());
+        assertTrue(lifecycle.store().load(keyA).isEmpty(), "未命中但提取成功 → 旧指纹缓存目录也应删除");
     }
 }

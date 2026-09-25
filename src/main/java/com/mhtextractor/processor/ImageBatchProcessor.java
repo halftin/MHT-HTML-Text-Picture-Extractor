@@ -1,5 +1,9 @@
 package com.mhtextractor.processor;
 
+import com.mhtextractor.cache.DirectoryImageSource;
+import com.mhtextractor.cache.PreviewCacheKey;
+import com.mhtextractor.cache.PreviewCacheLifecycle;
+import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.ImageExtractor;
@@ -13,11 +17,14 @@ import com.mhtextractor.util.SanitizeUtils;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -33,9 +40,16 @@ public class ImageBatchProcessor extends BatchProcessor {
     private record PreloadResult(List<ParsedFileEntry> parsedList, Map<Integer, String> loadFailures) {}
 
     private final AppConfig config;
+    /** 预览缓存生命周期（会话 10 提取复用接线）；null = 复用关闭，行为与既有提取完全一致 */
+    private final PreviewCacheLifecycle previewCache;
 
     public ImageBatchProcessor(AppConfig config) {
+        this(config, null);
+    }
+
+    public ImageBatchProcessor(AppConfig config, PreviewCacheLifecycle previewCache) {
         this.config = config;
+        this.previewCache = previewCache;
     }
 
     /**
@@ -259,66 +273,108 @@ public class ImageBatchProcessor extends BatchProcessor {
                 log.info("----------------------------------------");
                 log.info("[处理] [{}/{}] {}", idx, total, name);
 
-                // 解析（或从缓存获取）
-                MimeParser.ParsedMht parsed = parseProvider.provide(i);
-                if (parsed == null || parsed.getHtmlContent() == null) {
-                    log.warn("文件 {} 无法解析，跳过", name);
-                    stats.incrementSkip();
-                    stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：无法解析", name));
-                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "无法解析", List.of());
-                    fireProgress(idx, total, name, 1.0);
-                    continue;
+                // —— 会话 10：逐文件查预览缓存（P3 按文件、非按输出单元）。
+                // 命中 → 跳过解析与图片提取，直接以 DirectoryImageSource 产出；
+                // 未命中 → 走原路径，行为完全不变。
+                CacheHit hit = lookupPreviewCache(fileInfo);
+                // 单独模式 + 名称提取：输出目录名依赖 HTML 标题（P13 缓存元数据不含标题，
+                // 必须提取期重算）→ 命中时仍解析一次取标题，图片不重新提取
+                boolean needsTitleParse = hit != null
+                        && !config.isSingleOutputMode() && config.isEnableNameExtraction();
+                MimeParser.ParsedMht parsed = null;
+                if (hit == null || needsTitleParse) {
+                    parsed = parseProvider.provide(i);
+                }
+                if (needsTitleParse && (parsed == null || parsed.getHtmlContent() == null)) {
+                    // 防御：缓存存在但解析不出 HTML（文件未变时不会发生）→ 回退原路径，
+                    // 与未命中路径的「无法解析」SKIPPED 保持一致
+                    hit = null;
                 }
 
-                // 快速检查：无任何图片资源
-                if (parsed.getCidMap().isEmpty() && parsed.getLocationDataMap().isEmpty()) {
-                    log.info("[跳过] 无图片内容：{}", name);
-                    stats.incrementSkip();
-                    stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：无图片内容", name));
-                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "无图片内容", List.of());
-                    fireProgress(idx, total, name, 1.0);
-                    continue;
-                }
-
-                // 提取图片
-                fireProgress(idx, total, name, extractionBaseProgress);
-                ImageExtractor imageExtractor = new ImageExtractor(parsed,
-                        config.getImageNameStartMarker(), config.getImageNameEndMarker(),
-                        config.getImageRegionStartMarker(), config.getImageRegionEndMarker());
-
-                final int fi = i;
-                final String fn = name;
-                var images = imageExtractor.extractImages(
-                        progress -> fireProgress(fi + 1, total, fn,
-                                extractionBaseProgress + extractionRange * progress));
-                List<String> fileWarnings = new ArrayList<>(imageExtractor.getLastWarnings());
-                reportExtractorWarnings(name, imageExtractor, stats);
-
-                if (images.isEmpty()) {
-                    log.info("[跳过] 未提取到图片：{}", name);
-                    stats.incrementSkip();
-                    stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：未提取到图片", name));
-                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "未提取到图片", fileWarnings);
-                    fireProgress(idx, total, name, 1.0);
-                    continue;
-                }
-
-                log.info("[提取] {} 共 {} 张图片", name, images.size());
-
-                // 提取标题（单独模式需要用于目录命名）
+                ImageSource imageSource;
                 String extractedTitle = null;
-                if (config.isEnableNameExtraction()) {
-                    extractedTitle = imageExtractor.extractTitle();
+                List<String> fileWarnings;
+
+                if (hit != null) {
+                    log.info("[缓存命中] {}（跳过解析与图片提取，复用 {} 张）",
+                            name, hit.meta().images().size());
+                    fireProgress(idx, total, name, extractionBaseProgress);
+                    imageSource = new DirectoryImageSource(hit.meta(),
+                            previewCache.store().dirFor(hit.key()));
+                    fileWarnings = new ArrayList<>(hit.meta().warnings());
+                    reportExtractorWarnings(name, () -> fileWarnings, stats);
+                    if (needsTitleParse) {
+                        extractedTitle = new ImageExtractor(parsed,
+                                config.getImageNameStartMarker(), config.getImageNameEndMarker(),
+                                null, null).extractTitle();
+                    }
+                } else {
+                    if (parsed == null || parsed.getHtmlContent() == null) {
+                        log.warn("文件 {} 无法解析，跳过", name);
+                        stats.incrementSkip();
+                        stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：无法解析", name));
+                        recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "无法解析", List.of());
+                        fireProgress(idx, total, name, 1.0);
+                        continue;
+                    }
+
+                    // 快速检查：无任何图片资源
+                    if (parsed.getCidMap().isEmpty() && parsed.getLocationDataMap().isEmpty()) {
+                        log.info("[跳过] 无图片内容：{}", name);
+                        stats.incrementSkip();
+                        stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：无图片内容", name));
+                        recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "无图片内容", List.of());
+                        fireProgress(idx, total, name, 1.0);
+                        continue;
+                    }
+
+                    // 提取图片
+                    fireProgress(idx, total, name, extractionBaseProgress);
+                    ImageExtractor imageExtractor = new ImageExtractor(parsed,
+                            config.getImageNameStartMarker(), config.getImageNameEndMarker(),
+                            config.getImageRegionStartMarker(), config.getImageRegionEndMarker());
+
+                    final int fi = i;
+                    final String fn = name;
+                    var images = imageExtractor.extractImages(
+                            progress -> fireProgress(fi + 1, total, fn,
+                                    extractionBaseProgress + extractionRange * progress));
+                    fileWarnings = new ArrayList<>(imageExtractor.getLastWarnings());
+                    reportExtractorWarnings(name, imageExtractor, stats);
+
+                    if (images.isEmpty()) {
+                        log.info("[跳过] 未提取到图片：{}", name);
+                        stats.incrementSkip();
+                        stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：未提取到图片", name));
+                        recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "未提取到图片", fileWarnings);
+                        fireProgress(idx, total, name, 1.0);
+                        continue;
+                    }
+
+                    log.info("[提取] {} 共 {} 张图片", name, images.size());
+
+                    // 提取标题（单独模式需要用于目录命名）
+                    if (config.isEnableNameExtraction()) {
+                        extractedTitle = imageExtractor.extractTitle();
+                    }
+                    imageSource = new InMemoryImageSource(images);
                 }
 
-                // 保存与归档（委托给输出处理器）
-                int saved = outputHandler.saveImages(new InMemoryImageSource(images), extractedTitle, fileInfo, i, total, stats);
+                // 保存与归档（委托给输出处理器；命中与未命中共用，命名在提取期重算 P13）
+                int saved = outputHandler.saveImages(imageSource, extractedTitle, fileInfo, i, total, stats);
                 if (saved > 0) {
                     totalImageCount += saved;
                     stats.incrementSuccess();
                     recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SUCCESS, null, fileWarnings);
+                    // 规则 (b)：该项目提取完成（SUCCESS/SUCCESS_WARNED）→ 删其缓存目录。
+                    // 命中与否都删（未命中也可能残留旧指纹目录，规则 (a) 的兜底）；
+                    // 取消（未处理到该项目）或 FAILED/SKIPPED → 保留缓存以便重试（C10）。
+                    // hasCachedEntries 守卫：会话缓存为空时跳过逐文件扫描
+                    if (previewCache != null && previewCache.hasCachedEntries()) {
+                        previewCache.onExtractionCompleted(fileInfo.getPath());
+                    }
                 } else {
-                    String failReason = String.format("全部 %d 张图片写入失败", images.size());
+                    String failReason = String.format("全部 %d 张图片写入失败", imageSource.size());
                     stats.incrementFail();
                     stats.addFailDetail(String.format("文件：%s 失败，失败原因：%s", name, failReason));
                     recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, failReason, fileWarnings);
@@ -527,6 +583,56 @@ public class ImageBatchProcessor extends BatchProcessor {
     }
 
     // ==================== 工具方法 ====================
+
+    /**
+     * 会话 10：逐文件查预览缓存（P3 按文件、P9 四要素命中）。
+     * 指纹取单元已解析参数（本处理器 config）：OutputUnitPlanner 按「来源 + 参数内容」分桶，
+     * 同一单元内各文件生效图片参数完全相同（H7 收敛），按文件再解析只会得到同一指纹；
+     * 且条目级参数表不在本层可见。预览落盘时用的正是同一生效参数（effectiveForObject），
+     * 因此预览指纹与提取指纹必然同源。
+     *
+     * <p>除 store.load 的四要素 + .complete + 图片文件存在性校验外，额外要求：
+     * 元数据含 ≥1 张图、且 ≥1 张有非空来源标识（cid）。后者等价于未命中路径的
+     * 「无图片内容」快速检查（cidMap/locationDataMap 非空）会放行——只有能证明
+     * 未命中路径会走到提取阶段的缓存才可复用；0 图或全 data URI 的缓存按未命中处理
+     * （回全量路径，结果与无缓存时完全一致）。
+     *
+     * @return 命中；任何不满足（含 IO 失败、meta 损坏）→ null（走原路径）
+     */
+    private CacheHit lookupPreviewCache(MhtFileInfo fileInfo) {
+        if (previewCache == null) {
+            return null;
+        }
+        PreviewCacheKey key;
+        try {
+            key = PreviewCacheKey.compute(Path.of(fileInfo.getPath()),
+                    config.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
+        } catch (IOException e) {
+            log.warn("[缓存] 计算缓存键失败，按未命中处理：{}（{}）", fileInfo.getName(), e.getMessage());
+            return null;
+        }
+        try {
+            Optional<PreviewCacheMeta> meta = previewCache.store().load(key);
+            if (meta.isEmpty()) {
+                return null;
+            }
+            PreviewCacheMeta m = meta.get();
+            boolean reusable = !m.images().isEmpty()
+                    && m.images().stream().anyMatch(e -> e.sourceId() != null && !e.sourceId().isEmpty());
+            if (!reusable) {
+                log.info("[缓存] 缓存不含可复现的图片（0 张或全 data URI），按未命中处理：{}",
+                        fileInfo.getName());
+                return null;
+            }
+            return new CacheHit(key, m);
+        } catch (IOException e) {
+            log.warn("[缓存] 读取预览缓存失败，按未命中处理：{}（{}）", fileInfo.getName(), e.getMessage());
+            return null;
+        }
+    }
+
+    /** 会话 10：命中结果的携带类型（key 用于取缓存目录与规则 (b) 删除，meta 提供图片与警告） */
+    private record CacheHit(PreviewCacheKey key, PreviewCacheMeta meta) {}
 
     private void logImageConfigInfo() {
         if (config.isEnableNameExtraction()) {

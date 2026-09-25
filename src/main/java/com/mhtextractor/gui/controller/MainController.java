@@ -2155,7 +2155,8 @@ public class MainController {
         AppConfig config = unit.getParams();
         List<BatchProcessor.MhtFileInfo> files = BatchProcessor.buildMhtFileInfoList(unit.getPaths());
         if (config.isImageModeEnabled()) {
-            ImageBatchProcessor processor = new ImageBatchProcessor(config);
+            // 会话 10：注入预览缓存生命周期 → 提取复用（命中跳过解析与提取）+ 规则 (b) 完成删除
+            ImageBatchProcessor processor = new ImageBatchProcessor(config, previewCacheLifecycle);
             processor.setCancelSupplier(cancelSupplier);
             processor.setRecursionContinueCallback(recursionCallback);
             if (config.isSingleOutputMode()) {
