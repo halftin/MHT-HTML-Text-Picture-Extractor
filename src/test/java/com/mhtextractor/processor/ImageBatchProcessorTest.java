@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,11 +19,14 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -311,17 +315,110 @@ class ImageBatchProcessorTest {
      */
     private PreviewCacheKey writePreviewCache(Path mht, AppConfig params, byte[] webpBytes)
             throws Exception {
+        return writePreviewCacheWithImages(mht, params, List.of(new PreviewCacheMeta.ImageEntry(
+                "images/0001.webp", "img001", "img001", "webp", List.of())), webpBytes);
+    }
+
+    /** 通用预览落盘模拟：任意 meta.images 列表 + 任意图片字节（file 名与 datas 下标对应） */
+    private PreviewCacheKey writePreviewCacheWithImages(Path mht, AppConfig params,
+            List<PreviewCacheMeta.ImageEntry> images, byte[]... datas) throws Exception {
         PreviewCacheStore store = new PreviewCacheStore(tmp.resolve("cache"));
         PreviewCacheKey key = PreviewCacheKey.compute(mht,
                 params.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
         PreviewCacheMeta meta = new PreviewCacheMeta(PreviewCacheMeta.FORMAT_VERSION,
                 new PreviewCacheMeta.Source(key.absolutePath(), key.size(), key.mtime()),
-                key.paramFingerprint(), true,
-                List.of(new PreviewCacheMeta.ImageEntry(
-                        "images/0001.webp", "img001", "img001", "webp", List.of())),
-                List.of());
-        store.write(key, meta, dir -> Files.write(dir.resolve("0001.webp"), webpBytes));
+                key.paramFingerprint(), true, images, List.of());
+        store.write(key, meta, dir -> {
+            for (int i = 0; i < datas.length; i++) {
+                Files.write(dir.resolve(String.format("%04d.webp", i + 1)), datas[i]);
+            }
+        });
         return key;
+    }
+
+    /** 合法 multipart/related，HTML 无 img 且无图片部件（0 图边界） */
+    private Path writeNoImageMht(Path dir, String fileName) throws Exception {
+        String boundary = "----=_ibp_noimg_boundary";
+        StringBuilder sb = new StringBuilder();
+        sb.append("From: <test@example.com>\r\n");
+        sb.append("Subject: ").append(fileName).append("\r\n");
+        sb.append("MIME-Version: 1.0\r\n");
+        sb.append("Content-Type: multipart/related; boundary=\"").append(boundary).append("\"\r\n\r\n");
+        sb.append("--").append(boundary).append("\r\n");
+        sb.append("Content-Type: text/html; charset=\"utf-8\"\r\n");
+        sb.append("Content-Transfer-Encoding: 8bit\r\n\r\n");
+        sb.append("<html><body>纯文本，没有图片</body></html>\r\n");
+        sb.append("--").append(boundary).append("--\r\n");
+        Path f = dir.resolve(fileName);
+        Files.write(f, sb.toString().getBytes(StandardCharsets.UTF_8));
+        return f;
+    }
+
+    /** 两张 cid 图：img002 在区域外，img001 在 RSTART/REND 之间（区域限定命中边界） */
+    private Path writeTwoImageRegionMht(Path dir, String fileName) throws Exception {
+        byte[] webpBytes;
+        try (InputStream is = getClass().getResourceAsStream("/sample-preview.webp")) {
+            assertNotNull(is, "sample-preview.webp 资源缺失");
+            webpBytes = is.readAllBytes();
+        }
+        String boundary = "----=_ibp_region_boundary";
+        StringBuilder sb = new StringBuilder();
+        sb.append("From: <test@example.com>\r\n");
+        sb.append("Subject: ").append(fileName).append("\r\n");
+        sb.append("MIME-Version: 1.0\r\n");
+        sb.append("Content-Type: multipart/related; boundary=\"").append(boundary).append("\"\r\n\r\n");
+        sb.append("--").append(boundary).append("\r\n");
+        sb.append("Content-Type: text/html; charset=\"utf-8\"\r\n");
+        sb.append("Content-Transfer-Encoding: 8bit\r\n\r\n");
+        sb.append("<html><body><img src=\"cid:img002\">RSTART<img src=\"cid:img001\">REND</body></html>\r\n");
+        sb.append("--").append(boundary).append("\r\n");
+        sb.append("Content-Type: image/webp\r\n");
+        sb.append("Content-ID: <img001>\r\n");
+        sb.append("Content-Transfer-Encoding: base64\r\n\r\n");
+        sb.append(Base64.getEncoder().encodeToString(webpBytes)).append("\r\n");
+        sb.append("--").append(boundary).append("\r\n");
+        sb.append("Content-Type: image/webp\r\n");
+        sb.append("Content-ID: <img002>\r\n");
+        sb.append("Content-Transfer-Encoding: base64\r\n\r\n");
+        sb.append(Base64.getEncoder().encodeToString(webpBytes)).append("\r\n");
+        sb.append("--").append(boundary).append("--\r\n");
+        Path f = dir.resolve(fileName);
+        Files.write(f, sb.toString().getBytes(StandardCharsets.UTF_8));
+        return f;
+    }
+
+    /** 仅含 Data URI 图片（无 cid/location 部件）的合法 MHT */
+    private Path writeDataUriOnlyMht(Path dir, String fileName) throws Exception {
+        String boundary = "----=_ibp_datauri_boundary";
+        String png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+        StringBuilder sb = new StringBuilder();
+        sb.append("From: <test@example.com>\r\n");
+        sb.append("Subject: ").append(fileName).append("\r\n");
+        sb.append("MIME-Version: 1.0\r\n");
+        sb.append("Content-Type: multipart/related; boundary=\"").append(boundary).append("\"\r\n\r\n");
+        sb.append("--").append(boundary).append("\r\n");
+        sb.append("Content-Type: text/html; charset=\"utf-8\"\r\n");
+        sb.append("Content-Transfer-Encoding: 8bit\r\n\r\n");
+        sb.append("<html><body><img src=\"data:image/png;base64,").append(png).append("\"></body></html>\r\n");
+        sb.append("--").append(boundary).append("--\r\n");
+        Path f = dir.resolve(fileName);
+        Files.write(f, sb.toString().getBytes(StandardCharsets.UTF_8));
+        return f;
+    }
+
+    /** 指定大小的垃圾文件（超大文件边界：> 50MB GUI 阈值；合法 MHT 不需要——缓存命中不读文件） */
+    private Path writeLargeFile(Path dir, String fileName, long size) throws Exception {
+        Path f = dir.resolve(fileName);
+        byte[] chunk = new byte[1024 * 1024];
+        try (OutputStream os = Files.newOutputStream(f)) {
+            long remaining = size;
+            while (remaining > 0) {
+                int n = (int) Math.min(chunk.length, remaining);
+                os.write(chunk, 0, n);
+                remaining -= n;
+            }
+        }
+        return f;
     }
 
     /** 用等长垃圾覆盖文件并还原 mtime：size/mtime 不变 → 缓存 key 不变；解析必失败 → 可观测 parse 是否被跳过 */
@@ -606,5 +703,363 @@ class ImageBatchProcessorTest {
 
         assertEquals(1, stats.getSuccessCount(), stats.toString());
         assertTrue(lifecycle.store().load(keyA).isEmpty(), "未命中但提取成功 → 旧指纹缓存目录也应删除");
+    }
+
+    // ==================== 会话 11：边界与并发验证 ====================
+
+    @Test
+    void emptyImagesCacheFallsBackToFullPath() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeNoImageMht(source, "a.mht");
+        Path out1 = Files.createDirectories(tmp.resolve("out1"));
+        Path out2 = Files.createDirectories(tmp.resolve("out2"));
+        AppConfig config = preloadSeparateConfig(source);
+
+        // 基线：无缓存 → 「无图片内容」快速跳过
+        BatchProcessor.ProcessStats base = new ImageBatchProcessor(config).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out1.toString(), null, null);
+        assertEquals(1, base.getFileResults().size(), base.toString());
+        assertEquals(ExtractOutcome.SKIPPED, base.getFileResults().get(0).outcome());
+
+        // 预览对 0 图文件落盘的缓存（images 为空）→ 未命中（复用条件 ≥1 张图）→ 全量路径，行为一致
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        PreviewCacheKey key = writePreviewCacheWithImages(a, config, List.of());
+        BatchProcessor.ProcessStats cached = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out2.toString(), null, null);
+
+        assertEquals(ExtractOutcome.SKIPPED, cached.getFileResults().get(0).outcome(),
+                "0 图缓存必须回退全量路径，结果与无缓存一致");
+        assertTreeEquals(out1, out2);
+        assertTrue(lifecycle.store().load(key).isPresent(), "SKIPPED 不触发规则 (b)，缓存保留可重试（C10）");
+    }
+
+    @Test
+    void dataUriOnlyMhtConsistentWithNoCache() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeDataUriOnlyMht(source, "a.mht");
+        Path out1 = Files.createDirectories(tmp.resolve("out1"));
+        Path out2 = Files.createDirectories(tmp.resolve("out2"));
+        AppConfig config = preloadSeparateConfig(source);
+
+        // 基线：无缓存（data-URI-only 文件的「无图片内容」跳过为既有冻结语义，H10 新发现 2）
+        BatchProcessor.ProcessStats base = new ImageBatchProcessor(config).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out1.toString(), null, null);
+        assertEquals(1, base.getFileResults().size(), base.toString());
+
+        // 预览对 data-URI-only 文件落盘的缓存（0 图）→ 未命中 → 全量路径，结果一致
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        PreviewCacheKey key = writePreviewCacheWithImages(a, config, List.of());
+        BatchProcessor.ProcessStats cached = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out2.toString(), null, null);
+
+        assertEquals(base.getFileResults().get(0).outcome(), cached.getFileResults().get(0).outcome(),
+                "有 0 图缓存时必须与无缓存结果一致");
+        assertTreeEquals(out1, out2);
+        assertTrue(lifecycle.store().load(key).isPresent(), "SKIPPED 不触发规则 (b)，缓存保留可重试（C10）");
+    }
+
+    @Test
+    void regionMarkersAbsentConsistentWithNoCache() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        // 两张 cid 图但 HTML 无 RSTART/REND → 区域限定未命中（起始标记未找到 → 中止区域提取 → 0 图）
+        Path a = writeTwoImageRegionMht(source, "a.mht");
+        Path out1 = Files.createDirectories(tmp.resolve("out1"));
+        Path out2 = Files.createDirectories(tmp.resolve("out2"));
+        AppConfig config = preloadSeparateConfig(source);
+        config.setEnableRegionExtraction(true);
+        config.setImageRegionStartMarker("RSTART");
+        config.setImageRegionEndMarker("REND");
+
+        // 把区域标记从 HTML 中移除：区域限定未命中
+        byte[] html = Files.readAllBytes(a);
+        Files.write(a, new String(html, StandardCharsets.UTF_8)
+                .replace("RSTART", "NOMARK").replace("REND", "NOMARK")
+                .getBytes(StandardCharsets.UTF_8));
+
+        BatchProcessor.ProcessStats base = new ImageBatchProcessor(config).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out1.toString(), null, null);
+        assertEquals(1, base.getFileResults().size(), base.toString());
+
+        // 预览落盘的 0 图缓存（含区域警告）→ 未命中 → 全量路径，结果一致
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        PreviewCacheKey key = writePreviewCacheWithImages(a, config, List.of());
+        BatchProcessor.ProcessStats cached = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out2.toString(), null, null);
+
+        assertEquals(base.getFileResults().get(0).outcome(), cached.getFileResults().get(0).outcome(),
+                "区域未命中时有 0 图缓存必须与无缓存结果一致");
+        assertTreeEquals(out1, out2);
+        assertTrue(lifecycle.store().load(key).isPresent(), "失败不触发规则 (b)，缓存保留可重试（C10）");
+    }
+
+    @Test
+    void nullSourceIdCacheFallsBackToFullPath() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeImageMht(source, "a.mht", null);
+        Path out1 = Files.createDirectories(tmp.resolve("out1"));
+        Path out2 = Files.createDirectories(tmp.resolve("out2"));
+        AppConfig config = preloadSeparateConfig(source);
+
+        BatchProcessor.ProcessStats stats1 = new ImageBatchProcessor(config).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out1.toString(), null, null);
+        assertEquals(1, stats1.getSuccessCount(), stats1.toString());
+        byte[] webpBytes = Files.readAllBytes(out1.resolve("a").resolve("img001.webp"));
+
+        // 缓存图片 sourceId 全为 null（location-only / 广告过滤后 data URI 图的预览产物）→ 未命中
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        PreviewCacheKey key = writePreviewCacheWithImages(a, config, List.of(
+                new PreviewCacheMeta.ImageEntry("images/0001.webp", null, "image_0.webp", "webp", List.of())),
+                webpBytes);
+        BatchProcessor.ProcessStats stats2 = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out2.toString(), null, null);
+
+        assertEquals(1, stats2.getSuccessCount(), stats2.toString());
+        assertTreeEquals(out1, out2);
+        assertTrue(lifecycle.store().load(key).isEmpty(), "SUCCESS 后规则 (b) 删除缓存");
+    }
+
+    @Test
+    void regionLimitedCacheHitByteIdentical() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeTwoImageRegionMht(source, "a.mht");
+        Path out1 = Files.createDirectories(tmp.resolve("out1"));
+        Path out2 = Files.createDirectories(tmp.resolve("out2"));
+        AppConfig config = preloadSeparateConfig(source);
+        config.setEnableRegionExtraction(true);
+        config.setImageRegionStartMarker("RSTART");
+        config.setImageRegionEndMarker("REND");
+
+        // 区域限定：只出区域内的 img001
+        BatchProcessor.ProcessStats stats1 = new ImageBatchProcessor(config).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out1.toString(), null, null);
+        assertEquals(1, stats1.getSuccessCount(), stats1.toString());
+        byte[] webpBytes = Files.readAllBytes(out1.resolve("a").resolve("img001.webp"));
+
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        writePreviewCache(a, config, webpBytes);
+        BatchProcessor.ProcessStats stats2 = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out2.toString(), null, null);
+
+        assertEquals(1, stats2.getSuccessCount(), stats2.toString());
+        assertTreeEquals(out1, out2);
+        assertFalse(lifecycle.hasCachedEntries(), "提取成功后缓存目录应被删除");
+    }
+
+    @Test
+    void specialCharsAndChineseFileNameCacheHitByteIdentical() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeImageMht(source, "中文 测试（副本）#1.mht", null);
+        Path out1 = Files.createDirectories(tmp.resolve("out1"));
+        Path out2 = Files.createDirectories(tmp.resolve("out2"));
+        AppConfig config = preloadSeparateConfig(source);
+
+        BatchProcessor.ProcessStats stats1 = new ImageBatchProcessor(config).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out1.toString(), null, null);
+        assertEquals(1, stats1.getSuccessCount(), stats1.toString());
+        byte[] webpBytes;
+        try (Stream<Path> walk = Files.walk(out1)) {
+            Path img = walk.filter(Files::isRegularFile).findFirst()
+                    .orElseThrow(() -> new IllegalStateException("out1 应有一张输出图片"));
+            webpBytes = Files.readAllBytes(img);
+        }
+
+        // 缓存目录名 = SHA-256 hex，与文件名字符集无关
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        PreviewCacheKey key = writePreviewCache(a, config, webpBytes);
+        assertTrue(key.toDirName().matches("[0-9a-f]{64}"), key.toDirName());
+        BatchProcessor.ProcessStats stats2 = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out2.toString(), null, null);
+
+        assertEquals(1, stats2.getSuccessCount(), stats2.toString());
+        assertTreeEquals(out1, out2);
+        assertFalse(lifecycle.hasCachedEntries(), "提取成功后缓存目录应被删除");
+    }
+
+    @Test
+    void sameNameDifferentDirsIndependentCaches() throws Exception {
+        Path source = tmp.resolve("src");
+        Path d1 = Files.createDirectories(source.resolve("d1"));
+        Path d2 = Files.createDirectories(source.resolve("d2"));
+        Path a1 = writeImageMht(d1, "a.mht", null);
+        Path a2 = writeImageMht(d2, "a.mht", null);
+        Path out = Files.createDirectories(tmp.resolve("out"));
+        AppConfig config = preloadSeparateConfig(source);
+        byte[] webpBytes;
+        try (InputStream is = getClass().getResourceAsStream("/sample-preview.webp")) {
+            webpBytes = is.readAllBytes();
+        }
+
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        PreviewCacheKey key1 = writePreviewCache(a1, config, webpBytes);
+        PreviewCacheKey key2 = writePreviewCache(a2, config, webpBytes);
+        assertNotEquals(key1.toDirName(), key2.toDirName(), "同名不同目录必须映射到不同缓存目录");
+
+        // 只提取 d1 的文件：其缓存删除，d2 的缓存不受影响
+        BatchProcessor.ProcessStats stats = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a1.toString())), out.toString(), null, null);
+        assertEquals(1, stats.getSuccessCount(), stats.toString());
+        assertTrue(lifecycle.store().load(key1).isEmpty(), "提取完成 → 该项目缓存删除");
+        assertTrue(lifecycle.store().load(key2).isPresent(), "另一目录的同名文件缓存不受影响");
+    }
+
+    @Test
+    void largeFileOverThresholdCacheHitSkipsRead() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        // 51MB 垃圾字节（超过 GUI 50MB 阈值）：若命中路径读取/解析文件必然失败
+        Path big = writeLargeFile(source, "big.mht", 51L * 1024 * 1024);
+        Path out = Files.createDirectories(tmp.resolve("out"));
+        AppConfig config = preloadSeparateConfig(source);
+        byte[] webpBytes;
+        try (InputStream is = getClass().getResourceAsStream("/sample-preview.webp")) {
+            webpBytes = is.readAllBytes();
+        }
+
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        PreviewCacheKey key = writePreviewCache(big, config, webpBytes);
+        assertEquals(51L * 1024 * 1024, key.size(), "key 的 size 只取元数据，不读文件");
+
+        BatchProcessor.ProcessStats stats = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(big.toString())), out.toString(), null, null);
+        assertEquals(1, stats.getSuccessCount(), stats.toString());
+        assertTrue(Arrays.equals(webpBytes, Files.readAllBytes(out.resolve("big").resolve("img001.webp"))),
+                "命中路径输出 = 缓存图片字节");
+        assertFalse(lifecycle.hasCachedEntries(), "提取成功后缓存目录应被删除");
+    }
+
+    @Test
+    void mtimeChangeMissesCacheEndToEnd() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeImageMht(source, "a.mht", null);
+        Path out1 = Files.createDirectories(tmp.resolve("out1"));
+        Path out2 = Files.createDirectories(tmp.resolve("out2"));
+        AppConfig config = preloadSeparateConfig(source);
+
+        BatchProcessor.ProcessStats stats1 = new ImageBatchProcessor(config).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out1.toString(), null, null);
+        assertEquals(1, stats1.getSuccessCount(), stats1.toString());
+        byte[] webpBytes = Files.readAllBytes(out1.resolve("a").resolve("img001.webp"));
+
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        PreviewCacheKey key = writePreviewCache(a, config, webpBytes);
+        assertTrue(lifecycle.store().load(key).isPresent(), "写入后应命中");
+
+        // C4：touch mtime（size 不变）→ 缓存不再命中 → 全量路径，输出与无缓存一致
+        Files.setLastModifiedTime(a, FileTime.fromMillis(key.mtime() + 5000));
+        BatchProcessor.ProcessStats stats2 = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out2.toString(), null, null);
+
+        assertEquals(1, stats2.getSuccessCount(), stats2.toString());
+        assertTreeEquals(out1, out2);
+        assertTrue(lifecycle.store().load(key).isEmpty(),
+                "规则 (b) 按路径反查删除旧 mtime 的缓存目录");
+    }
+
+    @Test
+    void extractionDuringPreviewWriteIsConsistent() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeImageMht(source, "a.mht", null);
+        Path out = Files.createDirectories(tmp.resolve("out"));
+        AppConfig config = preloadSeparateConfig(source);
+        byte[] webpBytes;
+        try (InputStream is = getClass().getResourceAsStream("/sample-preview.webp")) {
+            webpBytes = is.readAllBytes();
+        }
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+        PreviewCacheKey key = PreviewCacheKey.compute(a,
+                config.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
+
+        // 模拟预览写盘进行中（imagesWriter 阻塞在 .tmp 阶段）→ 用户同时点「开始提取」
+        CountDownLatch writeStarted = new CountDownLatch(1);
+        CountDownLatch releaseWrite = new CountDownLatch(1);
+        Thread preview = new Thread(() -> {
+            try {
+                PreviewCacheMeta meta = new PreviewCacheMeta(PreviewCacheMeta.FORMAT_VERSION,
+                        new PreviewCacheMeta.Source(key.absolutePath(), key.size(), key.mtime()),
+                        key.paramFingerprint(), true,
+                        List.of(new PreviewCacheMeta.ImageEntry(
+                                "images/0001.webp", "img001", "img001", "webp", List.of())),
+                        List.of());
+                lifecycle.store().write(key, meta, imagesDir -> {
+                    writeStarted.countDown();
+                    try {
+                        releaseWrite.await(10, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    Files.write(imagesDir.resolve("0001.webp"), webpBytes);
+                });
+            } catch (Exception ignored) {
+            }
+        });
+        preview.start();
+        assertTrue(writeStarted.await(10, TimeUnit.SECONDS), "预览写盘应已进入 .tmp 阶段");
+        assertTrue(lifecycle.store().load(key).isEmpty(), "写盘未完成（无 .complete）不得命中");
+
+        // 提取并发运行：未命中 → 全量路径 → SUCCESS
+        BatchProcessor.ProcessStats stats = new ImageBatchProcessor(config, lifecycle).process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out.toString(), null, null);
+        assertEquals(1, stats.getSuccessCount(), stats.toString());
+
+        releaseWrite.countDown();
+        preview.join(10000);
+        // H10 新发现 1 的已接受语义：并发窗口期规则 (b) 看不到 .tmp → 写盘完成后残留有效缓存（语义安全）
+        assertTrue(lifecycle.store().load(key).isPresent(), "预览写盘完成后缓存应为有效状态");
+    }
+
+    @Test
+    void concurrentWritesToDifferentItemsAllSucceed() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        int n = 8;
+        List<Path> files = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            files.add(writeImageMht(source, "item" + i + ".mht", null));
+        }
+        AppConfig config = preloadSeparateConfig(source);
+        byte[] webpBytes;
+        try (InputStream is = getClass().getResourceAsStream("/sample-preview.webp")) {
+            webpBytes = is.readAllBytes();
+        }
+        PreviewCacheLifecycle lifecycle = newCacheLifecycle();
+
+        // 并发预览多个项目（GUI 同款：每项目写锁，不同项目互不阻塞）
+        CountDownLatch start = new CountDownLatch(1);
+        List<PreviewCacheKey> keys = Collections.synchronizedList(new ArrayList<>());
+        List<Exception> failures = Collections.synchronizedList(new ArrayList<>());
+        List<Thread> threads = new ArrayList<>();
+        for (Path f : files) {
+            Thread t = new Thread(() -> {
+                try {
+                    start.await();
+                    synchronized (lifecycle.lockFor(f.toAbsolutePath().normalize().toString())) {
+                        keys.add(writePreviewCache(f, config, webpBytes));
+                    }
+                } catch (Exception e) {
+                    failures.add(e);
+                }
+            });
+            threads.add(t);
+            t.start();
+        }
+        start.countDown();
+        for (Thread t : threads) {
+            t.join(15000);
+        }
+
+        assertTrue(failures.isEmpty(), failures.toString());
+        assertEquals(n, keys.size(), "所有并发预览都应落盘成功");
+        for (PreviewCacheKey k : keys) {
+            assertTrue(lifecycle.store().load(k).isPresent(), "每个项目的缓存都应完整可读");
+        }
+        assertEquals(n, lifecycle.store().listKeys().size());
     }
 }

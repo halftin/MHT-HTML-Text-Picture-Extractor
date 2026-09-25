@@ -272,6 +272,78 @@ class PreviewCacheStoreTest {
         assertTrue(store.load(key).isEmpty());
     }
 
+    // ---------- §2.5 目录布局精确断言（C1 结构） ----------
+
+    @Test
+    void writtenLayoutMatchesSchema() throws IOException {
+        Path file = mhtFile();
+        PreviewCacheStore store = store();
+        PreviewCacheKey key = keyFor(file);
+        byte[] d1 = "layout-image".getBytes(StandardCharsets.UTF_8);
+        Path dir = store.write(key, metaFor(key, List.of(
+                new PreviewCacheMeta.ImageEntry("images/0001.png", "cid:x", "a.png", "png", List.of()))),
+                imagesWriter(d1));
+
+        // 目录名 = 64 位小写 hex（SHA-256，文件名与哈希无关）
+        String dirName = dir.getFileName().toString();
+        assertTrue(dirName.matches("[0-9a-f]{64}"), "缓存目录名应为 64 位小写 hex，实际：" + dirName);
+        // 恰好三个条目：meta.json + images/ + .complete，无多余文件
+        List<String> entries;
+        try (var s = Files.list(dir)) {
+            entries = s.map(p -> p.getFileName().toString()).sorted().toList();
+        }
+        assertEquals(List.of(".complete", "images", "meta.json"), entries);
+        // .complete 为空常规文件；meta.json 为常规文件；images/ 为目录且含 1 张图
+        assertTrue(Files.isRegularFile(dir.resolve(".complete")));
+        assertEquals(0, Files.size(dir.resolve(".complete")));
+        assertTrue(Files.isRegularFile(dir.resolve("meta.json")));
+        assertTrue(Files.isDirectory(dir.resolve("images")));
+        assertArrayEquals(d1, Files.readAllBytes(dir.resolve("images/0001.png")));
+    }
+
+    // ---------- 并发：写入过程中删除（手工删缓存目录场景） ----------
+
+    @Test
+    void concurrentDeleteDuringWriteLeavesNoPartialState() throws Exception {
+        Path file = mhtFile();
+        PreviewCacheStore store = store();
+        PreviewCacheKey key = keyFor(file);
+
+        // 写线程 20 次完整写入（提交 = 改名 + .complete 前删除旧目录）；
+        // 删线程 20 次删除同一 key。结束后状态必为「完整命中」或「完全不存在」。
+        Thread writer = new Thread(() -> {
+            for (int i = 0; i < 20; i++) {
+                try {
+                    store.write(key, metaFor(key, List.of()), imagesWriter(new byte[]{(byte) i}));
+                } catch (Exception ignored) {
+                    // 删线程在提交窗口删除目录 → 写失败是预期竞争结果
+                }
+            }
+        });
+        Thread deleter = new Thread(() -> {
+            for (int i = 0; i < 20; i++) {
+                try {
+                    store.delete(key);
+                } catch (Exception ignored) {
+                }
+            }
+        });
+        writer.start();
+        deleter.start();
+        writer.join();
+        deleter.join();
+
+        Optional<PreviewCacheMeta> loaded = store.load(key);
+        if (loaded.isPresent()) {
+            assertTrue(loaded.get().matches(key), "若命中，meta 必须与 key 四要素全等");
+        }
+        // 无 .tmp 残留
+        try (var s = Files.list(store.root())) {
+            assertTrue(s.noneMatch(p -> p.getFileName().toString().endsWith(".tmp")),
+                    "竞争结束后不应残留 .tmp 目录");
+        }
+    }
+
     // ---------- listKeys / deleteAll ----------
 
     @Test
