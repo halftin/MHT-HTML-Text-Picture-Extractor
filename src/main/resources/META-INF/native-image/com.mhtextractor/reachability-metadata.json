@@ -3157,6 +3157,12 @@
      "parameterTypes": []
     }
    ]
+  },
+  {
+   "type": "sun.text.resources.BreakIteratorResources_en"
+  },
+  {
+   "type": "sun.text.resources.BreakIteratorResources_en_US"
   }
  ],
  "resources": [
@@ -13336,6 +13342,61 @@
   {
    "glob": "vcruntime140_1.dll",
    "module": "javafx.graphics"
+  },
+  {
+   "glob": "META-INF/services/java.util.spi.ResourceBundleControlProvider"
+  },
+  {
+   "glob": "com/sun/javafx/scene/control/skin/resources/controls_en.properties"
+  },
+  {
+   "glob": "com/sun/javafx/scene/control/skin/resources/controls_en_US.properties"
+  },
+  {
+   "glob": "com/sun/javafx/tk/quantum/QuantumMessagesBundle_en.properties"
+  },
+  {
+   "glob": "com/sun/javafx/tk/quantum/QuantumMessagesBundle_en_US.properties"
+  },
+  {
+   "glob": "i18n/messages.properties"
+  },
+  {
+   "glob": "i18n/messages_en.properties"
+  },
+  {
+   "glob": "i18n/messages_en_US.properties"
+  },
+  {
+   "glob": "i18n/messages_zh.properties"
+  },
+  {
+   "glob": "i18n/messages_zh_CN.properties"
+  },
+  {
+   "glob": "i18n/messages_zh_Hans.properties"
+  },
+  {
+   "glob": "i18n/messages_zh_Hans_CN.properties"
+  },
+  {
+   "module": "javafx.controls",
+   "glob": "com/sun/javafx/scene/control/skin/resources/controls_en.properties"
+  },
+  {
+   "module": "javafx.controls",
+   "glob": "com/sun/javafx/scene/control/skin/resources/controls_en_US.properties"
+  },
+  {
+   "module": "javafx.graphics",
+   "glob": "com/sun/javafx/tk/quantum/QuantumMessagesBundle_en.properties"
+  },
+  {
+   "module": "javafx.graphics",
+   "glob": "com/sun/javafx/tk/quantum/QuantumMessagesBundle_en_US.properties"
+  },
+  {
+   "bundle": "i18n/messages"
   }
  ]
 }

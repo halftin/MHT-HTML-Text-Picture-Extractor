@@ -1,6 +1,7 @@
 package com.mhtextractor.util;
 
 import com.mhtextractor.core.MimeParser;
+import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
@@ -61,7 +62,7 @@ public final class HtmlExportBuilder {
      */
     public static ExportResult export(String mhtPath, MimeParser.ParsedMht parsed) {
         if (parsed == null || parsed.getHtmlContent() == null) {
-            return ExportResult.failure(parsed == null ? "解析结果为空" : "无法解析文件（HTML 内容缺失）");
+            return ExportResult.failure(parsed == null ? I18n.get("browser.exportParseEmpty") : I18n.get("browser.exportUnparseable"));
         }
         try {
             Path root = Paths.get(System.getProperty("java.io.tmpdir"), TEMP_ROOT_NAME);
@@ -93,7 +94,7 @@ public final class HtmlExportBuilder {
             return new ExportResult(true, htmlFile, countImages(dir), warnings, null);
         } catch (Exception e) {
             log.error("导出浏览器查看页失败：{}", mhtPath, e);
-            return ExportResult.failure("导出失败：" + e.getMessage());
+            return ExportResult.failure(I18n.get("browser.exportFailed", "reason", e.getMessage()));
         }
     }
 
@@ -223,7 +224,7 @@ public final class HtmlExportBuilder {
             if (rel != null) {
                 rewrite.appendReplacement(out, Matcher.quoteReplacement(rel));
             } else {
-                warnings.add("无法解析的 cid 引用：" + rewrite.group(1));
+                warnings.add(I18n.get("browser.unresolvedCid", "ref", rewrite.group(1)));
                 rewrite.appendReplacement(out, Matcher.quoteReplacement(rewrite.group()));
             }
         }

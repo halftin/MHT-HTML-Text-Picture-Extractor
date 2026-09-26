@@ -2,6 +2,7 @@ package com.mhtextractor.processor;
 
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.WarningProvider;
+import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.FileUtils;
 import lombok.Data;
@@ -259,7 +260,7 @@ public abstract class BatchProcessor {
     protected void reportExtractorWarnings(String fileName, WarningProvider extractor, ProcessStats stats) {
         for (String warning : extractor.getLastWarnings()) {
             stats.incrementWarn();
-            stats.addWarnDetail(String.format("文件：%s 出现警告，警告信息：%s", fileName, warning));
+            stats.addWarnDetail(I18n.get("extract.fileWarned", "file", fileName, "message", warning));
         }
     }
 

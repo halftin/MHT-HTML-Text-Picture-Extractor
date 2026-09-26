@@ -1,5 +1,7 @@
 package com.mhtextractor.util;
 
+import com.mhtextractor.i18n.I18n;
+
 import java.util.List;
 
 /**
@@ -23,7 +25,7 @@ public class HtmlUtils {
         int startIdx = html.indexOf(startMarker);
         if (startIdx == -1) {
             if (warnings != null) {
-                warnings.add(String.format("内容限定起始标记未找到: %s", startMarker));
+                warnings.add(I18n.get("core.startMarkerNotFound", "marker", startMarker));
             }
             return null;
         }
@@ -31,7 +33,7 @@ public class HtmlUtils {
         int endIdx = html.indexOf(endMarker, contentStart);
         if (endIdx == -1) {
             if (warnings != null) {
-                warnings.add(String.format("内容限定结束标记未找到: %s，将从起始标记后截取到末尾", endMarker));
+                warnings.add(I18n.get("core.endMarkerNotFound", "marker", endMarker));
             }
             return html.substring(contentStart);
         }

@@ -1,5 +1,6 @@
 package com.mhtextractor.core;
 
+import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.EncodingUtils;
 import com.mhtextractor.util.HtmlUtils;
 import org.jsoup.Jsoup;
@@ -107,7 +108,7 @@ public class ContentExtractor {
                 if (matcher.find()) {
                     return matcher.group(1);
                 } else {
-                    String msg = String.format("内容限定标记未找到 - 起始: %s, 结束: %s", startMarker, endMarker);
+                    String msg = I18n.get("core.areaMarkersNotFound", "start", startMarker, "end", endMarker);
                     logger.warn("[警告] {}", msg);
                     lastWarnings.add(msg);
                 }
@@ -119,7 +120,7 @@ public class ContentExtractor {
                 return html;
             }
         } catch (Exception e) {
-            String msg = String.format("内容截取失败: %s", e.getMessage());
+            String msg = I18n.get("core.areaExtractFailed", "reason", e.getMessage());
             logger.warn(msg, e);
             lastWarnings.add(msg);
         }

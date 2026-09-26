@@ -1,5 +1,6 @@
 package com.mhtextractor.gui.util;
 
+import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
 
 import java.awt.Desktop;
@@ -598,7 +599,7 @@ public final class BrowserLauncher {
     private static Path writeSourceViewPage(Path indexHtml) {
         try {
             String html = Files.readString(indexHtml, StandardCharsets.UTF_8);
-            String pageHtml = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>HTML 源码</title>"
+            String pageHtml = I18n.get("browser.sourceHtmlHead")
                     + "<style>"
                     + "body{margin:0;background:#fff;}"
                     + ".row{clear:both;font-family:Consolas,\"Courier New\",monospace;font-size:13px;line-height:1.5;}"
