@@ -1,6 +1,7 @@
 package com.mhtextractor.extractor;
 
 import com.mhtextractor.core.MimeParser;
+import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.HtmlUtils;
 import com.mhtextractor.util.SanitizeUtils;
 import lombok.Data;
@@ -90,7 +91,7 @@ public class ImageExtractor extends BaseExtractor {
 
         // 有区域限定：解析失败则中止该文件的区域限定提取，不静默放行区域外图片
         if (orderedImageRefs == null) {
-            String msg = "区域图片引用解析失败，已中止该文件的区域限定提取";
+            String msg = I18n.get("extract.areaImageRefFailed");
             logger.warn("[警告] {}", msg);
             lastWarnings.add(msg);
             if (progressCallback != null) progressCallback.accept(1.0);
@@ -149,7 +150,7 @@ public class ImageExtractor extends BaseExtractor {
             String cid = info.getContentId();
             // 过滤广告图片（null/空标识符保留：无法判定为广告）
             if (isAdImage(cid)) {
-                String msg = "已过滤广告图片: " + cid;
+                String msg = I18n.get("extract.adFiltered", "name", cid);
                 logger.warn("[警告] {}", msg);
                 lastWarnings.add(msg);
                 continue;
