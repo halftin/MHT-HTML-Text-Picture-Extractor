@@ -1,6 +1,9 @@
 package com.mhtextractor;
 
 import atlantafx.base.theme.NordLight;
+import com.mhtextractor.config.GuiState;
+import com.mhtextractor.config.GuiStateManager;
+import com.mhtextractor.i18n.I18n;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
@@ -13,6 +16,7 @@ import javafx.stage.Window;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.util.Locale;
 
 @Slf4j
 public class App extends Application {
@@ -27,6 +31,15 @@ public class App extends Application {
             System.err.println("FATAL: " + e.getMessage());
             e.printStackTrace();
         });
+
+        // 会话 13（i18n）：locale 必须在 FXMLLoader.load() 之前就绪——FXML 的 %key 解析发生在 load 期间
+        GuiState guiState = GuiStateManager.load();
+        if (guiState != null && guiState.getLocale() != null && !guiState.getLocale().isBlank()) {
+            Locale locale = I18n.parseLocale(guiState.getLocale());
+            if (locale != null) {
+                I18n.setLocale(locale);
+            }
+        }
 
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/mhtextractor/gui/view/MainView.fxml"));
         Scene scene = new Scene(loader.load());
@@ -44,7 +57,7 @@ public class App extends Application {
         double winWidth  = screenBounds.getWidth()  * 0.80;
         double winHeight = screenBounds.getHeight() * 0.85;
 
-        primaryStage.setTitle("MHT 资源提取器");
+        primaryStage.setTitle(I18n.get("app.title"));
         primaryStage.setScene(scene);
         primaryStage.setWidth(winWidth);
         primaryStage.setHeight(winHeight);

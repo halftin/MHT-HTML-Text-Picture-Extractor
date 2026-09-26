@@ -11,6 +11,9 @@
     "pattern": "\\Qcustom.css\\E"
    },
    {
+    "pattern": "\\Qi18n/\\E.*\\.properties$"
+   },
+   {
     "pattern": "\\Qlogback.xml\\E"
    },
    {

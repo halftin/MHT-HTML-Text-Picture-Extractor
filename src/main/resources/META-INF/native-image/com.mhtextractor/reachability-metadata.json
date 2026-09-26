@@ -597,6 +597,10 @@
      "parameterTypes": []
     },
     {
+     "name": "getLocale",
+     "parameterTypes": []
+    },
+    {
      "name": "getOutputFolder",
      "parameterTypes": []
     },
@@ -616,6 +620,12 @@
     },
     {
      "name": "setInputFolder",
+     "parameterTypes": [
+      "java.lang.String"
+     ]
+    },
+    {
+     "name": "setLocale",
      "parameterTypes": [
       "java.lang.String"
      ]
