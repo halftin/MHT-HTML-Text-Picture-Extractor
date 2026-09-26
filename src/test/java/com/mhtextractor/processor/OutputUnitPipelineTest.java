@@ -1,6 +1,7 @@
 package com.mhtextractor.processor;
 
 import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.OutputUnitPlanner;
@@ -171,6 +172,8 @@ class OutputUnitPipelineTest {
 
     @Test
     void chapterNumberingRestartsPerGroupUnit() throws Exception {
+        // 章节名按 locale 策略化（会话 15C）：本断言锁定中文规则，须钉死 locale（不受运行机默认语言影响）
+        I18n.setLocale(java.util.Locale.forLanguageTag("zh-CN"));
         Path src = Files.createDirectories(tmp.resolve("src"));
         GroupItem<TItem> g1 = new GroupItem<>(1, "组1");
         g1.getMembers().add(new TItem(writeTextMht(src, "a.mht", "组1第一篇").toString(), src.toString(), false));

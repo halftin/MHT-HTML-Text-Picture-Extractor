@@ -4,6 +4,7 @@ import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.core.ChapterGenerator;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.TextExtractor;
+import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.output.FileWriter;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.SanitizeUtils;
@@ -143,8 +144,9 @@ public class TextBatchProcessor extends BatchProcessor {
                         progress -> fireProgress(idx, mhtFiles.size(), name, progress));
                 if (parsed.getHtmlContent() == null) {
                     stats.incrementSkip();
-                    stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：无法解析", fileInfo.getName()));
-                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "无法解析", List.of());
+                    stats.addSkipDetail(I18n.get("extract.fileSkippedUnparseable", "file", fileInfo.getName()));
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
+                            I18n.get("extract.reasonUnparseable"), List.of());
                     log.info("[跳过] 无法解析：{}", fileInfo.getName());
                     fireProgress(idx, mhtFiles.size(), fileInfo.getName(), 1.0);
                     continue;
@@ -160,8 +162,9 @@ public class TextBatchProcessor extends BatchProcessor {
 
                 if (text == null || text.trim().isEmpty()) {
                     stats.incrementSkip();
-                    stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：内容为空", fileInfo.getName()));
-                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "内容为空", fileWarnings);
+                    stats.addSkipDetail(I18n.get("extract.fileSkippedEmpty", "file", fileInfo.getName()));
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
+                            I18n.get("extract.reasonEmpty"), fileWarnings);
                     log.info("[跳过] 内容为空：{}", fileInfo.getName());
                     fireProgress(idx, mhtFiles.size(), fileInfo.getName(), 1.0);
                     continue;
@@ -194,13 +197,15 @@ public class TextBatchProcessor extends BatchProcessor {
                     recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SUCCESS, null, fileWarnings);
                 } else {
                     stats.incrementFail();
-                    stats.addFailDetail(String.format("文件：%s 失败，失败原因：写入文件失败", fileInfo.getName()));
-                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, "写入文件失败", fileWarnings);
+                    stats.addFailDetail(I18n.get("extract.fileFailedWrite", "file", fileInfo.getName()));
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED,
+                            I18n.get("extract.reasonWriteFailed"), fileWarnings);
                 }
 
             } catch (Exception e) {
                 stats.incrementFail();
-                stats.addFailDetail(String.format("文件：%s 失败，失败原因：%s", fileInfo.getName(), e.getMessage()));
+                stats.addFailDetail(I18n.get("extract.fileFailed", "file", fileInfo.getName(),
+                        "reason", e.getMessage()));
                 recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, e.getMessage(), List.of());
                 log.error("[异常] 处理文件失败：{}", fileInfo.getName(), e);
             } finally {
@@ -239,9 +244,10 @@ public class TextBatchProcessor extends BatchProcessor {
                 } else {
                     log.warn("[警告] {} 未提取到标题（标记: {} ... {}）", fileName, titleStart, titleEnd);
                     stats.incrementWarn();
-                    stats.addWarnDetail(String.format("文件：%s 出现警告，警告信息：未提取到标题（标记: %s ... %s）",
-                            fileName, titleStart, titleEnd));
-                    fileWarnings.add(String.format("未提取到标题（标记: %s ... %s）", titleStart, titleEnd));
+                    stats.addWarnDetail(I18n.get("extract.fileWarnedNoTitle",
+                            "file", fileName, "start", titleStart, "end", titleEnd));
+                    fileWarnings.add(I18n.get("extract.noTitleMarkers",
+                            "start", titleStart, "end", titleEnd));
                     extractedTitle = null;
                 }
             } catch (Exception e) {

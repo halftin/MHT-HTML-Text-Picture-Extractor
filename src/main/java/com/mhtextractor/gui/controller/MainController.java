@@ -691,7 +691,7 @@ public class MainController {
      */
     private void autoSetOutputPath(String inputPath) {
         String projectDir = System.getProperty("user.dir");
-        String outputBaseDir = projectDir + File.separator + "输出文件";
+        String outputBaseDir = projectDir + File.separator + I18n.get("core.defaultOutputName");
 
         File outDirFile = new File(outputBaseDir);
         if (!outDirFile.exists()) {
@@ -884,7 +884,7 @@ public class MainController {
         // ① 组名：sanitize（保证"列表显示名 == 输出名"，F10/BC-6）
         String base = SanitizeUtils.sanitize(folderName);
         if (base.isEmpty()) {
-            base = "组" + GroupStructure.nextGroupNo(groupNoCounter);
+            base = I18n.get("core.groupDefault") + GroupStructure.nextGroupNo(groupNoCounter);
         }
         // ② 唯一化：复用既有实现（F7）
         String name = GroupStructure.uniqueGroupName(base, allGroupNames());
@@ -3724,7 +3724,7 @@ public class MainController {
         List<Object> before = GroupStructure.snapshotStructure(items);
         int groupNo = GroupStructure.nextGroupNo(groupNoCounter);
         groupNoCounter = groupNo;
-        GroupItem<PreviewItem> group = new GroupItem<>(groupNo, "组" + groupNo);
+        GroupItem<PreviewItem> group = new GroupItem<>(groupNo, I18n.get("core.groupDefault") + groupNo);
         registerGroupNameRefresh(group);
 
         // 插入槽位：最早目标在显示序中的位置（顶层项目=自身位置；组内成员=其组之后），拆出时同步修正索引

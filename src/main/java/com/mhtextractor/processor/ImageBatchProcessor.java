@@ -9,6 +9,7 @@ import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.ImageSource;
 import com.mhtextractor.extractor.InMemoryImageSource;
+import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.output.Archiver;
 import com.mhtextractor.output.ImageWriter;
 import com.mhtextractor.util.ExtractOutcome;
@@ -176,7 +177,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                 }
             } catch (Exception e) {
                 log.error("加载 MHT 文件 {} 失败: {}", fileInfo.getName(), e.getMessage(), e);
-                loadFailures.put(i, e.getMessage() == null ? "未知错误" : e.getMessage());
+                loadFailures.put(i, e.getMessage() == null ? I18n.get("extract.unknownError") : e.getMessage());
             } finally {
                 fireProgress(i + 1, mhtFiles.size(), fileInfo.getName(), 1.0);
             }
@@ -232,10 +233,10 @@ public class ImageBatchProcessor extends BatchProcessor {
             if (folderName == null) {
                 folderName = determineDefaultFolderName(config.getInputFolder());
                 if (config.isEnableNameExtraction() && firstParsed != null && firstParsed.getHtmlContent() != null) {
-                    nameWarning = String.format("未从第一个文件提取到标题，使用默认名称：%s", folderName);
+                    nameWarning = I18n.get("extract.titleFallback", "name", folderName);
                     stats.incrementWarn();
-                    stats.addWarnDetail(String.format("文件：%s 出现警告，警告信息：%s",
-                            mhtFiles.get(0).getName(), nameWarning));
+                    stats.addWarnDetail(I18n.get("extract.fileWarned",
+                            "file", mhtFiles.get(0).getName(), "message", nameWarning));
                     log.warn("[警告] 未从第一个文件提取到标题，使用默认名称：{}", folderName);
                 }
             }
@@ -312,8 +313,9 @@ public class ImageBatchProcessor extends BatchProcessor {
                     if (parsed == null || parsed.getHtmlContent() == null) {
                         log.warn("文件 {} 无法解析，跳过", name);
                         stats.incrementSkip();
-                        stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：无法解析", name));
-                        recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "无法解析", List.of());
+                        stats.addSkipDetail(I18n.get("extract.fileSkippedUnparseable", "file", name));
+                        recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
+                                I18n.get("extract.reasonUnparseable"), List.of());
                         fireProgress(idx, total, name, 1.0);
                         continue;
                     }
@@ -322,8 +324,9 @@ public class ImageBatchProcessor extends BatchProcessor {
                     if (parsed.getCidMap().isEmpty() && parsed.getLocationDataMap().isEmpty()) {
                         log.info("[跳过] 无图片内容：{}", name);
                         stats.incrementSkip();
-                        stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：无图片内容", name));
-                        recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "无图片内容", List.of());
+                        stats.addSkipDetail(I18n.get("extract.fileSkippedNoImages", "file", name));
+                        recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
+                                I18n.get("extract.reasonNoImages"), List.of());
                         fireProgress(idx, total, name, 1.0);
                         continue;
                     }
@@ -345,8 +348,9 @@ public class ImageBatchProcessor extends BatchProcessor {
                     if (images.isEmpty()) {
                         log.info("[跳过] 未提取到图片：{}", name);
                         stats.incrementSkip();
-                        stats.addSkipDetail(String.format("文件：%s 跳过，跳过原因：未提取到图片", name));
-                        recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED, "未提取到图片", fileWarnings);
+                        stats.addSkipDetail(I18n.get("extract.fileSkippedNoExtracted", "file", name));
+                        recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
+                                I18n.get("extract.reasonNoExtracted"), fileWarnings);
                         fireProgress(idx, total, name, 1.0);
                         continue;
                     }
@@ -374,16 +378,16 @@ public class ImageBatchProcessor extends BatchProcessor {
                         previewCache.onExtractionCompleted(fileInfo.getPath());
                     }
                 } else {
-                    String failReason = String.format("全部 %d 张图片写入失败", imageSource.size());
+                    String failReason = I18n.get("extract.allImagesWriteFailed", "count", imageSource.size());
                     stats.incrementFail();
-                    stats.addFailDetail(String.format("文件：%s 失败，失败原因：%s", name, failReason));
+                    stats.addFailDetail(I18n.get("extract.fileFailed", "file", name, "reason", failReason));
                     recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, failReason, fileWarnings);
                     log.error("[失败] {}：{}", name, failReason);
                 }
 
             } catch (Exception e) {
                 stats.incrementFail();
-                stats.addFailDetail(String.format("文件：%s 失败，失败原因：%s", name, e.getMessage()));
+                stats.addFailDetail(I18n.get("extract.fileFailed", "file", name, "reason", e.getMessage()));
                 recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, e.getMessage(), List.of());
                 log.error("[异常] 处理文件失败：{}", name, e);
             } finally {
@@ -522,7 +526,7 @@ public class ImageBatchProcessor extends BatchProcessor {
         public void afterAll(String outputFolder, ProcessStats stats) {
             if (!archiveMergedOutput(mergedDir, folderName, outputFolder)) {
                 stats.incrementFail();
-                stats.addFailDetail(String.format("合并输出归档失败，图片保留在目录：%s", mergedDir));
+                stats.addFailDetail(I18n.get("extract.archiveFailedKeep", "dir", mergedDir));
                 log.error("[归档] 合并输出归档失败，图片保留在目录：{}", mergedDir);
             }
         }

@@ -1,6 +1,7 @@
 package com.mhtextractor.util;
 
 import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.i18n.I18n;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -207,7 +208,7 @@ public final class OutputUnitPlanner {
     private static String sanitizedGroupName(GroupItem<?> g) {
         String s = SanitizeUtils.sanitize(g.getName());
         if (s.isEmpty()) {
-            return "组" + g.getGroupNo();
+            return I18n.get("core.groupDefault") + g.getGroupNo();
         }
         return s;
     }
