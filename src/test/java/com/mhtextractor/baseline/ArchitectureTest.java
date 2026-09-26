@@ -129,8 +129,23 @@ class ArchitectureTest {
      * （并且全仓库其余源文件也零引用），因此改回 {@code private} 并摘除标记。
      * 这些字段仍由 {@code FXMLLoader} 注入 —— 对 private 字段同样有效，GUI 自动化 30/30 未变。
      * 剩下的 64 处才是"真的被测试夹具驱动"的暴露面。</p>
+     *
+     * <p><b>演进记录（步骤 1 阶段 B，2026-09-26）</b>：64 → <b>62</b>。
+     * 用"哑而稳"的审计脚本（`.claude-work/s1b-audit.js`：逐条取标记后的成员名，再数
+     * {@code FeatureExercise} 里的 {@code mc.<名>} 引用）复核全部 64 条，发现 <b>2 条标记已失效</b>：
+     * <ul>
+     *   <li>{@code logTextArea} —— 类外零引用（{@code FeatureExercise} 里只 import 了类型，未取字段）；</li>
+     *   <li>{@code wrapper}（{@code PreviewListCell} 的私有字段）—— 类外零引用。</li>
+     * </ul>
+     * 两者都只在本类内使用，标记是 E0.6 遗留的过度放宽，故摘除；可见性未变（仍是包级，避免扩大改动面）。
+     * 同一轮还发现 {@code modeToggleGroup} 的标记已失效（它在前一批已改为 {@code private}）。</p>
+     *
+     * <p><b>审计脚本自身的教训</b>：第一版审计脚本用"取行内最后一个标识符"来判定字段名，把
+     * {@code final Foo bar = new Foo();} 解析成了类型名 {@code Foo} —— 产生了一批**假阳性**
+     * （把实际被引用的成员报成"未被引用"）。改用**行首锚定的类型+名字**正则后 0 条 UNPARSED。
+     * 这与 `CLAUDE.md` 记录的"正则漏掉分号结尾的枚举常量"是同一类错误。</p>
      */
-    private static final int TEST_SUPPORT_MARKER_MAX = 64;
+    private static final int TEST_SUPPORT_MARKER_MAX = 62;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

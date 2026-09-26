@@ -343,7 +343,7 @@ public class MainController {
     @FXML /* test-support */ Label statusLabel;
     @FXML /* test-support */ Button startButton;
     @FXML private Button stopButton;
-    @FXML /* test-support */ LogTextArea logTextArea;
+    @FXML LogTextArea logTextArea;
     @FXML /* test-support */ ToggleSwitch openFolderAfterCompleteCheck;
 
     // ===== 状态 =====
@@ -2220,7 +2220,7 @@ public class MainController {
      */
     /* test-support */ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         private final HBox box = new HBox(6);
-        /* test-support */ final StackPane wrapper = new StackPane();
+        private final StackPane wrapper = new StackPane();
         private final CheckBox checkBox = new CheckBox();
         private final Label arrowLabel = new Label();
         private final Label badgeLabel = new Label();
