@@ -23,6 +23,14 @@ public class App extends Application {
 
     private static String customCssUrl;
 
+    /**
+     * 已加载的主控制器（E0.6：供反射挂钩把控制器交给测试侧 FeatureExercise）。
+     *
+     * <p>此前通过 {@code loader.getController()} 就地取用；现在挂钩是静态方法，故保存为字段。
+     * 正式运行（无 test.mode/agent.exit.delay）时该字段不被读取，属无害引用。</p>
+     */
+    private static Object CONTROLLER;
+
     @Override
     public void start(Stage primaryStage) throws IOException {
         // 全局未捕获异常处理器 — 将异常输出到控制台和日志
@@ -44,6 +52,7 @@ public class App extends Application {
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/mhtextractor/gui/view/MainView.fxml"));
         loader.setResources(I18n.bundle());
         Scene scene = new Scene(loader.load());
+        CONTROLLER = loader.getController();
 
         // 引入 AtlantaFX Nord Light 主题
         Application.setUserAgentStylesheet(new NordLight().getUserAgentStylesheet());
@@ -68,32 +77,54 @@ public class App extends Application {
         primaryStage.show();
 
         // Tracing Agent 模式
+        // 会话 18 · E0.6：演练/自动化测试代码已外迁到 test sources 的
+        // com.mhtextractor.gui.controller.FeatureExercise，生产类不再承载测试脚手架。
+        // 由于 main 源码不可依赖 test 源码，这里用"反射挂钩"调用：生产代码只保留一个
+        // 类名常量与调用点（零编译期依赖），测试类由 test classpath 提供。
         String d = System.getProperty("agent.exit.delay");
         if (d != null) {
-            com.mhtextractor.gui.controller.MainController c = loader.getController();
-            try { c.exerciseAllFeatures(); } catch (Exception ignored) {}
+            invokeFeatureExercise("exerciseAllFeatures");
             new java.util.Timer(true).schedule(new java.util.TimerTask() {
                 public void run() { Platform.exit(); System.exit(0); }
             }, Long.parseLong(d));
         }
         if ("true".equals(System.getProperty("test.mode"))) {
-            final com.mhtextractor.gui.controller.MainController c = loader.getController();
             new java.util.Timer(true).schedule(new java.util.TimerTask() {
                 public void run() {
                     // 自动化测试直接操作 JavaFX 控件，必须回到 FX 线程执行
                     Platform.runLater(() -> {
-                        boolean success = true;
-                        try {
-                            c.runAutomatedTests();
-                        } catch (Throwable t) {
-                            success = false;
-                            log.error("自动化测试执行失败", t);
-                        }
+                        boolean success = invokeFeatureExercise("runAutomatedTests");
                         Platform.exit();
                         System.exit(success ? 0 : 1);
                     });
                 }
             }, 2000);
+        }
+    }
+
+    /**
+     * 反射调用测试侧的 UI 演练/自动化入口（E0.6）。
+     *
+     * <p><b>为什么用反射</b>：{@code FeatureExercise} 住在 {@code src/test/java}，而本文件在
+     * {@code src/main/java} —— main 不能编译期依赖 test。反射把该依赖降为<b>运行期字符串</b>，
+     * 同时让"生产类不再含测试脚手架"这一目标成立。</p>
+     *
+     * <p><b>契约</b>：目标方法必须是 {@code public static void} 且无参。
+     * 若测试类不在 classpath（如正式发行包），记 warn 并返回 false，不影响正常启动。</p>
+     *
+     * @return true = 调用成功；false = 类/方法缺失或抛错（已记录）
+     */
+    private static boolean invokeFeatureExercise(String method) {
+        try {
+            Class<?> c = Class.forName("com.mhtextractor.gui.controller.FeatureExercise");
+            // FeatureExercise 用组合持有控制器：构造参数为该包内可见的 MainController 类型
+            Class<?> mcType = Class.forName("com.mhtextractor.gui.controller.MainController");
+            Object driver = c.getConstructor(mcType).newInstance(CONTROLLER);
+            c.getMethod(method).invoke(driver);
+            return true;
+        } catch (Throwable t) {
+            log.error("FeatureExercise.{} 调用失败（测试类不在 classpath 或执行出错）", method, t);
+            return false;
         }
     }
 

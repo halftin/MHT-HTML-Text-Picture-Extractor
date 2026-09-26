@@ -86,29 +86,55 @@ class ArchitectureTest {
     }
 
     /**
-     * {@code MainController} 行数上限（**只减不增**，但允许"解耦必要的基础设施"净增）。
+     * {@code MainController} 行数上限（**只减不增**）。
      *
      * <p><b>口径</b>：{@code Files.readAllLines}（= Java 的行分隔规则）。演进记录：</p>
      * <ul>
      *   <li>会话 18 起点：6111</li>
-     *   <li>E1.1 接线 {@code addNameChangeListener}：6113</li>
-     *   <li>E1.3a 把 {@code PreviewItem} 的 5 个 JavaFX 属性换成普通字段 + 自研监听器：
-     *       <b>6174</b>（+61，必要基础设施）；</li>
-     *   <li>E1.4 把缩略图从 JavaFX {@code Image} 改为纯像素（{@code ThumbnailData} +
-     *       {@code ThumbnailPixels}）：<b>6252</b>（+78，同样是把 JavaFX 转换点显式化的基础设施）。</li>
+     *   <li>E1.1 接线监听器：6113；E1.3a 属性→字段：6174；E1.4 缩略图纯像素化：6252</li>
+     *   <li><b>E0.6 外迁 1139 行演练/测试代码：5109</b>（净减 1143 —— 这是本阶段的目标达成点）</li>
      * </ul>
      *
-     * <p><b>净减在 E0.6</b>：外迁约 1141 行演练/测试代码后，本常量应大幅下调
-     * （预期 ≤ 5200）。E1 系列皆为"解耦必要投入"，行数上升属预期，但<b>不得用于新增职责</b>。</p>
-     *
      * <p><b>⚠️ 口径陷阱（会话 18 实测）</b>：同一文件用不同工具数出的行数<b>不一致</b> ——
-     * PowerShell {@code (Get-Content f).Count} 得 5882（E1.1 前），Node 按 Java 规则与
-     * Java {@code Files.readAllLines} 均得 6111/6113/6174。原因是本文件为纯 {@code LF} 换行，
-     * 而 {@code Get-Content} 的分行/编码处理与之不一致。
-     * **因此本常量只能与 {@code Files.readAllLines} 口径比较**，
-     * 不要拿 PowerShell 的数字来改它（会立刻假失败或假通过）。</p>
+     * PowerShell {@code (Get-Content f).Count} 与 Java {@code Files.readAllLines} 会给出不同结果
+     * （本文件为纯 {@code LF} 换行）。**因此本常量只能与 {@code Files.readAllLines} 口径比较**。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 6252;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 5109;
+
+    /**
+     * E0.6 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限。
+     *
+     * <p><b>这是什么</b>：把约 1140 行演练/测试代码外迁到 test sources 后，被驱动的成员必须从
+     * {@code private} 放宽到包级，否则同包的 {@code FeatureExercise} 无法访问。本次共放宽
+     * <b>86</b> 处（46 个状态/方法 + 39 个 {@code @FXML} 控件 + 1 个内部类 {@code PreviewListCell}）。
+     * 这是<b>已知且有意</b>的封装让步，用它换取"生产类不再承载测试脚手架"。</p>
+     *
+     * <p><b>为什么单独立断言</b>：让步必须可度量、只减不增 —— 否则日后有人图省事继续放宽，
+     * 会悄悄把 MainController 变成"什么都公开"的类。Layer B（无头驱动 API）落地并退役
+     * {@code test.mode} 后，本常量应逐步降到 0。</p>
+     *
+     * <p><b>注意</b>：这些成员仍是<b>包级</b>（不是 public），包外不可见；且逐个带标记，
+     * 便于检索与回收。</p>
+     */
+    private static final int TEST_SUPPORT_MARKER_MAX = 86;
+
+    @Test
+    void testSupportSurfaceDoesNotGrow() throws IOException {
+        Path mc = MAIN_SOURCES.resolve("com/mhtextractor/gui/controller/MainController.java");
+        String text = Files.readString(mc, StandardCharsets.UTF_8);
+        int count = 0;
+        int idx = 0;
+        while ((idx = text.indexOf("/* test-support */", idx)) >= 0) {
+            count++;
+            idx += 1;
+        }
+        assertTrue(count <= TEST_SUPPORT_MARKER_MAX,
+                "MainController 的测试支撑暴露面增长：" + count + " > " + TEST_SUPPORT_MARKER_MAX
+                        + "。这些 private→包级 的放宽是为 E0.6 外迁测试代码而做的已知让步，只应减少；"
+                        + "若确需新增，请同时更新本常量并说明为何无法用公开 API 替代。");
+        System.out.println("[arch] MainController 测试支撑暴露面 " + count + " / 上限 "
+                + TEST_SUPPORT_MARKER_MAX + "（Layer B 后应归零）");
+    }
 
     /** 允许引用 JavaFX 的包（视图层/外壳） */
     private static final List<String> UI_PACKAGES = List.of(
