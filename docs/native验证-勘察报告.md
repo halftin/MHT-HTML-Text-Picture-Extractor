@@ -92,27 +92,59 @@ native-image exit=20
 **顺带发现**：`reachability-metadata.json` 里 `AppConfig` 有**重复条目**（同一 type 出现两次，
 字段/方法列表略异），说明历史上的 tracing agent 输出被追加而非合并/去重。
 
-### 2.2 修法（两条路，建议 A）
+### 2.2 修复记录（2026-09-26 已完成）
 
-**A. 重跑 tracing agent 采集（推荐，最完整）**
-NIK 自带 `bin/native-image-agent.dll`。步骤：
-1. `mvn package -DskipTests` 出 jar
-2. 直接 java 启动，带
-   `-agentlib:native-image-agent=config-output-dir=<目标目录>`
-   并跑 `-Dtest.mode=true`（覆盖预览/提取/缓存路径）+ 必要时 `-Dagent.exit.delay` 的
-   `exerciseAllFeatures()`
-3. 把采集产物**合并**进 `src/main/resources/META-INF/native-image/com.mhtextractor/`
-   （合并时顺便**去重** AppConfig 的重复条目）
-4. 人工检查 `PreviewCacheMeta` / `Source` / `ImageEntry` 已被采集（若 test.mode 未覆盖缓存读，
-   需确认或手工补）
+**采用方案 A（tracing agent 采集），已完成并独立验证。**
 
-**B. 手工补条目（快速兜底）**
-照 `GuiState` 的既有格式，为以下类型补 `<init>` 反射条目：
-`com.mhtextractor.cache.PreviewCacheMeta`、`PreviewCacheMeta$Source`、`PreviewCacheMeta$ImageEntry`。
-风险：需要手工判断 Jackson 反序列化 record 所需的完整成员集合，容易漏。
+执行过程：
 
-> **建议在修好 MSVC 之后、与首次 native 构建同批进行**，这样能一次验证到底。
-> 若你希望现在就修，我可以先做 B（风险可控），等你装好工具链再用 A 复核。
+1. 编写驱动 `.claude-work/probe/CacheJacksonAgentDriver.java`：构造完整的 `PreviewCacheMeta`
+   （含嵌套 `Source` / `ImageEntry`）走一遍 Jackson 序列化 + 反序列化 + 真实 `PreviewCacheStore.write→load`，
+   使用临时 root（不触碰生产缓存根）
+2. 带 `-agentlib:native-image-agent=config-output-dir=target/agent-out` 运行 → 输出 9917 字节元数据
+3. 用 `.claude-work/merge-native-metadata.py` 把 agent 采集的 `com.mhtextractor.cache.*` 条目
+   合并进 `reachability-metadata.json`，并对 reflection 按 type 去重（字段/方法取并集）
+
+**agent 采集到的权威清单**（3 个类型，17 个方法）：
+
+| 类型 | 反射需求 |
+|---|---|
+| `com.mhtextractor.cache.PreviewCacheMeta` | `<init>(int, Source, String, boolean, List, List)` + 6 个访问器 |
+| `PreviewCacheMeta$Source` | `<init>(String, long, long)` + 3 个访问器 |
+| `PreviewCacheMeta$ImageEntry` | `<init>(String, String, String, String, List)` + 5 个访问器 |
+
+**独立验证结果**：
+
+| 校验项 | 结果 |
+|---|---|
+| JSON 合法性 | ✅ 顶层 `reflection`(192) + `resources`(2901) |
+| reflection 重复 type | ✅ 0（改前 12 个重复） |
+| cache 条目与 agent 采集**逐字节一致** | ✅ 3/3 类型内容全同 |
+| **方法级对账**（真正的风险点） | ✅ 丢失方法 **0**、丢失字段 **0**；新增恰好 17 个方法且全属 cache 包 |
+| resources 未被改动 | ✅ 2901 → 2901，内容完全一致 |
+| `mvn clean package` | ✅ 通过（jar 16.0 MB） |
+| 元数据已入库 jar | ✅ `META-INF/native-image/com.mhtextractor/reachability-metadata.json` |
+| 全量测试 | ✅ **274 / 20 类 / 0 失败** |
+
+**过程中的一次自我纠错**：我最初把原文件备份为同目录下的 `reachability-metadata.json.bak`，
+结果被 Maven 当资源**打进了 jar**（`jar tf` 发现）。已把备份移出 resources 到
+`.claude-work/reachability-metadata.orig.json`，重新打包确认 jar 内只剩 7 个正确的元数据文件。
+
+### 2.3 遗留：两个元数据文件并存且不一致
+
+`reflect-config.json`（旧格式，291 条，2026-09-06）与 `reachability-metadata.json`
+（现代统一格式，192 条 reflection）**同时存在于资源目录**。实测 `reflect-config.json` 中：
+
+- 无任何 `com.mhtextractor.cache.*` 条目
+- 同样**没有** `ImageBatchProcessor` / `ImageSource` / `InMemoryImageSource`
+  （即它整体落后于近期改动，不是只落后 cache 包）
+
+native-image 对同一 type 在两文件中的条目取**并集**，因此补齐 `reachability-metadata.json` 已足够，
+**无需**同步改 `reflect-config.json`（补了反而增加两处漂移的风险）。
+
+> **建议（后续清理，非本会话范围）**：确认 `reflect-config.json` 已无独立价值后删除，
+> 只保留 `reachability-metadata.json`，消除双份真相。归属：`项目需求文档.md` §四 4.4 D 类。
+
 
 ---
 

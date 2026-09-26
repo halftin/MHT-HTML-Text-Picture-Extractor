@@ -593,305 +593,6 @@
      "parameterTypes": []
     },
     {
-     "name": "getContentLimitEnd",
-     "parameterTypes": []
-    },
-    {
-     "name": "getContentLimitStart",
-     "parameterTypes": []
-    },
-    {
-     "name": "getEndMarker",
-     "parameterTypes": []
-    },
-    {
-     "name": "getEndTemplate",
-     "parameterTypes": []
-    },
-    {
-     "name": "getImageNameEndMarker",
-     "parameterTypes": []
-    },
-    {
-     "name": "getImageNameStartMarker",
-     "parameterTypes": []
-    },
-    {
-     "name": "getImageRegionEndMarker",
-     "parameterTypes": []
-    },
-    {
-     "name": "getImageRegionStartMarker",
-     "parameterTypes": []
-    },
-    {
-     "name": "getNameLimitEnd",
-     "parameterTypes": []
-    },
-    {
-     "name": "getNameLimitStart",
-     "parameterTypes": []
-    },
-    {
-     "name": "getStartMarker",
-     "parameterTypes": []
-    },
-    {
-     "name": "getStartTemplate",
-     "parameterTypes": []
-    },
-    {
-     "name": "getTitleEndMarker",
-     "parameterTypes": []
-    },
-    {
-     "name": "getTitleStartMarker",
-     "parameterTypes": []
-    },
-    {
-     "name": "isAddChapterNumber",
-     "parameterTypes": []
-    },
-    {
-     "name": "isAutoFixEncoding",
-     "parameterTypes": []
-    },
-    {
-     "name": "isEnableBatchRenaming",
-     "parameterTypes": []
-    },
-    {
-     "name": "isEnableCbzPackaging",
-     "parameterTypes": []
-    },
-    {
-     "name": "isEnableContentLimit",
-     "parameterTypes": []
-    },
-    {
-     "name": "isEnableNameExtraction",
-     "parameterTypes": []
-    },
-    {
-     "name": "isEnableRegionExtraction",
-     "parameterTypes": []
-    },
-    {
-     "name": "isEnableTemplate",
-     "parameterTypes": []
-    },
-    {
-     "name": "isEnableTitleExtraction",
-     "parameterTypes": []
-    },
-    {
-     "name": "isEnableZipPackaging",
-     "parameterTypes": []
-    },
-    {
-     "name": "isHighSpeedMemoryMode",
-     "parameterTypes": []
-    },
-    {
-     "name": "isSeparateFiles",
-     "parameterTypes": []
-    },
-    {
-     "name": "isSingleOutputMode",
-     "parameterTypes": []
-    },
-    {
-     "name": "isTitleUseRegex",
-     "parameterTypes": []
-    },
-    {
-     "name": "isUseRegex",
-     "parameterTypes": []
-    },
-    {
-     "name": "setAddChapterNumber",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setAutoFixEncoding",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setContentLimitEnd",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setContentLimitStart",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setEnableBatchRenaming",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setEnableCbzPackaging",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setEnableContentLimit",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setEnableNameExtraction",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setEnableRegionExtraction",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setEnableTemplate",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setEnableTitleExtraction",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setEnableZipPackaging",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setEndMarker",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setEndTemplate",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setHighSpeedMemoryMode",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setImageNameEndMarker",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setImageNameStartMarker",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setImageRegionEndMarker",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setImageRegionStartMarker",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setNameLimitEnd",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setNameLimitStart",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setSeparateFiles",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setSingleOutputMode",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setStartMarker",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setStartTemplate",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setTitleEndMarker",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setTitleStartMarker",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setTitleUseRegex",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
-     "name": "setUseRegex",
-     "parameterTypes": [
-      "boolean"
-     ]
-    }
-   ],
-   "type": "com.mhtextractor.config.AppConfig"
-  },
-  {
-   "methods": [
-    {
-     "name": "<init>",
-     "parameterTypes": []
-    },
-    {
      "name": "getInputFolder",
      "parameterTypes": []
     },
@@ -946,7 +647,13 @@
   {
    "fields": [
     {
+     "name": "addChapterNumberCheck"
+    },
+    {
      "name": "adjustCheck"
+    },
+    {
+     "name": "autoFixEncodingCheck"
     },
     {
      "name": "badgeHeaderLabel"
@@ -958,7 +665,28 @@
      "name": "browseOutputButton"
     },
     {
+     "name": "configComboBox"
+    },
+    {
+     "name": "configTabPane"
+    },
+    {
      "name": "dragOverlay"
+    },
+    {
+     "name": "enableLimitCheck"
+    },
+    {
+     "name": "enableTemplateCheck"
+    },
+    {
+     "name": "enableTitleExtractCheck"
+    },
+    {
+     "name": "endMarkerField"
+    },
+    {
+     "name": "endTemplateField"
     },
     {
      "name": "fileCountLabel"
@@ -976,16 +704,64 @@
      "name": "groupNameField"
     },
     {
+     "name": "highSpeedMemoryCheck"
+    },
+    {
+     "name": "imageCbzCheck"
+    },
+    {
+     "name": "imageConfigTab"
+    },
+    {
      "name": "imageHintLabel"
     },
     {
      "name": "imageModeToggle"
     },
     {
+     "name": "imageNameEndField"
+    },
+    {
+     "name": "imageNameExtractCheck"
+    },
+    {
+     "name": "imageNamePane"
+    },
+    {
+     "name": "imageNameStartField"
+    },
+    {
+     "name": "imageOutputModePane"
+    },
+    {
+     "name": "imagePerformancePane"
+    },
+    {
      "name": "imagePreviewBox"
     },
     {
+     "name": "imageProcessPane"
+    },
+    {
+     "name": "imageRegionEndField"
+    },
+    {
+     "name": "imageRegionExtractCheck"
+    },
+    {
+     "name": "imageRegionPane"
+    },
+    {
+     "name": "imageRegionStartField"
+    },
+    {
+     "name": "imageRenameCheck"
+    },
+    {
      "name": "imageScrollPane"
+    },
+    {
+     "name": "imageZipCheck"
     },
     {
      "name": "inputFolderField"
@@ -1030,167 +806,6 @@
      "name": "selectAllCheck"
     },
     {
-     "name": "startButton"
-    },
-    {
-     "name": "statusLabel"
-    },
-    {
-     "name": "stopButton"
-    },
-    {
-     "name": "textModeToggle"
-    },
-    {
-     "name": "textPreviewArea"
-    },
-    {
-     "name": "thumbnailPane"
-    },
-    {
-     "name": "titleInfoLabel"
-    },
-    {
-     "name": "undoButton"
-    },
-    {
-     "name": "ungroupButton"
-    }
-   ],
-   "methods": [
-    {
-     "name": "<init>",
-     "parameterTypes": []
-    },
-    {
-     "name": "initialize",
-     "parameterTypes": []
-    },
-    {
-     "name": "onGroupClicked",
-     "parameterTypes": []
-    },
-    {
-     "name": "onPreviewEffect",
-     "parameterTypes": []
-    },
-    {
-     "name": "onRemoveClicked",
-     "parameterTypes": []
-    },
-    {
-     "name": "onUndoClicked",
-     "parameterTypes": []
-    },
-    {
-     "name": "onUngroupClicked",
-     "parameterTypes": []
-    }
-   ],
-   "type": "com.mhtextractor.gui.controller.MainController"
-  },
-  {
-   "fields": [
-    {
-     "name": "addChapterNumberCheck"
-    },
-    {
-     "name": "autoFixEncodingCheck"
-    },
-    {
-     "name": "browseInputButton"
-    },
-    {
-     "name": "browseOutputButton"
-    },
-    {
-     "name": "configComboBox"
-    },
-    {
-     "name": "configTabPane"
-    },
-    {
-     "name": "enableLimitCheck"
-    },
-    {
-     "name": "enableTemplateCheck"
-    },
-    {
-     "name": "enableTitleExtractCheck"
-    },
-    {
-     "name": "endMarkerField"
-    },
-    {
-     "name": "endTemplateField"
-    },
-    {
-     "name": "highSpeedMemoryCheck"
-    },
-    {
-     "name": "imageCbzCheck"
-    },
-    {
-     "name": "imageConfigTab"
-    },
-    {
-     "name": "imageModeToggle"
-    },
-    {
-     "name": "imageNameEndField"
-    },
-    {
-     "name": "imageNameExtractCheck"
-    },
-    {
-     "name": "imageNamePane"
-    },
-    {
-     "name": "imageNameStartField"
-    },
-    {
-     "name": "imageOutputModePane"
-    },
-    {
-     "name": "imagePerformancePane"
-    },
-    {
-     "name": "imageProcessPane"
-    },
-    {
-     "name": "imageRegionEndField"
-    },
-    {
-     "name": "imageRegionExtractCheck"
-    },
-    {
-     "name": "imageRegionPane"
-    },
-    {
-     "name": "imageRegionStartField"
-    },
-    {
-     "name": "imageRenameCheck"
-    },
-    {
-     "name": "imageZipCheck"
-    },
-    {
-     "name": "inputFolderField"
-    },
-    {
-     "name": "logTextArea"
-    },
-    {
-     "name": "openFolderAfterCompleteCheck"
-    },
-    {
-     "name": "outputFolderField"
-    },
-    {
-     "name": "progressBar"
-    },
-    {
      "name": "separateFilesCheck"
     },
     {
@@ -1224,19 +839,34 @@
      "name": "textOutputModePane"
     },
     {
+     "name": "textPreviewArea"
+    },
+    {
      "name": "textTemplatePane"
     },
     {
      "name": "textTitlePane"
     },
     {
+     "name": "thumbnailPane"
+    },
+    {
      "name": "titleEndMarkerField"
+    },
+    {
+     "name": "titleInfoLabel"
     },
     {
      "name": "titleStartMarkerField"
     },
     {
      "name": "titleUseRegexCheck"
+    },
+    {
+     "name": "undoButton"
+    },
+    {
+     "name": "ungroupButton"
     },
     {
      "name": "useRegexCheck"
@@ -1249,6 +879,26 @@
     },
     {
      "name": "initialize",
+     "parameterTypes": []
+    },
+    {
+     "name": "onGroupClicked",
+     "parameterTypes": []
+    },
+    {
+     "name": "onPreviewEffect",
+     "parameterTypes": []
+    },
+    {
+     "name": "onRemoveClicked",
+     "parameterTypes": []
+    },
+    {
+     "name": "onUndoClicked",
+     "parameterTypes": []
+    },
+    {
+     "name": "onUngroupClicked",
      "parameterTypes": []
     }
    ],
@@ -2324,6 +1974,7 @@
    "type": "com.sun.xml.internal.stream.XMLInputFactoryImpl"
   },
   {
+   "jniAccessible": true,
    "fields": [
     {
      "name": "FALSE"
@@ -2332,7 +1983,6 @@
      "name": "TRUE"
     }
    ],
-   "jniAccessible": true,
    "methods": [
     {
      "name": "getBoolean",
@@ -2341,18 +1991,6 @@
      ]
     }
    ],
-   "type": "java.lang.Boolean"
-  },
-  {
-   "fields": [
-    {
-     "name": "FALSE"
-    },
-    {
-     "name": "TRUE"
-    }
-   ],
-   "jniAccessible": true,
    "type": "java.lang.Boolean"
   },
   {
@@ -2579,37 +2217,6 @@
      ]
     },
     {
-     "name": "setId",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    },
-    {
-     "name": "setVisible",
-     "parameterTypes": [
-      "boolean"
-     ]
-    }
-   ],
-   "type": "javafx.scene.Node"
-  },
-  {
-   "methods": [
-    {
-     "name": "getId",
-     "parameterTypes": []
-    },
-    {
-     "name": "getStyleClass",
-     "parameterTypes": []
-    },
-    {
-     "name": "setDisable",
-     "parameterTypes": [
-      "boolean"
-     ]
-    },
-    {
      "name": "setFocusTraversable",
      "parameterTypes": [
       "boolean"
@@ -2659,15 +2266,6 @@
   },
   {
    "type": "javafx.scene.control.BorderPane"
-  },
-  {
-   "methods": [
-    {
-     "name": "<init>",
-     "parameterTypes": []
-    }
-   ],
-   "type": "javafx.scene.control.Button"
   },
   {
    "methods": [
@@ -2728,9 +2326,6 @@
    "type": "javafx.scene.control.ComboBoxBase"
   },
   {
-   "type": "javafx.scene.control.Control"
-  },
-  {
    "methods": [
     {
      "name": "setTooltip",
@@ -2758,23 +2353,6 @@
     }
    ],
    "type": "javafx.scene.control.Label"
-  },
-  {
-   "methods": [
-    {
-     "name": "setGraphic",
-     "parameterTypes": [
-      "javafx.scene.Node"
-     ]
-    },
-    {
-     "name": "setText",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    }
-   ],
-   "type": "javafx.scene.control.Labeled"
   },
   {
    "methods": [
@@ -2958,9 +2536,6 @@
    "type": "javafx.scene.control.TextArea"
   },
   {
-   "type": "javafx.scene.control.TextArea"
-  },
-  {
    "methods": [
     {
      "name": "<init>",
@@ -2977,17 +2552,6 @@
       "boolean"
      ]
     },
-    {
-     "name": "setPromptText",
-     "parameterTypes": [
-      "java.lang.String"
-     ]
-    }
-   ],
-   "type": "javafx.scene.control.TextInputControl"
-  },
-  {
-   "methods": [
     {
      "name": "setPromptText",
      "parameterTypes": [
@@ -3213,15 +2777,6 @@
   {
    "methods": [
     {
-     "name": "getChildren",
-     "parameterTypes": []
-    }
-   ],
-   "type": "javafx.scene.layout.Pane"
-  },
-  {
-   "methods": [
-    {
      "name": "valueOf",
      "parameterTypes": [
       "java.lang.String"
@@ -3229,33 +2784,6 @@
     }
    ],
    "type": "javafx.scene.layout.Priority"
-  },
-  {
-   "methods": [
-    {
-     "name": "<init>",
-     "parameterTypes": []
-    },
-    {
-     "name": "setPadding",
-     "parameterTypes": [
-      "javafx.geometry.Insets"
-     ]
-    },
-    {
-     "name": "setPrefHeight",
-     "parameterTypes": [
-      "double"
-     ]
-    },
-    {
-     "name": "setPrefWidth",
-     "parameterTypes": [
-      "double"
-     ]
-    }
-   ],
-   "type": "javafx.scene.layout.Region"
   },
   {
    "methods": [
@@ -3304,28 +2832,6 @@
     }
    ],
    "type": "javafx.scene.layout.StackPane"
-  },
-  {
-   "methods": [
-    {
-     "name": "<init>",
-     "parameterTypes": []
-    },
-    {
-     "name": "setSpacing",
-     "parameterTypes": [
-      "double"
-     ]
-    },
-    {
-     "name": "setVgrow",
-     "parameterTypes": [
-      "javafx.scene.Node",
-      "javafx.scene.layout.Priority"
-     ]
-    }
-   ],
-   "type": "javafx.scene.layout.VBox"
   },
   {
    "methods": [
@@ -3541,6 +3047,106 @@
   },
   {
    "type": "sun.util.resources.cldr.CalendarData"
+  },
+  {
+   "type": "com.mhtextractor.cache.PreviewCacheMeta",
+   "methods": [
+    {
+     "name": "<init>",
+     "parameterTypes": [
+      "int",
+      "com.mhtextractor.cache.PreviewCacheMeta$Source",
+      "java.lang.String",
+      "boolean",
+      "java.util.List",
+      "java.util.List"
+     ]
+    },
+    {
+     "name": "formatVersion",
+     "parameterTypes": []
+    },
+    {
+     "name": "imageMode",
+     "parameterTypes": []
+    },
+    {
+     "name": "images",
+     "parameterTypes": []
+    },
+    {
+     "name": "paramFingerprint",
+     "parameterTypes": []
+    },
+    {
+     "name": "source",
+     "parameterTypes": []
+    },
+    {
+     "name": "warnings",
+     "parameterTypes": []
+    }
+   ]
+  },
+  {
+   "type": "com.mhtextractor.cache.PreviewCacheMeta$ImageEntry",
+   "methods": [
+    {
+     "name": "<init>",
+     "parameterTypes": [
+      "java.lang.String",
+      "java.lang.String",
+      "java.lang.String",
+      "java.lang.String",
+      "java.util.List"
+     ]
+    },
+    {
+     "name": "detectedExt",
+     "parameterTypes": []
+    },
+    {
+     "name": "file",
+     "parameterTypes": []
+    },
+    {
+     "name": "originalName",
+     "parameterTypes": []
+    },
+    {
+     "name": "sourceId",
+     "parameterTypes": []
+    },
+    {
+     "name": "warnings",
+     "parameterTypes": []
+    }
+   ]
+  },
+  {
+   "type": "com.mhtextractor.cache.PreviewCacheMeta$Source",
+   "methods": [
+    {
+     "name": "<init>",
+     "parameterTypes": [
+      "java.lang.String",
+      "long",
+      "long"
+     ]
+    },
+    {
+     "name": "absolutePath",
+     "parameterTypes": []
+    },
+    {
+     "name": "mtime",
+     "parameterTypes": []
+    },
+    {
+     "name": "size",
+     "parameterTypes": []
+    }
+   ]
   }
  ],
  "resources": [
