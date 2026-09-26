@@ -174,6 +174,43 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
+                <executions>
+                    <!--
+                      默认执行：全部单测（JavaFX 在 classpath 上）。
+
+                      第二个执行（headless-layer-b）：把 JavaFX **物理剔除**后重跑"无头层"测试。
+                      这是验收 V1（app 层依赖闭包零 javafx）与 V2（桩 UI 可跑通）的**最强证据** ——
+                      它不靠源码/字节码扫描断言，而是让"缺少 JavaFX 时也能跑"成为运行时事实：
+                      无头闭包中任何一处触碰 javafx.* 都会以 NoClassDefFoundError 直接失败。
+
+                      被纳入的测试只允许依赖"零 JavaFX 的业务闭包"：
+                        LayerBTest（无头门面端到端 + 与产物基线逐字节比对）
+                        WorkspaceParamServiceTest（app 层缓存规则服务）
+                      注意：它们不得直接或间接 import javafx.*;
+                    -->
+                    <execution>
+                        <id>headless-layer-b</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                        <configuration>
+                            <test>
+                                com.mhtextractor.app.LayerBTest,com.mhtextractor.app.WorkspaceParamServiceTest
+                            </test>
+                            <!-- 标识"这是无头执行"：LayerBTest 据此自我断言 JavaFX 确实不在 classpath 上 -->
+                            <systemPropertyVariables>
+                                <mht.headless.execution>1</mht.headless.execution>
+                            </systemPropertyVariables>
+                            <classpathDependencyExcludes>
+                                <classpathDependencyExclude>org.openjfx:javafx-controls</classpathDependencyExclude>
+                                <classpathDependencyExclude>org.openjfx:javafx-fxml</classpathDependencyExclude>
+                                <classpathDependencyExclude>org.openjfx:javafx-graphics</classpathDependencyExclude>
+                                <classpathDependencyExclude>org.openjfx:javafx-base</classpathDependencyExclude>
+                            </classpathDependencyExcludes>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- 打包插件：生成包含所有依赖的可执行 JAR -->

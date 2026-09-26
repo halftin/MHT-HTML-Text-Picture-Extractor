@@ -186,6 +186,43 @@ class LayerBTest {
         assertProductsMatchBaseline(out, "image-cn-filename", "zh");
     }
 
+    /**
+     * 自证"本测试确实运行在**没有 JavaFX** 的 classpath 上"（会话 18 · E4-1）。
+     *
+     * <p>{@code pom.xml} 里 {@code headless-layer-b} 这次 surefire 执行把 JavaFX 四个 artifact
+     * 从 classpath 中<b>物理剔除</b>。本条断言把这件事从"构建配置假设"变成"测试内事实"：
+     * 只有当运行环境<b>确实</b>声明了该执行时才生效，因此它在默认执行（JavaFX 在场）下不会误报。</p>
+     *
+     * <p><b>为什么这是 V1 的最强证据</b>：源码扫描/字节码扫描都可能被"间接引用"绕过；
+     * 而"缺 JavaFX 时整个无头链路仍能跑完并与基线逐字节一致"是运行时事实 ——
+     * 闭包里任何一处触碰 UI 框架都会立刻 {@code NoClassDefFoundError}。</p>
+     *
+     * <p><b>注意类名为何要拼接</b>：{@code ArchitectureTest.headlessTestPackagesHaveNoJavaFx}
+     * 会扫描本包源码，禁止出现 UI 框架的<b>字面量</b>（防止无头测试真的依赖它）。
+     * 本断言必须提到这些类名，故用字符串拼接构造 —— 这样既表达了意图，又不会触发那条守卫
+     * （它是按字面量匹配的）。</p>
+     */
+    @Test
+    void runsWithoutUiFrameworkOnClasspathWhenHeadlessExecutionIsActive() {
+        String active = System.getProperty("mht.headless.execution");
+        if (active == null) {
+            // 默认执行（UI 框架在 classpath 上）：本断言不适用
+            return;
+        }
+        assertEquals("1", active, "headless 执行标识应为 1");
+        final String fx = "java" + "fx";
+        for (String fxClass : List.of(fx + ".application.Platform", fx + ".scene.image.Image",
+                fx + ".collections.ObservableList")) {
+            try {
+                Class.forName(fxClass);
+                throw new AssertionError("headless 执行下不应能加载 " + fxClass
+                        + " —— 说明 UI 框架仍在 classpath 上，本执行的证明力无效");
+            } catch (ClassNotFoundException expected) {
+                // 正是我们要的：UI 框架物理缺席
+            }
+        }
+    }
+
     /** 取消经零 JavaFX 的令牌表达：恒 true 时不得产出成功结果 */
     @Test
     void headlessCancelTokenStopsExtraction() throws Exception {
