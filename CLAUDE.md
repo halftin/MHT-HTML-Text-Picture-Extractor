@@ -96,12 +96,17 @@ ExtractionPreconditions // 提取前置校验规则（含 Level 分级 + Denial�
 
 ### GUI
 
-- **`MainController`** — FXML 控制器（约 4800 行，**重构中，只减不增**）：模式切换、输入/输出目录、文件列表（拖拽排序/分组/勾选/章节徽标）、文本与图片预览、预解析线程、提取任务启停、`logs/gui-state.json` 持久化。持有两个按模式确认的参数缓存（null = 该模式未确认参数）。
+- **`MainController`** — FXML 控制器（**4435 行**，`ArchitectureTest.mainControllerIsShrinking` 强制**只减不增**，上限常量与实测**同步顶格**）：模式切换、输入/输出目录、文件列表（拖拽排序/分组/勾选/章节徽标）、文本与图片预览、预解析线程、提取任务启停、`logs/gui-state.json` 持久化。持有两个按模式确认的参数缓存（null = 该模式未确认参数）。
+  > 会话 18 起持续减重：6111 → 5109（外迁演练代码）→ 5002（外迁 `PreviewItem`）→ 4985 → **4935**（步骤 2 预览编排 → `app.PreviewService`）→ **4435**（步骤 3 `PreviewListCell` 外迁为顶层类）。列表单元格渲染/拖拽已不在本类。
 - **`ParamDialogController`** — 「提取参数设置」模态弹窗；仅「确定」提交；底部固定行是命名配置 CRUD。
 - **`LogTextArea`** — 自定义 JavaFX 组件，经 `TextAreaAppender` 注册为 Logback consumer（日志进界面）。
 - **`MainView.fxml` / `ParamDialog.fxml`** — 全部文案为 `%key`（经 `loader.setResources(I18n.bundle())` 注入），**不得再出现中文字面量**。
-- **`gui.util.BrowserLauncher`**（约 840 行，零 JavaFX 但包归属不符，待迁出）— 系统浏览器打开本地 HTML；源码视图经 CDP 原生查看器，失败回退自产源码页。
-- `JavaFxUtil` / `SmoothProgressProperty`。
+- **`com.mhtextractor.platform`（步骤 5 新建）** — 与操作系统交互的基础设施，**零 JavaFX**，已纳入"零 UI 框架"不变式扫描：
+  - `BrowserLauncher`（159 行，**门面**）— `openHtml` / `openViewSource` + 启动三级兜底（直接起 exe → `cmd start` → `rundll32 url.dll,FileProtocolHandler`）
+  - `SourceViewPage`（314）— 源码视图页生成（HTML 转义 + 行号 + 语法高亮 + 链接下划线）。页头文案由**调用方**传入（本层不产本地化文案）
+  - `CdpClient`（320）— CDP 协议客户端 + 调试实例的进程/端口管理（原生 Socket，native-image 安全）
+  - `BrowserDetector`（197）— 浏览器探测与识别（注册表 `UserChoice` → `http` 协议命令 → 常见路径 → `where.exe`）
+- `JavaFxUtil` / `SmoothProgressProperty`（留在 `gui.util`：确实依赖 JavaFX）。
 
 ### 测试代码位置（重要）
 
@@ -116,10 +121,14 @@ ExtractionPreconditions // 提取前置校验规则（含 Level 分级 + Denial�
 
 | 资产 | 位置 | 规模 |
 |---|---|---|
-| 单元测试 | `src/test/java` | **374 测试 / 33 类**（`util`/`processor` 覆盖最好） |
+| 单元测试 | `src/test/java` | **384 测试 / 34 类**（`util`/`processor` 覆盖最好） |
 | MHT 夹具 | `src/test/resources/fixtures/` | 11 个（simple-text / single-image / multi-image / data-uri / data-uri-mixed / region / titles / cn-filename / garbage / deep-nesting / no-cte） |
 | **产物黄金基线** | `src/test/resources/baselines/` | **32 份**（16 例 × zh/en）——重构的字节级标尺；只证明"没变"不证明"对"，已知缺陷以 `knownIssues` 标注 |
 | 架构不变式 | `src/test/java/com/mhtextractor/baseline/ArchitectureTest.java` | 10 条 |
+
+> **回归门槛（每个改动都必须全绿）**：`mvn test` = 默认执行 **384/0** + `headless-layer-b` **44/0**；
+> 产物基线 **32 份**；架构不变式 **10 条**；GUI 自动化 **zh 30/0、en 30/0**。
+> 两条"顶格"约束：`MainController` ≤ **4435** 行、`/* test-support */` 标记 ≤ **44** 个 —— 均**只减不增**。
 
 ---
 
@@ -194,24 +203,38 @@ java -agentlib:native-image-agent=config-output-dir=target/agent-out -cp ... <�
 | `build-native.cmd` 内 4 处硬编码 `X:\` 路径 | ❌ **全部不可用**（本机无 X: 盘）。需改为本机实际路径：`BUILD_JAVA_HOME`/`GRAALVM_HOME` → NIK 目录（NIK 自带 native-image）；`MAVEN_HOME` → wrapper；`OUTPUT_DIR` → 本机可写目录。另建议把 `-J-Xmx8G` 下调（本机总内存约 15 GB） |
 | 解除方式 | 安装 **Visual Studio 2022 Build Tools（17.6+）**，勾选「使用 C++ 的桌面开发」+「MSVC v143」+「Windows SDK」 |
 
-### ⚠️ 一个已存在的构建配置缺陷（待修）
+### ✅ 无头执行（`headless-layer-b`）——**已修复（步骤 0，2026-09-26）**
 
-`pom.xml` 有第二个 surefire 执行 `headless-layer-b`，试图用 `classpathDependencyExcludes` 把 JavaFX **物理剔除**后跑无头层，以证明"缺 UI 框架仍能跑通"。**该执行当前失败**：
+> 本节原先记录"该执行失败、`mvn test` 恒有 1 个失败、无 JavaFX classpath 在本机物理不可达"。
+> **该结论已作废**，原因与修法如下（详见 `docs/handoff/H19.md`）。
 
-- **原因一**：排除项写的是无 classifier 的 `org.openjfx:javafx-controls`，而实际依赖带 **classifier `win`**（且带出无 classifier 的传递变体），**一个都没匹配上**
-- **原因二（决定性）**：**Liberica `Full` JDK 把 JavaFX 内置为 JDK 运行时模块**（`javafx.base@25.0.3` … 共 7 个，见 `jdk/jmods/javafx.base.jmod`）。`classpathDependencyExcludes` 只能剔 Maven 依赖，**剔不掉 JDK 模块**。实测即使剔除 classpath 上全部 openjfx jar，`Class.forName("javafx.application.Platform")` **仍然成功**
+让 `headless-layer-b` 真正"无 JavaFX"需要**两个条件同时满足**，缺一不可：
 
-> 即"无 JavaFX classpath"在本机**物理不可达**。修法三选一：① 断言降级为 `assumeTrue` 并标注"本机不可验证"；② **用不含 JavaFX 的 JDK**（Liberica `Standard`/`Lite` 或 Temurin）跑该执行；③ 固化为手工脚本 + 证据留档。
-> **在当前状态下 `mvn test` 会有 1 个失败**（`LayerBTest.runsWithoutUiFrameworkOnClasspathWhenHeadlessExecutionIsActive`）——这是**已知配置缺陷，非代码 bug**。
+| 条件 | 手段 | 管什么 |
+|---|---|---|
+| **A** | `argLine` 把 boot layer 限定在 `java.se` | **JDK 模块层**：Liberica `Full` JDK 把 JavaFX 内置为 7 个运行时模块，只剔 Maven 依赖无效 |
+| **B** | `classpathDependencyExcludes` 剔干净 jar | **classpath（未命名模块）**：argLine 只约束模块层，classpath 上的同名类仍可加载 |
+
+**为什么必须两个**（实测反例）：把 `javafx-base-win.jar` 放进 classpath 后，
+**加不加该 argLine 都能 `Class.forName` 成功** —— 即 argLine 对 classpath 无效；
+反过来，只剔 classpath 也挡不住 JDK 内置模块。
+
+**并且**排除坐标必须**带 classifier 与不带 classifier 各写一遍**：
+`classpathDependencyExcludes` 只排除与给出的 `groupId:artifactId` **完全相等**的坐标、不做前缀匹配，
+而实际依赖是 `org.openjfx:javafx-*:win` 且另带出无 classifier 的传递变体
+（`mvn -X` 核对 forked classpath 证实修复前两种 jar 同时在场）。
+
+> 修完后 `LayerBTest` 的原断言**一字未改**即通过（证明力完整保留，未降级为 `assumeTrue`），
+> `mvn test` 两个执行全绿。
 
 ### 其它已知缺陷（登记未修）
 
 | 缺陷 | 位置 | 影响 |
 |---|---|---|
-| **纯 Data URI 的 MHT 永远提取不到图片** | `ImageBatchProcessor` 的"无图片内容"快速跳过（`cidMap` 与 `locationDataMap` 均空 → SKIPPED） | 功能静默失效：有 Data URI 图却报"跳过：无图片内容"。修它会改变产物基线，需配套更新基线 |
+| ~~纯 Data URI 的 MHT 永远提取不到图片~~ | ✅ **已修复（步骤 7a，2026-09-26）** | 有**两个**根因：① `ImageExtractor.extractAllImagesInOrder` 在 `imageInfoList` 为空时提前 return，使同方法末尾的 Data URI 提取成为**死代码**；② `ImageBatchProcessor` 的"无图片内容"快速检查只看 `cidMap`/`locationDataMap`。两处均已修；`data-uri.mht` 由 `SKIPPED` 变为 `SUCCESS`（提取出 2 张图），基线同步更新。详见 `docs/handoff/H30.md` §四 |
 | 业务层仍在产"已解析文案" | `ImageExtractor` 经 `I18n.get` 产 warning 文案 → 写入 `PreviewCacheMeta.warnings` | 缓存内警告语言取决于预览时 locale；彻底修需业务层产码值，会触及缓存 schema |
 | `AD_KEYWORDS` 硬编码 | `ImageExtractor` | 若参数化，**必须同步加入 `imageExtractionFingerprint()`**，否则预览缓存串味 |
-| `BrowserLauncher` 包归属 | `gui.util`（零 JavaFX） | 应迁至基础设施包 |
+| `BrowserLauncher` 包归属 | ✅ **已修复（步骤 5，2026-09-26）** | 已迁出 `gui.util` 到新建的 `com.mhtextractor.platform`，并按 4 类职责拆分：`BrowserLauncher`（159 行门面）/ `SourceViewPage`（314）/ `CdpClient`（320）/ `BrowserDetector`（197）。`platform` 包已纳入"零 UI 框架"不变式扫描 |
 | `reflect-config.json` 与统一元数据并存不一致 | 见上 | 建议删旧留新 |
 
 ---
@@ -231,7 +254,7 @@ java -agentlib:native-image-agent=config-output-dir=target/agent-out -cp ... <�
 - **git 身份未配置**：`git commit` 会报 `Author identity unknown`，须内联
   `git -c user.name="Administrator" -c user.email="admin@mht-extractor.local" commit -m "..."`（**不要** `git config`，那会改用户环境）。
 - **`git` 忽略规则已锚定到仓库根**：`.gitignore` 用 `/config/`、`/logs/`、`/temp/`、`/输出文件/`。**不要改回不带前导 `/` 的写法**——那样会误伤 `src/test/java/com/mhtextractor/config/`，导致新测试文件被静默忽略（本项目真发生过）。
-- **不要整文件读取 `MainController.java`**（约 4800 行）：用 `grep -n` 定位 + 区间读，否则上下文会被吃掉。
+- **不要整文件读取 `MainController.java`**（**4435 行**）：用 `grep -n` 定位 + 区间读，否则上下文会被吃掉。
 - **行号会漂移**：本文件或任何文档中提到的行号，引用前先用 `grep -n` 复核。
 
 ---
