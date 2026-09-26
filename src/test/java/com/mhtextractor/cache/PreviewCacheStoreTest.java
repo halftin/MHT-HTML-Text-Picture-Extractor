@@ -344,6 +344,59 @@ class PreviewCacheStoreTest {
         }
     }
 
+    // ---------- totalBytes（会话 12：磁盘占用提醒口径） ----------
+
+    @Test
+    void totalBytesSumsImagesAndMeta() throws IOException {
+        PreviewCacheStore store = store();
+        Path file = mhtFile();
+        PreviewCacheKey key = keyFor(file);
+        byte[] d1 = "12345".getBytes(StandardCharsets.UTF_8);
+        byte[] d2 = "1234567890".getBytes(StandardCharsets.UTF_8);
+        store.write(key, metaFor(key, List.of(
+                new PreviewCacheMeta.ImageEntry("images/0001.png", "cid:x", "a.png", "png", List.of()),
+                new PreviewCacheMeta.ImageEntry("images/0002.png", "cid:y", "b.png", "png", List.of()))),
+                imagesWriter(d1, d2));
+
+        long metaBytes = Files.size(store.dirFor(key).resolve("meta.json"));
+        assertEquals(d1.length + d2.length + metaBytes, store.totalBytes(),
+                "口径 = 全部图片 + meta.json（.complete 为空文件）");
+    }
+
+    @Test
+    void totalBytesIncludesTmpResidue() throws IOException {
+        PreviewCacheStore store = store();
+        Path file = mhtFile();
+        PreviewCacheKey key = keyFor(file);
+        store.write(key, metaFor(key, List.of()), imagesWriter(new byte[]{1, 2, 3, 4}));
+        long before = store.totalBytes();
+
+        // 写入中的 .tmp 目录同样真实占用磁盘 → 计入
+        Path tmp = store.root().resolve(key.toDirName() + PreviewCacheStore.TMP_SUFFIX);
+        Files.createDirectories(tmp);
+        Files.write(tmp.resolve("partial.bin"), new byte[]{5, 6, 7});
+
+        assertEquals(before + 3, store.totalBytes(), ".tmp 残留内容应计入磁盘占用");
+    }
+
+    @Test
+    void totalBytesZeroWhenRootMissing() throws IOException {
+        assertEquals(0, new PreviewCacheStore(tempDir.resolve("never-created")).totalBytes());
+    }
+
+    @Test
+    void totalBytesDecreasesAfterDelete() throws IOException {
+        PreviewCacheStore store = store();
+        Path file = mhtFile();
+        PreviewCacheKey key = keyFor(file);
+        store.write(key, metaFor(key, List.of()), imagesWriter(new byte[]{1, 2, 3, 4}));
+        assertTrue(store.totalBytes() > 0);
+
+        store.delete(key);
+
+        assertEquals(0, store.totalBytes(), "删除后磁盘占用应归零");
+    }
+
     // ---------- listKeys / deleteAll ----------
 
     @Test

@@ -374,6 +374,8 @@ public class MainController {
     private volatile Thread previewLoadThread = null;
     /** 退出清空已完成：二次 close 放行（规则 d） */
     private boolean shutdownCacheCleared = false;
+    /** 会话 12：磁盘占用提醒窗口引用（非模态）；新台阶到达时先关旧再弹新，防台阶连续跨越时窗口堆积 */
+    private Alert sizeAlertWindow = null;
     private boolean updatingAdjustCheck = false;
     /** 全选/全不选批量写入期间的联动抑制标记（F1） */
     private boolean updatingSelection = false;
@@ -569,6 +571,9 @@ public class MainController {
         // 6. 预览会话缓存（需求 2 会话 9）：启动扫孤儿（P7 崩溃恢复）；
         //    关窗清空处理器经 scene/window 装配后挂接（initialize 阶段 scene 尚未存在，App.start 稍后装配）
         previewCacheLifecycle.startupCleanup();
+        // 会话 12：磁盘占用提醒 hook（写盘成功且跨 10GiB 台阶时经 checkSizeAlert 触发；
+        // 在预览后台线程同步回调，这里换算 GiB 文案后回 FX 线程非模态弹窗）
+        previewCacheLifecycle.setSizeAlertHook(this::onSizeAlertStep);
         fileListView.sceneProperty().addListener((obs, oldScene, newScene) -> {
             if (newScene == null) {
                 return;
@@ -4769,6 +4774,8 @@ public class MainController {
             }
         });
         log.info("预览图片已落盘缓存：{}（{} 张）", item.name, images.size());
+        // 会话 12：写盘成功后检查磁盘占用台阶（命中路径不触发；检查在每项目写锁内，见 H12 取舍）
+        previewCacheLifecycle.checkSizeAlert();
         return meta;
     }
 
@@ -4932,6 +4939,29 @@ public class MainController {
     private void showAlert(Alert.AlertType type, String message) {
         Alert alert = new Alert(type, message, ButtonType.OK);
         alert.showAndWait();
+    }
+
+    /**
+     * 会话 12：磁盘占用跨台阶回调（在预览后台线程被 checkSizeAlert 同步调用）。
+     * 台阶序号换算 GiB、取当前实际占用后，回 FX 线程非模态弹窗（不阻断预览）。
+     */
+    private void onSizeAlertStep(int step) {
+        long stepGiB = step * PreviewCacheLifecycle.SIZE_ALERT_STEP_BYTES / (1024L * 1024 * 1024);
+        double actualGiB = previewCacheLifecycle.lastObservedTotalBytes() / (1024.0 * 1024 * 1024);
+        String message = String.format(
+                "预览缓存已占用约 %d GiB，当前实际 %.1f GiB（临时目录：%s）。"
+                        + "这只是提醒，不影响继续使用；关闭程序会自动清空该缓存。",
+                stepGiB, actualGiB, previewCacheLifecycle.store().root());
+        Platform.runLater(() -> showAlertNonModal(Alert.AlertType.INFORMATION, message));
+    }
+
+    /** 会话 12：非模态提醒弹窗（show() 不阻塞）；上一提醒未关则先关再弹，防台阶连续跨越时窗口堆积 */
+    private void showAlertNonModal(Alert.AlertType type, String message) {
+        if (sizeAlertWindow != null && sizeAlertWindow.isShowing()) {
+            sizeAlertWindow.close();
+        }
+        sizeAlertWindow = new Alert(type, message, ButtonType.OK);
+        sizeAlertWindow.show();
     }
 
     // ==================== Tracing Agent 演练 ====================

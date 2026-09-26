@@ -113,6 +113,25 @@ public class PreviewCacheStore {
         return Optional.of(meta);
     }
 
+    /**
+     * 当前缓存根目录的真实磁盘占用（字节）：遍历 root 下全部常规文件求和（会话 12 占用提醒用）。
+     * 口径：<b>含</b>写入中的 {@code *.tmp} 目录与孤儿残留——它们同样真实占用磁盘，提醒的是占用本身，
+     * 不区分「有效缓存」与「残留」；不计目录项自身（占比极小，忽略）。root 不存在返回 0。
+     * 并发写入/删除期间的遍历可能抛 IOException（如 NoSuchFileException），由调用方决定处置。
+     */
+    public long totalBytes() throws IOException {
+        if (!Files.isDirectory(root)) {
+            return 0;
+        }
+        long total = 0;
+        try (Stream<Path> walk = Files.walk(root)) {
+            for (Path p : walk.filter(Files::isRegularFile).toList()) {
+                total += Files.size(p);
+            }
+        }
+        return total;
+    }
+
     /** 删除某 key 的缓存目录；返回是否真的删掉了东西 */
     public boolean delete(PreviewCacheKey key) throws IOException {
         return deleteRecursivelyIfExists(dirFor(key));

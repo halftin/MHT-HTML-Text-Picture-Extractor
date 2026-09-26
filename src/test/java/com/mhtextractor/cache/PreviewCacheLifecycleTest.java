@@ -191,6 +191,127 @@ class PreviewCacheLifecycleTest {
         assertNotSame(l1, l3, "不同路径应返回不同锁");
     }
 
+    // ---------- 磁盘占用提醒（会话 12）：台阶注入小值（1024 字节），绕过无法真实写 10GiB 的限制 ----------
+
+    private PreviewCacheLifecycle lifecycleWithStep(long stepBytes) {
+        return new PreviewCacheLifecycle(new PreviewCacheStore(root), stepBytes);
+    }
+
+    /** 在缓存根写入 n 字节垃圾文件（totalBytes 只按常规文件求和，与目录布局无关） */
+    private void writePadBytes(int n) throws IOException {
+        Files.createDirectories(root);
+        Files.write(root.resolve("pad-" + n + "-" + System.nanoTime() + ".bin"), new byte[n]);
+    }
+
+    @Test
+    void sizeAlertStepDefaultIsTenGiB() {
+        assertEquals(10L * 1024 * 1024 * 1024, PreviewCacheLifecycle.SIZE_ALERT_STEP_BYTES);
+    }
+
+    @Test
+    void noAlertBelowStep() throws IOException {
+        PreviewCacheLifecycle small = lifecycleWithStep(1024);
+        AtomicInteger fired = new AtomicInteger();
+        small.setSizeAlertHook(s -> fired.incrementAndGet());
+        writePadBytes(1000);
+
+        small.checkSizeAlert();
+
+        assertEquals(0, fired.get(), "未跨台阶不应触发");
+    }
+
+    @Test
+    void alertFiresOnceWithCorrectStepOnCrossingOneStep() throws IOException {
+        PreviewCacheLifecycle small = lifecycleWithStep(1024);
+        AtomicInteger fired = new AtomicInteger();
+        AtomicInteger param = new AtomicInteger(-1);
+        small.setSizeAlertHook(s -> {
+            fired.incrementAndGet();
+            param.set(s);
+        });
+        writePadBytes(1300);
+
+        small.checkSizeAlert();
+
+        assertEquals(1, fired.get(), "跨一个台阶应触发一次");
+        assertEquals(1, param.get(), "参数 = 当前台阶序号");
+    }
+
+    @Test
+    void alertIdempotentWithinSameStep() throws IOException {
+        PreviewCacheLifecycle small = lifecycleWithStep(1024);
+        AtomicInteger fired = new AtomicInteger();
+        small.setSizeAlertHook(s -> fired.incrementAndGet());
+        writePadBytes(1300);
+
+        small.checkSizeAlert();
+        small.checkSizeAlert();
+        small.checkSizeAlert();
+
+        assertEquals(1, fired.get(), "同一台阶内重复调用不得重复触发");
+    }
+
+    @Test
+    void alertFiresOnceWhenCrossingMultipleSteps() throws IOException {
+        PreviewCacheLifecycle small = lifecycleWithStep(1024);
+        AtomicInteger fired = new AtomicInteger();
+        AtomicInteger param = new AtomicInteger(-1);
+        small.setSizeAlertHook(s -> {
+            fired.incrementAndGet();
+            param.set(s);
+        });
+        writePadBytes(3500);   // 一次写入跨 1、2、3 三个台阶
+
+        small.checkSizeAlert();
+
+        assertEquals(1, fired.get(), "一次跨越多个台阶只提醒一次");
+        assertEquals(3, param.get(), "参数应反映当前实际台阶");
+    }
+
+    @Test
+    void concurrentChecksFireOnlyOnce() throws Exception {
+        PreviewCacheLifecycle small = lifecycleWithStep(1024);
+        AtomicInteger fired = new AtomicInteger();
+        AtomicInteger param = new AtomicInteger(-1);
+        small.setSizeAlertHook(s -> {
+            fired.incrementAndGet();
+            param.set(s);
+        });
+        writePadBytes(2048);   // 当前台阶 = 2
+
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(16);
+        for (int i = 0; i < 16; i++) {
+            Thread t = new Thread(() -> {
+                try {
+                    start.await();
+                } catch (InterruptedException ignored) {
+                }
+                small.checkSizeAlert();
+                done.countDown();
+            }, "size-alert-" + i);
+            t.setDaemon(true);
+            t.start();
+        }
+        start.countDown();
+        done.await();
+
+        assertEquals(1, fired.get(), "并发同台阶调用只应触发一次（CAS 抢占）");
+        assertEquals(2, param.get());
+    }
+
+    @Test
+    void crossingWithoutHookAdvancesStepSilently() throws IOException {
+        PreviewCacheLifecycle small = lifecycleWithStep(1024);
+        writePadBytes(1500);
+        small.checkSizeAlert();   // 未注册 hook：只推进台阶，不抛异常
+
+        AtomicInteger fired = new AtomicInteger();
+        small.setSizeAlertHook(s -> fired.incrementAndGet());
+        small.checkSizeAlert();
+        assertEquals(0, fired.get(), "台阶已推进过：注册 hook 后同台阶不再补提醒");
+    }
+
     @Test
     void writeLockSerializesConcurrentWritersPerPath() throws Exception {
         AtomicInteger active = new AtomicInteger();
