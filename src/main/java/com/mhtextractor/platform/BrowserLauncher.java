@@ -3,13 +3,11 @@ package com.mhtextractor.platform;
 import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
 
-import java.awt.Desktop;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -58,7 +56,7 @@ public final class BrowserLauncher {
         if (openViewSourceNative(htmlFile)) {
             return true;
         }
-        Path page = SourceViewPage.writeSourceViewPage(htmlFile);
+        Path page = SourceViewPage.writeSourceViewPage(htmlFile, I18n.get("browser.sourceHtmlHead"));
         if (page == null) {
             return false;
         }
@@ -95,7 +93,7 @@ public final class BrowserLauncher {
 
 
 
-    /** 三级启动兜底：直接起浏览器 exe → cmd start → Desktop API，任一成功即返回 true */
+    /** 三级启动兜底：直接起浏览器 exe → cmd start → ShellExecute（rundll32），任一成功即返回 true */
     private static boolean launch(String url) {
         Optional<String> exe = BrowserDetector.detectDefaultBrowserExe();
         if (exe.isPresent() && runExe(exe.get(), url)) {
@@ -104,7 +102,7 @@ public final class BrowserLauncher {
         if (cmdStart(url)) {
             return true;
         }
-        return desktopBrowse(url);
+        return shellExecute(url);
     }
 
     /** 文件路径 → file URL（toASCIIString 自动百分号编码中文路径，不手工拼 file:///） */
@@ -136,18 +134,25 @@ public final class BrowserLauncher {
         }
     }
 
-    /** Desktop API 末位兜底（GraalVM native-image 下 AWT 支持有限，不保证可用） */
-    private static boolean desktopBrowse(String url) {
+    /**
+     * ShellExecute 末位兜底：经 {@code rundll32 url.dll,FileProtocolHandler} 交给 Windows 外壳打开。
+     *
+     * <p><b>步骤 7 行为变更（有意）</b>：原实现用 AWT {@code Desktop.getDesktop().browse(url)}。
+     * 但本项目目标是 GraalVM native EXE，而 native 对 AWT 支持有限（`CLAUDE.md` 记录过"把
+     * {@code Desktop.open} 换成 {@code Runtime.exec("explorer.exe")}"的同一处决策），
+     * 且 native 元数据里**没有注册任何 awt 条目** —— 保留 AWT 会让这一层在 native 下成为隐患。</p>
+     *
+     * <p>{@code rundll32 url.dll,FileProtocolHandler} 与 {@code Desktop.browse} 走的是
+     * <b>同一个 ShellExecute 机制</b>（都是把 URL 交给系统默认协议处理器），因此语义等价，
+     * 但完全不依赖 AWT。调用点、返回语义（成功 true / 失败 false 并记日志）均不变。</p>
+     */
+    private static boolean shellExecute(String url) {
         try {
-            if (!Desktop.isDesktopSupported()) {
-                log.warn("Desktop API 不可用");
-                return false;
-            }
-            Desktop.getDesktop().browse(URI.create(url));
-            log.info("已通过 Desktop 打开：{}", url);
+            new ProcessBuilder("rundll32", "url.dll,FileProtocolHandler", url).start();
+            log.info("已通过 ShellExecute 打开：{}", url);
             return true;
         } catch (Exception e) {
-            log.warn("Desktop.browse 打开失败：{}", url, e);
+            log.warn("ShellExecute 打开失败：{}", url, e);
             return false;
         }
     }

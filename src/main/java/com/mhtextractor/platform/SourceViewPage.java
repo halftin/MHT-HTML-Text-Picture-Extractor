@@ -1,6 +1,5 @@
 package com.mhtextractor.platform;
 
-import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -38,11 +37,16 @@ final class SourceViewPage {
     /**
      * 源码视图页：逐行渲染（行号栏 + 语法高亮 + 链接下划线），观感贴近 Edge/Chromium
      * 原生源码查看器。换行先归一化（\r\n / \r → \n），每行一条 .row，行号右对齐灰色栏。
+     *
+     * @param pageHeader 页头 HTML（由<b>调用方</b>提供：这一层做的是与文件系统/字符串打交道的
+     *                   基础设施工作，不应自己决定"用什么语言显示什么文案"。步骤 7 之前这里直接
+     *                   去取本地化文案，把 UI 文案决策带进了 platform 层 ——
+     *                   换 UI 框架 / 换语言时这一层会被迫跟着改，方向是反的。
      */
-    static Path writeSourceViewPage(Path indexHtml) {
+    static Path writeSourceViewPage(Path indexHtml, String pageHeader) {
         try {
             String html = Files.readString(indexHtml, StandardCharsets.UTF_8);
-            String pageHtml = I18n.get("browser.sourceHtmlHead")
+            String pageHtml = pageHeader
                     + "<style>"
                     + "body{margin:0;background:#fff;}"
                     + ".row{clear:both;font-family:Consolas,\"Courier New\",monospace;font-size:13px;line-height:1.5;}"

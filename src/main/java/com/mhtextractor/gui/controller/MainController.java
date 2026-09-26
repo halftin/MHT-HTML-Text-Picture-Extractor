@@ -107,7 +107,6 @@ import org.glavo.webp.WebPImage;
 import org.glavo.webp.WebPImageLoadOptions;
 import org.glavo.webp.javafx.WebPFXImage;
 
-import java.awt.Desktop;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -1449,8 +1448,9 @@ public class MainController {
                         "start \"\" explorer /select,\"" + f.getAbsolutePath() + "\"").start();
             } else if (dir != null && dir.exists()) {
                 log.warn("文件不存在，直接打开所在目录（不定位）：{}", it.path);
-                // 与"打开"同一机制（ShellExecute），提权环境下可靠
-                Desktop.getDesktop().open(dir);
+                // 步骤 7：去掉 AWT Desktop.open 改用 explorer.exe（native 对 AWT 支持有限，
+                // CLAUDE.md 有同一处决策记录，native 元数据也未注册 awt 条目）。
+                new ProcessBuilder("explorer.exe", dir.getAbsolutePath()).start();
             } else {
                 log.warn("打开所在文件夹失败：目录不存在 {}", dir == null ? it.path : dir.getAbsolutePath());
                 showAlert(Alert.AlertType.WARNING, ErrorCode.FILE_DIR_MISSING.message("path", it.path));
