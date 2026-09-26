@@ -196,7 +196,7 @@
                         </goals>
                         <configuration>
                             <test>
-                                com.mhtextractor.app.LayerBTest,com.mhtextractor.app.WorkspaceParamServiceTest,com.mhtextractor.app.ExtractionPreconditionsTest,com.mhtextractor.app.WorkspaceModelTest
+                                com.mhtextractor.app.LayerBTest,com.mhtextractor.app.WorkspaceParamServiceTest,com.mhtextractor.app.ExtractionPreconditionsTest,com.mhtextractor.app.WorkspaceModelTest,com.mhtextractor.app.StubUiAcceptanceTest
                             </test>
                             <!-- 标识"这是无头执行"：LayerBTest 据此自我断言 JavaFX 确实不在 classpath 上 -->
                             <systemPropertyVariables>

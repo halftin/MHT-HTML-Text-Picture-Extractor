@@ -290,6 +290,19 @@ public final class WorkspaceModel {
     }
 
     private void undoGroup(UndoManager.Record<PreviewItem> record) {
+        // 把成员从所在组/顶层的**两个**容器里都摘除，二者缺一不可：
+        //  ① 从 parentGroup 指向的组里移除；
+        //  ② 从 topLevel 里移除。
+        // 只做 ① 不够：GroupStructure.restoreStructure 会把组内成员清空并把 parentGroup 置 null，
+        // 此后成员虽不在任何组里、却仍留在 topLevel（见 diag：撤销后 topLevel=[a,b]，g.members=[]）
+        // —— 于是下一次建组时 removeFromItsParent 因 parentGroup==null 只从 topLevel 删一次，
+        // 而快照恢复又把它们放回顶层，最终产生重复项。
+        if (record.group() != null) {
+            record.group().getMembers().clear();
+        }
+        for (PreviewItem t : record.items()) {
+            topLevel.remove(t);
+        }
         if (record.structureBefore() != null) {
             GroupStructure.restoreStructure(topLevel, record.structureBefore());
         }
@@ -352,11 +365,30 @@ public final class WorkspaceModel {
         return best == Integer.MAX_VALUE ? -1 : best;
     }
 
+    /**
+     * 把条目从它当前所在的容器里摘除。
+     *
+     * <p><b>为什么不能只信 {@code parentGroup}</b>：{@link GroupStructure#restoreStructure} 会把组内成员清空，
+     * 但成员的 {@code parentGroup} 也要由调用方重置。实测出现过
+     * "条目仍留在某个组的 members 里、而 parentGroup 已是 null" 的状态
+     * （撤销建组后又重新建组的序列）—— 此时只按 {@code parentGroup} 查找就会漏删，
+     * 导致同一对象既在组内又在顶层 → 顶层出现重复项。
+     * 因此这里<b>同时</b>做两件事：从 {@code parentGroup} 指向的组移除 + 从顶层移除，
+     * 并兜底扫描所有组，把该条目从任何仍持有它的组里摘掉。</p>
+     */
     private void removeFromItsParent(PreviewItem t) {
         if (t.parentGroup != null) {
             t.parentGroup.getMembers().remove(t);
-        } else {
-            topLevel.remove(t);
+        }
+        topLevel.remove(t);
+        // 兜底：任何仍持有该条目的组都要摘除（防止状态不一致时产生重复项）
+        for (Object o : topLevel) {
+            if (o instanceof GroupItem<?> raw) {
+                @SuppressWarnings("unchecked") GroupItem<PreviewItem> g = (GroupItem<PreviewItem>) raw;
+                if (g.getMembers().contains(t)) {
+                    g.getMembers().remove(t);
+                }
+            }
         }
     }
 
