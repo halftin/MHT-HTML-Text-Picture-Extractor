@@ -295,54 +295,54 @@ public class MainController {
     };
 
     // ===== 顶部控制栏 =====
-    @FXML /* test-support */ ToggleGroup modeToggleGroup;
+    @FXML private ToggleGroup modeToggleGroup;
     @FXML /* test-support */ ToggleButton textModeToggle;
     @FXML /* test-support */ ToggleButton imageModeToggle;
     @FXML /* test-support */ TextField inputFolderField;
     @FXML /* test-support */ TextField outputFolderField;
-    @FXML /* test-support */ Button browseInputButton;
-    @FXML /* test-support */ Button browseOutputButton;
+    @FXML private Button browseInputButton;
+    @FXML private Button browseOutputButton;
 
     // ===== 预览工作区（左：列表） =====
-    @FXML /* test-support */ Label fileCountLabel;
+    @FXML private Label fileCountLabel;
     @FXML /* test-support */ CheckBox selectAllCheck;
-    @FXML /* test-support */ Label badgeHeaderLabel;
+    @FXML private Label badgeHeaderLabel;
     @FXML ListView<Object> fileListView;
-    @FXML /* test-support */ Pane dragOverlay;
+    @FXML private Pane dragOverlay;
     // ===== 列表按钮行（移除/撤销/合并为组/拆分组；后两者阶段 4/6 启用） =====
     @FXML /* test-support */ Button removeButton;
     @FXML /* test-support */ Button clearParamsButton;
     @FXML /* test-support */ Button undoButton;
-    @FXML /* test-support */ Button viewSourceButton;
+    @FXML private Button viewSourceButton;
     @FXML /* test-support */ Button groupButton;
     @FXML /* test-support */ Button ungroupButton;
     @FXML /* test-support */ Button applyGlobalButton;
 
     // ===== 预览工作区（右：信息区与内容区） =====
-    @FXML /* test-support */ Label modeLabel;
-    @FXML /* test-support */ Label outputModeLabel;
-    @FXML /* test-support */ Label outputNameLabel;
-    @FXML /* test-support */ HBox groupNameBox;
+    @FXML private Label modeLabel;
+    @FXML private Label outputModeLabel;
+    @FXML private Label outputNameLabel;
+    @FXML private HBox groupNameBox;
     @FXML /* test-support */ TextField groupNameField;
-    @FXML /* test-support */ Label titleInfoLabel;
-    @FXML /* test-support */ Label outputResultLabel;
+    @FXML private Label titleInfoLabel;
+    @FXML private Label outputResultLabel;
     @FXML CheckBox adjustCheck;
-    @FXML /* test-support */ TextArea textPreviewArea;
-    @FXML /* test-support */ VBox imagePreviewBox;
-    @FXML /* test-support */ Label imageHintLabel;
+    @FXML private TextArea textPreviewArea;
+    @FXML private VBox imagePreviewBox;
+    @FXML private Label imageHintLabel;
     /** 提取结果提示 banner（提取结果状态需求）：预览区顶部，选中含红条目时显示失败/跳过/警告详情 */
-    @FXML /* test-support */ Label extractResultBanner;
+    @FXML private Label extractResultBanner;
     @FXML Button previewEffectButton;
-    @FXML /* test-support */ Label renameNoteLabel;
-    @FXML /* test-support */ ScrollPane imageScrollPane;
-    @FXML /* test-support */ FlowPane thumbnailPane;
-    @FXML /* test-support */ Button paramSettingsButton;
+    @FXML private Label renameNoteLabel;
+    @FXML private ScrollPane imageScrollPane;
+    @FXML private FlowPane thumbnailPane;
+    @FXML private Button paramSettingsButton;
 
     // ===== 底部操作区 =====
     @FXML /* test-support */ ProgressBar progressBar;
     @FXML /* test-support */ Label statusLabel;
     @FXML /* test-support */ Button startButton;
-    @FXML /* test-support */ Button stopButton;
+    @FXML private Button stopButton;
     @FXML /* test-support */ LogTextArea logTextArea;
     @FXML /* test-support */ ToggleSwitch openFolderAfterCompleteCheck;
 

@@ -123,8 +123,14 @@ class ArchitectureTest {
      *
      * <p><b>注意</b>：这些成员仍是<b>包级</b>（不是 public），包外不可见；且逐个带标记，
      * 便于检索与回收。</p>
+     *
+     * <p><b>演进记录（步骤 1 阶段 A，2026-09-26）</b>：86 → <b>64</b>。
+     * 逐个核对 {@code FeatureExercise} 的引用后，有 <b>22 个 {@code @FXML} 控件字段从未被它引用</b>
+     * （并且全仓库其余源文件也零引用），因此改回 {@code private} 并摘除标记。
+     * 这些字段仍由 {@code FXMLLoader} 注入 —— 对 private 字段同样有效，GUI 自动化 30/30 未变。
+     * 剩下的 64 处才是"真的被测试夹具驱动"的暴露面。</p>
      */
-    private static final int TEST_SUPPORT_MARKER_MAX = 86;
+    private static final int TEST_SUPPORT_MARKER_MAX = 64;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {
