@@ -1,7 +1,5 @@
 package com.mhtextractor.util;
 
-import javafx.collections.ObservableList;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -99,7 +97,10 @@ public final class GroupStructure {
         for (M m : members) {
             topLevel.remove(m);
         }
-        group.getMembers().setAll(members);
+        // 会话 18 · E1.2：原 setAll（ObservableList，JavaFX）→ clear+addAll（等价整体替换）
+        List<M> current = group.getMembers();
+        current.clear();
+        current.addAll(members);
         topLevel.add(Math.max(0, Math.min(index, topLevel.size())), group);
     }
 
@@ -123,8 +124,11 @@ public final class GroupStructure {
         topLevel.clear();
         for (Object o : snapshot) {
             if (o instanceof GroupSnap<?> gs) {
-                ObservableList members = gs.group().getMembers();
-                members.setAll(gs.members());
+                // 会话 18 · E1.2：原用 ObservableList.setAll（JavaFX 依赖）；
+                // 成员列表已改回普通 List，clear+addAll 为等价替换（同样是整体替换并保持顺序）
+                List members = gs.group().getMembers();
+                members.clear();
+                members.addAll(gs.members());
                 topLevel.add(gs.group());
             } else {
                 topLevel.add(o);

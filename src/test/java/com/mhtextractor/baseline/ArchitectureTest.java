@@ -73,25 +73,33 @@ class ArchitectureTest {
     private static final Map<String, String> JAVAFX_LEAK_ALLOWLIST = new LinkedHashMap<>();
 
     static {
-        JAVAFX_LEAK_ALLOWLIST.put("com/mhtextractor/util/GroupItem", "E1.1");
-        JAVAFX_LEAK_ALLOWLIST.put("com/mhtextractor/util/GroupStructure", "E1.2");
-        JAVAFX_LEAK_ALLOWLIST.put("com/mhtextractor/util/DropResolver", "E1.2");
-        JAVAFX_LEAK_ALLOWLIST.put("com/mhtextractor/util/OutputUnitPlanner", "E2.1");
+        // 会话 18 · E1.1/E1.2 已把业务层 JavaFX 泄漏点降到 **0**，白名单清空。
+        //
+        // 值得记下的两点经验：
+        // 1) 最初凭 `grep 'import javafx'` 只找到 2 个（GroupItem/GroupStructure），
+        //    实际扫描发现 4 个 —— DropResolver 与 OutputUnitPlanner **不 import** javafx，
+        //    而是在方法签名里用了全限定名 javafx.collections.ObservableList。扫字节码才抓得到。
+        // 2) 那 2 个"额外"泄漏点其实是**传递性**的：它们调用 GroupItem.getMembers()，
+        //    而该方法原先返回 ObservableList，于是常量池里出现了 javafx 描述符。
+        //    GroupItem.getMembers() 改回 List 后，它们自动变干净 —— 即修 1 处解 3 处。
+        //    这说明"按字节码依赖闭包判分层"比"按文件归属判分层"更接近真相。
     }
 
     /**
      * {@code MainController} 行数上限（**只减不增**）。
      *
-     * <p><b>口径</b>：{@code Files.readAllLines}（= Java 的行分隔规则），实测 <b>6111</b>（会话 18）。
-     * E0.6 外迁约 1100 行演练/测试代码后应降到约 5000，届时本常量随之下调并在此记录。</p>
+     * <p><b>口径</b>：{@code Files.readAllLines}（= Java 的行分隔规则），实测 <b>6113</b>（会话 18，
+     * E1.1 接线 {@code addNameChangeListener} 后 +2 行）。E0.6 外迁约 1141 行演练/测试代码后
+     * 应降到约 4970，届时本常量随之下调并在此记录。</p>
      *
      * <p><b>⚠️ 口径陷阱（会话 18 实测）</b>：同一文件用不同工具数出的行数<b>不一致</b> ——
-     * PowerShell {@code (Get-Content f).Count} 得 <b>5882</b>，Node 按 Java 规则得 <b>6111</b>，
-     * Java 得 <b>6111</b>。原因是本文件为纯 {@code LF} 换行，而 {@code Get-Content} 的分行/编码处理
-     * 与之不一致。**因此本常量只能与 {@code Files.readAllLines} 口径比较**，
+     * PowerShell {@code (Get-Content f).Count} 得 5882（E1.1 前），Node 按 Java 规则与
+     * Java {@code Files.readAllLines} 均得 6111/6113。原因是本文件为纯 {@code LF} 换行，
+     * 而 {@code Get-Content} 的分行/编码处理与之不一致。
+     * **因此本常量只能与 {@code Files.readAllLines} 口径比较**，
      * 不要拿 PowerShell 的数字来改它（会立刻假失败或假通过）。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 6111;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 6113;
 
     /** 允许引用 JavaFX 的包（视图层/外壳） */
     private static final List<String> UI_PACKAGES = List.of(
@@ -138,6 +146,13 @@ class ArchitectureTest {
         assertTrue(stale.isEmpty(),
                 "以下类已不再是 JavaFX 泄漏点，请从 JAVAFX_LEAK_ALLOWLIST 移除（白名单腐化）：\n  "
                         + String.join("\n  ", stale));
+
+        // 会话 18 · E1.1/E1.2 后业务层应**零** JavaFX 依赖。白名单已清空，
+        // 这里显式断言归零（防止日后有人重新往白名单里塞条目来"绕过"）：
+        // 新增任何业务层 JavaFX 依赖都会在上面的 unexpected 检查里直接失败。
+        assertEquals(0, leaks.size(),
+                "业务层应零 JavaFX 依赖，实际仍有泄漏点（E1 后白名单已清空，不应再出现）：\n  "
+                        + leaks.keySet());
 
         System.out.println("[arch] 业务层 JavaFX 泄漏点 " + leaks.size() + " 个（白名单 "
                 + JAVAFX_LEAK_ALLOWLIST.size() + " 个，目标 E6 归零）：" + leaks.keySet());

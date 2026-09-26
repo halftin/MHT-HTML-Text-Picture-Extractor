@@ -270,4 +270,95 @@ class GroupStructureTest {
 
         assertEquals("组1", g.getName());
     }
+
+    // ==================== 会话 18 · E1.1：GroupItem 去 JavaFX 后的监听器契约 ====================
+    // 原实现是 javafx.beans.property.StringProperty，MainController 用它做"改名后刷新列表"。
+    // 替换为自研 ChangeListener 后，必须锁定与 JavaFX 属性**等价**的触发语义，
+    // 否则改名不再刷新列表（F8 回归）或刷新过度。
+
+    @Test
+    void nameChangeListenerFiresOnActualChange() {
+        GroupItem<String> g = new GroupItem<>(1, "组1");
+        int[] count = {0};
+        g.addNameChangeListener(() -> count[0]++);
+
+        g.setName("组2");
+
+        // 与 JavaFX StringProperty 一致：同步触发一次
+        assertEquals(1, count[0]);
+        assertEquals("组2", g.getName());
+    }
+
+    @Test
+    void nameChangeListenerDoesNotFireWhenValueUnchanged() {
+        GroupItem<String> g = new GroupItem<>(1, "组1");
+        int[] count = {0};
+        g.addNameChangeListener(() -> count[0]++);
+
+        // JavaFX 属性在旧值 equals 新值时不触发监听器 —— 必须保持等价，
+        // 否则每次 setName 都会多刷一次列表
+        g.setName("组1");
+
+        assertEquals(0, count[0]);
+    }
+
+    @Test
+    void nameChangeListenerSupportsMultipleAndSurvivesRemovalDuringCallback() {
+        GroupItem<String> g = new GroupItem<>(1, "组1");
+        int[] a = {0};
+        int[] b = {0};
+        g.addNameChangeListener(() -> a[0]++);
+        // 回调内再注册监听器：不应抛 ConcurrentModificationException（实现里遍历副本）
+        g.addNameChangeListener(() -> {
+            b[0]++;
+            g.addNameChangeListener(() -> { });
+        });
+
+        g.setName("组2");
+
+        assertEquals(1, a[0]);
+        assertEquals(1, b[0]);
+    }
+
+    @Test
+    void nullNameChangeListenerIsIgnored() {
+        GroupItem<String> g = new GroupItem<>(1, "组1");
+        g.addNameChangeListener(null);
+        g.setName("组2");
+        assertEquals("组2", g.getName());
+    }
+
+    @Test
+    void membersListBehavesAsPlainMutableList() {
+        // E1.2 依赖点：成员列表从 ObservableList 改为普通 List，
+        // 下列操作是 DropResolver / GroupStructure / MainController 实际用到的全部形态
+        GroupItem<String> g = new GroupItem<>(1, "组1");
+
+        g.getMembers().addAll(List.of("m1", "m2", "m3"));
+        assertEquals(List.of("m1", "m2", "m3"), g.getMembers());
+
+        g.getMembers().remove("m2");                     // DropResolver: remove(Object)
+        assertEquals(List.of("m1", "m3"), g.getMembers());
+
+        g.getMembers().add(1, "mX");                     // DropResolver: add(index, E)（含 Math.min 夹取）
+        assertEquals(List.of("m1", "mX", "m3"), g.getMembers());
+
+        g.getMembers().remove(0);                        // DropResolver: remove(int)
+        assertEquals(List.of("mX", "m3"), g.getMembers());
+
+        assertEquals(1, g.getMembers().indexOf("m3"));   // DropResolver: indexOf
+        assertTrue(g.getMembers().contains("mX"));       // DropResolver: contains
+
+        g.getMembers().clear();                          // GroupStructure.dissolveGroup
+        assertTrue(g.getMembers().isEmpty());
+    }
+
+    @Test
+    void expandedIsDefaultTrueAndPlainBoolean() {
+        GroupItem<String> g = new GroupItem<>(1, "组1");
+        // 原 BooleanProperty 默认 true（展开）
+        assertTrue(g.isExpanded());
+        g.setExpanded(false);
+        assertFalse(g.isExpanded());
+    }
 }

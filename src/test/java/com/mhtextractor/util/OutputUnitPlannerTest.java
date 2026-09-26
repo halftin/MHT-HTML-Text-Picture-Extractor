@@ -139,7 +139,10 @@ class OutputUnitPlannerTest {
         groupCfg.setSeparateFiles(false);
         groupCfg.setStartMarker("MARK");
         g.setTextParamsCache(groupCfg);
-        g.getMembers().addAll(item("x\\1.mht", "C:\\src"), item("x\\2.mht", "C:\\src"));
+        // 会话 18 · E1.1：GroupItem.getMembers() 由 ObservableList 改为普通 List。
+        // 原写法 addAll(item(...), item(...)) 依赖 ObservableList 特有的 varargs addAll(E...)，
+        // 普通 List 无该重载，故改为集合形式（语义完全一致）。
+        g.getMembers().addAll(List.of(item("x\\1.mht", "C:\\src"), item("x\\2.mht", "C:\\src")));
 
         List<OutputUnitPlanner.OutputUnit> units = plan(order(g), false, null, null);
         assertEquals(1, units.size());

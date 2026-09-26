@@ -906,7 +906,9 @@ public class MainController {
 
     /** 组名刷新监听注册（手动/自动建组共用；F8/RISK-11） */
     private void registerGroupNameRefresh(GroupItem<PreviewItem> group) {
-        group.nameProperty().addListener((obs, old, newVal) -> fileListView.refresh());
+        // 会话 18 · E1.1：GroupItem 已去 JavaFX 依赖，原 nameProperty().addListener(...)
+        // 改为等价的自研 ChangeListener（同步回调，语义一致）
+        group.addNameChangeListener(fileListView::refresh);
     }
 
     /** 全部组名集合（供自动建组唯一化使用） */
