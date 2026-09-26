@@ -23,6 +23,7 @@ import com.mhtextractor.processor.FileResult;
 import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.processor.PerFileOverrides;
 import com.mhtextractor.processor.TextBatchProcessor;
+import com.mhtextractor.util.ChangeListener;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
@@ -40,12 +41,6 @@ import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
 import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
-import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.ObjectProperty;
-import javafx.beans.property.SimpleBooleanProperty;
-import javafx.beans.property.SimpleObjectProperty;
-import javafx.beans.property.SimpleStringProperty;
-import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
@@ -231,16 +226,60 @@ public class MainController {
         final LocalDateTime modifiedTime;
         /** 输入来源目录：随导入写入，不随输入目录切换变化（F3/R1） */
         final String sourceFolder;
-        final ObjectProperty<Status> status = new SimpleObjectProperty<>(Status.WAITING);
-        final StringProperty errorMsg = new SimpleStringProperty("");
-        final BooleanProperty chapterEnabled = new SimpleBooleanProperty(true);
+        // ============ 会话 18 · E1.3a：以下原为 JavaFX 属性，已改为普通字段 ============
+        // 理由：本项目要出 GraalVM native EXE，且目标是把模型层做到"换 UI 框架可复用"。
+        // 这 5 个属性原先只被当作普通可变值使用 —— 全项目对它们的 observable 用法仅 3 处
+        // （见 selectedChangeListeners 注释），故改为普通字段 + 自研 ChangeListener 是等价替换。
+        Status status = Status.WAITING;
+        String errorMsg = "";
+        boolean chapterEnabled = true;
         /** 复选框勾选状态（F1）：默认未选中，仅用于批量选择，不影响提取名单 */
-        final BooleanProperty selected = new SimpleBooleanProperty(false);
+        boolean selected = false;
+        /**
+         * 勾选变更监听器（懒初始化）。替换原 {@code BooleanProperty selected} 的 observable 语义 ——
+         * 原用途仅两处：① initialize 注册 onSelectionChanged()；② 单元格 checkBox 双向绑定。
+         * 两者都只关心"值变了"，不需要属性名/旧值，故用极简回调接口（与 GroupItem 同一套）。
+         * 仅在值确实变化时通知，与 JavaFX 属性 set 的语义一致。
+         */
+        private java.util.List<ChangeListener> selectedChangeListeners;
+
+        /** 注册勾选变更监听器（同步回调；与替换前的 BooleanProperty 行为等价） */
+        void addSelectedChangeListener(ChangeListener listener) {
+            if (listener == null) return;
+            if (selectedChangeListeners == null) {
+                selectedChangeListeners = new ArrayList<>(1);
+            }
+            selectedChangeListeners.add(listener);
+        }
+
+        /** 设置勾选状态；仅在值确实变化时通知监听器（与 JavaFX 属性 set 语义一致） */
+        void setSelected(boolean value) {
+            if (this.selected == value) return;
+            this.selected = value;
+            if (selectedChangeListeners != null) {
+                for (ChangeListener l : new ArrayList<>(selectedChangeListeners)) {
+                    l.onValueChanged();
+                }
+            }
+        }
+
+        /**
+         * 移除勾选变更监听器。
+         *
+         * <p>替换原 {@code BooleanProperty} 的 {@code unbindBidirectional} —— 单元格复用（{@code PreviewListCell}）
+         * 必须能切断旧条目的联动，否则会串值/泄漏监听器。</p>
+         */
+        void removeSelectedChangeListener(ChangeListener listener) {
+            if (selectedChangeListeners != null && listener != null) {
+                selectedChangeListeners.remove(listener);
+            }
+        }
+
         /** 移除标记（F2）：隐藏式移除——不实际从列表删除，仅隐藏并排除在序号/徽标/提取名单外 */
         boolean removed = false;
         /** 所属组（F5）：null = 顶层未分组；由 rebuildDisplay 统一维护，勿手工赋值（volatile：预解析线程读取） */
         volatile GroupItem<PreviewItem> parentGroup = null;
-        final StringProperty badge = new SimpleStringProperty(null);
+        String badge = null;
         volatile String cachedText;
         volatile String cachedTitle;
         volatile List<ImageExtractor.ImageData> cachedImages;
@@ -509,7 +548,9 @@ public class MainController {
                 if (change.wasAdded()) {
                     for (Object o : change.getAddedSubList()) {
                         if (o instanceof PreviewItem it && selectionListened.add(it)) {
-                            it.selected.addListener((obs2, a, b) -> onSelectionChanged());
+                            // 会话 18 · E1.3a：原 it.selected.addListener((obs2,a,b) -> ...)
+                            // 改为等价的自研 ChangeListener（同步回调；仅值变化时触发）
+                            it.addSelectedChangeListener(this::onSelectionChanged);
                         }
                     }
                 }
@@ -528,7 +569,7 @@ public class MainController {
                 return;
             }
             if (isTextMode()) {
-                it.chapterEnabled.set(newVal);
+                it.chapterEnabled = newVal;
                 recomputeBadges();
             }
         });
@@ -1424,11 +1465,11 @@ public class MainController {
         updatingSelection = true;
         try {
             if (contextTarget instanceof PreviewItem it && !it.removed) {
-                it.selected.set(true);
+                it.setSelected(true);
             } else if (contextTarget instanceof GroupItem<?> g) {
                 for (PreviewItem m : ((GroupItem<PreviewItem>) g).getMembers()) {
                     if (!m.removed) {
-                        m.selected.set(true);
+                        m.setSelected(true);
                     }
                 }
             }
@@ -1455,7 +1496,7 @@ public class MainController {
         updatingSelection = true;
         try {
             for (PreviewItem t : targets) {
-                t.selected.set(true);
+                t.setSelected(true);
             }
         } finally {
             updatingSelection = false;
@@ -1707,7 +1748,7 @@ public class MainController {
     /** 勾选集合优先 → 回退对象（与"移除"的勾选优先拍板一致） */
     private List<Object> resolveClearTargets(Object fallback) {
         List<PreviewItem> checked = allVisibleItems().stream()
-                .filter(i -> i.selected.get()).toList();
+                .filter(i -> i.selected).toList();
         if (!checked.isEmpty()) {
             return new ArrayList<>(checked);
         }
@@ -1846,8 +1887,8 @@ public class MainController {
                 return;
             }
         }
-        if (sel instanceof PreviewItem it && it.status.get() == Status.FAILED) {
-            extractResultBanner.setText(I18n.get("extract.parseFailed") + it.errorMsg.get());
+        if (sel instanceof PreviewItem it && it.status == Status.FAILED) {
+            extractResultBanner.setText(I18n.get("extract.parseFailed") + it.errorMsg);
             extractResultBanner.setVisible(true);
             extractResultBanner.setManaged(true);
             return;
@@ -1882,7 +1923,7 @@ public class MainController {
             m.cachedTitle = null;
             m.cachedImages = null;
             m.cachedThumbs = null;
-            m.status.set(Status.WAITING);
+            m.status = Status.WAITING;
         }
         Object sel = currentSelection();
         updateBadgeHeader();
@@ -1898,7 +1939,7 @@ public class MainController {
             preParseItems(new ArrayList<>(affected), parseToken);
         }
         List<PreviewItem> interrupted = allVisibleItems().stream()
-                .filter(i -> i.status.get() == Status.WAITING && !affected.contains(i)).toList();
+                .filter(i -> i.status == Status.WAITING && !affected.contains(i)).toList();
         if (!interrupted.isEmpty()) {
             preParseItems(new ArrayList<>(interrupted), parseToken);
         }
@@ -1978,7 +2019,7 @@ public class MainController {
     private Map<String, PerFileOverrides> overrides() {
         Map<String, PerFileOverrides> map = new LinkedHashMap<>();
         for (PreviewItem item : allVisibleItems()) {
-            map.put(item.path, new PerFileOverrides(item.chapterEnabled.get()));
+            map.put(item.path, new PerFileOverrides(item.chapterEnabled));
         }
         return map;
     }
@@ -2232,6 +2273,14 @@ public class MainController {
         private final Region intoOverlay = new Region();
         private final FontIcon arrowIcon = new FontIcon();
         private PreviewItem boundItem;
+        /**
+         * 当前单元格与条目勾选状态的联动监听器（会话 18 · E1.3a）。
+         *
+         * <p>替换原 {@code bindBidirectional} 的"可解绑"能力：单元格复用时用
+         * {@link PreviewItem#removeSelectedChangeListener(ChangeListener)} 解挂，
+         * 再为新的条目建立新联动 —— 等价于原先的 {@code unbindBidirectional} → {@code bindBidirectional}。</p>
+         */
+        private ChangeListener selectedMirror;
 
         PreviewListCell() {
             // 内边距与列头 HBox 一致（10px 水平），保证列对齐
@@ -2317,7 +2366,12 @@ public class MainController {
         protected void updateItem(Object item, boolean empty) {
             super.updateItem(item, empty);
             if (boundItem != null) {
-                checkBox.selectedProperty().unbindBidirectional(boundItem.selected);
+                // 会话 18 · E1.3a：原 checkBox.selectedProperty().unbindBidirectional(boundItem.selected)
+                // 现改为解挂自研监听器（等价：切断复选框与该条目的联动，避免单元格复用时串值）
+                if (selectedMirror != null) {
+                    boundItem.removeSelectedChangeListener(selectedMirror);
+                    selectedMirror = null;
+                }
                 boundItem = null;
             }
             checkBox.setOnAction(null);
@@ -2374,7 +2428,7 @@ public class MainController {
             checkBox.setScaleY(0.75);
             int total = visibleMemberCount(g);
             int selected = (int) g.getMembers().stream()
-                    .filter(m -> !m.removed && m.selected.get()).count();
+                    .filter(m -> !m.removed && m.selected).count();
             SelectionState.TriState state = SelectionState.computeState(selected, total);
             checkBox.setSelected(state == SelectionState.TriState.ALL);
             checkBox.setIndeterminate(state == SelectionState.TriState.SOME);
@@ -2420,10 +2474,17 @@ public class MainController {
             checkBox.setMaxWidth(CHECK_COL_WIDTH);
             checkBox.setScaleX(1.0);
             checkBox.setScaleY(1.0);
-            // 单元格可能刚渲染过组条目，先按项目勾选状态对齐再绑定，避免双向绑定初始同步串值
-            checkBox.setSelected(it.selected.get());
+            // 单元格可能刚渲染过组条目，先按项目勾选状态对齐再建立联动，避免初始同步串值
+            checkBox.setSelected(it.selected);
             checkBox.setIndeterminate(false);
-            checkBox.selectedProperty().bindBidirectional(it.selected);
+            // 会话 18 · E1.3a：原 checkBox.selectedProperty().bindBidirectional(it.selected)
+            // 改为两条单向绑定，语义与双向绑定等价且更清晰：
+            //   ① 用户点击复选框 → 写回条目勾选状态（经 setSelected 触发 onSelectionChanged）
+            //   ② 条目勾选状态被程序修改 → 回写复选框显示
+            // 单元格复用时靠上面的解挂切断旧联动（原先靠 unbindBidirectional）。
+            checkBox.setOnAction(e -> it.setSelected(checkBox.isSelected()));
+            selectedMirror = () -> checkBox.setSelected(it.selected);
+            it.addSelectedChangeListener(selectedMirror);
             boundItem = it;
             arrowLabel.setVisible(false);
             arrowLabel.setManaged(false);
@@ -2438,13 +2499,13 @@ public class MainController {
             posLabel.setText(pos + ".");
             nameLabel.setPadding(inGroup ? new Insets(0, 0, 0, 16) : Insets.EMPTY);
             nameLabel.setText(it.name);
-            statusLabel.setText(switch (it.status.get()) {
+            statusLabel.setText(switch (it.status) {
                 case WAITING -> "⏳";
                 case READY -> "✅";
                 case EMPTY -> "⚠️";
                 case FAILED -> "❌";
             });
-            String badge = it.badge.get();
+            String badge = it.badge;
             if (badge == null) {
                 badgeLabel.setText("");
                 badgeLabel.setStyle("");
@@ -2460,12 +2521,12 @@ public class MainController {
                         : extractOutcomePaint(it.extractOutcome)));
                 setTooltip(it.extractDetail == null || it.extractDetail.isEmpty()
                         ? null : new Tooltip(it.extractDetail));
-            } else if (it.status.get() == Status.FAILED) {
+            } else if (it.status == Status.FAILED) {
                 setStyle(isSelected ? FAILED_SELECTED_ROW_STYLE : FAILED_ROW_STYLE);
-                setTooltip(new Tooltip(it.errorMsg.get()));
+                setTooltip(new Tooltip(it.errorMsg));
             } else {
                 setStyle(itemParamStyle(it, isSelected));
-                setTooltip(it.status.get() == Status.EMPTY
+                setTooltip(it.status == Status.EMPTY
                         ? new Tooltip(I18n.get("preview.emptyContent")) : null);
             }
             // 深色底需白字（-fx-text-background-color 不跨节点继承，直接设 label 填充色）：
@@ -2474,7 +2535,7 @@ public class MainController {
                     || it.extractOutcome == ExtractOutcome.SKIPPED
                     || it.extractOutcome == ExtractOutcome.SUCCESS_WARNED)
                     || (it.extractOutcome == ExtractOutcome.NONE
-                            && it.status.get() != Status.FAILED
+                            && it.status != Status.FAILED
                             && ParamScope.backgroundStatus(it.parentGroup,
                                     it.textItemParams, it.imageItemParams, imageModeToggle.isSelected(),
                                     textParamsCache, imageParamsCache) == ParamScope.Status.GLOBAL);
@@ -2979,7 +3040,7 @@ public class MainController {
         it.cachedImages = null;
         it.cachedThumbs = null;
         it.cachedMeta = null;
-        it.status.set(Status.WAITING);
+        it.status = Status.WAITING;
     }
 
     // ==================== 列表复选框（F1） ====================
@@ -2992,7 +3053,7 @@ public class MainController {
         boolean target = SelectionState.computeToggleTarget(currentSelectionState());
         updatingSelection = true;
         for (PreviewItem item : allVisibleItems()) {
-            item.selected.set(target);
+            item.setSelected(target);
         }
         updatingSelection = false;
         refreshSelectionUi();
@@ -3047,7 +3108,7 @@ public class MainController {
             return;
         }
         if (e.isControlDown() && !e.isShiftDown()) {
-            it.selected.set(!it.selected.get());
+            it.setSelected(!it.selected);
             selectionAnchor = it;
             refreshSelectionUi();
             updateListButtons();
@@ -3085,11 +3146,11 @@ public class MainController {
     /** 行的"完全勾选"判定：项目行 = 自身勾选；组行 = 全部有效成员已勾选 */
     private boolean isRowFullyChecked(Object o) {
         if (o instanceof PreviewItem it) {
-            return it.selected.get();
+            return it.selected;
         }
         if (o instanceof GroupItem<?> g) {
             for (Object m : ((GroupItem<PreviewItem>) g).getMembers()) {
-                if (!(m instanceof PreviewItem p) || (!p.removed && !p.selected.get())) {
+                if (!(m instanceof PreviewItem p) || (!p.removed && !p.selected)) {
                     return false;
                 }
             }
@@ -3101,11 +3162,11 @@ public class MainController {
     /** 区间内行设置勾选值：项目行设自身；组行设全部有效成员 */
     private void setRangeRow(Object o, boolean target) {
         if (o instanceof PreviewItem it && !it.removed) {
-            it.selected.set(target);
+            it.setSelected(target);
         } else if (o instanceof GroupItem<?> g) {
             for (Object m : ((GroupItem<PreviewItem>) g).getMembers()) {
                 if (m instanceof PreviewItem p && !p.removed) {
-                    p.selected.set(target);
+                    p.setSelected(target);
                 }
             }
         }
@@ -3131,7 +3192,7 @@ public class MainController {
             }
         } else if (item instanceof PreviewItem it && !it.removed) {
             if (e.getX() >= 50) {
-                it.selected.set(!it.selected.get());
+                it.setSelected(!it.selected);
                 selectionAnchor = it;
             }
         }
@@ -3141,7 +3202,7 @@ public class MainController {
     private SelectionState.TriState currentSelectionState() {
         List<PreviewItem> vis = allVisibleItems();
         int total = vis.size();
-        int selected = (int) vis.stream().filter(i -> i.selected.get()).count();
+        int selected = (int) vis.stream().filter(i -> i.selected).count();
         return SelectionState.computeState(selected, total);
     }
 
@@ -3255,7 +3316,7 @@ public class MainController {
     private void updateListButtons() {
         removeButton.setDisable(visibleCount() == 0);
         undoButton.setDisable(undoManager.isEmpty());
-        boolean anyChecked = allVisibleItems().stream().anyMatch(i -> i.selected.get());
+        boolean anyChecked = allVisibleItems().stream().anyMatch(i -> i.selected);
         Object sel = fileListView.getSelectionModel().getSelectedItem();
         boolean selItem = sel instanceof PreviewItem it && !it.removed;
         groupButton.setDisable(!anyChecked && !selItem);
@@ -3265,7 +3326,7 @@ public class MainController {
         applyGlobalButton.setDisable(!hasIndependentParams(sel));
         // 清除参数拍板 Q3：勾选集合任一目标带参数（无勾选 → 单选目标）即启用
         boolean anyClearable = anyChecked
-                ? allVisibleItems().stream().filter(i -> i.selected.get())
+                ? allVisibleItems().stream().filter(i -> i.selected)
                         .anyMatch(this::hasIndependentParams)
                 : hasIndependentParams(sel);
         clearParamsButton.setDisable(!anyClearable);
@@ -3304,7 +3365,7 @@ public class MainController {
         }
         // R5：有复选框勾选时按勾选集合移除（优先于当前选中项，含组内成员）
         List<PreviewItem> targets = allVisibleItems().stream()
-                .filter(i -> i.selected.get()).toList();
+                .filter(i -> i.selected).toList();
         Object sel = fileListView.getSelectionModel().getSelectedItem();
         // D7：无勾选且选中组条目 → 整组移除（组名/参数随组对象保留在撤销记录中）
         if (targets.isEmpty() && sel instanceof GroupItem<?> g) {
@@ -3366,7 +3427,7 @@ public class MainController {
         int selIndex = displayItems.indexOf(sel);
         for (PreviewItem t : targets) {
             t.removed = true;
-            t.selected.set(false);
+            t.setSelected(false);
         }
         // 规则 (c)：从列表移除 → 删该项目缓存目录
         previewCacheLifecycle.onItemsRemoved(targets.stream().map(t -> t.path).toList());
@@ -3403,7 +3464,7 @@ public class MainController {
         List<PreviewItem> members = new ArrayList<>(group.getMembers());
         for (PreviewItem m : members) {
             m.removed = true;
-            m.selected.set(false);
+            m.setSelected(false);
         }
         // 规则 (c)：整组移除 → 删组内成员缓存目录
         previewCacheLifecycle.onItemsRemoved(members.stream().map(m -> m.path).toList());
@@ -3450,7 +3511,7 @@ public class MainController {
             case REMOVE, REMOVE_GROUP -> {
                 for (PreviewItem it : record.items()) {
                     it.removed = false;
-                    it.selected.set(false);
+                    it.setSelected(false);
                 }
                 // 销毁的空组/整组按记录的原顶层索引恢复（降序记录，直接按序插回）
                 for (int k = 0; k < record.destroyedGroups().size(); k++) {
@@ -3465,7 +3526,7 @@ public class MainController {
                 boolean selRemoved = sel != null && record.items().contains(sel);
                 for (PreviewItem it : record.items()) {
                     it.removed = true;
-                    it.selected.set(false);
+                    it.setSelected(false);
                     // 防遗漏：导入项若已进入组（组内成员），一并从成员列表移除
                     GroupItem<PreviewItem> pg = it.parentGroup;
                     if (pg != null) {
@@ -3714,7 +3775,7 @@ public class MainController {
             return;
         }
         List<PreviewItem> targets = allVisibleItems().stream()
-                .filter(i -> i.selected.get()).toList();
+                .filter(i -> i.selected).toList();
         Object sel = fileListView.getSelectionModel().getSelectedItem();
         if (targets.isEmpty()) {
             if (sel instanceof PreviewItem it && !it.removed) {
@@ -3768,7 +3829,7 @@ public class MainController {
         updatingSelection = true;
         try {
             for (PreviewItem t : targets) {
-                t.selected.set(false);
+                t.setSelected(false);
             }
         } finally {
             updatingSelection = false;
@@ -3816,13 +3877,13 @@ public class MainController {
         }
         int total = visibleMemberCount(g);
         int selected = (int) g.getMembers().stream()
-                .filter(m -> !m.removed && m.selected.get()).count();
+                .filter(m -> !m.removed && m.selected).count();
         boolean target = SelectionState.computeToggleTarget(
                 SelectionState.computeState(selected, total));
         updatingSelection = true;
         for (PreviewItem m : g.getMembers()) {
             if (!m.removed) {
-                m.selected.set(target);
+                m.setSelected(target);
             }
         }
         updatingSelection = false;
@@ -4199,16 +4260,16 @@ public class MainController {
     /** 单项徽标赋值：按该条目生效参数判定章节编号（组参数可独立开关）；章节覆盖关闭或未解析完成时不占编号 */
     private int assignBadge(PreviewItem it, int n) {
         if (it.removed) {
-            it.badge.set(null);
+            it.badge = null;
             return n;
         }
         AppConfig eff = effectiveForObject(it);
         boolean numbering = isTextMode() && eff != null && eff.isAddChapterNumber();
-        if (numbering && it.status.get() == Status.READY && it.chapterEnabled.get()) {
-            it.badge.set(String.valueOf(n));
+        if (numbering && it.status == Status.READY && it.chapterEnabled) {
+            it.badge = String.valueOf(n);
             return n + 1;
         }
-        it.badge.set(null);
+        it.badge = null;
         return n;
     }
 
@@ -4223,7 +4284,7 @@ public class MainController {
             PreviewItem it = (PreviewItem) item;
             adjustCheck.setText(I18n.get("params.addChapterNumbers"));
             updatingAdjustCheck = true;
-            adjustCheck.setSelected(it.chapterEnabled.get());
+            adjustCheck.setSelected(it.chapterEnabled);
             updatingAdjustCheck = false;
         }
         boolean resultVisible = !isTextMode() && eff != null && isItem;
@@ -4280,7 +4341,7 @@ public class MainController {
             return;
         }
         if (showTitle) {
-            switch (it.status.get()) {
+            switch (it.status) {
                 case WAITING -> titleInfoLabel.setText(I18n.get("preview.titleParsing"));
                 case FAILED, EMPTY -> titleInfoLabel.setText(I18n.get("preview.titleNone"));
                 case READY -> titleInfoLabel.setText(it.cachedTitle != null
@@ -4314,7 +4375,7 @@ public class MainController {
     private String separateDirName(PreviewItem item) {
         AppConfig params = effectiveForObject(item);
         if (params != null && params.isEnableNameExtraction()) {
-            if (item.status.get() == Status.WAITING) {
+            if (item.status == Status.WAITING) {
                 return I18n.get("preview.parsing");
             }
             if (item.cachedTitle != null) {
@@ -4329,7 +4390,7 @@ public class MainController {
         if (params != null && params.isEnableNameExtraction()) {
             PreviewItem first = allVisibleItems().stream().findFirst().orElse(null);
             if (first != null) {
-                if (first.status.get() == Status.WAITING) {
+                if (first.status == Status.WAITING) {
                     return I18n.get("preview.parsing");
                 }
                 if (first.cachedTitle != null) {
@@ -4388,9 +4449,9 @@ public class MainController {
                 textPreviewArea.setText(HINT_NEED_PARAMS);
                 return;
             }
-            switch (it.status.get()) {
+            switch (it.status) {
                 case WAITING -> textPreviewArea.setText(I18n.get("preview.imageParsing"));
-                case FAILED -> textPreviewArea.setText(I18n.get("preview.parseFailed") + it.errorMsg.get());
+                case FAILED -> textPreviewArea.setText(I18n.get("preview.parseFailed") + it.errorMsg);
                 case EMPTY -> textPreviewArea.setText(I18n.get("preview.emptyContentShort"));
                 case READY -> renderTextPreview(it);
             }
@@ -4407,8 +4468,8 @@ public class MainController {
                 resetImageArea(HINT_NEED_PARAMS, false);
                 return;
             }
-            if (it.status.get() == Status.FAILED) {
-                imageHintLabel.setText(I18n.get("preview.parseFailed") + it.errorMsg.get());
+            if (it.status == Status.FAILED) {
+                imageHintLabel.setText(I18n.get("preview.parseFailed") + it.errorMsg);
                 imageHintLabel.setVisible(true);
                 previewEffectButton.setVisible(true);
                 previewEffectButton.setDisable(true);
@@ -4697,7 +4758,7 @@ public class MainController {
                     item.cachedImages = null;
                     if (meta.images().isEmpty()) {
                         // 全量解析确认无图片 → 空内容标记
-                        item.status.set(Status.EMPTY);
+                        item.status = Status.EMPTY;
                         fileListView.refresh();
                     }
                     renderThumbnails(item);
@@ -4873,8 +4934,8 @@ public class MainController {
             if (token != parseToken) {
                 return;
             }
-            item.status.set(st);
-            item.errorMsg.set(err == null ? "" : err);
+            item.status = st;
+            item.errorMsg = err == null ? "" : err;
             if (item.removed) {
                 // 已移除项：状态已记录（撤销恢复后可见），跳过 UI 刷新
                 return;
@@ -4912,7 +4973,7 @@ public class MainController {
         List<PreviewItem> vis = allVisibleItems().stream()
                 .filter(i -> effectiveForObject(i) != null).toList();
         long total = vis.size();
-        long done = vis.stream().filter(i -> i.status.get() != Status.WAITING).count();
+        long done = vis.stream().filter(i -> i.status != Status.WAITING).count();
         if (total == 0) {
             progressBar.setVisible(false);   // 全部无生效参数：不预解析，不动状态栏文案
             setProgressBarActivity(null);
@@ -5160,7 +5221,7 @@ public class MainController {
             // 部分勾选 → 移除（不弹确认框）→ 撤销移除 → 撤销两次增量导入
             List<PreviewItem> vis = allVisibleItems();
             if (!vis.isEmpty()) {
-                vis.get(0).selected.set(true);
+                vis.get(0).setSelected(true);
                 Thread.sleep(200);
                 removeButton.fire();
                 Thread.sleep(300);
@@ -5185,16 +5246,16 @@ public class MainController {
             Thread.sleep(1500);
             List<PreviewItem> vis = allVisibleItems();
             if (vis.size() >= 4) {
-                allVisibleItems().forEach(i -> i.selected.set(false));
-                vis.get(0).selected.set(true);
-                vis.get(1).selected.set(true);
+                allVisibleItems().forEach(i -> i.setSelected(false));
+                vis.get(0).setSelected(true);
+                vis.get(1).setSelected(true);
                 groupButton.fire();
                 Thread.sleep(400);
-                allVisibleItems().forEach(i -> i.selected.set(false));
+                allVisibleItems().forEach(i -> i.setSelected(false));
                 List<PreviewItem> tops = allVisibleItems().stream()
                         .filter(i -> i.parentGroup == null).toList();
-                tops.get(0).selected.set(true);
-                tops.get(1).selected.set(true);
+                tops.get(0).setSelected(true);
+                tops.get(1).setSelected(true);
                 groupButton.fire();
                 Thread.sleep(400);
                 List<GroupItem<PreviewItem>> groups = topLevelGroups();
@@ -5254,16 +5315,16 @@ public class MainController {
         try {
             List<PreviewItem> vis = allVisibleItems();
             if (vis.size() >= 4) {
-                allVisibleItems().forEach(i -> i.selected.set(false));
-                vis.get(0).selected.set(true);
-                vis.get(1).selected.set(true);
+                allVisibleItems().forEach(i -> i.setSelected(false));
+                vis.get(0).setSelected(true);
+                vis.get(1).setSelected(true);
                 groupButton.fire();
                 Thread.sleep(400);
-                allVisibleItems().forEach(i -> i.selected.set(false));
+                allVisibleItems().forEach(i -> i.setSelected(false));
                 List<PreviewItem> tops = allVisibleItems().stream()
                         .filter(i -> i.parentGroup == null).toList();
-                tops.get(0).selected.set(true);
-                tops.get(1).selected.set(true);
+                tops.get(0).setSelected(true);
+                tops.get(1).setSelected(true);
                 groupButton.fire();
                 Thread.sleep(400);
                 List<GroupItem<PreviewItem>> groups = topLevelGroups();
@@ -5584,17 +5645,17 @@ public class MainController {
 
             // 复选框列头全选/全不选（三态联动）
             try { selectAllCheck.fire(); Thread.sleep(200);
-                long sel = allVisibleItems().stream().filter(i -> i.selected.get()).count();
+                long sel = allVisibleItems().stream().filter(i -> i.selected).count();
                 if (sel != visibleCount()) { throw new IllegalStateException("全选未生效: " + sel); }
                 selectAllCheck.fire(); Thread.sleep(200);
-                sel = allVisibleItems().stream().filter(i -> i.selected.get()).count();
+                sel = allVisibleItems().stream().filter(i -> i.selected).count();
                 if (sel != 0) { throw new IllegalStateException("全不选未生效: " + sel); }
                 out.println("[PASS] Select-all checkbox tri-state"); p++;
             } catch (Exception e) { out.println("[FAIL] Select-all checkbox: " + e.getMessage()); f++; }
 
             // 移除 + 撤销（部分勾选不弹确认框）
             try { List<PreviewItem> vis = allVisibleItems();
-                vis.get(0).selected.set(true); Thread.sleep(200);
+                vis.get(0).setSelected(true); Thread.sleep(200);
                 removeButton.fire(); Thread.sleep(300);
                 if (vis.get(0).removed != true) { throw new IllegalStateException("移除未生效"); }
                 undoButton.fire(); Thread.sleep(300);
@@ -5604,8 +5665,8 @@ public class MainController {
 
             // 合并为组 + 组名编辑 + 组参数 + 拆分组 + 撤销
             try { List<PreviewItem> vis = allVisibleItems();
-                allVisibleItems().forEach(i -> i.selected.set(false));
-                vis.get(0).selected.set(true); vis.get(1).selected.set(true);
+                allVisibleItems().forEach(i -> i.setSelected(false));
+                vis.get(0).setSelected(true); vis.get(1).setSelected(true);
                 groupButton.fire(); Thread.sleep(400);
                 List<GroupItem<PreviewItem>> groups = topLevelGroups();
                 if (groups.size() != 1) { throw new IllegalStateException("建组失败: " + groups.size()); }
@@ -5647,13 +5708,13 @@ public class MainController {
             try { undoButton.fire(); Thread.sleep(300);   // 撤销上一段建组，成员回顶层
                 List<PreviewItem> vis = allVisibleItems();
                 if (vis.size() < 3) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
-                allVisibleItems().forEach(i -> i.selected.set(false));
-                vis.get(0).selected.set(true); vis.get(1).selected.set(true);
+                allVisibleItems().forEach(i -> i.setSelected(false));
+                vis.get(0).setSelected(true); vis.get(1).setSelected(true);
                 groupButton.fire(); Thread.sleep(400);
-                allVisibleItems().forEach(i -> i.selected.set(false));
+                allVisibleItems().forEach(i -> i.setSelected(false));
                 List<PreviewItem> tops = allVisibleItems().stream()
                         .filter(i -> i.parentGroup == null).toList();
-                tops.get(0).selected.set(true);
+                tops.get(0).setSelected(true);
                 groupButton.fire(); Thread.sleep(400);
                 List<GroupItem<PreviewItem>> groups = topLevelGroups();
                 if (groups.size() != 2) { throw new IllegalStateException("建第二组失败: " + groups.size()); }
@@ -5711,7 +5772,7 @@ public class MainController {
                 List<PreviewItem> vis = allVisibleItems();
                 if (vis.size() < 3) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
                 textModeToggle.setSelected(true); Thread.sleep(300);
-                allVisibleItems().forEach(i -> i.selected.set(false));
+                allVisibleItems().forEach(i -> i.setSelected(false));
                 updateListButtons();
                 PreviewItem a = vis.get(0), b = vis.get(1);
                 if (!clearParamsButton.isDisabled()) { throw new IllegalStateException("无独立参数时按钮应禁用"); }
@@ -5727,12 +5788,12 @@ public class MainController {
                 if (clearParamsButton.isDisabled()) { throw new IllegalStateException("选中带参数条目时按钮应启用"); }
                 fileListView.getSelectionModel().select(b); updateListButtons();
                 if (!clearParamsButton.isDisabled()) { throw new IllegalStateException("选中无参数条目时按钮应禁用"); }
-                a.selected.set(true); b.selected.set(true); updateListButtons();
+                a.setSelected(true); b.setSelected(true); updateListButtons();
                 if (clearParamsButton.isDisabled()) { throw new IllegalStateException("勾选集合含参数目标时按钮应启用"); }
                 clearParamsButton.fire(); Thread.sleep(300);
                 if (a.textItemParams != null) { throw new IllegalStateException("清除条目参数未生效"); }
                 if (!clearParamsButton.isDisabled()) { throw new IllegalStateException("清除后按钮应禁用"); }
-                allVisibleItems().forEach(i -> i.selected.set(false)); updateListButtons();
+                allVisibleItems().forEach(i -> i.setSelected(false)); updateListButtons();
                 undoButton.fire(); Thread.sleep(300);
                 if (a.textItemParams == null) { throw new IllegalStateException("撤销清除参数未恢复"); }
                 // 菜单启用态：空白/无参数禁用、带参数启用（启用看右键目标）
@@ -5749,9 +5810,9 @@ public class MainController {
             try {
                 List<PreviewItem> vis = allVisibleItems();
                 if (vis.size() < 3) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
-                allVisibleItems().forEach(i -> i.selected.set(false));
+                allVisibleItems().forEach(i -> i.setSelected(false));
                 PreviewItem a = vis.get(0), b = vis.get(1), c = vis.get(2);
-                b.selected.set(true); c.selected.set(true);
+                b.setSelected(true); c.setSelected(true);
                 groupButton.fire(); Thread.sleep(400);
                 List<GroupItem<PreviewItem>> groups = topLevelGroups();
                 if (groups.size() != 1) { throw new IllegalStateException("建组失败: " + groups.size()); }
@@ -5764,7 +5825,7 @@ public class MainController {
                 applyGroupParams(g, false, groupDlg.getResult());
                 if (g.getTextParamsCache() == null) { throw new IllegalStateException("组参数未写入"); }
                 // a（组外带参数）+ b（组内成员）混合多选 → 清 a 条目参数 + 清整组 g 参数（同组去重）
-                a.selected.set(true); b.selected.set(true); updateListButtons();
+                a.setSelected(true); b.setSelected(true); updateListButtons();
                 if (clearParamsButton.isDisabled()) { throw new IllegalStateException("混合多选按钮应启用"); }
                 clearParamsButton.fire(); Thread.sleep(300);
                 if (a.textItemParams != null) { throw new IllegalStateException("组外条目参数未清除"); }
@@ -5792,7 +5853,7 @@ public class MainController {
                 AppConfig savedGlobal = textParamsCache;
                 for (PreviewItem it : allPreviewItems()) {
                     it.textItemParams = null;
-                    it.status.set(Status.WAITING);
+                    it.status = Status.WAITING;
                 }
                 PreviewItem p0 = vis.get(0);
                 textParamsCache = null;               // 全局未确认
@@ -5804,7 +5865,7 @@ public class MainController {
                 if (!progressBar.getStyleClass().contains("progress-preparse")) {
                     throw new IllegalStateException("预解析进度条应为浅蓝样式");
                 }
-                p0.status.set(Status.READY);
+                p0.status = Status.READY;
                 updateProgressStatus(parseToken);
                 if (progressBar.isVisible()) {
                     throw new IllegalStateException("有参数条目全部完成后进度条应隐藏");
@@ -5840,7 +5901,7 @@ public class MainController {
             try {
                 List<PreviewItem> vis = allVisibleItems();
                 PreviewItem dt = vis.get(0);
-                boolean before = dt.selected.get();
+                boolean before = dt.selected;
                 PreviewListCell targetCell = findCell(dt);
                 if (targetCell == null) { throw new IllegalStateException("未找到条目 cell"); }
                 javafx.scene.input.MouseEvent click2 = new javafx.scene.input.MouseEvent(
@@ -5849,7 +5910,7 @@ public class MainController {
                         false, false, false, false, false, false, false,
                         false, false, false, null);
                 targetCell.fireEvent(click2); Thread.sleep(300);
-                if (dt.selected.get() == before) {
+                if (dt.selected == before) {
                     throw new IllegalStateException("双击未切换勾选状态");
                 }
                 // 快速连续双击：第二次手势的 click 序列为 3、4（多击窗口内递增）→ 奇数跳过、偶数 toggle
@@ -5859,7 +5920,7 @@ public class MainController {
                         false, false, false, false, false, false, false,
                         false, false, false, null);
                 targetCell.fireEvent(click3); Thread.sleep(200);
-                if (dt.selected.get() == before) {
+                if (dt.selected == before) {
                     throw new IllegalStateException("奇数次 click 不应 toggle");
                 }
                 javafx.scene.input.MouseEvent click4 = new javafx.scene.input.MouseEvent(
@@ -5868,7 +5929,7 @@ public class MainController {
                         false, false, false, false, false, false, false,
                         false, false, false, null);
                 targetCell.fireEvent(click4); Thread.sleep(300);
-                if (dt.selected.get() != before) {
+                if (dt.selected != before) {
                     throw new IllegalStateException("偶数次 click 应 toggle");
                 }
                 out.println("[PASS] Double-click toggle (rapid sequence)"); p++;
@@ -5879,9 +5940,9 @@ public class MainController {
                         "mht-auto-session").getPath();
                 List<PreviewItem> vis = allVisibleItems();
                 if (vis.size() >= 3) {
-                    allVisibleItems().forEach(i -> i.selected.set(false));
-                    vis.get(0).selected.set(true);
-                    vis.get(1).selected.set(true);
+                    allVisibleItems().forEach(i -> i.setSelected(false));
+                    vis.get(0).setSelected(true);
+                    vis.get(1).setSelected(true);
                     groupButton.fire(); Thread.sleep(400);
                 }
                 List<OutputUnitPlanner.OutputUnit> units = OutputUnitPlanner.plan(
