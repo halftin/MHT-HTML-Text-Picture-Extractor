@@ -2,8 +2,24 @@
 
 > **目标**: 将 JavaFX 25 + Maven 项目编译为 GraalVM Native Image 绿色免安装 Windows EXE。
 > **适用场景**: 从 Git 拉取代码后，在任何 Windows 设备上完成打包。
-> **最后更新**: 2026-09-24 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
+> **最后更新**: 2026-09-26 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
 > **项目版本**: 以 `pom.xml` 的 `<version>` 为**唯一来源**（当前 `2.6-beta`）。所有构建脚本（`build-native.cmd` / `.ps1` / `.sh` / `run-native-image.bat`）均从 pom 动态读取，**禁止**在脚本里硬编码 jar 名（历史问题：曾写死 `mhtExtractor-2.3.1.jar` / `-2.2-SNAPSHOT.jar`，与 pom 不一致导致打包找不到 jar）。
+
+> ## ⚠️ 打包前必读：当前的阻塞与待改项（2026-09-26 复核）
+>
+> | 项 | 状态 |
+> |---|---|
+> | **MSVC 工具链** | ⛔ **本机缺失 → 无法构建**。`native-image` 在 Windows 上**只支持 MSVC**（**不支持 MinGW/GCC**）。实测最小 HelloWorld 也失败：`Error: Failed to find 'vswhere.exe' for locating Visual Studio installations.`（exit=20）。解除：装 **VS 2022 Build Tools 17.6+**，勾选「使用 C++ 的桌面开发」+「MSVC v143」+「Windows SDK」 |
+> | **独立 GraalVM** | ✅ **不再需要**。NIK 25.0.3 **自带 `native-image 25.0.3`**（`<NIK>/bin/native-image.cmd`，实测可用）。§2.1 关于"NIK 静态链接缺符号"的历史结论已被现状取代——本项目当前用 **NIK 作为统一 JDK + native-image** |
+> | **`build-native.cmd` 的 4 处 `X:\` 硬编码** | ❌ **全部不可用**（本机无 X: 盘）：`:39 BUILD_JAVA_HOME`、`:42 GRAALVM_HOME`、`:45 MAVEN_HOME`、`:80 OUTPUT_DIR`。详见 §5.1 的修正说明 |
+> | **`-J-Xmx8G`** | ⚠️ 建议下调（本机总内存约 15 GB，可用约 10 GB）→ 例如 `-J-Xmx6G` |
+> | **本机 `mvn` 不在 PATH** | ⚠️ 必须用 Maven wrapper，并令 `JAVA_HOME` 指向 NIK 25。**用 Oracle OpenJDK 时 javac + Lombok 会静默失效**（全项目报 `找不到符号 log`） |
+> | **JavaFX 来源** | ⚠️ **Liberica `Full` JDK 把 JavaFX 25.0.3 内置为 JDK 模块**（7 个：`javafx.base/controls/fxml/graphics/media/swing/web`）。因此 pom 里的 JavaFX 依赖在**编译期**起作用，运行期由 JDK 提供；这会导致 §4.3 之外的"无 JavaFX classpath"类验证**在本机物理不可达**（详见 CLAUDE.md） |
+>
+> **另需知**：项目已完成架构重构（新增零 JavaFX 的 `app` 应用层）与全量国际化（276 键 + 20 错误码）。
+> **这带来两类新的 native 元数据需求**：① Jackson 序列化的纯 DTO（如 `PreviewCacheMeta` 及其嵌套 record）
+> 需反射条目；② i18n bundle 需**资源注册** `{"bundle": "i18n/messages"}`。
+> **两者均已备齐**，但**改动后必须重采**——见 §4.3 与 §4.9。
 
 ---
 
@@ -11,13 +27,17 @@
 
 | 项目 | 详情 |
 |------|------|
-| 构建工具 | Maven (pom.xml) |
+| 构建工具 | Maven (pom.xml) —— ⚠️ 本机 `mvn` 不在 PATH，用 wrapper + 指定 NIK 为 `JAVA_HOME` |
 | 编译 JDK | Liberica NIK 25.0.3（含 JavaFX + native-image，统一编译和构建） |
-| Native Image JDK | GraalVM 25.0.2+ 或 Liberica NIK 25.0.3 |
-| JavaFX | 25.0.3 (win classifier)，无 module-info.java，classpath 模式 |
+| Native Image JDK | **NIK 25.0.3 自带的 `native-image`**（独立 GraalVM 不再必需）；历史方案 GraalVM 25.0.2+ 仍可用 |
+| JavaFX | 25.0.3 (win classifier)，无 module-info.java，classpath 模式。**注意：Liberica Full JDK 亦内置 JavaFX 模块** |
 | 主类 | `com.mhtextractor.App` |
-| 关键依赖 | Jackson, Ikonli, AtlantaFX, Jakarta Mail, Jsoup, Logback, Lombok 1.18.44 |
+| 关键依赖 | Jackson, Ikonli, AtlantaFX, Jakarta Mail, Jsoup, Logback, Lombok 1.18.44, **glavo webp 0.2.0**（纯 Java，无 JNI） |
 | 打包路径 | pom.xml → fat JAR → native-image → EXE + DLLs |
+| **架构分层**（2026-09 重构后） | `gui → app → {core, extractor, processor, output, util, cache, config, i18n}`；`model` 为纯数据模型。**业务层与 app 层零 JavaFX**，由 `ArchitectureTest` 的 10 条不变式强制 |
+| **国际化** | zh_CN / en_US，276 键（`src/main/resources/i18n/messages_*.properties`）+ 20 错误码 → **native 需资源注册**（见 §4.9） |
+| **预览缓存** | 会话级 `<java.io.tmpdir>/mht-extractor-preview/`，Jackson 读写 `PreviewCacheMeta` → **native 需反射条目**（见 §4.9） |
+| **测试** | 374 单测 / 33 类；32 份产物黄金基线；30 项 GUI 自动化（`test.mode`，zh/en 各 30/0） |
 
 > **v2.3.1 升级说明**: 编译器升级至 JDK 25（`maven.compiler.release=25`），Lombok 升级至 1.18.44（兼容 JDK 25），JavaFX 升级至 25.0.3。编译和 native-image 不再需要两套 JDK 切换。Liberica NIK 25.0.3 的静态链接与项目现有的 JNI 配置存在兼容性问题（`glass.lib` 缺少符号），当前仍推荐用 GraalVM 25.0.2 执行 native-image 步骤。
 
@@ -1107,6 +1127,88 @@ JavaFX 通过 JNI 与原生窗口系统通信。Native code 调用 `FindClass`�
 
 ---
 
+### 4.9 项目专属：改动后必须重采的元数据清单（2026-09 重构后新增）
+
+> **本节是本项目的"变更 → 元数据"对照表。** 项目在 2026-09 完成了架构重构（新增零 JavaFX 的 `app` 应用层）、
+> 全量国际化、预览缓存持久化。这三件事各自引入了新的 native 元数据需求。**只改代码不重采元数据，
+> `mvn package` 会正常通过，但 native EXE 会在运行时才炸** —— 这是最危险的一类问题。
+
+#### 4.9.1 已登记需反射的纯 DTO（Jackson 序列化）
+
+Jackson 靠反射构造 record / POJO。**任何新增的"被 Jackson 读写的 DTO"都必须补反射条目**。
+当前 `reachability-metadata.json` 已含：
+
+| 类型 | 反射需求 | 用途 |
+|---|---|---|
+| `com.mhtextractor.cache.PreviewCacheMeta` | `<init>(int, Source, String, boolean, List, List)` + 6 个访问器 | 预览缓存 `meta.json` |
+| `PreviewCacheMeta$Source` | `<init>(String, long, long)` + 3 个访问器 | 同上（嵌套 record） |
+| `PreviewCacheMeta$ImageEntry` | `<init>(String, String, String, String, List)` + 5 个访问器 | 同上（嵌套 record） |
+| `com.mhtextractor.config.AppConfig` | 全部 getter/setter（字段较多） | 命名配置 `config/*.json` |
+| `com.mhtextractor.config.GuiState` | `<init>` + 各 getter/setter（含 `getLocale`/`setLocale`） | `logs/gui-state.json` |
+
+> **新增 DTO 时怎么做**：写一个最小 driver（或用 `test.mode`）走一遍该 DTO 的序列化 + **反序列化**，
+> 用 tracing agent 采集，然后**按并集合并**（见 4.9.3）。
+
+#### 4.9.2 i18n 的资源注册（不是反射！）
+
+**实测结论（务必记住，这条曾判断错方向）**：i18n **不需要** `ResourceBundle` / `PropertyResourceBundle` /
+`Locale` 的**反射条目**（agent 实测为 **0 条**）——classpath 模式下 properties bundle 走
+`ResourceBundle.Control.newBundle` → `new PropertyResourceBundle(stream)` 的**直接构造**路径，无反射。
+
+**真正需要的是资源注册**（已在 `reachability-metadata.json`）：
+
+```json
+{ "bundle": "i18n/messages" }                                          // ← 核心：注册 bundle 全部 locale 变体
+{ "glob": "i18n/messages{,_en,_en_US,_zh,_zh_CN,_zh_Hans,_zh_Hans_CN}.properties" }
+{ "glob": "META-INF/services/java.util.spi.ResourceBundleControlProvider" }
+{ "glob": "com/sun/javafx/scene/control/skin/resources/controls_en{,_US}.properties", "module": "javafx.controls" }
+```
+
+`resource-config.json` 另含 `\Qi18n/\E.*\.properties$`（显式声明）与 `.*\.properties$`（通配兜底）。
+
+> **新增资源（FXML / properties / 图片 / 字体）都要补 pattern**。漏了**不会构建失败**，只在运行时抛异常。
+
+#### 4.9.3 采集与合并纪律（本项目用代价换来的）
+
+**① 元数据必须用 tracing agent 采集，不许手工推断。** 上面 4.9.2 就是反例。
+NIK 自带 agent，JVM 下即可运行：
+
+```bash
+java -agentlib:native-image-agent=config-output-dir=target/agent-out \
+     -Dtest.mode=true -cp "target/classes;target/test-classes;<cp.txt>" com.mhtextractor.App
+# 若报 "Can't find dependent libraries"，改用全路径形式：
+#   -agentpath=<NIK>/bin/native-image-agent.dll=config-output-dir=target/agent-out
+# 建议跑两轮（zh 与 en 各一次），确保两份 bundle 都被采集
+```
+
+**② 按并集合并，勿直接覆盖。** 旧版有些条目新演练捕获不到但运行必需。
+
+**③ 必须是纯增量 diff。** 核对 `git diff --numstat`。
+反例：曾在合并脚本里用 `json.dumps(indent=1)`，**重排整个文件产生 −606 行**无关变更；
+正确做法是 **append-only**（本项目历史做法：agent 采集 → 只追加新条目 → 去重同 type 时取字段/方法并集）。
+
+**④ 方法/字段级对账：丢失数必须为 0。** 合并前后比对各 type 的 fields/methods 集合。
+本项目一次合并的合格样本：`reflection 201 → 192`（去重 12 个重复 type）、**方法丢失 0 / 字段丢失 0**、
+`git diff` 为 `+61 / −0` 纯增量。
+
+**⑤ 不要往 `src/main/resources` 放临时或备份文件** —— 会被 Maven 静默打进 jar。
+（本项目真发生过：`reachability-metadata.json.bak` 被 `jar tf` 发现打进了产物。）
+
+#### 4.9.4 `reflect-config.json` 的处理建议
+
+`src/main/resources/META-INF/native-image/com.mhtextractor/` 下**同时存在**：
+
+| 文件 | 格式 | 状态 |
+|---|---|---|
+| `reachability-metadata.json` | GraalVM 25 统一格式 | ✅ **权威**（含 cache 包与 i18n 条目） |
+| `reflect-config.json` | 旧分离格式（291 条） | ⚠️ **已过时**：不含 `com.mhtextractor.cache.*`，也不含 `ImageBatchProcessor` / `ImageSource` 等近期类 |
+
+两种格式**可以共存**，native-image 对同一 type 取**并集**。因此补齐统一格式即可，**无需同步维护旧文件**。
+**建议**：确认该旧文件无独立价值后**删除**，只保留统一格式，消除双份真相。
+（§4.4 的手工模板仅作历史参考；若仍保留该文件，注意其条目会与统一格式合并。）
+
+---
+
 ## 五、构建命令
 
 ### 5.1 完整构建流程
@@ -1119,6 +1221,16 @@ JDK25_HOME=<你的 JDK 25 路径（Liberica Full JDK 25）>
 GRAALVM_HOME=<你的 GraalVM JDK 25+ 路径>
 PROJECT_DIR=<项目根目录>
 
+# ⚠️ 本机（打包开发机）实际取值参考（2026-09-26 复核）—— build-native.cmd 需改这 4 处：
+#   set "BUILD_JAVA_HOME=D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3"   (原 :39 写 X:\...)
+#   set "GRAALVM_HOME=D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3"      (原 :42；NIK 自带 native-image，无需独立 GraalVM)
+#   set "MAVEN_HOME=C:\Users\Admin\.m2\wrapper\dists\apache-maven-3.9.16-bin\5grr65jo27hi51sujmtcldfovl\apache-maven-3.9.16"  (原 :45)
+#   set "OUTPUT_DIR=D:\install\MhtExtractorV2.6"                                  (原 :80 写 X:\123\MHTtoEX)
+# 前提核对：① Step 1 的 vcvars64.bat(MSVC) 本机【不存在】→ 必须先装 VS 2022 Build Tools 17.6+，
+#             否则 native-image 直接报 "Failed to find 'vswhere.exe'"（exit=20）
+#           ② mvn 不在 PATH → Step 2 实际用 "%MAVEN_HOME%\bin\mvn.cmd"，且 JAVA_HOME 必须指向 NIK 25
+#           ③ Step 4 的 -J-Xmx8G 建议下调（本机总内存约 15 GB / 可用约 10 GB）→ 如 -J-Xmx6G
+
 # ========== Step 1: 初始化 MSVC 环境（必须最先执行） ==========
 # 找到 vcvars64.bat 的位置（通常在 VS 安装目录下）
 # 示例路径: "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
@@ -1129,6 +1241,8 @@ export JAVA_HOME=$JDK25_HOME
 export PATH=$JAVA_HOME/bin:$PATH
 cd $PROJECT_DIR
 mvn clean package -DskipTests
+# ⚠️ 本机 mvn 不在 PATH → 实际用 "%MAVEN_HOME%\bin\mvn.cmd" clean package -DskipTests
+#    并确保 JAVA_HOME 指向 NIK 25（否则 javac + Lombok 静默失效，全项目报"找不到符号 log"）
 
 # 版本号以 pom.xml 为唯一来源（jar 产物名 = mhtExtractor-<version>.jar）
 APP_VERSION=$(grep -oP '<version>\K[^<]+' "$PROJECT_DIR/pom.xml" | head -1)
@@ -1581,29 +1695,89 @@ target/dist/
 
 ---
 
+### 8.6 已知环境陷阱（2026-09 架构重构 + 国际化后新增）
+
+**错误**: `Error: Failed to find 'vswhere.exe' for locating Visual Studio installations.`
+（native-image 退出码 20）
+
+**根因**: 本机**未安装 MSVC 工具链**。GraalVM native-image 在 Windows 上**只支持 MSVC**
+（**不支持 MinGW/GCC**），且 `--no-fallback` 要求走完 C 编译+链接。
+
+**解决**: 安装 **Visual Studio 2022 Build Tools（17.6+）**，勾选「使用 C++ 的桌面开发」+
+「MSVC v143 - VS 2022 C++ x64/x86 生成工具」+「Windows 10/11 SDK」。
+装后 `vswhere.exe` 出现在 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe`。
+> 实测：本机即使是最小 HelloWorld 也无法构建，故此问题**必须先解决才能验证任何 native 改动**。
+
+---
+
+**现象**: 无头层测试断言"JavaFX 不在 classpath 上"失败（`pom.xml` 的 `headless-layer-b` 执行）。
+
+**根因（两层）**: ① 该项目 surefire 的 `classpathDependencyExcludes` 写的是无 classifier 的
+`org.openjfx:javafx-controls`，而实际依赖带 **classifier `win`**（并带出无 classifier 的传递变体），
+**一个都没匹配上**；② **决定性原因**：**Liberica `Full` JDK 把 JavaFX 内置为 JDK 运行时模块**
+（`javafx.base@25.0.3` … 共 7 个，见 `<JDK>/jmods/javafx.base.jmod`）。
+`classpathDependencyExcludes` 只能剔 Maven 依赖，**剔不掉 JDK 模块**。
+
+**验证方法**: 剔除 classpath 上全部 `openjfx` 条目后，用探针跑
+`Class.forName("javafx.application.Platform")` —— **仍然成功**，即"无 JavaFX classpath"本机物理不可达。
+
+**解决（三选一）**: ① 断言降级为 `assumeTrue` 并标注"本机不可验证"；
+② **用不含 JavaFX 的 JDK**（Liberica `Standard`/`Lite` 或 Temurin）执行该 surefire execution；
+③ 固化为手工脚本 + 证据留档。**并修正/删除 `classpathDependencyExcludes` 的错误坐标。**
+
+---
+
+**错误**: native EXE 运行到"预览缓存落盘"或"切换语言"时才崩溃（构建期完全正常）。
+
+**根因**: 缺少运行期反射/资源元数据（**这类问题不会在 `mvn package` 阶段暴露**）：
+① `PreviewCacheMeta` 等 **Jackson 序列化的 record** 需要 `<init>` + 访问器反射条目；
+② i18n 需要**资源注册** `{"bundle": "i18n/messages"}`（**不是** `ResourceBundle` 的反射条目——
+曾判断错方向，agent 实测该反射需求为 **0 条**）。
+
+**解决**: 见 **§4.9**（采集与合并纪律）。核心三条：
+用 tracing agent 采集（勿手工推断）、**按并集合并**、**核对 `git diff --numstat` 为纯增量**。
+
+---
+
+**错误**: 构建产物里多出 `reachability-metadata.json.bak` 之类的文件。
+
+**根因**: 把备份/临时文件放在了 `src/main/resources/` 下 —— Maven 会把该目录**全部**内容打进 jar。
+
+**解决**: 备份放仓库外或 `.claude-work/`（已 gitignore）。**永远不要在 `src/main/resources` 下留临时文件。**
+
+---
+
 ## 九、给 Claude Code CLI 的提示
 
 如果在新的会话或新设备上使用 Claude Code CLI 打包此项目：
 
-1. **先读本文档**，了解整体流程
-2. **运行环境检查**（第三章），确认 Liberica NIK 25.0.3、GraalVM JDK 25.0.2、Maven、MSVC 都已就绪
-3. **检查并生成配置文件**（第四章），`src/main/resources/META-INF/native-image/com.mhtextractor/` 下的 7 个配置文件都需要存在
-4. **编译用 JDK 25，native-image 用 GraalVM 25.0.2**，NIK 的 native-image 存在静态链接兼容问题
+1. **先读本文档**，了解整体流程；**并先读 §顶部的"打包前必读"**（当前阻塞与待改项）
+2. **运行环境检查**（第三章），确认 JDK 25 / native-image / Maven / **MSVC** 都已就绪。
+   > NIK 25.0.3 **自带 `native-image`**，故独立 GraalVM 已非必需（历史方案仍可用）
+3. **检查配置文件**（第四章），`src/main/resources/META-INF/native-image/com.mhtextractor/` 下的配置文件需存在；
+   **但注意**：`reflect-config.json` 已过时且与 `reachability-metadata.json` 不一致（见 §4.9.4），
+   统一格式才是权威
+4. **编译用 NIK 25 的 JDK；native-image 可用 NIK 自带的**（若遇 §8.5 的静态链接符号错误，再退回 GraalVM 25.0.2）
 5. **所有工具路径必须纯 ASCII**，含中文的路径会导致模块加载失败（`Module org.graalvm.nativeimage.builder not found`）
 6. **`--initialize-at-run-time` 参数一个都不能少**，缺失任何一个 JavaFX 子包都会崩溃
 7. **DLL 必须放在 EXE 同目录**，包括 JNI 桥接库 `awt.dll`/`java.dll`/`jvm.dll`
 8. **构建后用 `editbin /SUBSYSTEM:WINDOWS`** 隐藏控制台窗口
 9. **遇到 `Failed to delete target\lib`**: 跳过 clean，用 `mvn package` 而非 `mvn clean package`
-10. **遇到新错误**: 搜索本文档第八章，或在命令行运行 EXE 获取具体堆栈信息
+10. **本机 `mvn` 不在 PATH**：用 Maven wrapper，并令 `JAVA_HOME` 指向 NIK 25
+11. **架构/功能改动后必须重采元数据**（§4.9）：新增 Jackson DTO → 补反射；
+    新增 FXML/properties/图片 → 补资源 pattern
+12. **遇到新错误**: 搜索本文档第八章（含 §8.5/§8.6 的实测陷阱），或在命令行运行 EXE 获取具体堆栈
 
 ### 自动化建议
 
 Claude Code CLI 可以通过以下步骤在新设备上自动完成全部打包：
 
-1. 读取本文档了解流程
-2. 搜索本机环境（`where java`、`where mvn`、检查 VS 安装）
-3. 如果没有找到，提示用户提供路径或自行安装
+1. 读取本文档了解流程（**含 §顶部"打包前必读"**）
+2. 搜索本机环境（`where java`、`where mvn`、检查 VS 安装与 `vswhere.exe`、`java --list-modules | findstr javafx`）
+3. 如果没有找到，提示用户提供路径或自行安装（**MSVC 缺失则无法继续，务必先明确告知用户**）
 4. 检查 `src/main/resources/META-INF/native-image/` 目录是否存在
-5. 如果配置文件不存在，按第四章模板创建
-6. 按第五章命令执行构建
+5. 如果配置文件不存在或不完整，**用 tracing agent 采集**（§4.9.3），不要手工推断
+6. 按第五章命令执行构建（**先把 `build-native.cmd` 的 4 处 `X:\` 路径改成本机实际值**）
 7. 如果构建失败，根据错误信息对照第八章排查
+8. **构建成功后务必冒烟验证**：启动 → 导入 → 预览（确认缓存目录生成）→ 提取 →
+   切换语言（zh/en 各一次）→ 退出（确认缓存清空）。这些路径正是元数据缺失时才会崩的地方

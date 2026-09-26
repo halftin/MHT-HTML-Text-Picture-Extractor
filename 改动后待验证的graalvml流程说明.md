@@ -1,102 +1,234 @@
 # 改动后待验证的 GraalVM 打包流程说明
 
-> 本文档面向**打包电脑上的智能体/操作者**：功能完善需求（阶段 1–8：增量导入/复选框/移除撤销/分组/组参数/拆分组/拖拽升级/输出单元拆分）与"提取前预览与调整"功能改动对 GraalVM native-image 打包的影响、需要执行的步骤与验收清单。
-> 打包总体流程以《基于graalvm的MHT资源提取器项目打包工作流程.md》为准，本文只补充本次改动相关项。
+> 本文档面向**打包电脑上的智能体/操作者**：说明**当前代码状态**（2026-09 架构重构 + 全量国际化 + 预览缓存持久化之后）对 GraalVM native-image 打包的影响、需执行的步骤与验收清单。
+> 打包总体流程以《基于graalvm的MHT资源提取器项目打包工作流程.md》为准，本文只补充**变动相关项**。
 >
-> **最后更新：2026-09-07**（阶段 9 演练扩展完成后）。
+> **最后更新：2026-09-26**（架构重构 + 国际化 + 预览缓存之后）
+
+---
+
+## 零、先看这个：当前的阻塞与必改项
+
+| 项 | 状态 | 必须做的 |
+|---|---|---|
+| **MSVC 工具链** | ⛔ **本机缺失 → native 构建无法进行** | 安装 **VS 2022 Build Tools 17.6+**（勾「使用 C++ 的桌面开发」+「MSVC v143」+「Windows SDK」）。**这是硬阻塞**：实测最小 HelloWorld 也报 `Failed to find 'vswhere.exe'`（exit=20） |
+| **独立 GraalVM** | ✅ **不需要** | NIK 25.0.3 自带 `native-image 25.0.3`（实测可用）。`build-native.cmd:42` 的 `GRAALVM_HOME` 直接指向 NIK 目录即可 |
+| `build-native.cmd` 的 **4 处 `X:\` 硬编码** | ❌ 全部不可用（本机无 X: 盘） | 改 `:39 BUILD_JAVA_HOME`、`:42 GRAALVM_HOME`、`:45 MAVEN_HOME`、`:80 OUTPUT_DIR`（取值见打包工作流程文档 §5.1） |
+| `-J-Xmx8G` | ⚠️ 偏高 | 下调至 `-J-Xmx6G`（本机总内存约 15 GB / 可用约 10 GB） |
+| **元数据重采** | ⚠️ **必做** | 本次重构/国际化引入了新的反射与资源需求，见 §二 |
+
+> **一句话**：**先把 MSVC 装上、把脚本 4 处路径改掉**，否则后面所有步骤都无法验证。
 
 ---
 
 ## 一、本次改动对打包的影响总览
 
-| 项 | 影响 | 需要做的 |
-|----|------|---------|
-| 新依赖 `org.glavo:webp:0.2.0`（JWebP） | 纯 Java WebP 解码库，MPL-2.0，仅依赖 `java.base`，**无 JNI、无 System.load、不注册 ImageIO SPI**，全部直接 API 调用——native-image 最友好形态，**无需 JNI 配置** | 无（mvn 自动下载，自动进 target/lib） |
-| 新控制器 `ParamDialogController` + `ParamDialog.fxml`（`PreviewDialogController` 已删除） | FXML 经反射加载，控制器被 agent 演练覆盖 | FXML 资源已写入 resource-config；反射条目已手工写入 reflect-config（见下） |
-| 阶段 1–8 新增 `util` 类：IncrementalImport / SelectionState / UndoManager / GroupItem / GroupStructure / DropResolver / OutputUnitPlanner / UnitProgressAggregator / ParamScope | 全部为**直接 new / 静态调用**（静态可达），无 Class.forName、无 Jackson 序列化参与、无动态代理——**无需任何反射条目**（agent 演练已实测确认，与 8.4 预期一致） | 无 |
-| 新资源 `sample-preview.webp` | 仅 agent 演练生成样例 MHT 时从类路径读取，native EXE 正常运行不依赖 | 无（不打包也可） |
-| 手工 reflect-config 新增条目 | 见 `reflect-config.json` 中本次新增：ParamDialogController、GuiState/GuiStateManager、ListView/ListViewSkin/ListCell、TextArea/TextAreaSkin、CheckBox/CheckBoxSkin、ImageView/Image、**StackPane**（FXML 必需）、DragEvent/Dragboard/ClipboardContent/DataFormat/TransferMode | **打包时勿用 agent 输出覆盖这些手工条目**（合并时保留） |
-| `reachability-metadata.json` | 已在本机（NIK 25.0.3 + tracing agent）重新演练并按**并集合并**（旧条目 + 新演练输出，reflection 201 条 / resources 2901 条）。特别保留了旧版中的 `com.sun.prism.shader.DrawRoundRect_Color_Loader`、`sun.launcher.LauncherHelper$FXHelper` 等新演练未捕获但运行必需的条目 | 拉取最新代码即可；若打包电脑重新演练，**按并集合并，勿直接覆盖**（见 §2 步骤 3） |
-| 拖拽动画（快照覆盖层 + TranslateTransition） | 动画类全部直接实例化（静态可达），**无需反射条目**；`Node.snapshot()` 若在 native 下异常，代码内置兜底自动退化为瞬时重排 | 无 |
-| `runAutomatedTests()` 自动化测试 | 已改为**临时目录驱动**（不再依赖 `Y:\MHTtest` 固定路径），输出到 `logs/test-results.txt`；`App.java` test.mode 分支已修为在 FX 线程执行（原来在 Timer 线程直接操作控件会抛 "Not on FX application thread" 崩溃） | 打包电脑可直接 `java -Dtest.mode=true ...` 复验 |
+### 1.1 架构重构（新增零 JavaFX 的 `app` 应用层）
 
-**结论：`build-native.cmd` 不需要任何修改；无 JNI 配置；无新增反射手工条目需求（均已写入）。**
+| 改动 | 对 native 打包的影响 | 需要做的 |
+|---|---|---|
+| 新增 `com.mhtextractor.app`（`MhtExtractorApp` / `WorkspaceModel` / `WorkspaceParamService` / `ExtractionPreconditions`） | **纯逻辑类，静态可达**，无反射、无 Jackson 参与 | **无需反射条目** |
+| 新增 `com.mhtextractor.model`（`PreviewItem` / `ThumbnailData`） | 同上（`ThumbnailData` 持 `int[]` ARGB 像素，无 AWT/ImageIO 依赖，对 native 友好） | **无需反射条目** |
+| 1139 行演练/测试代码从 `MainController` 外迁至**测试源集** `src/test/java/.../FeatureExercise.java` | `App.java` 通过**反射**调用 `invokeFeatureExercise(...)`。**类名以字符串形式出现**（`"com.mhtextractor.gui.controller.FeatureExercise"`），**可能需要在 reflect-config 中注册该类及其 `exerciseAllFeatures` / `runAutomatedTests` 方法** | ⚠️ **用 agent 采集确认**（`-Dtest.mode=true` 或 `-Dagent.exit.delay` 演练时会触发）；若 agent 未捕获而 native 下 test.mode 报 `NoSuchMethodException`，需手工补 |
+| `MainController` 6111 → 约 4800 行 | 无影响 | 无 |
+| `ArchitectureTest` 的 10 条不变式 | 纯测试，不进产物 | 无 |
+
+### 1.2 全量国际化（zh_CN / en_US）
+
+| 改动 | 影响 | 需要做的 |
+|---|---|---|
+| 新增 `com.mhtextractor.i18n`（`I18n` / `ErrorCode`） | 纯静态调用；`ErrorCode` 是枚举，**不经反射/Jackson** | **无需反射条目**（agent 实测为 0 条） |
+| 新增资源 `src/main/resources/i18n/messages_zh_CN.properties` / `messages_en_US.properties`（276 键） | **必须做资源注册**，否则 native 下 bundle 加载失败、界面全是 `!key!` | 已在 `reachability-metadata.json` 注册 `{"bundle": "i18n/messages"}` + 各 locale 变体 glob（见 §二） |
+| FXML 文案改为 `%key`（`loader.setResources(I18n.bundle())`） | 不影响 FXML 反射需求（字段注入照旧） | 无（但需确认 `resource-config.json` 仍含两个 FXML） |
+| `GuiState` 新增 `locale` 字段 | **Jackson 序列化字段变化** → 需 `getLocale`/`setLocale` 反射 | 已补（与既有 `getInputFolder`/`setInputFolder` 同构） |
+
+### 1.3 预览缓存持久化（会话级缓存）
+
+| 改动 | 影响 | 需要做的 |
+|---|---|---|
+| 新增 `com.mhtextractor.cache`（5 类） | `PreviewCacheStore` 用 **Jackson** 读写 `PreviewCacheMeta`（record + 嵌套 record `Source`/`ImageEntry`）→ **需要反射条目**，否则 **native 下预览缓存落盘/读取报错**（而 JVM 下完全正常，是最隐蔽的一类问题） | **已补 3 个类型的反射条目**（见 §二）；**改 `PreviewCacheMeta` 字段结构后必须重采** |
+| 缓存位置 `<java.io.tmpdir>/mht-extractor-preview/` | 与 `HtmlExportBuilder` 的 `<tmpdir>/mht-extractor-view/` 并列；**会话级，退出清空** | 无（不涉及打包） |
+| 每 10 GiB 台阶非模态提醒 | 纯 JavaFX Alert，无新依赖 | 无 |
+
+### 1.4 其它
+
+| 项 | 影响 |
+|---|---|
+| 依赖未变（仍为 Jakarta Mail / Jsoup / Jackson / glavo-webp / AtlantaFX / Logback / Ikonli） | ✅ `ArchitectureTest.noNewThirdPartyDependencies` 保证不新增依赖 |
+| AWT 规避（`Runtime.exec("explorer.exe")` 替代 `Desktop.open`） | ✅ 保持（native 不支持 AWT） |
+| 日志仍走 Logback + `TextAreaAppender` | ✅ 元数据既有条目不变 |
+| **`reflect-config.json`（旧格式，291 条）已过时** | ⚠️ 不含 `cache` 包与近期新增类；与 `reachability-metadata.json` 并存且不一致。建议**确认后删除**，只留统一格式（native-image 对同 type 取并集，故补统一格式即可） |
 
 ---
 
-## 二、打包电脑上的操作流程
+## 二、必须核对的元数据增量（本次改动引入）
 
-1. **拉取最新 master01**（包含本说明的 commit）；
-2. **常规 agent 演练**（见打包工作流程文档 §4.3.3）：
+### 2.1 已登记的反射条目（Jackson DTO）
+
+| 类型 | 反射需求 | 来源 |
+|---|---|---|
+| `com.mhtextractor.cache.PreviewCacheMeta` | `<init>(int, Source, String, boolean, List, List)` + `formatVersion`/`imageMode`/`images`/`paramFingerprint`/`source`/`warnings` | 预览缓存 |
+| `PreviewCacheMeta$Source` | `<init>(String, long, long)` + `absolutePath`/`mtime`/`size` | 同上 |
+| `PreviewCacheMeta$ImageEntry` | `<init>(String, String, String, String, List)` + `detectedExt`/`file`/`originalName`/`sourceId`/`warnings` | 同上 |
+| `com.mhtextractor.config.AppConfig` | 全 getter/setter（既有，字段有增） | 命名配置 |
+| `com.mhtextractor.config.GuiState` | `<init>` + getter/setter（**新增 `getLocale`/`setLocale`**） | `gui-state.json` |
+
+### 2.2 已登记的资源条目（i18n）
+
+```json
+{ "bundle": "i18n/messages" }
+{ "glob": "i18n/messages{,_en,_en_US,_zh,_zh_CN,_zh_Hans,_zh_Hans_CN}.properties" }
+{ "glob": "META-INF/services/java.util.spi.ResourceBundleControlProvider" }
+{ "glob": "com/sun/javafx/scene/control/skin/resources/controls_en{,_US}.properties", "module": "javafx.controls" }
+```
+
+> **重要实测结论**：i18n **不需要** `ResourceBundle` / `PropertyResourceBundle` / `Locale` 的反射条目
+> （agent 实测 **0 条**）—— classpath bundle 走 `new PropertyResourceBundle(stream)` **直接构造**路径。
+> 曾判断错方向，记录下来避免重犯。
+
+### 2.3 采集与合并纪律（三条硬要求）
+
+1. **用 tracing agent 采集，不许手工推断**（NIK 自带，JVM 下即可）：
+   ```bash
+   java -agentlib:native-image-agent=config-output-dir=target/agent-out \
+        -Dtest.mode=true -cp "target/classes;target/test-classes;<cp.txt>" com.mhtextractor.App
+   # 若报 "Can't find dependent libraries"：
+   #   -agentpath=<NIK>/bin/native-image-agent.dll=config-output-dir=target/agent-out
+   # 建议 zh / en 各跑一轮，确保两份 bundle 都被采集
    ```
-   java -agentlib:native-image-agent=config-output-dir=agent-config \
-     -Dagent.exit.delay=95000 \
-     --module-path target/lib \
-     --add-modules=javafx.controls,javafx.fxml,javafx.graphics \
-     -cp "target/classes;target/lib/*" \
-     com.mhtextractor.App
+2. **按并集合并，勿直接覆盖**（旧条目有些新演练捕获不到但运行必需）
+3. **核对纯增量 + 方法级对账**：`git diff --numstat` 不应出现大片无关注释/重排；
+   合并前后各 type 的 fields/methods **丢失数必须为 0**
+   > 合格样本（本项目一次实测）：`reflection 201 → 192`（去重 12 个重复 type）、方法丢失 **0**、`git diff` = `+61 / −0`
+
+### 2.4 ⚠️ 不要往 `src/main/resources` 放临时文件
+
+Maven 会把该目录**全部**内容打进 jar。本项目真发生过
+`reachability-metadata.json.bak` 被打进产物（`jar tf` 才发现）。备份放仓库外或 `.claude-work/`。
+
+---
+
+## 三、打包电脑上的操作流程
+
+1. **拉取最新代码**；
+2. **前置检查**：`java --list-modules | findstr javafx`（确认有 7 个 javafx 模块）、
+   `where vswhere.exe` 或 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe` 是否存在、
+   `pom.xml` 的 `<version>`；
+3. **改 `build-native.cmd` 的 4 处路径**（见 §零 与打包工作流程文档 §5.1），并下调 `-Xmx`；
+4. **编译**：`"%MAVEN_HOME%\bin\mvn.cmd" clean package -DskipTests`，`JAVA_HOME` 指向 NIK 25；
+5. **（若元数据有改动）重采并合并**：按 §二.3 执行，先核对 `git diff --numstat` 是纯增量；
+6. **跑 JVM 侧回归**（确认改动没破坏功能，再花时间做 native）：
+   ```bash
+   # 单测（注意：当前有 1 个已知失败，见 §四）
+   "%MAVEN_HOME%\bin\mvn.cmd" test
+   # GUI 自动化（勿用 mvn javafx:run，-D 会被 Maven 吃掉）
+   java --module-path <jfx-win-jars> --add-modules javafx.controls,javafx.fxml \
+        -Duser.language=zh -Duser.country=CN -Dtest.mode=true \
+        -cp "target/classes;target/test-classes;<cp.txt>" com.mhtextractor.App
+   # 期望：logs/test-results.txt 中 30 passed / 0 failed
    ```
-   演练脚本 `exerciseAllFeatures()` 已扩展覆盖全部新功能：**增量导入、复选框、移除、撤销（含撤销拖拽/整组/拆分）、合并为组、组名编辑（重名自动追加序号）、组参数设置与继承、拆分组、拖拽（组内排序/跨组/组行移动/两组合并，performDrop 程序化驱动）、输出单元拆分（未分组按来源+各组）、背景色三态**，以及原有预览窗口/WebP 解码演练。
-   > 已知坑（本机 NIK 环境实测）：若 `-agentlib:native-image-agent` 报 "Can't find dependent libraries"，改用 `-agentpath=<JDK>/bin/native-image-agent.dll=config-output-dir=agent-config` 全路径形式。
-   > 演练开始会自动**清场**（移除 GUI 状态恢复导入的既有文件并重置撤销栈），结束时日志应有 "Agent exercise complete - all UI features exercised" 且无 "演练失败" 警告；
-3. **合并 reachability-metadata.json** 到 `src/main/resources/META-INF/native-image/com.mhtextractor/`。**规则：按并集合并（agent 输出 ∪ 仓库现有），保留** reflect-config.json / resource-config.json 中的手工条目，**勿直接覆盖**。至少确认以下条目未丢失：`com.sun.prism.shader.DrawRoundRect_Color_Loader`、`javafx.scene.input.DragEvent/Dragboard`、`StackPane`、ParamDialogController；
-4. 运行 `build-native.cmd`；
-5. 按第四节清单在 native EXE 上真机验收；
-6. （可选）`java -Dtest.mode=true --module-path target/lib --add-modules=javafx.controls,javafx.fxml,javafx.graphics -cp "target/classes;target/lib/*" com.mhtextractor.App` 复验自动化测试（预期 `logs/test-results.txt` 中 17 passed, 0 failed）。
+7. **运行 `build-native.cmd`**（Step 1–6）；
+8. **按 §五 清单在 native EXE 上真机验收**；
+9. **（可选）native 下复验自动化**：native EXE 加 `-Dtest.mode=true`
+   （注意：`test.mode` 走的是**测试源集**的 `FeatureExercise`，需确认该 jar/类在 native 镜像可达——
+   若不可达，改为按 §五 手工验收）。
 
 ---
 
-## 三、agent 无法覆盖、需真机手工验证的项
+## 四、已知失败/阻塞（登记，避免误判）
 
-- **拖拽 DnD**：无法脚本化（演练中的拖拽为 `performDrop` 程序化驱动，覆盖解析/执行/撤销逻辑；真实手势的 DragEvent 路径需真机验证）。相关反射条目（DragEvent/Dragboard/ClipboardContent/DataFormat/TransferMode）已手工写入 reflect-config；
-- **拖拽滑动动画**：`Node.snapshot()` 在 native 下的表现需真机确认。若拖拽时**没有滑动动画但排序功能正常**，说明快照兜底生效（可接受，不影响功能）；若动画正常则最优；
-- **WebP 缩略图**：agent 演练已覆盖解码路径，但真机仍需确认（见清单）。
+| 项 | 说明 |
+|---|---|
+| **`mvn test` 有 1 个失败** | `LayerBTest.runsWithoutUiFrameworkOnClasspathWhenHeadlessExecutionIsActive:218`。根因是 `pom.xml` 的 `headless-layer-b` 执行**无法真正剔除 JavaFX** —— ① 排除坐标缺 classifier；② **决定性：Liberica Full JDK 把 JavaFX 内置为 JDK 模块**，`classpathDependencyExcludes` 剔不掉。**这是构建配置缺陷，非代码 bug。** 修法见打包工作流程文档 §8.6 |
+| **native 构建阻塞** | 缺 MSVC（见 §零） |
+| **纯 Data URI 的 MHT 提取不到图片** | 已知产品缺陷（`ImageBatchProcessor` 的"无图片内容"快速跳过）。native 验收时该夹具输出为 0 产物属**预期**（基线已标 `knownIssues`） |
 
 ---
 
-## 四、native EXE 验收清单
+## 五、native EXE 验收清单
 
-### A. 功能完善需求（阶段 1–8，本次重点）
+> 本次重构/国际化改动的**重点新增项**已标 ⭐。其余为既有功能回归。
+
+### A. ⭐ 本次改动相关（重点）
+
+| # | 验收项 | 为什么重要 |
+|---|---|---|
+| 1 | ⭐ **启动后切换语言**：能显示中文；改 `logs/gui-state.json` 的 `"locale":"en_US"` 或 `-Duser.language=en -Duser.country=US` 启动后界面为英文、**无 `!key!` 残留** | 直接验证 **i18n bundle 资源注册**是否生效（最易漏的元数据） |
+| 2 | ⭐ **预览图片并观察缓存落盘**：点「查看预览效果」后检查 `%TEMP%\mht-extractor-preview\<64位hex>\` 下有 `meta.json` + `images\` + `.complete` | 直接验证 **Jackson 对 `PreviewCacheMeta` 的反射**是否生效（缺则 native 报错） |
+| 3 | ⭐ **再次预览同一文件（命中缓存）**：应立即出缩略图、不再解析 | 验证缓存读取路径（`meta.json` 反序列化） |
+| 4 | ⭐ **关窗清空**：有未提取的预览缓存时点 X → 弹「关闭程序前需要清空缓存…」→ 清空后关闭 | 验证关窗链路（`onWindowCloseRequest`） |
+| 5 | ⭐ **`test.mode` 演练**：native EXE 带 `-Dtest.mode=true` 能否运行 | 验证 `FeatureExercise` 的**反射可达性**（本次从生产类外迁，新增的反射依赖点） |
+
+### B. 文本提取
 
 | # | 验收项 |
-|---|--------|
-| 1 | 增量导入：先选 A 目录（2 个 mht）→ 再选 B 目录（1 个 mht）→ 列表 [A1,A2,B1] 不重建；重复导入去重；撤销可整体移除本次导入 |
-| 2 | 复选框：最左列 CheckBox；列头三态全选/全不选（含组内成员）；勾选不影响提取名单 |
-| 3 | 移除：勾选移除/整组移除；仅"移除后列表为空"弹确认框；空组自动销毁 |
-| 4 | 撤销：撤销移除/导入/建组/拆分/整组移除/拖拽排序/组合并，35 步深度；栈空按钮禁用 |
-| 5 | 合并为组：组条目+组内缩进、展开/折叠、组内序号列；单项目建组；重名自动追加序号并日志提示 |
-| 6 | 组参数：选中组 → 参数设置 → 确定后只作用于该组；未设置继承全局；组参数确认后组内重解析 |
-| 7 | 背景色三态：现状色（无生效参数）/浅绿（全局参数）/深绿（组参数），随参数确认与入组/出组实时刷新 |
-| 8 | 拆分组：成员按组内顺序回顶层原组位置；撤销重建（组名与参数恢复） |
-| 9 | 拖拽：组内排序、跨组入组（含末尾/指定落点）、出组到顶层、组行移动、两组合并（成员按原顺序，目标组名/参数保留）；拖拽致空组销毁；撤销恢复拖拽前结构 |
-| 10 | 输出单元拆分：文本合并输出未分组按来源拆分、每组独立输出（组名命名）；图片合并输出目录名=组名/来源名；进度跨单元聚合；取消不启动后续单元 |
-| 11 | 章号按单元重算：组内独立编号、顶层连续编号、每文件章节覆盖优先 |
+|---|---|
+| 1 | 合并输出：多文件 → 单个 TXT，章号连续 |
+| 2 | 单独输出：每 MHT 一个 TXT，可含标题命名 |
+| 3 | 内容限定：起止标记（字面 / 正则两种模式**都要试**）、模板变量 `{filename}`/`{datetime}` |
+| 4 | 标题提取、编码自动修复、章节序号勾选 |
 
-### B. 提取前预览与调整（上一期）
+### C. 图片提取
 
 | # | 验收项 |
-|---|--------|
-| 1 | 主界面开关"开始提取前预览并调整提取效果"，随模式选择启用/禁用，配置保存/加载后状态恢复 |
-| 2 | 文本模式：预览窗口打开，条目状态 ⏳→✅，选中文件显示 模板开头+正文首尾+模板结尾 |
-| 3 | 文本模式：章节徽标列与列头显示，勾选"添加章节序号"徽标实时重算，取消勾选徽标消失 |
-| 4 | 文本模式：开启标题提取时信息区显示"提取标题：xxx" |
-| 5 | 图片模式：信息区第三行显示"输出结果：文件夹/ZIP/CBZ/ZIP + CBZ" |
-| 6 | 图片模式：点击"查看预览效果"后 **WebP 缩略图逐张渐进显示**（123 张大图场景 1 分钟内完成） |
-| 7 | 拖拽排序：蓝线指示、提起瞬间消失+下方上滑 0.2s 补位、松手条目瞬间出现+下方下滑 0.2s 让位、Esc 取消回原位 |
-| 8 | 点击【提取】按拖拽后的顺序执行；点击【取消】无残留状态 |
-| 9 | 拖拽中无异常日志；关闭窗口后台线程正常退出 |
+|---|---|
+| 1 | 合并输出（单目录）/ 单独输出（每文件一目录） |
+| 2 | 流式 与 高速内存（预加载）两种模式 |
+| 3 | 名称提取、区域限定、批量重命名 |
+| 4 | ZIP / CBZ 打包 + 归档后删源目录 |
+| 5 | 广告过滤、Data URI、魔数扩展名纠正 |
+
+### D. 列表 / 分组 / 撤销 / 拖拽
+
+| # | 验收项 |
+|---|---|
+| 1 | 文件列表、勾选、全选三态、位置序号、章节徽标 |
+| 2 | 合并为组 / 拆分组 / 组名编辑 / 组参数独立与继承 |
+| 3 | 撤销（移除/导入/拖拽/组合并/拆分/参数/清除/应用全局） |
+| 4 | 拖拽：组内排序、跨组、出组、组行移动、两组合并 |
+| 5 | 移除（含整组、空组自动销毁） |
+
+### E. 其它
+
+| # | 验收项 |
+|---|---|
+| 1 | 参数弹窗打开/确定/取消、命名配置 保存/加载/删除 |
+| 2 | 输入/输出目录选择、浏览按钮、完成后自动打开输出文件夹 |
+| 3 | 在浏览器中打开 / 查看源码（CDP 原生查看器或回退源码页） |
+| 4 | 进度条三态配色、取消提取、失败/跳过/警告可视化回写 |
+| 5 | `logs/gui-state.json` 持久化与启动恢复（含 locale） |
 
 ---
 
-## 五、故障排查速查
+## 六、故障排查速查
 
 | 症状 | 排查方向 |
-|------|---------|
-| 打包失败：javafx 控件类反射缺失（ListView/TextArea/CheckBox 等） | 手工 reflect-config 条目被 agent 输出覆盖/丢失，按 §一 表格补回 |
-| 渲染异常/黑屏：shader 加载失败 | 检查 reachability-metadata 是否包含 `com.sun.prism.shader.*_Loader` 条目（合并时勿丢失旧条目） |
-| 缩略图显示"无法加载" | JWebP 类不可达：检查 reachability-metadata 是否包含 `org.glavo.webp` 条目（演练应已捕获）；或该图不是 WebP/PNG/JPEG/GIF（AVIF 不支持属预期） |
-| 参数窗口打开报 FXML 加载失败 | 检查 resource-config 中 `ParamDialog.fxml` 条目 |
-| 拖拽无动画但功能正常 | `Node.snapshot()` 兜底生效（预期行为，可接受） |
-| 拖拽/预览卡死 | 查看日志中"拖拽快照失败"警告，确认滚动守卫与取消路径正常 |
-| `-agentlib:native-image-agent` 报 "Can't find dependent libraries" | 改用 `-agentpath=<JDK>/bin/native-image-agent.dll=config-output-dir=agent-config` 全路径（NIK 环境实测） |
-| test.mode 抛 "Not on FX application thread" | App.java test.mode 分支必须走 `Platform.runLater`（已修）；若回退到旧代码请重打补丁 |
+|---|---|
+| 界面显示 `!key!` 字样 | i18n **bundle 未注册** → 检查 `reachability-metadata.json` 是否有 `{"bundle": "i18n/messages"}` |
+| 预览图片报错 / 缩略图全部"无法加载" | **`PreviewCacheMeta` 反射条目缺失** → 检查 §2.1 的三个 cache 类型；用 agent 重采 |
+| `test.mode` 报 `NoSuchMethodException` / `ClassNotFoundException: ...FeatureExercise` | 测试源集类未被 native 镜像收录 → 需在 reflect-config 补该类与方法，或改为手工验收 |
+| 参数窗口打开报 FXML 加载失败 | `resource-config.json` 缺 `ParamDialog.fxml` / `MainView.fxml` |
+| 渲染异常/黑屏：shader 加载失败 | 检查 `reachability-metadata.json` 是否含 `com.sun.prism.shader.*` 与 `.obj$` 资源模式 |
+| 缩略图"无法加载"（非缓存问题） | `org.glavo.webp` 条目缺失（agent 演练应已捕获）；或该图不是 WebP/PNG/JPEG/GIF |
+| `Error: Failed to find 'vswhere.exe'` | **MSVC 未安装**（见 §零） |
+| `error LNK2001: unresolved external symbol Java_com_sun_glass_ui_Application__1overrideNativeWindowHandle` | NIK 静态链接与 JNI 配置不兼容 → native-image 改用 GraalVM 25.0.2，或按 NIK 重采全套元数据 |
+| `Module org.graalvm.nativeimage.builder not found` | 工具路径含中文 → 移到纯 ASCII 路径 |
+| 构建产物里多出 `.bak` 等文件 | 临时文件放在 `src/main/resources` 下了 → 移出该目录 |
+| `mvn test` 有 1 个失败 | 见 §四（已知构建配置缺陷，非代码问题） |
+| `-agentlib:native-image-agent` 报 `Can't find dependent libraries` | 改用 `-agentpath=<NIK>/bin/native-image-agent.dll=config-output-dir=...` 全路径形式 |
+
+---
+
+## 七、JVM 侧回归基线（打包前先确认这些是绿的）
+
+| 项 | 基线 |
+|---|---|
+| 单元测试 | **374 测试 / 33 类**（其中 **1 个已知失败**，见 §四） |
+| GUI 自动化（zh） | **30 passed / 0 failed** |
+| GUI 自动化（en） | **30 passed / 0 failed** |
+| 产物黄金基线 | 32 份（16 例 × zh/en）全部 SHA 一致 |
+| 架构不变式 | 10 条（业务层零 JavaFX 等） |
+
+> **跑 GUI 自动化时注意**（本项目踩过）：**不要**用 `mvn javafx:run -Dtest.mode=true` ——
+> `-D` 会被 Maven 吃掉、不传进子 JVM，测试根本没跑起来。必须直接 `java` 起（见 §三.6）。
+> 另：**en locale 断言会被 `logs/gui-state.json` 里持久化的 locale 覆盖**，跑 en 前先移走该文件（或改其 `locale`）。
