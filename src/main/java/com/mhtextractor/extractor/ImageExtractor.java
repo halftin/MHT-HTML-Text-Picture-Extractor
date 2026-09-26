@@ -201,7 +201,7 @@ public class ImageExtractor extends BaseExtractor {
             return SanitizeUtils.sanitize(clean);
         }
 
-        return SanitizeUtils.UNNAMED_SENTINEL;
+        return "";
     }
 
     /**

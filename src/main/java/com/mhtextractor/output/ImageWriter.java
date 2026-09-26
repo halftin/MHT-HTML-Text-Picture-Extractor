@@ -97,7 +97,7 @@ public class ImageWriter {
     public static String computeFileName(ImageExtractor.ImageData imageData, String fallbackExt,
                                          boolean rename, int renameIndex, String filePrefix) {
         if (imageData == null || imageData.getData() == null) {
-            return SanitizeUtils.UNNAMED_SENTINEL + "." + normalizeExt(fallbackExt);
+            return SanitizeUtils.UNNAMED_FALLBACK_NAME + "." + normalizeExt(fallbackExt);
         }
         String ext = normalizeExt(SanitizeUtils.detectExtensionByMagicNumber(imageData.getData(), fallbackExt));
 
@@ -122,7 +122,7 @@ public class ImageWriter {
      * 去除文件名中已有的扩展名
      */
     private static String stripExtension(String fileName) {
-        if (fileName == null || fileName.isEmpty()) return SanitizeUtils.UNNAMED_SENTINEL;
+        if (fileName == null || fileName.isEmpty()) return SanitizeUtils.UNNAMED_FALLBACK_NAME;
         int dotIndex = fileName.lastIndexOf('.');
         if (dotIndex > 0) {
             String potentialExt = fileName.substring(dotIndex + 1).toLowerCase();

@@ -206,7 +206,7 @@ public final class OutputUnitPlanner {
 
     private static String sanitizedGroupName(GroupItem<?> g) {
         String s = SanitizeUtils.sanitize(g.getName());
-        if (s.isEmpty() || s.equals(SanitizeUtils.UNNAMED_SENTINEL)) {
+        if (s.isEmpty()) {
             return "组" + g.getGroupNo();
         }
         return s;
@@ -216,7 +216,7 @@ public final class OutputUnitPlanner {
         String dirName = sourceFolder == null || sourceFolder.isEmpty()
                 ? "" : new File(sourceFolder).getName();
         String s = SanitizeUtils.sanitize(dirName);
-        if (s.isEmpty() || s.equals(SanitizeUtils.UNNAMED_SENTINEL)) {
+        if (s.isEmpty()) {
             return imageMode ? "All_Images" : "mht_output";
         }
         return s;

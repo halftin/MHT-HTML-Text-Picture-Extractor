@@ -11,11 +11,11 @@ public class SanitizeUtils {
     private static final Logger logger = LoggerFactory.getLogger(SanitizeUtils.class);
 
     /**
-     * 文件名回退哨兵（会话 15B 步骤 A）：sanitize 空输入的返回值。
-     * 值保持 "unnamed" 不变——消费方用它识别"无有效名字"并回退默认名，
-     * 因此用户真实标题恰为 "unnamed" 时会被误判（现存语义，测试已锁定）。
+     * "无名字"产物的展示回退名（会话 15B 步骤 B）：仅用于产物命名兜底（如 unnamed.jpg）。
+     * <p><b>禁止</b>用本常量做 equals 比较判断"无名字"——内部一律以空串表示"无名字"
+     * （见 {@link #sanitize}），用户真实名字恰为 "unnamed" 时必须原样保留。</p>
      */
-    public static final String UNNAMED_SENTINEL = "unnamed";
+    public static final String UNNAMED_FALLBACK_NAME = "unnamed";
 
     private static final String[] IMAGE_MAGIC_NUMBERS = {
             "FFD8FF",   // JPEG
@@ -32,11 +32,12 @@ public class SanitizeUtils {
     };
 
     /**
-     * 清理文件名中的非法字符
+     * 清理文件名中的非法字符。null / 空串 / 纯空白输入返回空串（会话 15B 步骤 B：
+     * 空串 = 内部"无名字"表示，消费者据此回退默认名；真实名字 "unnamed" 原样保留）。
      */
     public static String sanitize(String fileName) {
         if (fileName == null || fileName.isEmpty()) {
-            return UNNAMED_SENTINEL;
+            return "";
         }
         return fileName.replaceAll("[\\\\/:*?\"<>|]", "_")
                 .replaceAll("_+", "_")

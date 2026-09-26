@@ -5,25 +5,38 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * SanitizeUtils 哨兵行为锁定（会话 15B 步骤 A）：
- * sanitize 空输入返回 {@link SanitizeUtils#UNNAMED_SENTINEL}；
- * 真实值 "unnamed" 原样通过——与哨兵同值、下游 equals 比较会误判（现存语义，如实锁定）。
+ * SanitizeUtils 空串语义锁定（会话 15B 步骤 B）：
+ * null/空/纯空白输入返回空串（内部"无名字"表示）；真实名字 "unnamed" 原样保留——
+ * 不再与回退名 {@link SanitizeUtils#UNNAMED_FALLBACK_NAME} 碰撞。
  */
 class SanitizeUtilsTest {
 
     @Test
-    void sanitizeNullReturnsUnnamedSentinel() {
-        assertEquals(SanitizeUtils.UNNAMED_SENTINEL, SanitizeUtils.sanitize(null));
+    void sanitizeNullReturnsEmpty() {
+        assertEquals("", SanitizeUtils.sanitize(null));
     }
 
     @Test
-    void sanitizeEmptyReturnsUnnamedSentinel() {
-        assertEquals(SanitizeUtils.UNNAMED_SENTINEL, SanitizeUtils.sanitize(""));
+    void sanitizeEmptyReturnsEmpty() {
+        assertEquals("", SanitizeUtils.sanitize(""));
     }
 
     @Test
-    void sanitizeLiteralUnnamedPassesThroughUnchanged() {
+    void sanitizeBlankReturnsEmpty() {
+        assertEquals("", SanitizeUtils.sanitize("   "));
+    }
+
+    @Test
+    void sanitizeLiteralUnnamedIsKept() {
+        // 步骤 B 修复点：真实标题 "unnamed" 不再被当作"无名字"丢弃
         assertEquals("unnamed", SanitizeUtils.sanitize("unnamed"));
+    }
+
+    @Test
+    void fallbackNameIsOnlyForDisplay() {
+        // 展示回退名仅用于产物命名兜底（如 unnamed.jpg），内部"无名字"判定用空串
+        assertEquals("unnamed", SanitizeUtils.UNNAMED_FALLBACK_NAME);
+        assertEquals("", SanitizeUtils.sanitize(""));
     }
 
     @Test

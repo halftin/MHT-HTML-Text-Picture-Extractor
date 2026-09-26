@@ -190,24 +190,26 @@ class OutputUnitPlannerTest {
         assertEquals("组5", plan(order(g), false, null, null).get(0).getOutputName());
     }
 
-    // ==================== unnamed 哨兵（会话 15B 步骤 A）：真实名字恰为 "unnamed" 与哨兵碰撞 ====================
+    // ==================== 会话 15B 步骤 B：真实名字恰为 "unnamed" 原样保留，仅空串回退 ====================
 
     @Test
-    void groupNamedUnnamedFallsBackToGroupNo() {
-        // 现存语义：真实组名 "unnamed" 被当作哨兵 → 回退"组N"（如实锁定，不改语义）
+    void groupNamedUnnamedIsKept() {
+        // 步骤 B 修复：真实组名 "unnamed" 不再被当作"无名字"回退成"组N"
         GroupItem<TItem> g = new GroupItem<>(7, "unnamed");
         g.getMembers().add(item("x\\1.mht", "C:\\src"));
-        assertEquals("组7", plan(order(g), false, null, null).get(0).getOutputName());
+        OutputUnitPlanner.OutputUnit u = plan(order(g), false, null, null).get(0);
+        assertEquals("unnamed", u.getOutputName());
+        assertEquals(new File("S", "unnamed.txt").getPath(), u.getOutputPath());
     }
 
     @Test
-    void sourceNamedUnnamedFallsBackToDefault() {
-        // 现存语义：来源目录名恰为 "unnamed" 被当作哨兵 → 回退默认输出名
-        assertEquals("mht_output",
+    void sourceNamedUnnamedIsKept() {
+        // 步骤 B 修复：来源目录名恰为 "unnamed" 原样保留；空/纯空白仍回退默认名
+        assertEquals("unnamed",
                 plan(order(item("x.mht", "C:\\unnamed")), false, null, null).get(0).getOutputName());
         AppConfig imgMerged = new AppConfig();
         imgMerged.setSingleOutputMode(true);
-        assertEquals("All_Images",
+        assertEquals("unnamed",
                 plan(order(item("x.mht", "C:\\unnamed")), true, null, imgMerged).get(0).getOutputName());
     }
 

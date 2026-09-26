@@ -202,10 +202,10 @@ class OutputUnitPipelineTest {
         assertTrue(session.resolve("组2.txt").toFile().exists());
     }
 
-    // ==================== unnamed 哨兵（会话 15B 步骤 A）：真实标题恰为 "unnamed" 被丢弃 ====================
+    // ==================== 会话 15B 步骤 B：真实标题恰为 "unnamed" 原样保留 ====================
 
     @Test
-    void separateModeTitleUnnamedIsDiscardedLikeExistingSemantics() throws Exception {
+    void separateModeTitleUnnamedIsKept() throws Exception {
         Path source = tmp.resolve("src");
         Files.createDirectories(source);
         Path a = writeTextMht(source, "a.mht", "TITLE-STARTunnamedTITLE-END 内容");
@@ -222,8 +222,8 @@ class OutputUnitPipelineTest {
                 BatchProcessor.buildMhtFileInfoList(List.of(a.toString(), b.toString())),
                 out.toString(), null, Map.of());
         assertEquals(2, stats.getSuccessCount(), stats.toString());
-        // 现存语义：标题恰为 unnamed 时被当作哨兵丢弃 → 回退原始文件名；正常标题生效
-        assertEquals(List.of("a.txt", "正常标题.txt"),
+        // 步骤 B 修复：标题恰为 unnamed 不再被丢弃；标题缺失/空仍回退原始文件名
+        assertEquals(List.of("unnamed.txt", "正常标题.txt"),
                 Files.list(out).map(p -> p.getFileName().toString()).sorted().toList());
     }
 

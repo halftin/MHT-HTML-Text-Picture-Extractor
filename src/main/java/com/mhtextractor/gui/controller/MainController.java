@@ -883,7 +883,7 @@ public class MainController {
     private GroupItem<PreviewItem> createGroupForImport(List<PreviewItem> members, String folderName) {
         // ① 组名：sanitize（保证"列表显示名 == 输出名"，F10/BC-6）
         String base = SanitizeUtils.sanitize(folderName);
-        if (base.isEmpty() || base.equals(SanitizeUtils.UNNAMED_SENTINEL)) {
+        if (base.isEmpty()) {
             base = "组" + GroupStructure.nextGroupNo(groupNoCounter);
         }
         // ② 唯一化：复用既有实现（F7）
