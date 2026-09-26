@@ -26,9 +26,9 @@
 
             <!-- 标题栏 -->
             <HBox spacing="12" alignment="CENTER_LEFT">
-                <Label text="模式选择:" styleClass="title-3"/>
+                <Label text="%main.modeSelection" styleClass="title-3"/>
                 <HBox spacing="0">
-                    <ToggleButton fx:id="textModeToggle" text="文本提取" toggleGroup="$modeToggleGroup">
+                    <ToggleButton fx:id="textModeToggle" text="%main.textExtract" toggleGroup="$modeToggleGroup">
                         <styleClass>
                             <String fx:value="left-pill"/>
                             <String fx:value="mode-pill"/>
@@ -37,7 +37,7 @@
                             <FontIcon iconLiteral="fas-file-alt" iconSize="24"/>
                         </graphic>
                     </ToggleButton>
-                    <ToggleButton fx:id="imageModeToggle" text="图片提取" toggleGroup="$modeToggleGroup">
+                    <ToggleButton fx:id="imageModeToggle" text="%main.imageExtract" toggleGroup="$modeToggleGroup">
                         <styleClass>
                             <String fx:value="right-pill"/>
                             <String fx:value="mode-pill"/>
@@ -48,7 +48,7 @@
                     </ToggleButton>
                 </HBox>
                 <Region HBox.hgrow="ALWAYS"/>
-                <Label text="MHT 资源提取器" styleClass="heading-3"/>
+                <Label text="%main.title" styleClass="heading-3"/>
             </HBox>
 
             <!-- 输入/输出目录 -->
@@ -59,17 +59,17 @@
                     <ColumnConstraints minWidth="100" prefWidth="100"/>
                 </columnConstraints>
 
-                <Label text="输入目录:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
-                <TextField fx:id="inputFolderField" promptText="选择包含 .mht 文件的目录" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
-                <Button fx:id="browseInputButton" text="浏览..." onAction="#onBrowseInput" GridPane.rowIndex="0" GridPane.columnIndex="2">
+                <Label text="%main.inputDir" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                <TextField fx:id="inputFolderField" promptText="%main.inputDirPrompt" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+                <Button fx:id="browseInputButton" text="%main.browse" onAction="#onBrowseInput" GridPane.rowIndex="0" GridPane.columnIndex="2">
                     <graphic>
                         <FontIcon iconLiteral="fas-folder-open" iconSize="14"/>
                     </graphic>
                 </Button>
 
-                <Label text="输出目录:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
-                <TextField fx:id="outputFolderField" promptText="选择输出目录" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
-                <Button fx:id="browseOutputButton" text="浏览..." onAction="#onBrowseOutput" GridPane.rowIndex="1" GridPane.columnIndex="2">
+                <Label text="%main.outputDir" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                <TextField fx:id="outputFolderField" promptText="%main.outputDirPrompt" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                <Button fx:id="browseOutputButton" text="%main.browse" onAction="#onBrowseOutput" GridPane.rowIndex="1" GridPane.columnIndex="2">
                     <graphic>
                         <FontIcon iconLiteral="fas-folder-open" iconSize="14"/>
                     </graphic>
@@ -93,14 +93,14 @@
                     <CheckBox fx:id="selectAllCheck" minWidth="40" prefWidth="40" maxWidth="40"
                               alignment="CENTER" focusTraversable="false" style="-fx-padding: 0;">
                         <tooltip>
-                            <Tooltip text="全选 / 取消全选"/>
+                            <Tooltip text="%main.selectAllToggle"/>
                         </tooltip>
                     </CheckBox>
-                    <Label fx:id="badgeHeaderLabel" text="章号" prefWidth="40" styleClass="text-muted"/>
-                    <Label text="顺序" prefWidth="40" styleClass="text-muted"/>
-                    <Label text="文件名" styleClass="text-muted"/>
+                    <Label fx:id="badgeHeaderLabel" text="%main.chapterNo" prefWidth="40" styleClass="text-muted"/>
+                    <Label text="%main.order" prefWidth="40" styleClass="text-muted"/>
+                    <Label text="%main.fileName" styleClass="text-muted"/>
                     <Region HBox.hgrow="ALWAYS"/>
-                    <Label text="状态" styleClass="text-muted"/>
+                    <Label text="%main.status" styleClass="text-muted"/>
                 </HBox>
                 <StackPane VBox.vgrow="ALWAYS">
                     <ListView fx:id="fileListView"/>
@@ -112,37 +112,37 @@
                     <padding>
                         <Insets top="4" right="10" bottom="2" left="10"/>
                     </padding>
-                    <Button fx:id="undoButton" text="撤销" onAction="#onUndoClicked" disable="true">
+                    <Button fx:id="undoButton" text="%main.undo" onAction="#onUndoClicked" disable="true">
                         <graphic>
                             <FontIcon iconLiteral="fas-undo" iconSize="14"/>
                         </graphic>
                     </Button>
-                    <Button fx:id="groupButton" text="合并为组" onAction="#onGroupClicked" disable="true">
+                    <Button fx:id="groupButton" text="%main.mergeGroup" onAction="#onGroupClicked" disable="true">
                         <graphic>
                             <FontIcon iconLiteral="fas-object-group" iconSize="14"/>
                         </graphic>
                     </Button>
-                    <Button fx:id="ungroupButton" text="拆分组" onAction="#onUngroupClicked" disable="true">
+                    <Button fx:id="ungroupButton" text="%main.ungroup" onAction="#onUngroupClicked" disable="true">
                         <graphic>
                             <FontIcon iconLiteral="fas-object-ungroup" iconSize="14"/>
                         </graphic>
                     </Button>
-                    <Button fx:id="removeButton" text="移除" onAction="#onRemoveClicked" disable="true">
+                    <Button fx:id="removeButton" text="%main.remove" onAction="#onRemoveClicked" disable="true">
                         <graphic>
                             <FontIcon iconLiteral="fas-trash-alt" iconSize="14"/>
                         </graphic>
                     </Button>
-                    <Button fx:id="clearParamsButton" text="清除参数" onAction="#onClearParamsClicked" disable="true">
+                    <Button fx:id="clearParamsButton" text="%main.clearParams" onAction="#onClearParamsClicked" disable="true">
                         <graphic>
                             <FontIcon iconLiteral="fas-eraser" iconSize="14"/>
                         </graphic>
                     </Button>
-                    <Button fx:id="applyGlobalButton" text="将参数应用到全局" onAction="#onApplyGlobalClicked" disable="true">
+                    <Button fx:id="applyGlobalButton" text="%main.applyGlobal" onAction="#onApplyGlobalClicked" disable="true">
                         <graphic>
                             <FontIcon iconLiteral="fas-globe" iconSize="14"/>
                         </graphic>
                     </Button>
-                    <Button fx:id="viewSourceButton" text="查看HTML源码" onAction="#onViewSourceButton" disable="true">
+                    <Button fx:id="viewSourceButton" text="%main.viewHtmlSource" onAction="#onViewSourceButton" disable="true">
                         <graphic>
                             <FontIcon iconLiteral="fas-code" iconSize="14"/>
                         </graphic>
@@ -156,10 +156,10 @@
 
                 <!-- 模式/文件计数/提取参数设置按钮 -->
                 <HBox spacing="10" alignment="CENTER_LEFT">
-                    <Label fx:id="modeLabel" text="模式："/>
-                    <Label fx:id="fileCountLabel" text="共 0 个文件"/>
+                    <Label fx:id="modeLabel" text="%main.modeLabel"/>
+                    <Label fx:id="fileCountLabel" text="%main.fileCountZero"/>
                     <Region HBox.hgrow="ALWAYS"/>
-                    <Button fx:id="paramSettingsButton" text="提取参数设置" onAction="#onParamSettings">
+                    <Button fx:id="paramSettingsButton" text="%main.paramSettings" onAction="#onParamSettings">
                         <graphic>
                             <FontIcon iconLiteral="fas-sliders-h" iconSize="14"/>
                         </graphic>
@@ -168,10 +168,10 @@
 
                 <!-- 信息区：输出模式 / 输出文件名 / 提取标题 / 输出结果或逐文件调整 -->
                 <VBox spacing="4">
-                    <Label fx:id="outputModeLabel" text="输出模式："/>
+                    <Label fx:id="outputModeLabel" text="%main.outputMode"/>
                     <Label fx:id="outputNameLabel" wrapText="true" visible="false" managed="false"/>
                     <HBox fx:id="groupNameBox" spacing="6" alignment="CENTER_LEFT" visible="false" managed="false">
-                        <Label text="输出组文件名："/>
+                        <Label text="%main.outputGroupFile"/>
                         <TextField fx:id="groupNameField" HBox.hgrow="ALWAYS"/>
                     </HBox>
                     <Label fx:id="titleInfoLabel" wrapText="true" visible="false" managed="false"/>
@@ -184,8 +184,8 @@
                     <TextArea fx:id="textPreviewArea" wrapText="true" editable="false"/>
                     <VBox fx:id="imagePreviewBox" spacing="10" alignment="TOP_CENTER">
                         <Label fx:id="imageHintLabel" wrapText="true" textAlignment="CENTER"/>
-                        <Button fx:id="previewEffectButton" text="查看预览效果" onAction="#onPreviewEffect"/>
-                        <Label fx:id="renameNoteLabel" text="全局序号以实际输出为准" styleClass="text-muted"
+                        <Button fx:id="previewEffectButton" text="%main.previewButton" onAction="#onPreviewEffect"/>
+                        <Label fx:id="renameNoteLabel" text="%main.globalNoNote" styleClass="text-muted"
                                visible="false" managed="false"/>
                         <ScrollPane fx:id="imageScrollPane" fitToWidth="true" VBox.vgrow="ALWAYS"
                                     visible="false" managed="false">
@@ -210,19 +210,19 @@
 
             <!-- 进度条 -->
             <ProgressBar fx:id="progressBar" progress="0" maxWidth="Infinity" visible="false"/>
-            <Label fx:id="statusLabel" text="就绪" styleClass="text-small"/>
+            <Label fx:id="statusLabel" text="%main.statusReady" styleClass="text-small"/>
 
             <!-- 完成后操作 -->
-            <ToggleSwitch fx:id="openFolderAfterCompleteCheck" text="提取完成后打开输出文件夹"/>
+            <ToggleSwitch fx:id="openFolderAfterCompleteCheck" text="%main.openFolderAfter"/>
 
             <!-- 操作按钮 -->
             <HBox spacing="10" alignment="CENTER">
-                <Button fx:id="startButton" text="开始提取" onAction="#onStartProcessing" styleClass="action-button">
+                <Button fx:id="startButton" text="%main.startExtract" onAction="#onStartProcessing" styleClass="action-button">
                     <graphic>
                         <FontIcon iconLiteral="fas-play" iconSize="14"/>
                     </graphic>
                 </Button>
-                <Button fx:id="stopButton" text="停止" onAction="#onStopProcessing"
+                <Button fx:id="stopButton" text="%main.stop" onAction="#onStopProcessing"
                         disable="true" styleClass="stop-button">
                     <graphic>
                         <FontIcon iconLiteral="fas-stop" iconSize="14"/>

@@ -135,6 +135,7 @@ public class ParamDialogController {
             throws IOException {
         FXMLLoader loader = new FXMLLoader(
                 ParamDialogController.class.getResource("/com/mhtextractor/gui/view/ParamDialog.fxml"));
+        loader.setResources(I18n.bundle());
         Parent root = loader.load();
         ParamDialogController ctrl = loader.getController();
 

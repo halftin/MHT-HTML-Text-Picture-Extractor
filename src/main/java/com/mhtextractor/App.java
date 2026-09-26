@@ -42,6 +42,7 @@ public class App extends Application {
         }
 
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/mhtextractor/gui/view/MainView.fxml"));
+        loader.setResources(I18n.bundle());
         Scene scene = new Scene(loader.load());
 
         // 引入 AtlantaFX Nord Light 主题
