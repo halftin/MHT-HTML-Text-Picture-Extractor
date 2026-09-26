@@ -159,6 +159,56 @@ public final class FeatureExercise {
         this.mc = mc;
     }
 
+    // ===== 步骤 1 阶段 C：按 fx:id 定位节点，取代对 MainController @FXML 字段的直接引用 =====
+    //
+    // 为什么：直接引用 mc.<fxmlField> 要求该字段在 MainController 中保持包级可见（即必须带
+    // /* test-support */ 标记）。改用 Node.lookup("#fx:id") 后字段可收回 private，暴露面随之下降。
+    // 实测（.claude-work 探针，见 docs/handoff/H20.md §3.2）：42 个 fx:id 中 41 个可解析，
+    // 唯一例外 modeToggleGroup 是 ToggleGroup 而非 Node —— 它不在本类使用。
+    // 且 lookup 对 visible=false / managed=false / disabled=true 的节点同样有效。
+
+    /** 按 fx:id 定位节点。找不到即抛异常（不静默返回 null，避免把"节点没了"伪装成断言失败）。 */
+    private javafx.scene.Node node(String fxId) {
+        // MainController 是普通 FXML 控制器（不是 Node），本身没有 getScene()；
+        // 借一个必然挂进场景图的控件取 Scene。见 docs/handoff/H21.md §四。
+        javafx.scene.Scene sc = mc.fileListView.getScene();
+        if (sc == null) {
+            throw new IllegalStateException("场景尚未建立，无法按 fx:id 定位节点: " + fxId);
+        }
+        javafx.scene.Node n = sc.getRoot().lookup("#" + fxId);
+        if (n == null) {
+            throw new IllegalStateException("按 fx:id 未找到节点: #" + fxId);
+        }
+        return n;
+    }
+
+    /** 需要具体控件类型时用这个：把 lookup 结果按类型校验后返回。 */
+    private <T> T node(String fxId, Class<T> type) {
+        javafx.scene.Node n = node(fxId);
+        if (!type.isInstance(n)) {
+            throw new IllegalStateException("#" + fxId + " 期望 " + type.getSimpleName()
+                    + "，实际 " + n.getClass().getName());
+        }
+        return type.cast(n);
+    }
+
+    private javafx.scene.control.ToggleButton textModeToggle() { return node("textModeToggle", javafx.scene.control.ToggleButton.class); }
+    private javafx.scene.control.ToggleButton imageModeToggle() { return node("imageModeToggle", javafx.scene.control.ToggleButton.class); }
+    private javafx.scene.control.TextField inputFolderField() { return node("inputFolderField", javafx.scene.control.TextField.class); }
+    private javafx.scene.control.TextField outputFolderField() { return node("outputFolderField", javafx.scene.control.TextField.class); }
+    private javafx.scene.control.CheckBox selectAllCheck() { return node("selectAllCheck", javafx.scene.control.CheckBox.class); }
+    private javafx.scene.control.Button removeButton() { return node("removeButton", javafx.scene.control.Button.class); }
+    private javafx.scene.control.Button clearParamsButton() { return node("clearParamsButton", javafx.scene.control.Button.class); }
+    private javafx.scene.control.Button undoButton() { return node("undoButton", javafx.scene.control.Button.class); }
+    private javafx.scene.control.Button groupButton() { return node("groupButton", javafx.scene.control.Button.class); }
+    private javafx.scene.control.Button ungroupButton() { return node("ungroupButton", javafx.scene.control.Button.class); }
+    private javafx.scene.control.Button applyGlobalButton() { return node("applyGlobalButton", javafx.scene.control.Button.class); }
+    private javafx.scene.control.TextField groupNameField() { return node("groupNameField", javafx.scene.control.TextField.class); }
+    private javafx.scene.control.ProgressBar progressBar() { return node("progressBar", javafx.scene.control.ProgressBar.class); }
+    private javafx.scene.control.Label statusLabel() { return node("statusLabel", javafx.scene.control.Label.class); }
+    private javafx.scene.control.Button startButton() { return node("startButton", javafx.scene.control.Button.class); }
+    private atlantafx.base.controls.ToggleSwitch openFolderAfterCompleteCheck() { return node("openFolderAfterCompleteCheck", atlantafx.base.controls.ToggleSwitch.class); }
+
 public void exerciseAllFeatures() throws Exception {
     // Phase 0: 清场——移除启动时 GUI 状态恢复导入的既有文件并重置撤销栈，保证后续演练脚本可预测
     if (!mc.items.isEmpty()) {
@@ -175,17 +225,17 @@ public void exerciseAllFeatures() throws Exception {
     }
 
     // Phase 1: 模式切换演练
-    mc.textModeToggle.setSelected(true);
+    textModeToggle().setSelected(true);
     Thread.sleep(300);
-    mc.textModeToggle.setSelected(false);
+    textModeToggle().setSelected(false);
     Thread.sleep(300);
-    mc.imageModeToggle.setSelected(true);
+    imageModeToggle().setSelected(true);
     Thread.sleep(300);
-    mc.imageModeToggle.setSelected(false);
+    imageModeToggle().setSelected(false);
     Thread.sleep(300);
 
     // Phase 2: 文本参数弹窗演练（全部开关与字段 + TitledPane 展开/折叠）
-    mc.textModeToggle.setSelected(true);
+    textModeToggle().setSelected(true);
     Thread.sleep(200);
     ParamDialogController textDialog = ParamDialogController.showDirect(
             null, false, mc.textParamsCache, mc.imageParamsCache, ParamScope.GLOBAL);
@@ -220,8 +270,8 @@ public void exerciseAllFeatures() throws Exception {
     Thread.sleep(200);
 
     // Phase 3: 图片参数弹窗演练（highSpeedMemoryCheck 跳过：勾选触发模态 Alert 阻塞 agent）
-    mc.textModeToggle.setSelected(false);
-    mc.imageModeToggle.setSelected(true);
+    textModeToggle().setSelected(false);
+    imageModeToggle().setSelected(true);
     Thread.sleep(200);
     ParamDialogController imageDialog = ParamDialogController.showDirect(
             null, true, mc.textParamsCache, mc.imageParamsCache, ParamScope.GLOBAL);
@@ -263,9 +313,9 @@ public void exerciseAllFeatures() throws Exception {
     Thread.sleep(200);
 
     // Phase 5: 路径与开关
-    mc.inputFolderField.setText("C:\\test\\mht");
-    mc.outputFolderField.setText("D:\\output");
-    mc.openFolderAfterCompleteCheck.setSelected(true);
+    inputFolderField().setText("C:\\test\\mht");
+    outputFolderField().setText("D:\\output");
+    openFolderAfterCompleteCheck().setSelected(true);
     Thread.sleep(200);
 
     // Phase 6: 触发对话框/处理器对象创建（不显示对话框）
@@ -300,8 +350,8 @@ public void exerciseAllFeatures() throws Exception {
         createSampleMht(tempDir, "preview01.mht");
 
         // 文本模式：章节复选框 + 文本渲染
-        mc.textModeToggle.setSelected(true);
-        mc.inputFolderField.setText(tempDir.toString());
+        textModeToggle().setSelected(true);
+        inputFolderField().setText(tempDir.toString());
         Thread.sleep(1500);
         mc.fileListView.getSelectionModel().selectFirst();
         mc.adjustCheck.setSelected(false);
@@ -310,7 +360,7 @@ public void exerciseAllFeatures() throws Exception {
         Thread.sleep(300);
 
         // 图片模式：缩略图加载
-        mc.imageModeToggle.setSelected(true);
+        imageModeToggle().setSelected(true);
         Thread.sleep(1500);
         mc.fileListView.getSelectionModel().selectFirst();
         mc.previewEffectButton.fire();
@@ -324,9 +374,9 @@ public void exerciseAllFeatures() throws Exception {
         java.nio.file.Path importDir = java.nio.file.Files.createTempDirectory("mht-import-agent");
         createSampleMht(importDir, "import01.mht");
         createSampleMht(importDir, "import02.mht");
-        mc.textModeToggle.setSelected(true);
+        textModeToggle().setSelected(true);
         Thread.sleep(200);
-        mc.inputFolderField.setText(importDir.toString());
+        inputFolderField().setText(importDir.toString());
         Thread.sleep(1200);
         // 增量导入：新增第三个文件后再次导入同目录 → 仅新增 1 个（IMPORT 入撤销栈）
         createSampleMht(importDir, "import03.mht");
@@ -341,22 +391,22 @@ public void exerciseAllFeatures() throws Exception {
         mc.fileListView.refresh();
         Thread.sleep(200);
         // 列头全选/全不选（三态联动）
-        mc.selectAllCheck.fire();
+        selectAllCheck().fire();
         Thread.sleep(200);
-        mc.selectAllCheck.fire();
+        selectAllCheck().fire();
         Thread.sleep(200);
         // 部分勾选 → 移除（不弹确认框）→ 撤销移除 → 撤销两次增量导入
         List<PreviewItem> vis = mc.allVisibleItems();
         if (!vis.isEmpty()) {
             vis.get(0).setSelected(true);
             Thread.sleep(200);
-            mc.removeButton.fire();
+            removeButton().fire();
             Thread.sleep(300);
-            mc.undoButton.fire();
+            undoButton().fire();
             Thread.sleep(300);
-            mc.undoButton.fire();
+            undoButton().fire();
             Thread.sleep(300);
-            mc.undoButton.fire();
+            undoButton().fire();
             Thread.sleep(300);
         }
     } catch (Exception e) {
@@ -369,21 +419,21 @@ public void exerciseAllFeatures() throws Exception {
         for (int i = 1; i <= 4; i++) {
             createSampleMht(groupDir, "g0" + i + ".mht");
         }
-        mc.inputFolderField.setText(groupDir.toString());
+        inputFolderField().setText(groupDir.toString());
         Thread.sleep(1500);
         List<PreviewItem> vis = mc.allVisibleItems();
         if (vis.size() >= 4) {
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             vis.get(0).setSelected(true);
             vis.get(1).setSelected(true);
-            mc.groupButton.fire();
+            groupButton().fire();
             Thread.sleep(400);
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             List<PreviewItem> tops = mc.allVisibleItems().stream()
                     .filter(i -> i.parentGroup == null).toList();
             tops.get(0).setSelected(true);
             tops.get(1).setSelected(true);
-            mc.groupButton.fire();
+            groupButton().fire();
             Thread.sleep(400);
             List<GroupItem<PreviewItem>> groups = mc.topLevelGroups();
             if (groups.size() == 2) {
@@ -399,11 +449,11 @@ public void exerciseAllFeatures() throws Exception {
                 // 组名编辑：g2 改成与 g1 重名 → 自动追加序号（R7）
                 mc.fileListView.getSelectionModel().select(g1);
                 Thread.sleep(300);
-                mc.groupNameField.setText("演练分组");
+                groupNameField().setText("演练分组");
                 Thread.sleep(300);
                 mc.fileListView.getSelectionModel().select(g2);
                 Thread.sleep(300);
-                mc.groupNameField.setText("演练分组");
+                groupNameField().setText("演练分组");
                 Thread.sleep(300);
                 // 组参数（文本模式）：g1 确认独立参数 → 深绿背景 + 组内重解析
                 ParamDialogController groupDialog = ParamDialogController.showDirect(
@@ -422,15 +472,15 @@ public void exerciseAllFeatures() throws Exception {
                 // 拆分组 + 撤销拆分（组名/参数恢复）→ 撤销组参数（PARAM_SET）→ 撤销两次建组
                 mc.fileListView.getSelectionModel().select(g1);
                 Thread.sleep(200);
-                mc.ungroupButton.fire();
+                ungroupButton().fire();
                 Thread.sleep(300);
-                mc.undoButton.fire();
+                undoButton().fire();
                 Thread.sleep(300);
-                mc.undoButton.fire();
+                undoButton().fire();
                 Thread.sleep(300);
-                mc.undoButton.fire();
+                undoButton().fire();
                 Thread.sleep(300);
-                mc.undoButton.fire();
+                undoButton().fire();
                 Thread.sleep(300);
             }
         }
@@ -445,14 +495,14 @@ public void exerciseAllFeatures() throws Exception {
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             vis.get(0).setSelected(true);
             vis.get(1).setSelected(true);
-            mc.groupButton.fire();
+            groupButton().fire();
             Thread.sleep(400);
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             List<PreviewItem> tops = mc.allVisibleItems().stream()
                     .filter(i -> i.parentGroup == null).toList();
             tops.get(0).setSelected(true);
             tops.get(1).setSelected(true);
-            mc.groupButton.fire();
+            groupButton().fire();
             Thread.sleep(400);
             List<GroupItem<PreviewItem>> groups = mc.topLevelGroups();
             if (groups.size() == 2) {
@@ -484,15 +534,15 @@ public void exerciseAllFeatures() throws Exception {
                 mc.rebuildDisplay();
                 Thread.sleep(200);
                 // 撤销组合并 → 撤销组行移动 → 撤销出组 → 撤销入组 → 撤销组内排序
-                mc.undoButton.fire();
+                undoButton().fire();
                 Thread.sleep(300);
-                mc.undoButton.fire();
+                undoButton().fire();
                 Thread.sleep(300);
-                mc.undoButton.fire();
+                undoButton().fire();
                 Thread.sleep(300);
-                mc.undoButton.fire();
+                undoButton().fire();
                 Thread.sleep(300);
-                mc.undoButton.fire();
+                undoButton().fire();
                 Thread.sleep(300);
             }
         }
@@ -525,13 +575,13 @@ public void exerciseAllFeatures() throws Exception {
     }
 
     // Phase 12: 取消全部模式
-    mc.textModeToggle.setSelected(false);
-    mc.imageModeToggle.setSelected(false);
+    textModeToggle().setSelected(false);
+    imageModeToggle().setSelected(false);
     Thread.sleep(300);
 
     // Phase 13: 收尾
-    mc.textModeToggle.setSelected(true);
-    mc.imageModeToggle.setSelected(false);
+    textModeToggle().setSelected(true);
+    imageModeToggle().setSelected(false);
     Thread.sleep(300);
 
     // Phase 14: 导入相关（统一导入改造）：高亮样式类 + 盘符根目录判定（不真正扫描盘符）
@@ -594,14 +644,14 @@ public void runAutomatedTests() {
         createSampleMht(imageDir, "i01.mht");
         createSampleMht(imageDir, "i02.mht");
 
-        try { mc.textModeToggle.setSelected(true); Thread.sleep(300); out.println("[PASS] Text mode toggle"); p++;
+        try { textModeToggle().setSelected(true); Thread.sleep(300); out.println("[PASS] Text mode toggle"); p++;
         } catch (Exception e) { out.println("[FAIL] Text mode: " + e.getMessage()); f++; }
 
-        try { mc.imageModeToggle.setSelected(true); Thread.sleep(300); out.println("[PASS] Image mode toggle"); p++;
+        try { imageModeToggle().setSelected(true); Thread.sleep(300); out.println("[PASS] Image mode toggle"); p++;
         } catch (Exception e) { out.println("[FAIL] Image mode: " + e.getMessage()); f++; }
 
         // 文本参数弹窗：开关联动 + 确定生效
-        try { mc.textModeToggle.setSelected(true); Thread.sleep(200);
+        try { textModeToggle().setSelected(true); Thread.sleep(200);
             ParamDialogController textDialog = ParamDialogController.showDirect(
                     null, false, mc.textParamsCache, mc.imageParamsCache, ParamScope.GLOBAL);
             Thread.sleep(300);
@@ -615,7 +665,7 @@ public void runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Text param dialog: " + e.getMessage()); f++; }
 
         // 图片参数弹窗
-        try { mc.imageModeToggle.setSelected(true); Thread.sleep(200);
+        try { imageModeToggle().setSelected(true); Thread.sleep(200);
             ParamDialogController imageDialog = ParamDialogController.showDirect(
                     null, true, mc.textParamsCache, mc.imageParamsCache, ParamScope.GLOBAL);
             Thread.sleep(300);
@@ -631,8 +681,8 @@ public void runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Image param dialog: " + e.getMessage()); f++; }
 
         // 增量导入：先导入 2 个，追加 1 个后再次导入 → 仅新增 1 个
-        try { mc.textModeToggle.setSelected(true); Thread.sleep(200);
-            mc.inputFolderField.setText(textDir.toString()); Thread.sleep(1200);
+        try { textModeToggle().setSelected(true); Thread.sleep(200);
+            inputFolderField().setText(textDir.toString()); Thread.sleep(1200);
             waitForImportDone();
             long before = mc.visibleCount();
             createSampleMht(textDir, "t03.mht");
@@ -646,7 +696,7 @@ public void runAutomatedTests() {
 
         // 撤销导入后同目录可重新导入（回归：撤销导入曾清空列表且无法重新导入）
         try { long before = mc.visibleCount();
-            mc.undoButton.fire(); Thread.sleep(400);
+            undoButton().fire(); Thread.sleep(400);
             if (mc.visibleCount() != before - 1) {
                 throw new IllegalStateException("撤销导入数量不符：" + before + " -> " + mc.visibleCount());
             }
@@ -707,7 +757,7 @@ public void runAutomatedTests() {
         try {
             int itemsBefore = (int) mc.visibleCount();
             int groupsBefore = mc.topLevelGroups().size();
-            mc.undoButton.fire(); Thread.sleep(600);
+            undoButton().fire(); Thread.sleep(600);
             if (mc.visibleCount() != itemsBefore - 6) throw new IllegalStateException("整批撤销项目数不符：" + mc.visibleCount());
             if (mc.topLevelGroups().size() != groupsBefore - 4) throw new IllegalStateException("整批撤销未带走自动创建的组");
             out.println("[PASS] Unified import: single undo removes whole batch (items + groups)"); p++;
@@ -742,7 +792,7 @@ public void runAutomatedTests() {
                 throw new IllegalStateException("重复导入清空了既有条目级参数");
             }
             // 清场：撤销本次导入（后续测试段假设列表为 3 个顶层项目、无组）
-            mc.undoButton.fire(); Thread.sleep(600);
+            undoButton().fire(); Thread.sleep(600);
             out.println("[PASS] Unified import: re-import is a no-op"); p++;
         } catch (Exception e) { out.println("[FAIL] Unified import re-import: " + e.getMessage()); f++; }
 
@@ -750,11 +800,11 @@ public void runAutomatedTests() {
         try {
             mc.importPending = new MainController.ImportSession(List.of(), "自动化按钮状态", false);
             mc.updateStartButtonState();
-            if (!mc.startButton.isDisabled()) throw new IllegalStateException("导入期间开始提取应禁用");
+            if (!startButton().isDisabled()) throw new IllegalStateException("导入期间开始提取应禁用");
             mc.importPending = null;
             mc.updateStartButtonState();
-            boolean anyMode = mc.textModeToggle.isSelected() || mc.imageModeToggle.isSelected();
-            if (mc.startButton.isDisabled() != (!anyMode || mc.visibleCount() == 0)) {
+            boolean anyMode = textModeToggle().isSelected() || imageModeToggle().isSelected();
+            if (startButton().isDisabled() != (!anyMode || mc.visibleCount() == 0)) {
                 throw new IllegalStateException("导入结束后开始按钮状态未按派生规则恢复");
             }
             out.println("[PASS] Import disables/restores start button"); p++;
@@ -771,10 +821,10 @@ public void runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Drag-drop highlight: " + e.getMessage()); f++; }
 
         // 复选框列头全选/全不选（三态联动）
-        try { mc.selectAllCheck.fire(); Thread.sleep(200);
+        try { selectAllCheck().fire(); Thread.sleep(200);
             long sel = mc.allVisibleItems().stream().filter(i -> i.selected).count();
             if (sel != mc.visibleCount()) { throw new IllegalStateException("全选未生效: " + sel); }
-            mc.selectAllCheck.fire(); Thread.sleep(200);
+            selectAllCheck().fire(); Thread.sleep(200);
             sel = mc.allVisibleItems().stream().filter(i -> i.selected).count();
             if (sel != 0) { throw new IllegalStateException("全不选未生效: " + sel); }
             out.println("[PASS] Select-all checkbox tri-state"); p++;
@@ -783,9 +833,9 @@ public void runAutomatedTests() {
         // 移除 + 撤销（部分勾选不弹确认框）
         try { List<PreviewItem> vis = mc.allVisibleItems();
             vis.get(0).setSelected(true); Thread.sleep(200);
-            mc.removeButton.fire(); Thread.sleep(300);
+            removeButton().fire(); Thread.sleep(300);
             if (vis.get(0).removed != true) { throw new IllegalStateException("移除未生效"); }
-            mc.undoButton.fire(); Thread.sleep(300);
+            undoButton().fire(); Thread.sleep(300);
             if (vis.get(0).removed) { throw new IllegalStateException("撤销移除未生效"); }
             out.println("[PASS] Remove + undo"); p++;
         } catch (Exception e) { out.println("[FAIL] Remove + undo: " + e.getMessage()); f++; }
@@ -794,12 +844,12 @@ public void runAutomatedTests() {
         try { List<PreviewItem> vis = mc.allVisibleItems();
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             vis.get(0).setSelected(true); vis.get(1).setSelected(true);
-            mc.groupButton.fire(); Thread.sleep(400);
+            groupButton().fire(); Thread.sleep(400);
             List<GroupItem<PreviewItem>> groups = mc.topLevelGroups();
             if (groups.size() != 1) { throw new IllegalStateException("建组失败: " + groups.size()); }
             GroupItem<PreviewItem> g = groups.get(0);
             mc.fileListView.getSelectionModel().select(g); Thread.sleep(300);
-            mc.groupNameField.setText("自动测试组"); Thread.sleep(300);
+            groupNameField().setText("自动测试组"); Thread.sleep(300);
             if (!"自动测试组".equals(g.getName())) { throw new IllegalStateException("组名编辑失败"); }
             // 折叠/展开动画（触发后立即快进验证终态；FX 线程 sleep 会阻塞 pulse 动画无法推进）
             mc.toggleGroupExpanded(g);
@@ -818,13 +868,13 @@ public void runAutomatedTests() {
             mc.applyGroupParams(g, false, groupDialog.getResult()); Thread.sleep(300);
             if (g.getTextParamsCache() == null) { throw new IllegalStateException("组参数未写入"); }
             mc.fileListView.getSelectionModel().select(g); Thread.sleep(200);
-            mc.ungroupButton.fire(); Thread.sleep(300);
+            ungroupButton().fire(); Thread.sleep(300);
             if (mc.topLevelGroups().size() != 0) { throw new IllegalStateException("拆分组失败"); }
-            mc.undoButton.fire(); Thread.sleep(300);
+            undoButton().fire(); Thread.sleep(300);
             if (mc.topLevelGroups().size() != 1 || !"自动测试组".equals(mc.topLevelGroups().get(0).getName())) {
                 throw new IllegalStateException("撤销拆分失败（组名/参数未恢复）");
             }
-            mc.undoButton.fire(); Thread.sleep(300);   // 撤销组参数（PARAM_SET）
+            undoButton().fire(); Thread.sleep(300);   // 撤销组参数（PARAM_SET）
             if (g.getTextParamsCache() != null) {
                 throw new IllegalStateException("撤销组参数失败");
             }
@@ -832,17 +882,17 @@ public void runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Group ops: " + e.getMessage()); f++; }
 
         // 拖拽（performDrop 程序化驱动）+ 撤销；第二组用单项目建组（R9）
-        try { mc.undoButton.fire(); Thread.sleep(300);   // 撤销上一段建组，成员回顶层
+        try { undoButton().fire(); Thread.sleep(300);   // 撤销上一段建组，成员回顶层
             List<PreviewItem> vis = mc.allVisibleItems();
             if (vis.size() < 3) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             vis.get(0).setSelected(true); vis.get(1).setSelected(true);
-            mc.groupButton.fire(); Thread.sleep(400);
+            groupButton().fire(); Thread.sleep(400);
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             List<PreviewItem> tops = mc.allVisibleItems().stream()
                     .filter(i -> i.parentGroup == null).toList();
             tops.get(0).setSelected(true);
-            mc.groupButton.fire(); Thread.sleep(400);
+            groupButton().fire(); Thread.sleep(400);
             List<GroupItem<PreviewItem>> groups = mc.topLevelGroups();
             if (groups.size() != 2) { throw new IllegalStateException("建第二组失败: " + groups.size()); }
             GroupItem<PreviewItem> g1 = groups.get(0); GroupItem<PreviewItem> g2 = groups.get(1);
@@ -853,17 +903,17 @@ public void runAutomatedTests() {
             mc.performDrop(g2, g1, DropResolver.Zone.INTO, null);
             mc.rebuildDisplay(); Thread.sleep(200);
             if (mc.topLevelGroups().size() != 1) { throw new IllegalStateException("两组合并失败"); }
-            mc.undoButton.fire(); Thread.sleep(300);   // 撤销组合并
-            mc.undoButton.fire(); Thread.sleep(300);   // 撤销入组
-            mc.undoButton.fire(); Thread.sleep(300);   // 撤销组内排序
+            undoButton().fire(); Thread.sleep(300);   // 撤销组合并
+            undoButton().fire(); Thread.sleep(300);   // 撤销入组
+            undoButton().fire(); Thread.sleep(300);   // 撤销组内排序
             if (mc.topLevelGroups().size() != 2) { throw new IllegalStateException("撤销拖拽失败"); }
             out.println("[PASS] Drag-drop (reorder/cross-group/merge) + undo"); p++;
         } catch (Exception e) { out.println("[FAIL] Drag-drop: " + e.getMessage()); f++; }
 
         // 条目独立参数 + 应用到全局 + 撤销链（条目独立参数需求）
         try {
-            mc.undoButton.fire(); Thread.sleep(300);   // 撤销建组（第二组）
-            mc.undoButton.fire(); Thread.sleep(300);   // 撤销建组（第一组）
+            undoButton().fire(); Thread.sleep(300);   // 撤销建组（第二组）
+            undoButton().fire(); Thread.sleep(300);   // 撤销建组（第一组）
             List<PreviewItem> vis = mc.allVisibleItems();
             if (vis.size() < 2) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
             PreviewItem target = vis.get(0);
@@ -876,18 +926,18 @@ public void runAutomatedTests() {
             mc.applyItemParams(target, false, itemDialog.getResult());
             if (target.textItemParams == null) { throw new IllegalStateException("条目参数未写入"); }
             mc.fileListView.getSelectionModel().select(target); Thread.sleep(200);
-            if (mc.applyGlobalButton.isDisabled()) { throw new IllegalStateException("应用到全局按钮未启用"); }
+            if (applyGlobalButton().isDisabled()) { throw new IllegalStateException("应用到全局按钮未启用"); }
             AppConfig globalBeforeApply = mc.textParamsCache;
-            mc.applyGlobalButton.fire(); Thread.sleep(300);
+            applyGlobalButton().fire(); Thread.sleep(300);
             if (target.textItemParams != null
                     || mc.allVisibleItems().stream().anyMatch(i -> i.textItemParams != null)) {
                 throw new IllegalStateException("应用到全局未清空独立参数");
             }
-            mc.undoButton.fire(); Thread.sleep(300);   // 撤销应用到全局
+            undoButton().fire(); Thread.sleep(300);   // 撤销应用到全局
             if (target.textItemParams == null || mc.textParamsCache != globalBeforeApply) {
                 throw new IllegalStateException("撤销应用到全局未恢复");
             }
-            mc.undoButton.fire(); Thread.sleep(300);   // 撤销条目参数
+            undoButton().fire(); Thread.sleep(300);   // 撤销条目参数
             if (target.textItemParams != null) {
                 throw new IllegalStateException("撤销条目参数未恢复");
             }
@@ -898,11 +948,11 @@ public void runAutomatedTests() {
         try {
             List<PreviewItem> vis = mc.allVisibleItems();
             if (vis.size() < 3) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
-            mc.textModeToggle.setSelected(true); Thread.sleep(300);
+            textModeToggle().setSelected(true); Thread.sleep(300);
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             mc.updateListButtons();
             PreviewItem a = vis.get(0), b = vis.get(1);
-            if (!mc.clearParamsButton.isDisabled()) { throw new IllegalStateException("无独立参数时按钮应禁用"); }
+            if (!clearParamsButton().isDisabled()) { throw new IllegalStateException("无独立参数时按钮应禁用"); }
             ParamDialogController itemDlg = ParamDialogController.showDirect(
                     null, false, mc.textParamsCache, mc.imageParamsCache,
                     new ParamScope.ItemTarget<>(a, a.textItemParams, a.imageItemParams));
@@ -912,16 +962,16 @@ public void runAutomatedTests() {
             mc.applyItemParams(a, false, itemDlg.getResult());
             if (a.textItemParams == null) { throw new IllegalStateException("条目参数未写入"); }
             mc.fileListView.getSelectionModel().select(a); Thread.sleep(200);
-            if (mc.clearParamsButton.isDisabled()) { throw new IllegalStateException("选中带参数条目时按钮应启用"); }
+            if (clearParamsButton().isDisabled()) { throw new IllegalStateException("选中带参数条目时按钮应启用"); }
             mc.fileListView.getSelectionModel().select(b); mc.updateListButtons();
-            if (!mc.clearParamsButton.isDisabled()) { throw new IllegalStateException("选中无参数条目时按钮应禁用"); }
+            if (!clearParamsButton().isDisabled()) { throw new IllegalStateException("选中无参数条目时按钮应禁用"); }
             a.setSelected(true); b.setSelected(true); mc.updateListButtons();
-            if (mc.clearParamsButton.isDisabled()) { throw new IllegalStateException("勾选集合含参数目标时按钮应启用"); }
-            mc.clearParamsButton.fire(); Thread.sleep(300);
+            if (clearParamsButton().isDisabled()) { throw new IllegalStateException("勾选集合含参数目标时按钮应启用"); }
+            clearParamsButton().fire(); Thread.sleep(300);
             if (a.textItemParams != null) { throw new IllegalStateException("清除条目参数未生效"); }
-            if (!mc.clearParamsButton.isDisabled()) { throw new IllegalStateException("清除后按钮应禁用"); }
+            if (!clearParamsButton().isDisabled()) { throw new IllegalStateException("清除后按钮应禁用"); }
             mc.allVisibleItems().forEach(i -> i.setSelected(false)); mc.updateListButtons();
-            mc.undoButton.fire(); Thread.sleep(300);
+            undoButton().fire(); Thread.sleep(300);
             if (a.textItemParams == null) { throw new IllegalStateException("撤销清除参数未恢复"); }
             // 菜单启用态：空白/无参数禁用、带参数启用（启用看右键目标）
             mc.updateContextMenuState(null);
@@ -940,7 +990,7 @@ public void runAutomatedTests() {
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             PreviewItem a = vis.get(0), b = vis.get(1), c = vis.get(2);
             b.setSelected(true); c.setSelected(true);
-            mc.groupButton.fire(); Thread.sleep(400);
+            groupButton().fire(); Thread.sleep(400);
             List<GroupItem<PreviewItem>> groups = mc.topLevelGroups();
             if (groups.size() != 1) { throw new IllegalStateException("建组失败: " + groups.size()); }
             GroupItem<PreviewItem> g = groups.get(0);
@@ -953,18 +1003,18 @@ public void runAutomatedTests() {
             if (g.getTextParamsCache() == null) { throw new IllegalStateException("组参数未写入"); }
             // a（组外带参数）+ b（组内成员）混合多选 → 清 a 条目参数 + 清整组 g 参数（同组去重）
             a.setSelected(true); b.setSelected(true); mc.updateListButtons();
-            if (mc.clearParamsButton.isDisabled()) { throw new IllegalStateException("混合多选按钮应启用"); }
-            mc.clearParamsButton.fire(); Thread.sleep(300);
+            if (clearParamsButton().isDisabled()) { throw new IllegalStateException("混合多选按钮应启用"); }
+            clearParamsButton().fire(); Thread.sleep(300);
             if (a.textItemParams != null) { throw new IllegalStateException("组外条目参数未清除"); }
             if (g.getTextParamsCache() != null) { throw new IllegalStateException("组参数未清除"); }
-            mc.undoButton.fire(); Thread.sleep(300);
+            undoButton().fire(); Thread.sleep(300);
             if (a.textItemParams == null || g.getTextParamsCache() == null) {
                 throw new IllegalStateException("撤销混合清除未全部恢复");
             }
             // 清场恢复：撤销组参数、建组、条目参数，回到本段前状态
-            mc.undoButton.fire(); Thread.sleep(300);
-            mc.undoButton.fire(); Thread.sleep(300);
-            mc.undoButton.fire(); Thread.sleep(300);
+            undoButton().fire(); Thread.sleep(300);
+            undoButton().fire(); Thread.sleep(300);
+            undoButton().fire(); Thread.sleep(300);
             if (mc.topLevelGroups().size() != 0 || a.textItemParams != null) {
                 throw new IllegalStateException("清除参数测试段清场失败");
             }
@@ -975,7 +1025,7 @@ public void runAutomatedTests() {
         try {
             List<PreviewItem> vis = mc.allVisibleItems();
             if (vis.size() < 2) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
-            mc.textModeToggle.setSelected(true); Thread.sleep(300);
+            textModeToggle().setSelected(true); Thread.sleep(300);
             mc.cancelWorkspaceActivity();   // 作废在途解析代次，保证断言确定性
             AppConfig savedGlobal = mc.textParamsCache;
             for (PreviewItem it : mc.allPreviewItems()) {
@@ -986,33 +1036,33 @@ public void runAutomatedTests() {
             mc.textParamsCache = null;               // 全局未确认
             p0.textItemParams = new AppConfig();  // 仅该条目有独立参数
             mc.updateProgressStatus(mc.parseToken);
-            if (!mc.progressBar.isVisible() || Math.abs(mc.progressBar.getProgress()) > 0.001) {
+            if (!progressBar().isVisible() || Math.abs(progressBar().getProgress()) > 0.001) {
                 throw new IllegalStateException("无参数条目不应参与进度（期望可见且 0/1）");
             }
-            if (!mc.progressBar.getStyleClass().contains("progress-preparse")) {
+            if (!progressBar().getStyleClass().contains("progress-preparse")) {
                 throw new IllegalStateException("预解析进度条应为浅蓝样式");
             }
             p0.status = PreviewItem.Status.READY;
             mc.updateProgressStatus(mc.parseToken);
-            if (mc.progressBar.isVisible()) {
+            if (progressBar().isVisible()) {
                 throw new IllegalStateException("有参数条目全部完成后进度条应隐藏");
             }
-            if (mc.progressBar.getStyleClass().contains("progress-preparse")) {
+            if (progressBar().getStyleClass().contains("progress-preparse")) {
                 throw new IllegalStateException("预解析完成后应移除浅蓝样式");
             }
             p0.textItemParams = null;
             mc.updateProgressStatus(mc.parseToken);
-            if (mc.progressBar.isVisible()) {
+            if (progressBar().isVisible()) {
                 throw new IllegalStateException("全部无参数时进度条应隐藏");
             }
             // 相邻修复：提取运行期间进度条/状态栏归提取任务独占，解析回调不得覆盖
             mc.running.set(true);
-            mc.progressBar.setVisible(true);
-            mc.progressBar.setProgress(0.5);
-            String labelBefore = mc.statusLabel.getText();
+            progressBar().setVisible(true);
+            progressBar().setProgress(0.5);
+            String labelBefore = statusLabel().getText();
             mc.updateProgressStatus(mc.parseToken);
-            if (Math.abs(mc.progressBar.getProgress() - 0.5) > 0.001
-                    || !mc.statusLabel.getText().equals(labelBefore)) {
+            if (Math.abs(progressBar().getProgress() - 0.5) > 0.001
+                    || !statusLabel().getText().equals(labelBefore)) {
                 mc.running.set(false);
                 throw new IllegalStateException("提取期间解析回调不应覆盖进度条/状态栏");
             }
@@ -1070,7 +1120,7 @@ public void runAutomatedTests() {
                 mc.allVisibleItems().forEach(i -> i.setSelected(false));
                 vis.get(0).setSelected(true);
                 vis.get(1).setSelected(true);
-                mc.groupButton.fire(); Thread.sleep(400);
+                groupButton().fire(); Thread.sleep(400);
             }
             List<OutputUnitPlanner.OutputUnit> units = OutputUnitPlanner.plan(
                     mc.items, MainController.ITEM_VIEW, false, mc.textParamsCache, mc.imageParamsCache, sessionDir);
@@ -1078,11 +1128,11 @@ public void runAutomatedTests() {
             out.println("[PASS] Output unit plan (" + units.size() + " units)"); p++;
         } catch (Exception e) { out.println("[FAIL] Output unit plan: " + e.getMessage()); f++; }
 
-        try { mc.inputFolderField.setText(textDir.toString()); Thread.sleep(200);
+        try { inputFolderField().setText(textDir.toString()); Thread.sleep(200);
             out.println("[PASS] Set input folder"); p++;
         } catch (Exception e) { out.println("[FAIL] Input folder: " + e.getMessage()); f++; }
 
-        try { mc.outputFolderField.setText(new File(System.getProperty("java.io.tmpdir"),
+        try { outputFolderField().setText(new File(System.getProperty("java.io.tmpdir"),
                     "mht-auto-output").getPath()); Thread.sleep(200);
             out.println("[PASS] Set output folder"); p++;
         } catch (Exception e) { out.println("[FAIL] Output folder: " + e.getMessage()); f++; }
@@ -1098,7 +1148,7 @@ public void runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Config combo: " + e.getMessage()); f++; }
 
         // 文本预览工作区（主窗口）：列表 + 章节勾选
-        try { mc.textModeToggle.setSelected(true); Thread.sleep(500);
+        try { textModeToggle().setSelected(true); Thread.sleep(500);
             if (mc.fileListView.getItems().isEmpty()) { throw new IllegalStateException("文件列表为空"); }
             mc.fileListView.getSelectionModel().selectFirst(); Thread.sleep(500);
             mc.adjustCheck.setSelected(false); Thread.sleep(200);
@@ -1107,16 +1157,16 @@ public void runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Text preview workspace: " + e.getMessage()); f++; }
 
         // 文本提取（参数已确认 → 不弹提示；断言单元合并后 fileResults 完整，供回写背景色）
-        try { mc.textModeToggle.setSelected(true); Thread.sleep(300);
-            mc.inputFolderField.setText(textDir.toString());
+        try { textModeToggle().setSelected(true); Thread.sleep(300);
+            inputFolderField().setText(textDir.toString());
             waitForImportDone();   // 统一导入为异步：先排空（本例为全量已导入 no-op），避免收尾回调在提取期间重算按钮状态
-            mc.outputFolderField.setText(new File(System.getProperty("java.io.tmpdir"),
+            outputFolderField().setText(new File(System.getProperty("java.io.tmpdir"),
                     "mht-auto-output-text").getPath());
-            mc.startButton.fire();
+            startButton().fire();
             // 提取回调（onSucceeded 等）在 FX 线程事件队列中，须嵌套泵排空后再断言
             long deadline = System.currentTimeMillis() + 20000;
             while (System.currentTimeMillis() < deadline
-                    && (mc.lastExtractStats.get() == null || mc.startButton.isDisabled())) {
+                    && (mc.lastExtractStats.get() == null || startButton().isDisabled())) {
                 pumpFxEvents();
             }
             BatchProcessor.ProcessStats merged = mc.lastExtractStats.get();
@@ -1127,15 +1177,15 @@ public void runAutomatedTests() {
                         + (merged == null ? "null" : merged.getFileResults().size()));
             }
             // 进度条配色拍板：全部成功 → 满格绿色
-            if (!mc.progressBar.isVisible() || Math.abs(mc.progressBar.getProgress() - 1.0) > 0.001
-                    || !mc.progressBar.getStyleClass().contains("progress-extract-success")) {
+            if (!progressBar().isVisible() || Math.abs(progressBar().getProgress() - 1.0) > 0.001
+                    || !progressBar().getStyleClass().contains("progress-extract-success")) {
                 throw new IllegalStateException("全部成功后进度条应满格且为绿色");
             }
             out.println("[PASS] Text extraction started"); p++;
         } catch (Exception e) { out.println("[FAIL] Text extraction: " + e.getMessage()); f++; }
 
         // 图片预览工作区：查看预览效果（懒加载 + 需求 2 C1 预览落盘断言）
-        try { mc.imageModeToggle.setSelected(true); Thread.sleep(500);
+        try { imageModeToggle().setSelected(true); Thread.sleep(500);
             PreviewItem pvTarget = mc.allVisibleItems().stream()
                     .filter(i -> "t01.mht".equals(i.name)).findFirst()
                     .orElseThrow(() -> new IllegalStateException("找不到 t01.mht"));
@@ -1169,31 +1219,31 @@ public void runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Image preview workspace: " + e.getMessage()); f++; }
 
         // 图片提取（含损坏文件 → 满格条应转为浅红，进度条配色拍板）
-        try { mc.imageModeToggle.setSelected(true); Thread.sleep(300);
+        try { imageModeToggle().setSelected(true); Thread.sleep(300);
             java.nio.file.Files.write(imageDir.resolve("bad.mht"),
                     "garbage-not-a-mht".getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            mc.inputFolderField.setText(imageDir.toString());
+            inputFolderField().setText(imageDir.toString());
             waitForImportDone();   // 统一导入为异步：bad.mht 须完成导入后才开始提取，否则无失败条目
-            mc.outputFolderField.setText(new File(System.getProperty("java.io.tmpdir"),
+            outputFolderField().setText(new File(System.getProperty("java.io.tmpdir"),
                     "mht-auto-output-image").getPath());
-            mc.startButton.fire();
+            startButton().fire();
             long deadline = System.currentTimeMillis() + 20000;
             while (System.currentTimeMillis() < deadline
-                    && (mc.lastExtractStats.get() == null || mc.startButton.isDisabled())) {
+                    && (mc.lastExtractStats.get() == null || startButton().isDisabled())) {
                 pumpFxEvents();
             }
             if (mc.lastExtractStats.get() == null) {
                 throw new IllegalStateException("图片提取未在时限内完成");
             }
-            if (!mc.progressBar.isVisible() || Math.abs(mc.progressBar.getProgress() - 1.0) > 0.001
-                    || !mc.progressBar.getStyleClass().contains("progress-extract-failed")) {
+            if (!progressBar().isVisible() || Math.abs(progressBar().getProgress() - 1.0) > 0.001
+                    || !progressBar().getStyleClass().contains("progress-extract-failed")) {
                 throw new IllegalStateException("存在失败条目时满格条应为浅红");
             }
             out.println("[PASS] Image extraction started"); p++;
         } catch (Exception e) { out.println("[FAIL] Image extraction: " + e.getMessage()); f++; }
 
         // 预览缓存生命周期（需求 2 会话 9）：参数失效 C3 / 移除清理 C7 / 退出清理 C8
-        try { mc.imageModeToggle.setSelected(true); Thread.sleep(300);
+        try { imageModeToggle().setSelected(true); Thread.sleep(300);
             PreviewItem target = mc.allVisibleItems().stream()
                     .filter(i -> "i01.mht".equals(i.name)).findFirst()
                     .orElseThrow(() -> new IllegalStateException("找不到 i01.mht"));

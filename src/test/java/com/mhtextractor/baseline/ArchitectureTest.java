@@ -144,8 +144,24 @@ class ArchitectureTest {
      * {@code final Foo bar = new Foo();} 解析成了类型名 {@code Foo} —— 产生了一批**假阳性**
      * （把实际被引用的成员报成"未被引用"）。改用**行首锚定的类型+名字**正则后 0 条 UNPARSED。
      * 这与 `CLAUDE.md` 记录的"正则漏掉分号结尾的枚举常量"是同一类错误。</p>
+     *
+     * <p><b>演进记录（步骤 1 阶段 C，2026-09-26）</b>：62 → <b>46</b>。
+     * 把 {@code FeatureExercise} 里 {@code mc.<字段>} 的直接引用（125 处）改为
+     * {@code Node.lookup("#fx:id")}（宿主 {@code node(String)} / {@code node(String, Class)} 在
+     * **测试源集**，不占 MainController 行数），于是 <b>16 个 @FXML 字段</b>不再需要包级可见性，
+     * 全部收回 {@code private} 并摘除标记。</p>
+     *
+     * <p><b>为什么 lookup 可行</b>（实测，见 `docs/handoff/H20.md` §3.2）：42 个 {@code fx:id} 中
+     * 41 个可解析，唯一例外 {@code modeToggleGroup} 是 {@code ToggleGroup} 而**非** {@code Node}
+     * （它也不在本测试使用）；且 {@code lookup} 对 {@code visible=false} / {@code managed=false} /
+     * {@code disabled=true} 的节点**同样有效**，三阶段结果一致。</p>
+     *
+     * <p><b>剩余 46 处不能照此办理</b>：它们是**状态与方法**（{@code allVisibleItems} 31 次、
+     * {@code textParamsCache} 22 次、{@code topLevelGroups} 20 次 …）与 1 个内部类，属
+     * "读状态做断言 / 直接驱动内部方法"，需要另设测试支撑 API 或改为经 UI 观察，
+     * 是独立且更难的一项。</p>
      */
-    private static final int TEST_SUPPORT_MARKER_MAX = 62;
+    private static final int TEST_SUPPORT_MARKER_MAX = 46;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

@@ -296,34 +296,34 @@ public class MainController {
 
     // ===== 顶部控制栏 =====
     @FXML private ToggleGroup modeToggleGroup;
-    @FXML /* test-support */ ToggleButton textModeToggle;
-    @FXML /* test-support */ ToggleButton imageModeToggle;
-    @FXML /* test-support */ TextField inputFolderField;
-    @FXML /* test-support */ TextField outputFolderField;
+    @FXML private ToggleButton textModeToggle;
+    @FXML private ToggleButton imageModeToggle;
+    @FXML private TextField inputFolderField;
+    @FXML private TextField outputFolderField;
     @FXML private Button browseInputButton;
     @FXML private Button browseOutputButton;
 
     // ===== 预览工作区（左：列表） =====
     @FXML private Label fileCountLabel;
-    @FXML /* test-support */ CheckBox selectAllCheck;
+    @FXML private CheckBox selectAllCheck;
     @FXML private Label badgeHeaderLabel;
     @FXML ListView<Object> fileListView;
     @FXML private Pane dragOverlay;
     // ===== 列表按钮行（移除/撤销/合并为组/拆分组；后两者阶段 4/6 启用） =====
-    @FXML /* test-support */ Button removeButton;
-    @FXML /* test-support */ Button clearParamsButton;
-    @FXML /* test-support */ Button undoButton;
+    @FXML private Button removeButton;
+    @FXML private Button clearParamsButton;
+    @FXML private Button undoButton;
     @FXML private Button viewSourceButton;
-    @FXML /* test-support */ Button groupButton;
-    @FXML /* test-support */ Button ungroupButton;
-    @FXML /* test-support */ Button applyGlobalButton;
+    @FXML private Button groupButton;
+    @FXML private Button ungroupButton;
+    @FXML private Button applyGlobalButton;
 
     // ===== 预览工作区（右：信息区与内容区） =====
     @FXML private Label modeLabel;
     @FXML private Label outputModeLabel;
     @FXML private Label outputNameLabel;
     @FXML private HBox groupNameBox;
-    @FXML /* test-support */ TextField groupNameField;
+    @FXML private TextField groupNameField;
     @FXML private Label titleInfoLabel;
     @FXML private Label outputResultLabel;
     @FXML CheckBox adjustCheck;
@@ -339,12 +339,12 @@ public class MainController {
     @FXML private Button paramSettingsButton;
 
     // ===== 底部操作区 =====
-    @FXML /* test-support */ ProgressBar progressBar;
-    @FXML /* test-support */ Label statusLabel;
-    @FXML /* test-support */ Button startButton;
+    @FXML private ProgressBar progressBar;
+    @FXML private Label statusLabel;
+    @FXML private Button startButton;
     @FXML private Button stopButton;
     @FXML LogTextArea logTextArea;
-    @FXML /* test-support */ ToggleSwitch openFolderAfterCompleteCheck;
+    @FXML private ToggleSwitch openFolderAfterCompleteCheck;
 
     // ===== 状态 =====
     /** 数据序：顶层混合列表（PreviewItem | GroupItem），组内成员存于 GroupItem.members */
