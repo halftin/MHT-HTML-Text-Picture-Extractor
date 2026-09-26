@@ -2,6 +2,7 @@ package com.mhtextractor.gui.controller;
 
 import atlantafx.base.controls.ToggleSwitch;
 import com.mhtextractor.app.ExtractionPreconditions;
+import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.cache.PreviewCacheKey;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheMeta;
@@ -310,8 +311,8 @@ public class MainController {
     /** 最近一次提取的 partial/完整统计（提取结果状态需求）：Task 取消时 getValue() 不可用，回写经此 holder */
     /* test-support */ final AtomicReference<BatchProcessor.ProcessStats> lastExtractStats = new AtomicReference<>();
 
-    // ===== 撤销栈（F4）：REMOVE/IMPORT/GROUP/REMOVE_GROUP 四类记录，深度 35，超出丢弃最旧 =====
-    /* test-support */ final UndoManager<PreviewItem> undoManager = new UndoManager<>();
+    // 撤销栈（F4）：唯一栈由 app.WorkspaceModel 独占；结构类由模型 undo() 应用，参数 / 拖拽类由本类 popRecord() 后自行应用
+    /* test-support */ final WorkspaceModel ws = new WorkspaceModel();
     private volatile Task<BatchProcessor.ProcessStats> currentTask;
 
     /** 两套已确认提取参数缓存：null 表示该模式尚未确认过参数 */
@@ -839,7 +840,7 @@ public class MainController {
 
         // 撤销栈：一次导入 = 一条记录（BC-5；多轮导入时每轮记录均携带全量累计，一次撤销撤整批）
         if (!importAccumulated.isEmpty()) {
-            undoManager.push(new UndoManager.Record<>(
+            ws.push(new UndoManager.Record<>(
                     UndoManager.RecordType.IMPORT, new ArrayList<>(importAccumulated),
                     new ArrayList<>(createdGroups)));
         }
@@ -1204,7 +1205,7 @@ public class MainController {
         } else {
             item.textItemParams = params;
         }
-        undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
+        ws.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
                 null, -1, List.of(), List.of(), List.of(), List.of(),
                 false, null, null, null, imageMode, item.path, null, before,
                 false, null, null));
@@ -1227,14 +1228,13 @@ public class MainController {
         } else {
             textParamsCache = params;
         }
-        undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
+        ws.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
                 null, -1, List.of(), List.of(), List.of(), List.of(),
                 false, null, null, null, imageMode, null, null, before,
                 false, null, null));
         // 拍板：全局参数重新确认 → 全部条目旧提取结果色失效
         clearExtractOutcomes(allPreviewItems());
-        // 规则 (a)：全局参数变化 → 全部条目缓存目录删除（保守全删：无独立参数的条目生效参数确实变了，
-        // 有独立参数的条目删除也只是下次预览重建，语义安全）
+        // 规则 (a)：全局参数变化 → 全部条目缓存目录删除（保守全删：有独立参数的条目删除也只是下次预览重建，语义安全）
         workspaceParamService.paramsChanged(imageMode, allPreviewItems());
         refreshAfterParamsChanged();
         updateExtractBanner(currentSelection());
@@ -1250,7 +1250,7 @@ public class MainController {
         }
         log.info("组 {} 已确认{}模式独立参数，组内项目重新解析", group.getName(), imageMode ? "图片" : "文本");
         // 入撤销栈（PARAM_SET，组参数设置可撤销）
-        undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
+        ws.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
                 null, -1, List.of(), List.of(), List.of(), List.of(),
                 false, null, null, null, imageMode, null, group.getGroupNo(), before,
                 false, null, null));
@@ -1634,7 +1634,7 @@ public class MainController {
                 }
             }
         }
-        undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.APPLY_GLOBAL, List.of(),
+        ws.push(new UndoManager.Record<>(UndoManager.RecordType.APPLY_GLOBAL, List.of(),
                 null, -1, List.of(), List.of(), List.of(), List.of(),
                 imageMode, globalBefore, itemBefore, groupBefore, false, null, null, null,
                 false, null, null));
@@ -1730,7 +1730,7 @@ public class MainController {
                 grp.setTextParamsCache(null);
             }
         }
-        undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.CLEAR_PARAMS, List.of(),
+        ws.push(new UndoManager.Record<>(UndoManager.RecordType.CLEAR_PARAMS, List.of(),
                 null, -1, List.of(), List.of(), List.of(), List.of(),
                 false, null, null, null, false, null, null, null,
                 imageMode, itemBefore, groupBefore));
@@ -2222,13 +2222,13 @@ public class MainController {
         if (changed) {
             // 一次拖放会话 = 一条撤销记录（REORDER 存拖拽前结构快照；MERGE_GROUPS 另存被拖组及其成员副本）
             if (type == UndoManager.RecordType.MERGE_GROUPS) {
-                undoManager.push(new UndoManager.Record<>(type, mergedMembers, merged,
+                ws.push(new UndoManager.Record<>(type, mergedMembers, merged,
                         mergedIdx, List.of(), List.of(), before));
                 log.info("拖拽合并：组 {} 并入组 {}（{} 个成员），{} 已销毁",
                         merged.getName(), ((DropResolver.MergeInto) op).target().getName(),
                         mergedMembers.size(), merged.getName());
             } else {
-                undoManager.push(new UndoManager.Record<>(type,
+                ws.push(new UndoManager.Record<>(type,
                         op instanceof DropResolver.InsertTop it && it.item() instanceof PreviewItem p
                                 ? List.of(p)
                                 : op instanceof DropResolver.InsertInto ii && ii.item() instanceof PreviewItem p2
@@ -2782,7 +2782,7 @@ public class MainController {
 
     /* test-support */ void updateListButtons() {
         removeButton.setDisable(visibleCount() == 0);
-        undoButton.setDisable(undoManager.isEmpty());
+        undoButton.setDisable(!ws.canUndo());
         boolean anyChecked = allVisibleItems().stream().anyMatch(i -> i.selected);
         Object sel = fileListView.getSelectionModel().getSelectedItem();
         boolean selItem = sel instanceof PreviewItem it && !it.removed;
@@ -2912,7 +2912,7 @@ public class MainController {
                 }
             }
         }
-        undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.REMOVE, targets,
+        ws.push(new UndoManager.Record<>(UndoManager.RecordType.REMOVE, targets,
                 null, -1, destroyed, destroyedIdx, List.of()));
         boolean selRemoved = sel != null
                 && ((sel instanceof PreviewItem it && targets.contains(it))
@@ -2936,7 +2936,7 @@ public class MainController {
         // 规则 (c)：整组移除 → 删组内成员缓存目录
         workspaceParamService.itemsRemoved(members);
         items.remove(group);
-        undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.REMOVE_GROUP, members,
+        ws.push(new UndoManager.Record<>(UndoManager.RecordType.REMOVE_GROUP, members,
                 group, idx, List.of(group), List.of(idx), List.of()));
         if (sel == group) {
             selectNearestVisible(selIndex);
@@ -2967,10 +2967,10 @@ public class MainController {
 
     @FXML
     private void onUndoClicked() {
-        if (listAnimating || undoManager.isEmpty()) {
+        if (listAnimating || !ws.canUndo()) {
             return;
         }
-        UndoManager.Record<PreviewItem> record = undoManager.pop();
+        UndoManager.Record<PreviewItem> record = ws.popRecord();
         Object selectAfter = null;
         // 结构恢复类操作（REORDER/MERGE_GROUPS）：恢复后生效参数可能变化，受影响项目重新预解析
         List<PreviewItem> reparseAfter = List.of();
@@ -3275,7 +3275,7 @@ public class MainController {
             t.imageItemParams = null;
         }
         items.add(Math.max(0, Math.min(insertIdx, items.size())), group);
-        undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.GROUP, targets, group,
+        ws.push(new UndoManager.Record<>(UndoManager.RecordType.GROUP, targets, group,
                 items.indexOf(group), List.of(), List.of(), before));
         // 拍板：合并为组后勾选集合复位，避免勾选残留导致下一批建组误合并
         updatingSelection = true;
@@ -3314,7 +3314,7 @@ public class MainController {
             m.textItemParams = group.getTextParamsCache();
             m.imageItemParams = group.getImageParamsCache();
         }
-        undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.UNGROUP, members,
+        ws.push(new UndoManager.Record<>(UndoManager.RecordType.UNGROUP, members,
                 group, topIdx, List.of(), List.of(), List.of()));
         refreshAfterListChange();
         // 选中的组已解散：跳转到原组位置的最近有效行（拆分后为原组第一个成员）

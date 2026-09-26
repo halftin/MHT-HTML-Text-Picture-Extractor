@@ -89,6 +89,40 @@ public final class WorkspaceModel {
         return undoManager.size();
     }
 
+    /** 撤销栈是否为空（GUI 的撤销按钮可用性据此判定，取代控制器自有的第二条栈） */
+    public boolean canUndo() {
+        return !undoManager.isEmpty();
+    }
+
+    /**
+     * 压入一条撤销记录（供 GUI 侧记录本模型尚未负责的类型，如参数类 / 拖拽类）。
+     *
+     * <p><b>为什么需要它</b>：撤销栈必须<b>唯一</b>，否则两套栈会分叉。因此栈由本类独占，
+     * 但"如何应用"按类型分工：结构类由 {@link #undo()} 负责，参数 / 拖拽类由 GUI 负责
+     * —— 后者需要缓存失效（{@code WorkspaceParamService}）与文案，仍属 GUI 职责。</p>
+     */
+    public void push(UndoManager.Record<PreviewItem> record) {
+        undoManager.push(record);
+    }
+
+    /**
+     * 弹出栈顶记录并交给调用方自行应用（<b>不</b>改动任何状态）。
+     *
+     * <p>为什么需要：{@link #undo()} 只应用结构类记录，遇到参数 / 拖拽类会把记录原样压回。
+     * 若栈由本类独占而 GUI 又需要处理那些类型，就必须有一个"只弹出、不应用"的入口，
+     * 否则未支持类型会永久卡在栈顶，把后面的结构撤销全部堵死。</p>
+     *
+     * @return 栈顶记录；栈空时返回 {@code null}
+     */
+    public UndoManager.Record<PreviewItem> popRecord() {
+        return undoManager.isEmpty() ? null : undoManager.pop();
+    }
+
+    /** 清空撤销栈（<b>不动</b>工作区结构；供 GUI 的新会话 / 清空流程使用） */
+    public void clearUndoStack() {
+        undoManager.clear();
+    }
+
     private void addItemsOf(Object o, List<PreviewItem> out) {
         if (o instanceof PreviewItem it) {
             out.add(it);

@@ -212,14 +212,14 @@ public void exerciseAllFeatures() throws Exception {
     // Phase 0: 清场——移除启动时 GUI 状态恢复导入的既有文件并重置撤销栈，保证后续演练脚本可预测
     if (!mc.items.isEmpty()) {
         mc.items.clear();
-        mc.undoManager.clear();
+        mc.ws.clearUndoStack();
         mc.refreshAfterListChange();
     }
     // 统一导入为异步：等待启动时可能在途的导入收尾，再二次清场（防 applyImportPlan 回填列表）
     waitForImportDone();
     if (!mc.items.isEmpty()) {
         mc.items.clear();
-        mc.undoManager.clear();
+        mc.ws.clearUndoStack();
         mc.refreshAfterListChange();
     }
 
@@ -624,14 +624,14 @@ public void runAutomatedTests() {
         // 清场：移除启动时 GUI 状态恢复导入的既有文件并重置撤销栈（保证断言可预测）
         if (!mc.items.isEmpty()) {
             mc.items.clear();
-            mc.undoManager.clear();
+            mc.ws.clearUndoStack();
             mc.refreshAfterListChange();
         }
         // 统一导入为异步：等待启动时可能在途的导入收尾，再二次清场（防 applyImportPlan 回填列表）
         waitForImportDone();
         if (!mc.items.isEmpty()) {
             mc.items.clear();
-            mc.undoManager.clear();
+            mc.ws.clearUndoStack();
             mc.refreshAfterListChange();
         }
 
