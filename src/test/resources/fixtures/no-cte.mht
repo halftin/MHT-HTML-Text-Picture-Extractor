@@ -1,0 +1,17 @@
+From: <fixture@example.com>
+To: <receiver@example.com>
+Subject: 缺CTE
+Date: Thu, 01 Jan 2026 00:00:00 +0800
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="----=_fixture_boundary_0001"
+
+------=_fixture_boundary_0001
+Content-Type: text/html; charset="utf-8"
+
+<html><body><p>没有 CTE 头。</p><img src="cid:img001"></body></html>
+------=_fixture_boundary_0001
+Content-Type: image/png
+Content-ID: <img001>
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==
+------=_fixture_boundary_0001--

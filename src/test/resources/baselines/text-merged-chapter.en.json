@@ -1,0 +1,23 @@
+{
+  "case": "text-merged-chapter",
+  "locale": "en",
+  "imageMode": false,
+  "mergedOutput": true,
+  "fixtures": ["simple-text.mht", "titles.mht"],
+  "note": "合并文本 + 章节序号（zh 中文数字 / en Western）",
+  "knownIssues": [],
+  "stats": {
+    "total": 2,
+    "success": 2,
+    "fail": 0,
+    "skip": 0,
+    "warn": 0,
+    "outcomes": ["simple-text.mht=SUCCESS", "titles.mht=SUCCESS"]
+  },
+  "products": [
+    {"path": "merged.txt", "sha256": "d9ebbe7c634ce8ca64c8c0b8105ac4b2472be9363034b6df1339ab582e2ee8fe"}
+  ],
+  "contentDigests": {
+    "merged.txt": "ffd69602e4d5d1fc0a233b139d68e5922c18e8e94e48bc47207a34780b2eea54"
+  }
+}

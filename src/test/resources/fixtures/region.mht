@@ -1,0 +1,41 @@
+From: <fixture@example.com>
+To: <receiver@example.com>
+Subject: 区域限定
+Date: Thu, 01 Jan 2026 00:00:00 +0800
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="----=_fixture_boundary_0001"
+
+------=_fixture_boundary_0001
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+<html><head><title>区域文档</title></head><body><p>区域外前文，这段文字不应出现在提取结果中。</p><img src="cid:outside1"><!--START--><p>区域内正文，这段文字应当被提取出来。</p><img src="cid:inside1"><img src="cid:inside2"><!--END--><p>区域外后文，这段文字同样不应出现。</p><img src="cid:outside2"></body></html>
+------=_fixture_boundary_0001
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-ID: <outside1>
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842
+iQAAAABJRU5ErkJggg==
+------=_fixture_boundary_0001
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-ID: <inside1>
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842
+iQAAAABJRU5ErkJggg==
+------=_fixture_boundary_0001
+Content-Type: image/gif
+Content-Transfer-Encoding: base64
+Content-ID: <inside2>
+
+R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7
+------=_fixture_boundary_0001
+Content-Type: image/jpeg
+Content-Transfer-Encoding: base64
+Content-ID: <outside2>
+
+/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a
+HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA
+AAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==
+------=_fixture_boundary_0001--

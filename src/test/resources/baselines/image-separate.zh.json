@@ -1,0 +1,27 @@
+{
+  "case": "image-separate",
+  "locale": "zh",
+  "imageMode": true,
+  "mergedOutput": false,
+  "fixtures": ["multi-image.mht", "single-image.mht"],
+  "note": "单独输出（cid + Content-Location 两种来源）",
+  "knownIssues": [],
+  "stats": {
+    "total": 2,
+    "success": 2,
+    "fail": 0,
+    "skip": 0,
+    "warn": 0,
+    "outcomes": ["multi-image.mht=SUCCESS", "single-image.mht=SUCCESS"]
+  },
+  "products": [
+    {"path": "multi-image/img001.png", "sha256": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443"},
+    {"path": "multi-image/img002.gif", "sha256": "ef1955ae757c8b966c83248350331bd3a30f658ced11f387f8ebf05ab3368629"},
+    {"path": "multi-image/img003.jpg", "sha256": "cb0501d6c1250017af030077e00e88b9f3b81f98470699754ea5bfadd7a1e3a6"},
+    {"path": "multi-image/photo1.png", "sha256": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443"},
+    {"path": "multi-image/photo2.gif", "sha256": "ef1955ae757c8b966c83248350331bd3a30f658ced11f387f8ebf05ab3368629"},
+    {"path": "single-image/img001.png", "sha256": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443"}
+  ],
+  "contentDigests": {
+  }
+}

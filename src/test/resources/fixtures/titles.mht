@@ -1,0 +1,20 @@
+From: <fixture@example.com>
+To: <receiver@example.com>
+Subject: 标题提取
+Date: Thu, 01 Jan 2026 00:00:00 +0800
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="----=_fixture_boundary_0001"
+
+------=_fixture_boundary_0001
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+<html><head><title>页面标题一</title></head><body><p>前文。</p><!--NAME_START-->我的作品名称<!--NAME_END--><p>正文。</p><img src="cid:img001"></body></html>
+------=_fixture_boundary_0001
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-ID: <img001>
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842
+iQAAAABJRU5ErkJggg==
+------=_fixture_boundary_0001--

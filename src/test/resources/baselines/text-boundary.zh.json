@@ -1,0 +1,23 @@
+{
+  "case": "text-boundary",
+  "locale": "zh",
+  "imageMode": false,
+  "mergedOutput": true,
+  "fixtures": ["deep-nesting.mht", "garbage.mht", "no-cte.mht"],
+  "note": "失败/跳过/递归截断路径（garbage 不可解析、no-cte 缺 CTE、deep 超 100 层截断）",
+  "knownIssues": [],
+  "stats": {
+    "total": 3,
+    "success": 0,
+    "fail": 1,
+    "skip": 2,
+    "warn": 0,
+    "outcomes": ["deep-nesting.mht=SKIPPED", "garbage.mht=SKIPPED", "no-cte.mht=FAILED"]
+  },
+  "products": [
+    {"path": "merged.txt", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+  ],
+  "contentDigests": {
+    "merged.txt": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+  }
+}

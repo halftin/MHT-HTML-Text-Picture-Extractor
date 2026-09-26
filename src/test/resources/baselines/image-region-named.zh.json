@@ -1,0 +1,23 @@
+{
+  "case": "image-region-named",
+  "locale": "zh",
+  "imageMode": true,
+  "mergedOutput": true,
+  "fixtures": ["region.mht", "titles.mht"],
+  "note": "区域限定 + 名称提取（指纹 8 字段中 6 个参与）",
+  "knownIssues": [],
+  "stats": {
+    "total": 2,
+    "success": 1,
+    "fail": 0,
+    "skip": 1,
+    "warn": 2,
+    "outcomes": ["region.mht=SUCCESS_WARNED", "titles.mht=SKIPPED"]
+  },
+  "products": [
+    {"path": "All_Images/f01_inside1.png", "sha256": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443"},
+    {"path": "All_Images/f01_inside2.gif", "sha256": "ef1955ae757c8b966c83248350331bd3a30f658ced11f387f8ebf05ab3368629"}
+  ],
+  "contentDigests": {
+  }
+}

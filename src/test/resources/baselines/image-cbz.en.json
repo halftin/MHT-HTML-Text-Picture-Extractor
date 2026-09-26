@@ -1,0 +1,29 @@
+{
+  "case": "image-cbz",
+  "locale": "en",
+  "imageMode": true,
+  "mergedOutput": false,
+  "fixtures": ["multi-image.mht", "single-image.mht"],
+  "note": "单独输出 + CBZ 打包",
+  "knownIssues": ["登记表 #3：createZip/createCbz 产出字节相同，CBZ 实际只是换扩展名"],
+  "stats": {
+    "total": 2,
+    "success": 2,
+    "fail": 0,
+    "skip": 0,
+    "warn": 0,
+    "outcomes": ["multi-image.mht=SUCCESS", "single-image.mht=SUCCESS"]
+  },
+  "products": [
+    {"path": "multi-image.cbz", "sha256": "5a6fb5cdda28c95b747d9a84b1d133dfaaab308a79a422342ef8db1ec4fe9213"},
+    {"path": "single-image.cbz", "sha256": "1c976478843328eb29cfc5b423468a8f73a9a368f75efced8374dd312ddaa4b9"}
+  ],
+  "contentDigests": {
+    "multi-image.cbz!img001.png": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443",
+    "multi-image.cbz!img002.gif": "ef1955ae757c8b966c83248350331bd3a30f658ced11f387f8ebf05ab3368629",
+    "multi-image.cbz!img003.jpg": "cb0501d6c1250017af030077e00e88b9f3b81f98470699754ea5bfadd7a1e3a6",
+    "multi-image.cbz!photo1.png": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443",
+    "multi-image.cbz!photo2.gif": "ef1955ae757c8b966c83248350331bd3a30f658ced11f387f8ebf05ab3368629",
+    "single-image.cbz!img001.png": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443"
+  }
+}

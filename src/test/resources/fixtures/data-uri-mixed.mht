@@ -1,0 +1,21 @@
+From: <fixture@example.com>
+To: <receiver@example.com>
+Subject: DataURI混合
+Date: Thu, 01 Jan 2026 00:00:00 +0800
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="----=_fixture_boundary_0001"
+
+------=_fixture_boundary_0001
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+<html><head><title>DataURI 混合文档</title></head><body><p>一张外部图片与两张内嵌图片：</p><img src="cid:img001"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=="><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></body></html>
+------=_fixture_boundary_0001
+Content-Type: image/jpeg
+Content-Transfer-Encoding: base64
+Content-ID: <img001>
+
+/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a
+HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA
+AAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==
+------=_fixture_boundary_0001--

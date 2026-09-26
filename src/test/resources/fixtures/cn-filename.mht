@@ -1,0 +1,27 @@
+From: <fixture@example.com>
+To: <receiver@example.com>
+Subject: 中文文件名
+Date: Thu, 01 Jan 2026 00:00:00 +0800
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="----=_fixture_boundary_0001"
+
+------=_fixture_boundary_0001
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+<html><head><title>中文文件名文档</title></head><body><img src="cid:img001"><img src="cid:img002"></body></html>
+------=_fixture_boundary_0001
+Content-Type: image/png; name="=?utf-8?B?5Lit5paH5Zu+54mH5LiALnBuZw==?="
+Content-Transfer-Encoding: base64
+Content-ID: <img001>
+Content-Disposition: inline; filename="=?utf-8?B?5Lit5paH5Zu+54mH5LiALnBuZw==?="
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==
+------=_fixture_boundary_0001
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-ID: <img002>
+Content-Disposition: inline; filename="中文图片二.png"
+
+R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7
+------=_fixture_boundary_0001--

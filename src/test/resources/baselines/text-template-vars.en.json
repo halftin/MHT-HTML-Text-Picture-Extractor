@@ -1,0 +1,23 @@
+{
+  "case": "text-template-vars",
+  "locale": "en",
+  "imageMode": false,
+  "mergedOutput": true,
+  "fixtures": ["simple-text.mht"],
+  "note": "自定义模板变量 {filename}/{date}/{time}/\\n（契约见耦合点 #23）",
+  "knownIssues": [],
+  "stats": {
+    "total": 1,
+    "success": 1,
+    "fail": 0,
+    "skip": 0,
+    "warn": 0,
+    "outcomes": ["simple-text.mht=SUCCESS"]
+  },
+  "products": [
+    {"path": "merged.txt", "sha256": "ee1465eafabf742a57682fc0b0e0ab42b905a07e7bfaab195e4de556ee04e941"}
+  ],
+  "contentDigests": {
+    "merged.txt": "d5469a9c4e486b3ea723e65806f94384187b6548bb725236b5aa1b6057ce8c7a"
+  }
+}

@@ -1,0 +1,20 @@
+From: <fixture@example.com>
+To: <receiver@example.com>
+Subject: 单图
+Date: Thu, 01 Jan 2026 00:00:00 +0800
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="----=_fixture_boundary_0001"
+
+------=_fixture_boundary_0001
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+<html><head><title>单图文档</title></head><body><p>正文一段。</p><img src="cid:img001"><p>正文二段。</p></body></html>
+------=_fixture_boundary_0001
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-ID: <img001>
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842
+iQAAAABJRU5ErkJggg==
+------=_fixture_boundary_0001--

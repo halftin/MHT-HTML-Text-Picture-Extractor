@@ -1,0 +1,25 @@
+{
+  "case": "text-separate-titled",
+  "locale": "en",
+  "imageMode": false,
+  "mergedOutput": false,
+  "fixtures": ["multi-image.mht", "simple-text.mht", "titles.mht"],
+  "note": "单独文本 + 标题提取命名（无标记文件回退原名）",
+  "knownIssues": [],
+  "stats": {
+    "total": 3,
+    "success": 2,
+    "fail": 0,
+    "skip": 1,
+    "warn": 1,
+    "outcomes": ["multi-image.mht=SKIPPED", "simple-text.mht=SUCCESS_WARNED", "titles.mht=SUCCESS"]
+  },
+  "products": [
+    {"path": "simple-text.txt", "sha256": "7073cdfd31e5c6cff0af7cf94bebfa1a1e5de968b0e0ab474f5051d6c9ff574c"},
+    {"path": "我的作品名称.txt", "sha256": "79bcf9223045fbfe3308d1b9893bef36f96d1f00651e6812f13a1bbaf225e8d1"}
+  ],
+  "contentDigests": {
+    "simple-text.txt": "3058ecef2d9fc937057d98717fafe146872b685b39c9dd98db52f0dac5ed6c4d",
+    "我的作品名称.txt": "b01258eb9d04d3af529c91d2c008c8b18012c16150f1650fd8ed4ad575a42a74"
+  }
+}

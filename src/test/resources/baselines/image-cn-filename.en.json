@@ -1,0 +1,23 @@
+{
+  "case": "image-cn-filename",
+  "locale": "en",
+  "imageMode": true,
+  "mergedOutput": false,
+  "fixtures": ["cn-filename.mht"],
+  "note": "RFC 2047 编码中文文件名解码（P0-8 修复点）",
+  "knownIssues": ["裸 UTF-8 中文文件名（未用 RFC 2047）由 Jakarta Mail 按 ISO-8859-1 读头 → 预期乱码；基线锁定该既有行为，**不作为期望值**"],
+  "stats": {
+    "total": 1,
+    "success": 1,
+    "fail": 0,
+    "skip": 0,
+    "warn": 0,
+    "outcomes": ["cn-filename.mht=SUCCESS"]
+  },
+  "products": [
+    {"path": "cn-filename/ä¸­æå¾çäº.gif", "sha256": "ef1955ae757c8b966c83248350331bd3a30f658ced11f387f8ebf05ab3368629"},
+    {"path": "cn-filename/中文图片一.png", "sha256": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443"}
+  ],
+  "contentDigests": {
+  }
+}

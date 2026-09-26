@@ -1,0 +1,23 @@
+{
+  "case": "text-region-literal",
+  "locale": "zh",
+  "imageMode": false,
+  "mergedOutput": true,
+  "fixtures": ["region.mht"],
+  "note": "内容限定（字面量标记，走 HtmlUtils.extractRegion）",
+  "knownIssues": [],
+  "stats": {
+    "total": 1,
+    "success": 1,
+    "fail": 0,
+    "skip": 0,
+    "warn": 0,
+    "outcomes": ["region.mht=SUCCESS"]
+  },
+  "products": [
+    {"path": "merged.txt", "sha256": "9583c2131ac482b96efb9d296ab4295a1d42f69566fd9a56d719ce7398597c6c"}
+  ],
+  "contentDigests": {
+    "merged.txt": "eb87e615e8f802c87e83f59372683de44eb9975eac16483b54cb63126c596e98"
+  }
+}

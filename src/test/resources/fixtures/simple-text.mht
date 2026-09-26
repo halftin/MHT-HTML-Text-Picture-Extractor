@@ -1,0 +1,13 @@
+From: <fixture@example.com>
+To: <receiver@example.com>
+Subject: 简单文本
+Date: Thu, 01 Jan 2026 00:00:00 +0800
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="----=_fixture_boundary_0001"
+
+------=_fixture_boundary_0001
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+<html><head><title>第一章 起风了</title></head><body><p>这是第一段正文。</p><p>这是第二段正文，含标点、数字 123 与英文 word。</p></body></html>
+------=_fixture_boundary_0001--

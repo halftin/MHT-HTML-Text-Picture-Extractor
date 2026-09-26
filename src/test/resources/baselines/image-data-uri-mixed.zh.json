@@ -1,0 +1,24 @@
+{
+  "case": "image-data-uri-mixed",
+  "locale": "zh",
+  "imageMode": true,
+  "mergedOutput": false,
+  "fixtures": ["data-uri-mixed.mht"],
+  "note": "1 张 cid 图 + 2 张 Data URI —— 隔离上述缺陷：有 cid 时快速检查放行，可判定 Data URI 提取本身是否可用",
+  "knownIssues": [],
+  "stats": {
+    "total": 1,
+    "success": 1,
+    "fail": 0,
+    "skip": 0,
+    "warn": 0,
+    "outcomes": ["data-uri-mixed.mht=SUCCESS"]
+  },
+  "products": [
+    {"path": "data-uri-mixed/image_1.png", "sha256": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443"},
+    {"path": "data-uri-mixed/image_2.gif", "sha256": "ef1955ae757c8b966c83248350331bd3a30f658ced11f387f8ebf05ab3368629"},
+    {"path": "data-uri-mixed/img001.jpg", "sha256": "cb0501d6c1250017af030077e00e88b9f3b81f98470699754ea5bfadd7a1e3a6"}
+  ],
+  "contentDigests": {
+  }
+}

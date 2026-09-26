@@ -1,0 +1,40 @@
+# .gitattributes — 统一换行，保证检出内容跨平台确定性（会话 18 · E0）
+#
+# 为什么需要它：
+#   本机 core.autocrlf=true（Windows 默认），而仓库此前**没有 .gitattributes**。
+#   结果是同一个提交在不同平台检出后**字节不同**（LF vs CRLF）。
+#   对普通源码无害，但本项目有两类"字节即语义"的东西：
+#     1) src/test/resources/fixtures/*.mht —— 输入夹具。换行差异会改变文件 size，
+#        进而改变 MIME 解析与产物字节（产物基线是 SHA-256 级比对）。
+#     2) src/test/resources/baselines/*.json —— 产物基线本身。
+#   因此显式声明 eol=lf，让"检出即可复现"，不依赖各机器的 autocrlf 设置。
+
+# 默认：文本文件一律 LF（仓库内存储与检出保持一致）
+* text=auto eol=lf
+
+# 二进制夹具：含 NUL 字节/随机字节，禁止任何行尾转换
+*.mht   binary
+*.zip   binary
+*.cbz   binary
+*.exe   binary
+*.jar   binary
+*.png   binary
+*.gif   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.ico   binary
+
+# 明确文本类（即使上面 * 已覆盖，这里显式化以便日后审查）
+*.java       text eol=lf
+*.fxml       text eol=lf
+*.md         text eol=lf
+*.json       text eol=lf
+*.xml        text eol=lf
+*.properties text eol=lf
+*.css        text eol=lf
+*.cmd        text eol=crlf
+*.ps1        text eol=crlf
+
+# 测试夹具与基线是"字节即语义"的验收资产，显式标注（fixtures 已在上面 binary，此处仅示意基线）
+src/test/resources/baselines/** text eol=lf
