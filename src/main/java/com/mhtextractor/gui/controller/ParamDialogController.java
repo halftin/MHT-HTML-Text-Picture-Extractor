@@ -3,6 +3,8 @@ package com.mhtextractor.gui.controller;
 import atlantafx.base.controls.ToggleSwitch;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.config.ConfigManager;
+import com.mhtextractor.i18n.ErrorCode;
+import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.ParamScope;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
@@ -137,7 +139,7 @@ public class ParamDialogController {
         ParamDialogController ctrl = loader.getController();
 
         Stage stage = new Stage();
-        stage.setTitle("提取参数设置");
+        stage.setTitle(I18n.get("dialog.title"));
         stage.setScene(new Scene(root));
         stage.setWidth(640);
         stage.setHeight(620);
@@ -189,8 +191,9 @@ public class ParamDialogController {
         this.imageMode = imageMode;
         this.target = target;
         String scope = target instanceof ParamScope.GroupTarget gt
-                ? "（" + gt.group().getName() + "）" : "";
-        stage.setTitle("提取参数设置 — " + (imageMode ? "图片模式" : "文本模式") + scope);
+                ? I18n.get("dialog.parenOpen") + gt.group().getName() + I18n.get("dialog.parenClose") : "";
+        stage.setTitle(I18n.get("dialog.titleWithMode",
+                "mode", imageMode ? I18n.get("dialog.modeImage") : I18n.get("dialog.modeText")) + scope);
         // 当前模式控件从目标初值初始化（组未设置时回退全局已确认参数，均无则用默认参数）；
         // 另一模式控件仍从全局已确认缓存初始化（隐藏不可见，两组隔离互不影响）
         AppConfig currentInitial = ParamScope.initialParams(target, imageMode, textCache, imageCache);
@@ -319,9 +322,9 @@ public class ParamDialogController {
     @FXML
     private void onSaveConfig() {
         TextInputDialog dialog = new TextInputDialog("my_config");
-        dialog.setTitle("保存配置");
-        dialog.setHeaderText("输入配置名称");
-        dialog.setContentText("仅保存提取参数（不含输入/输出目录与提取模式）");
+        dialog.setTitle(I18n.get("dialog.saveConfig"));
+        dialog.setHeaderText(I18n.get("dialog.inputConfigName"));
+        dialog.setContentText(I18n.get("dialog.saveConfigNote"));
         dialog.showAndWait().ifPresent(name -> {
             try {
                 configManager.saveConfig(name, getResult());
@@ -330,7 +333,7 @@ public class ParamDialogController {
                 log.info("配置已保存：{}", name);
             } catch (Exception e) {
                 log.error("保存配置失败", e);
-                showAlert(Alert.AlertType.ERROR, "保存配置失败: " + e.getMessage());
+                showAlert(Alert.AlertType.ERROR, ErrorCode.CONFIG_SAVE_FAILED.message());
             }
         });
     }
@@ -339,7 +342,7 @@ public class ParamDialogController {
     private void onLoadConfig() {
         String selected = configComboBox.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "请选择要加载的配置");
+            showAlert(Alert.AlertType.WARNING, ErrorCode.CONFIG_SELECT_TO_LOAD.message());
             return;
         }
         try {
@@ -359,7 +362,7 @@ public class ParamDialogController {
             log.info("配置已加载（需点击\"确定\"生效）：{}", selected);
         } catch (Exception e) {
             log.error("加载配置失败", e);
-            showAlert(Alert.AlertType.ERROR, "加载配置失败: " + e.getMessage());
+            showAlert(Alert.AlertType.ERROR, ErrorCode.CONFIG_LOAD_FAILED.message());
         }
     }
 
@@ -367,10 +370,11 @@ public class ParamDialogController {
     private void onDeleteConfig() {
         String selected = configComboBox.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "请选择要删除的配置");
+            showAlert(Alert.AlertType.WARNING, ErrorCode.CONFIG_SELECT_TO_DELETE.message());
             return;
         }
-        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, "确定删除配置 \"" + selected + "\"？");
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                ErrorCode.CONFIG_DELETE_CONFIRM.message("name", selected));
         confirm.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
                 try {
@@ -379,7 +383,7 @@ public class ParamDialogController {
                     log.info("配置已删除：{}", selected);
                 } catch (Exception e) {
                     log.error("删除配置失败", e);
-                    showAlert(Alert.AlertType.ERROR, "删除配置失败: " + e.getMessage());
+                    showAlert(Alert.AlertType.ERROR, ErrorCode.CONFIG_DELETE_FAILED.message());
                 }
             }
         });
@@ -436,9 +440,11 @@ public class ParamDialogController {
         boolean enableExtract = enableTitleExtractCheck.isSelected();
         String tooltip;
         if (enableExtract) {
-            tooltip = hasChapterNumber ? "模式：序号 + 标题" : "模式：仅标题";
+            tooltip = hasChapterNumber
+                    ? I18n.get("dialog.chapterModeNumberTitle")
+                    : I18n.get("dialog.chapterModeTitleOnly");
         } else {
-            tooltip = "已禁用";
+            tooltip = I18n.get("dialog.disabled");
         }
         enableTitleExtractCheck.setTooltip(new Tooltip(tooltip));
     }
@@ -469,9 +475,9 @@ public class ParamDialogController {
     private void onHighSpeedMemoryChanged() {
         if (highSpeedMemoryCheck.isSelected()) {
             Alert alert = new Alert(Alert.AlertType.WARNING);
-            alert.setTitle("高速内存模式");
-            alert.setHeaderText("确认开启高速内存模式？");
-            alert.setContentText("该模式会预加载所有 MHT 文件到内存，\n需要约原始文件总大小 4 倍的空闲内存。\n\n如果内存不足，请使用默认的流式模式。");
+            alert.setTitle(I18n.get("dialog.highSpeedMemory"));
+            alert.setHeaderText(I18n.get("dialog.highSpeedConfirmTitle"));
+            alert.setContentText(I18n.get("dialog.highSpeedConfirmMsg"));
             alert.showAndWait().ifPresent(response -> {
                 if (response != ButtonType.OK) {
                     highSpeedMemoryCheck.setSelected(false);

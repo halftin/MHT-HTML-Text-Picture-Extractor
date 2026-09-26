@@ -14,6 +14,8 @@ import com.mhtextractor.extractor.TextExtractor;
 import com.mhtextractor.gui.component.LogTextArea;
 import com.mhtextractor.gui.util.BrowserLauncher;
 import com.mhtextractor.gui.util.JavaFxUtil;
+import com.mhtextractor.i18n.ErrorCode;
+import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.output.FileWriter;
 import com.mhtextractor.output.ImageWriter;
 import com.mhtextractor.processor.BatchProcessor;
@@ -120,6 +122,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -211,12 +214,9 @@ public class MainController {
     private static final double POS_COL_WIDTH = 40;
     private static final double CHECK_COL_WIDTH = 40;
 
-    private static final String HINT_NO_MODE_OR_DIR =
-            "请选择提取模式，并选择包含 .mht 文件的输入目录。";
-    private static final String HINT_NEED_PARAMS =
-            "当前模式尚未设置提取参数。\n点击右上角\"提取参数设置\"按钮，配置参数并点击\"确定\"后，即可在此预览提取效果。";
-    private static final String HINT_NO_FILES =
-            "所选输入目录中未找到 .mht 文件。";
+    private static final String HINT_NO_MODE_OR_DIR = I18n.get("preview.hintSelectMode");
+    private static final String HINT_NEED_PARAMS = I18n.get("preview.hintParamsUnset");
+    private static final String HINT_NO_FILES = I18n.get("preview.hintNoMht");
 
     /** 条目预解析状态 */
     enum Status { WAITING, READY, EMPTY, FAILED }
@@ -483,8 +483,7 @@ public class MainController {
     @FXML
     public void initialize() {
         openFolderAfterCompleteCheck.setLabelPosition(HorizontalDirection.RIGHT);
-        badgeHeaderLabel.setTooltip(new Tooltip(
-                "勾选\"添加章节序号\"的文件的最终章节号（阿拉伯数字），随勾选与排序实时变化"));
+        badgeHeaderLabel.setTooltip(new Tooltip(I18n.get("list.chapterNoTooltip")));
 
         // 1. 列表：单元格工厂、选择联动、逐文件章节勾选、拖拽动画滚动联动
         fileListView.setCellFactory(lv -> createPreviewCell());
@@ -586,8 +585,8 @@ public class MainController {
         });
 
         Platform.runLater(() -> {
-            logTextArea.appendText("欢迎使用 MHT 资源提取器！\n");
-            logTextArea.appendText("请选择提取模式与输入目录，通过\"提取参数设置\"确认参数后即可预览并提取。\n");
+            logTextArea.appendText(I18n.get("preview.welcome"));
+            logTextArea.appendText(I18n.get("preview.welcomeHint"));
         });
     }
 
@@ -603,8 +602,8 @@ public class MainController {
         e.consume();
         if (!"true".equals(System.getProperty("test.mode"))) {
             Alert alert = new Alert(Alert.AlertType.INFORMATION,
-                    "关闭程序前需要清空缓存，清空后关闭，请稍后");
-            alert.setTitle("退出前清空缓存");
+                    I18n.get("cache.clearingBeforeExit"));
+            alert.setTitle(I18n.get("cache.exitClearButton"));
             alert.setHeaderText(null);
             alert.showAndWait();
         }
@@ -650,6 +649,8 @@ public class MainController {
         state.setInputFolder(inputFolderField.getText());
         state.setOutputFolder(outputFolderField.getText());
         state.setOpenFolderAfterComplete(openFolderAfterCompleteCheck.isSelected());
+        Locale loc = I18n.currentLocale();
+        state.setLocale(loc.getLanguage() + (loc.getCountry().isEmpty() ? "" : "_" + loc.getCountry()));
         GuiStateManager.save(state);
     }
 
@@ -660,7 +661,7 @@ public class MainController {
         String currentPath = inputFolderField.getText();
         String dir = JavaFxUtil.showDirectoryChooser(
                 inputFolderField.getScene().getWindow(),
-                "选择输入目录",
+                I18n.get("dir.chooseInput"),
                 currentPath);
         if (dir != null) {
             boolean sameDir = dir.equals(inputFolderField.getText());
@@ -678,7 +679,7 @@ public class MainController {
         String currentPath = outputFolderField.getText();
         String dir = JavaFxUtil.showDirectoryChooser(
                 outputFolderField.getScene().getWindow(),
-                "选择输出目录",
+                I18n.get("dir.chooseOutput"),
                 currentPath);
         if (dir != null) {
             outputFolderField.setText(dir);
@@ -718,7 +719,7 @@ public class MainController {
 
     /** 增量导入：统一入口（BC-1：改为递归扫描 + 自动建组） */
     private void importFromFolder(String dir) {
-        importByPaths(List.of(dir), "目录 " + dir, false);
+        importByPaths(List.of(dir), I18n.get("dir.label", "path", dir), false);
     }
 
     // ==================== 统一导入（拖拽 + 浏览共用入口） ====================
@@ -752,10 +753,10 @@ public class MainController {
             List<String> roots = MhtImportPlanner.findDriveRoots(normalized);
             if (!roots.isEmpty()) {
                 Alert a = new Alert(Alert.AlertType.CONFIRMATION);
-                a.setTitle("盘符根目录导入确认");
+                a.setTitle(I18n.get("import.rootDirConfirmTitle"));
                 a.setHeaderText(null);
-                a.setContentText("正在使用盘符根目录进行导入，是否执行？\n\n" + String.join("\n", roots)
-                        + "\n\n（将递归扫描该盘，可能导入大量文件）");
+                a.setContentText(I18n.get("import.rootDirConfirmMsg") + String.join("\n", roots)
+                        + I18n.get("import.rootDirConfirmNote"));
                 a.getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
                 if (a.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
                     log.info("用户取消盘符根目录导入：{}", roots);
@@ -944,7 +945,7 @@ public class MainController {
             }
         } catch (Exception ex) {
             log.error("导入扫描失败", ex);
-            Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "导入失败：" + ex.getMessage()));
+            Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, ErrorCode.IMPORT_FAILED.message()));
         } finally {
             Platform.runLater(this::finishImport);   // 唯一恢复点
         }
@@ -955,14 +956,13 @@ public class MainController {
         CompletableFuture<Boolean> future = new CompletableFuture<>();
         Platform.runLater(() -> {
             Alert a = new Alert(Alert.AlertType.CONFIRMATION);
-            a.setTitle("导入数量确认");
+            a.setTitle(I18n.get("import.quotaConfirmTitle"));
             a.setHeaderText(null);
-            a.setContentText(String.format(
-                    "本次导入已达上限（每轮 %d 个组 / %d 个文件），是否继续导入？%n%n"
-                    + "继续：从断点扫描下一轮（每满一轮会再次询问）%n"
-                    + "停止：保留已导入的 %d 个文件 / %d 个组",
-                    IMPORT_QUOTA_GROUPS, IMPORT_QUOTA_FILES,
-                    importAccumulated.size(), importGroupCount));
+            a.setContentText(I18n.get("import.quotaReached",
+                            "groups", IMPORT_QUOTA_GROUPS, "files", IMPORT_QUOTA_FILES)
+                    + I18n.get("import.quotaContinue")
+                    + I18n.get("import.quotaStop",
+                            "files", importAccumulated.size(), "groups", importGroupCount));
             a.getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
             future.complete(a.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK);
         });
@@ -1121,8 +1121,8 @@ public class MainController {
         updateListButtons();
 
         // 预览工作区
-        modeLabel.setText("模式：" + (imageModeToggle.isSelected() ? "图片"
-                : (textModeToggle.isSelected() ? "文本" : "未选择")));
+        modeLabel.setText(I18n.get("mode.labelPrefix") + (imageModeToggle.isSelected() ? I18n.get("mode.image")
+                : (textModeToggle.isSelected() ? I18n.get("mode.text") : I18n.get("mode.none"))));
         Object sel = currentSelection();
         updateBadgeHeader();
         updateOutputModeLabel(sel);
@@ -1171,8 +1171,8 @@ public class MainController {
             params = currentParamsOrDefaults();
         }
         outputModeLabel.setText(isTextMode()
-                ? (params.isSeparateFiles() ? "输出模式：单独输出模式" : "输出模式：合并输出模式")
-                : (params.isSingleOutputMode() ? "输出模式：合并输出模式" : "输出模式：单独输出模式"));
+                ? (params.isSeparateFiles() ? I18n.get("extract.outputModeSeparate") : I18n.get("extract.outputModeMerged"))
+                : (params.isSingleOutputMode() ? I18n.get("extract.outputModeMerged") : I18n.get("extract.outputModeSeparate")));
     }
 
     // ==================== 参数设置弹窗 ====================
@@ -1218,7 +1218,7 @@ public class MainController {
             }
         } catch (Exception e) {
             log.error("参数设置窗口打开失败", e);
-            showAlert(Alert.AlertType.ERROR, "参数设置窗口打开失败: " + e.getMessage());
+            showAlert(Alert.AlertType.ERROR, ErrorCode.PARAM_DIALOG_OPEN_FAILED.message());
         }
     }
 
@@ -1301,18 +1301,18 @@ public class MainController {
 
     /** 构建右键菜单（拍板 Q1 命名统一"移除"；Q5 一律禁用制：菜单恒 16 项同序；浏览器查看HTML需求后移除"打开"） */
     private void buildContextMenu() {
-        ctxSelect = new MenuItem("选中");
-        ctxSelectAll = new MenuItem("全选");
-        ctxOpenFolder = new MenuItem("打开所在文件夹");
-        ctxOpenInBrowser = new MenuItem("在浏览器中打开");
-        ctxViewSource = new MenuItem("在浏览器中查看源码");
-        ctxParams = new MenuItem("设置提取参数");
-        ctxClearParams = new MenuItem("清除参数");
-        ctxApplyGlobal = new MenuItem("将参数应用到全局");
-        ctxGroup = new MenuItem("合并为组");
-        ctxUngroup = new MenuItem("拆分组");
-        ctxRemove = new MenuItem("移除");
-        ctxRemoveGroup = new MenuItem("移除组");
+        ctxSelect = new MenuItem(I18n.get("list.menuSelect"));
+        ctxSelectAll = new MenuItem(I18n.get("list.menuSelectAll"));
+        ctxOpenFolder = new MenuItem(I18n.get("list.menuOpenFolder"));
+        ctxOpenInBrowser = new MenuItem(I18n.get("browser.menuOpen"));
+        ctxViewSource = new MenuItem(I18n.get("browser.menuViewSource"));
+        ctxParams = new MenuItem(I18n.get("params.menuSet"));
+        ctxClearParams = new MenuItem(I18n.get("params.menuClear"));
+        ctxApplyGlobal = new MenuItem(I18n.get("params.menuApplyGlobal"));
+        ctxGroup = new MenuItem(I18n.get("group.menuMerge"));
+        ctxUngroup = new MenuItem(I18n.get("group.menuUngroup"));
+        ctxRemove = new MenuItem(I18n.get("list.menuRemove"));
+        ctxRemoveGroup = new MenuItem(I18n.get("group.menuRemove"));
 
         ctxSelect.setOnAction(e -> onContextSelect());
         ctxSelectAll.setOnAction(e -> onContextSelectAll());
@@ -1403,7 +1403,7 @@ public class MainController {
         ctxOpenInBrowser.setDisable(!(topItem || member));
         ctxViewSource.setDisable(!(topItem || member));
         // 条目独立参数需求拍板：空白区域为全局参数入口，文本与独立参数设置区分
-        ctxParams.setText(blank ? "设置提取参数（全局）" : "设置提取参数");
+        ctxParams.setText(blank ? I18n.get("params.menuSetGlobal") : I18n.get("params.menuSet"));
         ctxParams.setDisable(false);                  // 恒可用
         // 清除参数拍板：启用看右键目标（空白/无参数 → 禁用），动作走勾选优先（与"移除"菜单既有模式一致）
         ctxClearParams.setDisable(!hasIndependentParams(target));
@@ -1485,11 +1485,11 @@ public class MainController {
                 Desktop.getDesktop().open(dir);
             } else {
                 log.warn("打开所在文件夹失败：目录不存在 {}", dir == null ? it.path : dir.getAbsolutePath());
-                showAlert(Alert.AlertType.WARNING, "文件所在目录不存在：\n" + it.path);
+                showAlert(Alert.AlertType.WARNING, ErrorCode.FILE_DIR_MISSING.message("path", it.path));
             }
         } catch (Exception ex) {
             log.error("打开所在文件夹失败", ex);
-            showAlert(Alert.AlertType.ERROR, "打开所在文件夹失败：" + ex.getMessage());
+            showAlert(Alert.AlertType.ERROR, ErrorCode.OPEN_FOLDER_FAILED.message());
         }
     }
 
@@ -1512,14 +1512,14 @@ public class MainController {
         File f = new File(it.path);
         if (!f.exists()) {
             log.warn("浏览器查看失败：文件不存在（可能已被移动或删除）{}", it.path);
-            showAlert(Alert.AlertType.WARNING, "文件不存在，可能已被移动或删除：\n" + it.path);
+            showAlert(Alert.AlertType.WARNING, ErrorCode.FILE_MISSING.message("path", it.path));
             return;
         }
         if (!browserExporting.compareAndSet(false, true)) {
             log.info("已有查看页生成任务在进行中，忽略本次请求");
             return;
         }
-        statusLabel.setText("正在生成浏览器查看页…");
+        statusLabel.setText(I18n.get("browser.generatingPage"));
         Thread t = new Thread(() -> {
             try {
                 MimeParser.ParsedMht parsed = new MimeParser().parse(it.path, false, () -> false, null, null);
@@ -1540,17 +1540,17 @@ public class MainController {
                     if (!ok) {
                         log.warn("浏览器启动失败：{}", r.htmlFile());
                         Platform.runLater(() -> showAlert(Alert.AlertType.WARNING,
-                                "未能启动浏览器，页面已生成：\n" + r.htmlFile()));
+                                ErrorCode.BROWSER_LAUNCH_FAILED.message("file", r.htmlFile())));
                     }
                 }, "html-browser-launch");
                 launcher.setDaemon(true);
                 launcher.start();
             } catch (Exception e) {
                 log.error("生成浏览器查看页失败：{}", it.path, e);
-                Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "生成查看页失败：" + e.getMessage()));
+                Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, ErrorCode.BROWSER_VIEW_FAILED.message()));
             } finally {
                 browserExporting.set(false);
-                Platform.runLater(() -> statusLabel.setText("就绪"));
+                Platform.runLater(() -> statusLabel.setText(I18n.get("main.statusReady")));
             }
         }, "html-browser-export");
         t.setDaemon(true);
@@ -1815,7 +1815,7 @@ public class MainController {
             parts.add(r.message());
         }
         parts.addAll(r.warnings());
-        return parts.isEmpty() ? null : String.join("；", parts);
+        return parts.isEmpty() ? null : String.join(I18n.get("list.itemSeparator"), parts);
     }
 
     /** 提取结果色清除（拍板）：重新确认参数后旧结果失效，回到参数色/解析状态色 */
@@ -1832,20 +1832,20 @@ public class MainController {
         if (sel instanceof PreviewItem it && it.extractOutcome != ExtractOutcome.NONE
                 && it.extractDetail != null && !it.extractDetail.isEmpty()) {
             String prefix = switch (it.extractOutcome) {
-                case FAILED -> "提取失败";
-                case SKIPPED -> "已跳过";
-                case SUCCESS_WARNED -> "提取成功，但有警告";
+                case FAILED -> I18n.get("extract.statusFailed");
+                case SKIPPED -> I18n.get("extract.statusSkipped");
+                case SUCCESS_WARNED -> I18n.get("extract.statusWarned");
                 default -> null;
             };
             if (prefix != null) {
-                extractResultBanner.setText(prefix + "：" + it.extractDetail);
+                extractResultBanner.setText(prefix + I18n.get("list.colon") + it.extractDetail);
                 extractResultBanner.setVisible(true);
                 extractResultBanner.setManaged(true);
                 return;
             }
         }
         if (sel instanceof PreviewItem it && it.status.get() == Status.FAILED) {
-            extractResultBanner.setText("解析失败：" + it.errorMsg.get());
+            extractResultBanner.setText(I18n.get("extract.parseFailed") + it.errorMsg.get());
             extractResultBanner.setVisible(true);
             extractResultBanner.setManaged(true);
             return;
@@ -1913,20 +1913,20 @@ public class MainController {
         String outputFolder = outputFolderField.getText();
 
         if (inputFolder == null || inputFolder.trim().isEmpty()) {
-            showAlert(Alert.AlertType.WARNING, "请提供有效的输入目录");
+            showAlert(Alert.AlertType.WARNING, ErrorCode.INPUT_DIR_INVALID.message());
             return;
         }
         if (outputFolder == null || outputFolder.trim().isEmpty()) {
-            showAlert(Alert.AlertType.WARNING, "请提供有效的输出目录");
+            showAlert(Alert.AlertType.WARNING, ErrorCode.OUTPUT_DIR_INVALID.message());
             return;
         }
         if (!new File(inputFolder).isDirectory()) {
-            showAlert(Alert.AlertType.ERROR, "输入目录不存在");
+            showAlert(Alert.AlertType.ERROR, ErrorCode.INPUT_DIR_MISSING.message());
             return;
         }
         if (visibleCount() == 0) {
             showAlert(Alert.AlertType.WARNING,
-                    items.isEmpty() ? "未找到任何 MHT 文件" : "至少保留一个文件");
+                    items.isEmpty() ? ErrorCode.NO_MHT_FOUND.message() : ErrorCode.KEEP_AT_LEAST_ONE.message());
             return;
         }
 
@@ -1946,11 +1946,11 @@ public class MainController {
         boolean otherConfirmed = imageMode ? textParamsCache != null : imageParamsCache != null;
         if (!currentModeConfirmed()) {
             String msg = otherConfirmed
-                    ? "检测到模式切换，目前模式尚未配置参数，确定提取？"
-                    : "目前模式尚未设置提取参数，确定提取？";
+                    ? I18n.get("extract.confirmModeSwitch")
+                    : I18n.get("extract.confirmParamsUnset");
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, msg,
                     ButtonType.OK, ButtonType.CANCEL);
-            confirm.setTitle("提取确认");
+            confirm.setTitle(I18n.get("extract.confirmTitle"));
             confirm.setHeaderText(null);
             if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
                 return;
@@ -1991,7 +1991,7 @@ public class MainController {
         boolean imageMode = imageModeToggle.isSelected();
 
         // 生成时间戳会话目录，隔离每次提取运行
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH：mm：ss"));
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern(I18n.get("params.datetimeFormat")));
         String sessionOutputFolder = new File(outputFolderField.getText(), timestamp).getPath();
         if (!new File(sessionOutputFolder).mkdirs()) {
             log.warn("会话输出目录创建失败或已存在：{}", sessionOutputFolder);
@@ -2034,11 +2034,11 @@ public class MainController {
                         CompletableFuture<Boolean> future = new CompletableFuture<>();
                         Platform.runLater(() -> {
                             Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-                            alert.setTitle("递归深度警告");
-                            alert.setHeaderText("MIME 树递归深度已超过 100 层");
-                            alert.setContentText("该文件可能已损坏或结构异常。\n\n" +
-                                    "选「是」：继续解析（后续不再提醒）\n" +
-                                    "选「否」：跳过此文件，保留已提取的内容");
+                            alert.setTitle(I18n.get("alert.recursionDepthTitle"));
+                            alert.setHeaderText(I18n.get("alert.recursionDepthHeader"));
+                            alert.setContentText(I18n.get("alert.recursionDepthContent") +
+                                    I18n.get("alert.recursionDepthYes") +
+                                    I18n.get("alert.recursionDepthNo"));
                             alert.getButtonTypes().setAll(ButtonType.YES, ButtonType.NO);
                             ButtonType result = alert.showAndWait().orElse(ButtonType.NO);
                             future.complete(result == ButtonType.YES);
@@ -2074,8 +2074,8 @@ public class MainController {
                             for (int k = 0; k < unit.fileCount(); k++) {
                                 total.incrementFail();
                             }
-                            total.addFailDetail(String.format("输出单元[%s]处理失败：%s",
-                                    unit.label(), e.getMessage()));
+                            total.addFailDetail(I18n.get("extract.unitFailed",
+                                    "unit", unit.label(), "reason", e.getMessage()));
                         }
                     }
                     total.setEndTime(System.currentTimeMillis());
@@ -2100,7 +2100,7 @@ public class MainController {
             startButton.setDisable(false);
             stopButton.setDisable(true);
             progressBar.setProgress(1.0);
-            statusLabel.setText("处理完成");
+            statusLabel.setText(I18n.get("extract.done"));
             BatchProcessor.ProcessStats stats = task.getValue();
             if (stats != null) {
                 statusLabel.setText(stats.getSummaryLine());
@@ -2132,10 +2132,10 @@ public class MainController {
             stopButton.setDisable(true);
             progressBar.setVisible(false);
             setProgressBarActivity(null);
-            statusLabel.setText("处理异常");
+            statusLabel.setText(I18n.get("extract.statusError"));
             Throwable ex = task.getException();
             log.error("处理异常", ex);
-            showAlert(Alert.AlertType.ERROR, "处理异常: " + ex.getMessage());
+            showAlert(Alert.AlertType.ERROR, ErrorCode.PROCESS_FAILED.message());
         });
 
         task.setOnCancelled(e -> {
@@ -2193,7 +2193,7 @@ public class MainController {
         stopButton.setDisable(true);
         progressBar.setVisible(false);
         setProgressBarActivity(null);
-        statusLabel.setText("已停止");
+        statusLabel.setText(I18n.get("extract.stopped"));
         log.info("用户手动停止处理");
     }
 
@@ -2392,7 +2392,7 @@ public class MainController {
             posLabel.setManaged(false);
             posLabel.setText("");
             nameLabel.setPadding(Insets.EMPTY);
-            nameLabel.setText(g.getName() + "（" + total + " 项）");
+            nameLabel.setText(g.getName() + I18n.get("list.itemCount", "count", total));
             // 组行字体加粗 + 白字（拍板）；-fx-text-background-color 不跨节点继承，须直接作用于 Label
             nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
             statusLabel.setText("");
@@ -2464,7 +2464,7 @@ public class MainController {
             } else {
                 setStyle(itemParamStyle(it, isSelected));
                 setTooltip(it.status.get() == Status.EMPTY
-                        ? new Tooltip("内容为空，正式提取时将被跳过") : null);
+                        ? new Tooltip(I18n.get("preview.emptyContent")) : null);
             }
             // 深色底需白字（-fx-text-background-color 不跨节点继承，直接设 label 填充色）：
             // 全局参数深蓝底、提取失败/跳过/警告行（Windows 错误红 #E81123 及红绿分割行）
@@ -3235,7 +3235,7 @@ public class MainController {
     }
 
     private void updateFileCount() {
-        fileCountLabel.setText("共 " + visibleCount() + " 个文件");
+        fileCountLabel.setText(I18n.get("list.fileCount", "count", visibleCount()));
     }
 
     /** 列表操作按钮可用性：列表为空时移除禁用；撤销栈为空时撤销禁用；合并为组需勾选集合或选中项目；拆分组仅选中组条目时可用（F6） */
@@ -3320,10 +3320,10 @@ public class MainController {
         if (targets.size() >= visibleCount()) {
             // R13 确认框文案：全选含折叠组成员时提示（配合阶段 3 移除确认框）
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
-                    "确定移除全部 " + targets.size() + " 个项目？移除后列表为空，无法提取"
+                    I18n.get("list.removeAllConfirm", "count", targets.size())
                             + collapsedGroupHint(targets),
                     ButtonType.OK, ButtonType.CANCEL);
-            confirm.setTitle("移除确认");
+            confirm.setTitle(I18n.get("list.removeConfirmTitle"));
             confirm.setHeaderText(null);
             if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
                 return;
@@ -3332,7 +3332,7 @@ public class MainController {
         removeItems(targets);
         log.info("已移除 {} 个项目，剩余可见 {} 个", targets.size(), visibleCount());
         if (visibleCount() == 0) {
-            showAlert(Alert.AlertType.INFORMATION, "至少保留一个文件");
+            showAlert(Alert.AlertType.INFORMATION, ErrorCode.KEEP_AT_LEAST_ONE.message());
         }
     }
 
@@ -3341,12 +3341,12 @@ public class MainController {
         int memberCount = visibleMemberCount(group);
         String collapsedHint = group.isExpanded()
                 ? ""
-                : "\n（该组当前已折叠，组内项目在列表中不可见）";
+                : I18n.get("group.removeNoteCollapsed");
         String msg = memberCount >= visibleCount()
-                ? "确定移除整组（" + memberCount + " 个项目）？移除后列表为空，无法提取" + collapsedHint
-                : "确定移除整组（" + memberCount + " 个项目）？" + collapsedHint;
+                ? I18n.get("group.removeConfirm", "count", memberCount) + collapsedHint
+                : I18n.get("group.removeConfirmSimple", "count", memberCount) + collapsedHint;
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, msg, ButtonType.OK, ButtonType.CANCEL);
-        confirm.setTitle("移除确认");
+        confirm.setTitle(I18n.get("list.removeConfirmTitle"));
         confirm.setHeaderText(null);
         if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
             return;
@@ -3354,7 +3354,7 @@ public class MainController {
         removeGroup(group);
         log.info("已移除整组 {}（{} 个项目），剩余可见 {} 个", group.getName(), memberCount, visibleCount());
         if (visibleCount() == 0) {
-            showAlert(Alert.AlertType.INFORMATION, "至少保留一个文件");
+            showAlert(Alert.AlertType.INFORMATION, ErrorCode.KEEP_AT_LEAST_ONE.message());
         }
     }
 
@@ -3424,14 +3424,15 @@ public class MainController {
                     long cnt = group.getMembers().stream()
                             .filter(m -> !m.removed && targets.contains(m)).count();
                     if (cnt > 0) {
-                        parts.add(group.getName() + "（" + cnt + " 个）");
+                        parts.add(group.getName() + I18n.get("group.itemCount", "count", cnt));
                     }
                 }
             }
         }
         return parts.isEmpty()
                 ? ""
-                : "\n（注意：其中 " + String.join("、", parts) + " 位于已折叠的组内，当前不可见）";
+                : I18n.get("group.removeNoteHidden",
+                        "names", String.join(I18n.get("list.nameSeparator"), parts));
     }
 
     @FXML
@@ -4218,7 +4219,7 @@ public class MainController {
         adjustCheck.setManaged(checkVisible);
         if (checkVisible) {
             PreviewItem it = (PreviewItem) item;
-            adjustCheck.setText("添加章节序号");
+            adjustCheck.setText(I18n.get("params.addChapterNumbers"));
             updatingAdjustCheck = true;
             adjustCheck.setSelected(it.chapterEnabled.get());
             updatingAdjustCheck = false;
@@ -4242,7 +4243,7 @@ public class MainController {
         if (cbz) {
             return "CBZ";
         }
-        return "文件夹";
+        return I18n.get("extract.unitFolder");
     }
 
     private void updateInfoArea(Object item) {
@@ -4278,31 +4279,33 @@ public class MainController {
         }
         if (showTitle) {
             switch (it.status.get()) {
-                case WAITING -> titleInfoLabel.setText("提取标题：解析中…");
-                case FAILED, EMPTY -> titleInfoLabel.setText("提取标题：—");
+                case WAITING -> titleInfoLabel.setText(I18n.get("preview.titleParsing"));
+                case FAILED, EMPTY -> titleInfoLabel.setText(I18n.get("preview.titleNone"));
                 case READY -> titleInfoLabel.setText(it.cachedTitle != null
-                        ? "提取标题：" + it.cachedTitle
-                        : "提取标题：未提取到标题");
+                        ? I18n.get("preview.titlePrefix") + it.cachedTitle
+                        : I18n.get("preview.titleNotFound"));
             }
         }
         outputNameLabel.setVisible(true);
         outputNameLabel.setManaged(true);
         if (isTextMode()) {
             if (params.isSeparateFiles()) {
-                outputNameLabel.setText("输出文件：" + stripMhtExt(it.name) + ".txt");
+                outputNameLabel.setText(I18n.get("preview.outputFilePrefix") + stripMhtExt(it.name) + ".txt");
             } else {
                 String inputDirName = new File(inputFolderField.getText()).getName();
                 if (inputDirName == null || inputDirName.isEmpty()) {
                     inputDirName = "mht_output";
                 }
-                outputNameLabel.setText("输出文件：" + inputDirName + ".txt（合并输出，所有文件共用）");
+                outputNameLabel.setText(I18n.get("preview.outputFilePrefix") + inputDirName + ".txt"
+                        + I18n.get("preview.outputFileTxtSuffix"));
             }
         } else if (params.isSingleOutputMode()) {
             String folderName = mergedFolderName(it);
-            outputNameLabel.setText("输出目录：" + folderName + "（合并输出，所有文件共用）");
+            outputNameLabel.setText(I18n.get("preview.outputDirPrefix") + folderName
+                    + I18n.get("preview.outputDirMergedNote"));
         } else {
             String dirName = separateDirName(it);
-            outputNameLabel.setText("输出目录：" + dirName);
+            outputNameLabel.setText(I18n.get("preview.outputDirPrefix") + dirName);
         }
     }
 
@@ -4310,7 +4313,7 @@ public class MainController {
         AppConfig params = effectiveForObject(item);
         if (params != null && params.isEnableNameExtraction()) {
             if (item.status.get() == Status.WAITING) {
-                return "解析中…";
+                return I18n.get("preview.parsing");
             }
             if (item.cachedTitle != null) {
                 return SanitizeUtils.sanitize(item.cachedTitle);
@@ -4325,7 +4328,7 @@ public class MainController {
             PreviewItem first = allVisibleItems().stream().findFirst().orElse(null);
             if (first != null) {
                 if (first.status.get() == Status.WAITING) {
-                    return "解析中…";
+                    return I18n.get("preview.parsing");
                 }
                 if (first.cachedTitle != null) {
                     return SanitizeUtils.sanitize(first.cachedTitle);
@@ -4351,9 +4354,9 @@ public class MainController {
         // 组条目：预览区显示组信息与参数状态提示（6.5）
         if (item instanceof GroupItem<?> g) {
             GroupItem<PreviewItem> group = (GroupItem<PreviewItem>) g;
-            String info = "组信息\n组名：" + group.getName()
-                    + "\n组内项目数：" + visibleMemberCount(group) + " 项"
-                    + "\n参数：" + groupParamStatusText(group);
+            String info = I18n.get("preview.groupInfo") + group.getName()
+                    + I18n.get("preview.groupItemCount", "count", visibleMemberCount(group))
+                    + I18n.get("preview.paramsLabel") + groupParamStatusText(group);
             if (isTextMode()) {
                 imagePreviewBox.setVisible(false);
                 imagePreviewBox.setManaged(false);
@@ -4384,9 +4387,9 @@ public class MainController {
                 return;
             }
             switch (it.status.get()) {
-                case WAITING -> textPreviewArea.setText("解析中...");
-                case FAILED -> textPreviewArea.setText("解析失败：" + it.errorMsg.get());
-                case EMPTY -> textPreviewArea.setText("内容为空，提取时该文件将被跳过");
+                case WAITING -> textPreviewArea.setText(I18n.get("preview.imageParsing"));
+                case FAILED -> textPreviewArea.setText(I18n.get("preview.parseFailed") + it.errorMsg.get());
+                case EMPTY -> textPreviewArea.setText(I18n.get("preview.emptyContentShort"));
                 case READY -> renderTextPreview(it);
             }
         } else {
@@ -4403,7 +4406,7 @@ public class MainController {
                 return;
             }
             if (it.status.get() == Status.FAILED) {
-                imageHintLabel.setText("解析失败：" + it.errorMsg.get());
+                imageHintLabel.setText(I18n.get("preview.parseFailed") + it.errorMsg.get());
                 imageHintLabel.setVisible(true);
                 previewEffectButton.setVisible(true);
                 previewEffectButton.setDisable(true);
@@ -4413,7 +4416,7 @@ public class MainController {
                 renderThumbnails(it);
             } else if (imageLoadActive && loadingItem == it) {
                 // 加载中：保留渐进追加的网格，不重置
-                imageHintLabel.setText("正在加载...");
+                imageHintLabel.setText(I18n.get("preview.imageLoading"));
                 imageHintLabel.setVisible(true);
                 previewEffectButton.setVisible(true);
                 previewEffectButton.setDisable(true);
@@ -4430,10 +4433,10 @@ public class MainController {
         boolean imageMode = imageModeToggle.isSelected();
         AppConfig own = imageMode ? g.getImageParamsCache() : g.getTextParamsCache();
         if (own != null) {
-            return "该组使用独立参数";
+            return I18n.get("group.paramsIndependent");
         }
         AppConfig global = imageMode ? imageParamsCache : textParamsCache;
-        return global != null ? "该组继承全局参数" : "该组继承全局参数（全局参数尚未确认）";
+        return global != null ? I18n.get("group.paramsInherited") : I18n.get("group.paramsInheritedUnconfirmed");
     }
 
     private void renderTextPreview(PreviewItem item) {
@@ -4451,7 +4454,7 @@ public class MainController {
         } else {
             textPreviewArea.setText(head
                     + text.substring(0, 5000)
-                    + "\n……【提取内容】……\n"
+                    + I18n.get("preview.extractedContentDivider")
                     + text.substring(text.length() - 5000)
                     + tail);
         }
@@ -4459,9 +4462,7 @@ public class MainController {
 
     /** 重置图片区：hint 为 null 时显示默认按需预览说明 */
     private void resetImageArea(String hint, boolean showPreviewButton) {
-        imageHintLabel.setText(hint != null
-                ? hint
-                : "图片预览需要加载整个 MHT 文件，为节省内存开销，采用按需预览。点击'查看预览效果'按钮可查看提取效果。");
+        imageHintLabel.setText(hint != null ? hint : I18n.get("preview.imageLazyHint"));
         imageHintLabel.setVisible(true);
         previewEffectButton.setVisible(showPreviewButton);
         previewEffectButton.setDisable(false);
@@ -4474,7 +4475,7 @@ public class MainController {
         List<ThumbEntry> thumbs = item.cachedThumbs;
         thumbnailPane.getChildren().clear();
         if (thumbs == null || thumbs.isEmpty()) {
-            imageHintLabel.setText("未提取到图片");
+            imageHintLabel.setText(I18n.get("preview.noImages"));
             imageHintLabel.setVisible(true);
             previewEffectButton.setVisible(false);
             imageScrollPane.setVisible(false);
@@ -4503,7 +4504,7 @@ public class MainController {
         VBox box = new VBox(4);
         box.setAlignment(Pos.TOP_CENTER);
         if (entry.image() == null) {
-            box.getChildren().add(new Label("无法加载"));
+            box.getChildren().add(new Label(I18n.get("preview.loadFailed")));
         } else {
             ImageView iv = new ImageView(entry.image());
             iv.setFitWidth(150);
@@ -4586,9 +4587,10 @@ public class MainController {
         File f = new File(item.path);
         if (f.length() > LARGE_FILE_THRESHOLD) {
             Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-            alert.setTitle("大文件预览确认");
-            alert.setHeaderText("文件较大，预览可能需要较长时间与较多内存");
-            alert.setContentText(item.name + "（" + (f.length() / 1024 / 1024) + " MB），是否继续？");
+            alert.setTitle(I18n.get("preview.largeFileConfirmTitle"));
+            alert.setHeaderText(I18n.get("preview.largeFileConfirmHeader"));
+            alert.setContentText(item.name + I18n.get("preview.largeFileConfirmBody",
+                    "size", f.length() / 1024 / 1024));
             alert.getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
             if (alert.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
                 return;
@@ -4601,21 +4603,21 @@ public class MainController {
                     params.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
         } catch (IOException e) {
             log.error("计算缓存键失败：{}", item.path, e);
-            showAlert(Alert.AlertType.ERROR, "读取文件信息失败：" + e.getMessage());
+            showAlert(Alert.AlertType.ERROR, ErrorCode.READ_FILE_INFO_FAILED.message());
             return;
         }
 
         final int token = requestToken;
         imageLoadActive = true;
         loadingItem = item;
-        imageHintLabel.setText("正在加载...");
+        imageHintLabel.setText(I18n.get("preview.imageLoading"));
         previewEffectButton.setDisable(true);
         // 相邻修复：提取运行期间进度条/状态栏归提取任务独占，图片加载不动它们
         if (!running.get()) {
             progressBar.setVisible(true);
             progressBar.setProgress(-1);
             setProgressBarActivity(null);   // 预览加载 = 默认色（完成后回落预解析显示）
-            statusLabel.setText("正在加载图片：" + item.name);
+            statusLabel.setText(I18n.get("preview.loadingImage", "name", item.name));
         }
 
         Thread t = new Thread(() -> {
@@ -4708,7 +4710,7 @@ public class MainController {
                     }
                     imageLoadActive = false;
                     loadingItem = null;
-                    imageHintLabel.setText("解析失败：" + e.getMessage());
+                    imageHintLabel.setText(I18n.get("preview.parseFailed") + e.getMessage());
                     imageHintLabel.setVisible(true);
                     previewEffectButton.setDisable(false);
                     updateProgressStatus(parseToken);
@@ -4819,7 +4821,7 @@ public class MainController {
                 try {
                     MimeParser.ParsedMht parsed = parser.parse(item.path, true, () -> false, null, null);
                     if (parsed.getHtmlContent() == null) {
-                        setItemStatus(token, item, Status.FAILED, "无法解析文件（HTML 内容缺失）");
+                        setItemStatus(token, item, Status.FAILED, I18n.get("preview.unparseable"));
                         continue;
                     }
                     if (isTextMode()) {
@@ -4853,7 +4855,7 @@ public class MainController {
                         setItemStatus(token, item, Status.READY, null);
                     }
                 } catch (Exception e) {
-                    setItemStatus(token, item, Status.FAILED, "解析失败：" + e.getMessage());
+                    setItemStatus(token, item, Status.FAILED, I18n.get("preview.parseFailed") + e.getMessage());
                 }
             }
         }, "preview-preparse");
@@ -4922,7 +4924,7 @@ public class MainController {
             progressBar.setProgress((double) done / total);
             setProgressBarActivity(STYLE_PROGRESS_PREPARSE);
         }
-        statusLabel.setText("解析完成 " + done + "/" + total);
+        statusLabel.setText(I18n.get("preview.parseDone") + done + "/" + total);
     }
 
     /** 进度条活动样式切换（拍板 2026-09-24）：一次只保留一个活动类；null = 默认色 */
@@ -4948,10 +4950,10 @@ public class MainController {
     private void onSizeAlertStep(int step) {
         long stepGiB = step * PreviewCacheLifecycle.SIZE_ALERT_STEP_BYTES / (1024L * 1024 * 1024);
         double actualGiB = previewCacheLifecycle.lastObservedTotalBytes() / (1024.0 * 1024 * 1024);
-        String message = String.format(
-                "预览缓存已占用约 %d GiB，当前实际 %.1f GiB（临时目录：%s）。"
-                        + "这只是提醒，不影响继续使用；关闭程序会自动清空该缓存。",
-                stepGiB, actualGiB, previewCacheLifecycle.store().root());
+        String message = I18n.get("cache.sizeAlert",
+                        "step", stepGiB, "actual", String.format("%.1f", actualGiB),
+                        "dir", previewCacheLifecycle.store().root())
+                + I18n.get("cache.sizeAlertNote");
         Platform.runLater(() -> showAlertNonModal(Alert.AlertType.INFORMATION, message));
     }
 
@@ -6040,6 +6042,16 @@ public class MainController {
             } catch (Exception e) { out.println("[FAIL] Preview cache lifecycle: " + e.getMessage()); f++; }
             // 兜底清场（无论成败）：自动化测试经 System.exit 退出不走关窗处理器，避免缓存残留跨会话
             try { previewCacheLifecycle.onShutdown(() -> { }); } catch (Exception ignored) { }
+
+            // GUI 状态回写 locale（H13 行为变更 2 修复锁定）：saveGuiState 不得把 locale 清成 null
+            try {
+                saveGuiState();
+                String savedLocale = GuiStateManager.load().getLocale();
+                if (savedLocale == null || savedLocale.isBlank() || I18n.parseLocale(savedLocale) == null) {
+                    throw new IllegalStateException("saveGuiState 未回写有效 locale，实际: " + savedLocale);
+                }
+                out.println("[PASS] GuiState locale persisted after save"); p++;
+            } catch (Exception e) { out.println("[FAIL] GuiState locale: " + e.getMessage()); f++; }
 
             out.println(); out.println("=== RESULTS: " + p + " passed, " + f + " failed ===");
             out.flush();
