@@ -77,8 +77,8 @@ public final class BrowserLauncher {
      * 源码标签打开后自动关闭渲染标签（精简为单标签；无渲染标签则静默跳过）。
      */
     private static boolean openViewSourceNative(Path htmlFile) {
-        Optional<String> exe = detectDefaultBrowserExe();
-        if (exe.isEmpty() || !isChromium(exe.get())) {
+        Optional<String> exe = BrowserDetector.detectDefaultBrowserExe();
+        if (exe.isEmpty() || !BrowserDetector.isChromium(exe.get())) {
             return false;
         }
         String profile = Paths.get(System.getProperty("java.io.tmpdir"), CDP_PROFILE_NAME).toString();
@@ -277,7 +277,7 @@ public final class BrowserLauncher {
                 np.destroyForcibly();
                 return;
             }
-            String out = decodeConsole(np.getInputStream().readAllBytes());
+            String out = BrowserDetector.decodeConsole(np.getInputStream().readAllBytes());
             String pid = null;
             for (String line : out.lines().toList()) {
                 if (line.contains("127.0.0.1:" + port) && line.toUpperCase(Locale.ROOT).contains("LISTENING")) {
@@ -295,7 +295,7 @@ public final class BrowserLauncher {
                 wp.destroyForcibly();
                 return;
             }
-            String cmd = decodeConsole(wp.getInputStream().readAllBytes());
+            String cmd = BrowserDetector.decodeConsole(wp.getInputStream().readAllBytes());
             if (!cmd.contains(profile)) {
                 log.debug("端口 {} 的占用进程非本应用调试实例，不结束", port);
                 return;
@@ -307,11 +307,6 @@ public final class BrowserLauncher {
         }
     }
 
-    /** 仅 Chromium 系（Edge/Chrome/Chromium）支持 CDP /json/new 内部导航；其余浏览器走源码页回退 */
-    private static boolean isChromium(String exe) {
-        String name = Paths.get(exe).getFileName().toString().toLowerCase(Locale.ROOT);
-        return name.contains("msedge") || name.contains("chrome") || name.contains("chromium");
-    }
 
     /** 极简 HTTP 客户端（原生 Socket，native-image 安全）：返回"状态行\n响应体"；连接失败/超时返回 null */
     private static String httpRequest(String host, int port, String method, String path) {
@@ -383,7 +378,7 @@ public final class BrowserLauncher {
 
     /** 三级启动兜底：直接起浏览器 exe → cmd start → Desktop API，任一成功即返回 true */
     private static boolean launch(String url) {
-        Optional<String> exe = detectDefaultBrowserExe();
+        Optional<String> exe = BrowserDetector.detectDefaultBrowserExe();
         if (exe.isPresent() && runExe(exe.get(), url)) {
             return true;
         }
@@ -396,157 +391,6 @@ public final class BrowserLauncher {
     /** 文件路径 → file URL（toASCIIString 自动百分号编码中文路径，不手工拼 file:///） */
     private static String toFileUrl(Path file) {
         return file.toUri().toASCIIString();
-    }
-
-    /** 按序探测系统默认浏览器 exe：注册表 UserChoice → http 协议命令 → 固定路径 → where.exe */
-    private static Optional<String> detectDefaultBrowserExe() {
-        String progId = readRegistryValue(
-                "HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice",
-                "ProgId");
-        if (progId != null && !progId.isEmpty()) {
-            String exe = exeFromRegistryCommand("HKCR\\" + progId + "\\shell\\open\\command");
-            if (exe != null) {
-                return Optional.of(exe);
-            }
-        }
-        String exe = exeFromRegistryCommand("HKCR\\http\\shell\\open\\command");
-        if (exe != null) {
-            return Optional.of(exe);
-        }
-        for (String candidate : candidatePaths()) {
-            if (Files.isRegularFile(Path.of(candidate))) {
-                return Optional.of(candidate);
-            }
-        }
-        for (String name : List.of("msedge", "chrome", "firefox")) {
-            String found = whereExe(name);
-            if (found != null) {
-                return Optional.of(found);
-            }
-        }
-        log.warn("未探测到系统默认浏览器 exe");
-        return Optional.empty();
-    }
-
-    /** 读取注册表命名值（REG_SZ），失败返回 null */
-    private static String readRegistryValue(String key, String valueName) {
-        try {
-            Process p = new ProcessBuilder("reg", "query", key, "/v", valueName)
-                    .redirectErrorStream(true).start();
-            if (!p.waitFor(10, TimeUnit.SECONDS)) {
-                p.destroyForcibly();
-                return null;
-            }
-            if (p.exitValue() != 0) {
-                return null;
-            }
-            byte[] bytes = p.getInputStream().readAllBytes();
-            String out = decodeConsole(bytes);
-            for (String line : out.lines().toList()) {
-                int idx = line.indexOf("REG_SZ");
-                if (idx >= 0) {
-                    String value = line.substring(idx + "REG_SZ".length()).trim();
-                    if (!value.isEmpty()) {
-                        return value;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.debug("读取注册表失败：{}", key, e);
-        }
-        return null;
-    }
-
-    /** 读取注册表默认值命令（/ve），解析出浏览器 exe 路径并校验文件存在 */
-    private static String exeFromRegistryCommand(String key) {
-        try {
-            Process p = new ProcessBuilder("reg", "query", key, "/ve")
-                    .redirectErrorStream(true).start();
-            if (!p.waitFor(10, TimeUnit.SECONDS)) {
-                p.destroyForcibly();
-                return null;
-            }
-            if (p.exitValue() != 0) {
-                return null;
-            }
-            byte[] bytes = p.getInputStream().readAllBytes();
-            String out = decodeConsole(bytes);
-            for (String line : out.lines().toList()) {
-                int idx = line.indexOf("REG_SZ");
-                if (idx < 0) {
-                    continue;
-                }
-                String cmd = line.substring(idx + "REG_SZ".length()).trim();
-                String exe = parseCommandExe(cmd);
-                if (exe != null && Files.isRegularFile(Path.of(exe))) {
-                    return exe;
-                }
-            }
-        } catch (Exception e) {
-            log.debug("读取注册表默认命令失败：{}", key, e);
-        }
-        return null;
-    }
-
-    /** 解析注册表命令行值：以引号开头取到下一个引号，否则取第一个空格前的内容 */
-    private static String parseCommandExe(String cmd) {
-        if (cmd == null || cmd.isEmpty()) {
-            return null;
-        }
-        if (cmd.startsWith("\"")) {
-            int end = cmd.indexOf('"', 1);
-            return end > 1 ? cmd.substring(1, end) : null;
-        }
-        int sp = cmd.indexOf(' ');
-        return sp > 0 ? cmd.substring(0, sp) : cmd;
-    }
-
-    /** 常见浏览器安装路径（存在即用） */
-    private static List<String> candidatePaths() {
-        List<String> paths = new ArrayList<>();
-        paths.add("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe");
-        paths.add("C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe");
-        paths.add("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe");
-        paths.add("C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe");
-        String localAppData = System.getenv("LOCALAPPDATA");
-        if (localAppData != null && !localAppData.isEmpty()) {
-            paths.add(localAppData + "\\Google\\Chrome\\Application\\chrome.exe");
-        }
-        paths.add("C:\\Program Files\\Mozilla Firefox\\firefox.exe");
-        return paths;
-    }
-
-    /** where.exe 查询浏览器可执行文件（取第一行并校验存在） */
-    private static String whereExe(String name) {
-        try {
-            Process p = new ProcessBuilder("where.exe", name).redirectErrorStream(true).start();
-            if (!p.waitFor(10, TimeUnit.SECONDS)) {
-                p.destroyForcibly();
-                return null;
-            }
-            if (p.exitValue() != 0) {
-                return null;
-            }
-            byte[] bytes = p.getInputStream().readAllBytes();
-            String out = decodeConsole(bytes);
-            String first = out.lines().findFirst().orElse("").trim();
-            return (!first.isEmpty() && Files.isRegularFile(Path.of(first))) ? first : null;
-        } catch (Exception e) {
-            log.debug("where.exe 查询失败：{}", name, e);
-            return null;
-        }
-    }
-
-    /** 控制台进程输出解码：先试 UTF-8 严格解码，失败再用 GBK（中文系统 reg.exe 输出为代码页 GBK） */
-    private static String decodeConsole(byte[] bytes) {
-        try {
-            return StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-                    .decode(ByteBuffer.wrap(bytes)).toString();
-        } catch (CharacterCodingException e) {
-            return new String(bytes, Charset.forName("GBK"));
-        }
     }
 
     /** 直接启动浏览器 exe（不经过 shell：可绕过提权进程下 ShellExecute/DDE 被 UIPI 拦截的问题） */
