@@ -26,6 +26,33 @@ public final class DropResolver {
     /** 落点分区：TOP = 行上边缘空隙；INTO = 组行整行（入组/合并语义）；BOTTOM = 行下边缘空隙 */
     public enum Zone { TOP, INTO, BOTTOM }
 
+    /**
+     * 由鼠标在行内的相对位置算出落点分区（步骤 3 从 {@code MainController.dropZone} 外迁）。
+     *
+     * <p><b>为什么外迁</b>：这是**纯几何**判定，不依赖任何 UI 框架，却在控制器里是私有方法 ——
+     * 单元格类要调用它就必须放宽可见性（即增加"测试支撑暴露面"）。外迁后既不必放宽，
+     * 也首次获得直接单测。</p>
+     *
+     * <p>规则：组行分三区（上下边缘 = 行间空隙，中间带 = 整行入组/合并）；项目行分两区（上/下）。</p>
+     *
+     * @param row       该行的数据对象（{@code GroupItem} 走三区，其余走两区）
+     * @param y         鼠标相对行顶部的 y
+     * @param height    行高
+     * @param edgeRatio 组行上下边缘带占行高的比例（原 {@code GROUP_ROW_EDGE_ZONE = 0.25}）
+     */
+    public static Zone zoneFor(Object row, double y, double height, double edgeRatio) {
+        if (row instanceof GroupItem<?>) {
+            if (y < height * edgeRatio) {
+                return Zone.TOP;
+            }
+            if (y < height * (1 - edgeRatio)) {
+                return Zone.INTO;
+            }
+            return Zone.BOTTOM;
+        }
+        return y < height / 2 ? Zone.TOP : Zone.BOTTOM;
+    }
+
     /** 一次拖放对应的数据序操作 */
     public sealed interface Operation {
         /** 被拖对象（项目或组条目） */

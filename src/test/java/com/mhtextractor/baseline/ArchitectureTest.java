@@ -105,13 +105,18 @@ class ArchitectureTest {
      *       删掉 {@code loadOrWritePreviewCache}（52 行），{@code onPreviewEffect} 改为调服务并把代次
      *       检查经 {@code Supplier<Boolean>} 传给服务（+2），故净减 50。搬迁前是"零余量"状态，
      *       此后本上限随之收紧到 4935，继续保持只减不增。</li>
+     *   <li><b>步骤 3 把 430 行内部类 {@code PreviewListCell} 外迁为顶层类：4435</b>（净减 500）。
+     *       单元格（430 行）+ 私有接口 {@code CellIndicator}（7）+ 纯几何的 {@code dropZone}（13，
+     *       移入 {@code DropResolver.zoneFor} 并获得单测）+ 只被单元格使用的 28 个表现层常量与
+     *       {@code rowStyle}（37）搬出；控制器只留下 {@code createPreviewCell()} 工厂与一处
+     *       {@code PreviewListCell} 引用。</li>
      * </ul>
      *
      * <p><b>⚠️ 口径陷阱（会话 18 实测）</b>：同一文件用不同工具数出的行数<b>不一致</b> ——
      * PowerShell {@code (Get-Content f).Count} 与 Java {@code Files.readAllLines} 会给出不同结果
      * （本文件为纯 {@code LF} 换行）。**因此本常量只能与 {@code Files.readAllLines} 口径比较**。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 4935;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 4435;
 
     /**
      * E0.6 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限。
@@ -144,6 +149,20 @@ class ArchitectureTest {
      * 两者都只在本类内使用，标记是 E0.6 遗留的过度放宽，故摘除；可见性未变（仍是包级，避免扩大改动面）。
      * 同一轮还发现 {@code modeToggleGroup} 的标记已失效（它在前一批已改为 {@code private}）。</p>
      *
+     * <p><b>演进记录（步骤 3，2026-09-26）</b>：46 → <b>44</b>（下降），但有 12 个成员被<b>有意放宽为包级
+     * 且不加标记</b> —— 这不是"绕过约束"，而是两类暴露面的区分，见下。</p>
+     *
+     * <p><b>⚠️ 标记的语义边界（步骤 3 明确）</b>：{@code /* test-support *​/} 标记的是
+     * <b>"为测试夹具放宽的封装让步"</b>。步骤 3 把 430 行的 {@code PreviewListCell} 外迁为顶层类后，
+     * 它需要 {@code MainController} 的 12 个成员（{@code draggedObject} / {@code dropHandled} /
+     * {@code dragActive} / {@code listAnimating} / {@code lastDragOverCell} / {@code imageModeToggle} /
+     * {@code onCellPressed} / {@code onCellDoubleClicked} / {@code onGroupCheckToggled} /
+     * {@code isTextMode} / {@code unitIndex} / {@code cancelDrag}）。这些是
+     * <b>生产类之间的同包协作</b>，<b>不是测试脚手架</b>，故<b>刻意不加标记</b> ——
+     * 否则会把"为测试放宽"与"为同包生产类放宽"混成一回事，让本计数失去意义。
+     * 代价是这 12 处封装让步<b>不受本断言约束</b>；若日后要约束它们，应另立断言。
+     * （{@code performDrop} 例外：它原本就带标记，故继续带 —— 标记只增不减地守恒。）</p>
+     *
      * <p><b>审计脚本自身的教训</b>：第一版审计脚本用"取行内最后一个标识符"来判定字段名，把
      * {@code final Foo bar = new Foo();} 解析成了类型名 {@code Foo} —— 产生了一批**假阳性**
      * （把实际被引用的成员报成"未被引用"）。改用**行首锚定的类型+名字**正则后 0 条 UNPARSED。
@@ -165,7 +184,7 @@ class ArchitectureTest {
      * "读状态做断言 / 直接驱动内部方法"，需要另设测试支撑 API 或改为经 UI 观察，
      * 是独立且更难的一项。</p>
      */
-    private static final int TEST_SUPPORT_MARKER_MAX = 46;
+    private static final int TEST_SUPPORT_MARKER_MAX = 44;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

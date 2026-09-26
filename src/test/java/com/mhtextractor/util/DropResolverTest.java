@@ -376,4 +376,46 @@ class DropResolverTest {
         assertEquals(top(g1), t);
         assertEquals(List.of("m1"), g1.getMembers());
     }
+
+    // ==================== 落点分区 zoneFor（步骤 3 从 MainController.dropZone 外迁） ====================
+    //
+    // 为什么值得一组测试：它原本是 GUI 控制器的私有方法，只能靠真实拖拽动作间接验证；
+    // 外迁为纯几何函数后，可以把边界值逐条钉死。
+
+    /** 组行分三区：上边缘 → TOP；中间带 → INTO（入组/合并）；下边缘 → BOTTOM */
+    @Test
+    void zoneForGroupRowSplitsIntoThreeBands() {
+        GroupItem<String> g = group(1, "组1", "m1");
+        double h = 100.0;
+        double edge = 0.25;   // 与 MainController.GROUP_ROW_EDGE_ZONE 同值
+        assertEquals(DropResolver.Zone.TOP, DropResolver.zoneFor(g, 0.0, h, edge));
+        assertEquals(DropResolver.Zone.TOP, DropResolver.zoneFor(g, 24.9, h, edge));
+        assertEquals(DropResolver.Zone.INTO, DropResolver.zoneFor(g, 25.0, h, edge));
+        assertEquals(DropResolver.Zone.INTO, DropResolver.zoneFor(g, 50.0, h, edge));
+        assertEquals(DropResolver.Zone.INTO, DropResolver.zoneFor(g, 74.9, h, edge));
+        assertEquals(DropResolver.Zone.BOTTOM, DropResolver.zoneFor(g, 75.0, h, edge));
+        assertEquals(DropResolver.Zone.BOTTOM, DropResolver.zoneFor(g, 100.0, h, edge));
+    }
+
+    /** 项目行只分两区：上半 → TOP，下半 → BOTTOM；且**永不**返回 INTO */
+    @Test
+    void zoneForItemRowOnlyTopOrBottom() {
+        double h = 100.0;
+        assertEquals(DropResolver.Zone.TOP, DropResolver.zoneFor("item", 0.0, h, 0.25));
+        assertEquals(DropResolver.Zone.TOP, DropResolver.zoneFor("item", 49.9, h, 0.25));
+        assertEquals(DropResolver.Zone.BOTTOM, DropResolver.zoneFor("item", 50.0, h, 0.25));
+        assertEquals(DropResolver.Zone.BOTTOM, DropResolver.zoneFor("item", 100.0, h, 0.25));
+    }
+
+    /** edgeRatio 必须是参数（不再硬编码 0.25）：调大后 INTO 带收窄 */
+    @Test
+    void zoneForHonoursConfigurableEdgeRatio() {
+        GroupItem<String> g = group(1, "组1", "m1");
+        double h = 100.0;
+        // edge=0.4 → 0..40 TOP、40..60 INTO、60..100 BOTTOM
+        assertEquals(DropResolver.Zone.TOP, DropResolver.zoneFor(g, 39.9, h, 0.4));
+        assertEquals(DropResolver.Zone.INTO, DropResolver.zoneFor(g, 40.0, h, 0.4));
+        assertEquals(DropResolver.Zone.INTO, DropResolver.zoneFor(g, 59.9, h, 0.4));
+        assertEquals(DropResolver.Zone.BOTTOM, DropResolver.zoneFor(g, 60.0, h, 0.4));
+    }
 }

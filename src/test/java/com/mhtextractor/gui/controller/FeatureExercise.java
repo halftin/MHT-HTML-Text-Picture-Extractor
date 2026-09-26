@@ -1079,7 +1079,7 @@ public void runAutomatedTests() {
             List<PreviewItem> vis = mc.allVisibleItems();
             PreviewItem dt = vis.get(0);
             boolean before = dt.selected;
-            MainController.PreviewListCell targetCell = mc.findCell(dt);
+            PreviewListCell targetCell = mc.findCell(dt);
             if (targetCell == null) { throw new IllegalStateException("未找到条目 cell"); }
             javafx.scene.input.MouseEvent click2 = new javafx.scene.input.MouseEvent(
                     javafx.scene.input.MouseEvent.MOUSE_CLICKED,
