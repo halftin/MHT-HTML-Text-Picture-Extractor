@@ -532,6 +532,53 @@ class ArchitectureTest {
         System.out.println("[arch] GUI 层未直接调用缓存规则（已收口到 WorkspaceParamService）");
     }
 
+    /**
+     * 验收 V1 的**闭合性**断言：无头应用层不得依赖视图层/外壳。
+     *
+     * <p><b>为什么必须有这条</b>：{@link #businessPackagesHaveNoUiFrameworkDependency()} 只扫
+     * {@code app} 包**自身**的字节码常量池。若有人在 {@code app} 里写
+     * {@code import com.mhtextractor.gui.controller.MainController}，
+     * 那条断言**不会**发现 —— 因为 JavaFX 描述符出现在 {@code gui} 包的类里，而 gui 包是被允许的。
+     * 于是 {@code app} 就"看起来零 JavaFX"，实则通过 {@code MainController} **传递依赖**了 JavaFX，
+     * 换 UI 框架时整个应用层随之失效。</p>
+     *
+     * <p>本断言从**源码导入**层面禁止 {@code app} 依赖 {@code gui} / {@code logging}
+     * （日志基础设施 {@code logging.TextAreaAppender} 同样直接依赖 JavaFX，不得进入无头闭包）。</p>
+     *
+     * <p>允许的依赖方向：{@code app → {core, extractor, processor, output, cache, util, config, i18n, model}}。</p>
+     */
+    @Test
+    void applicationLayerDoesNotDependOnViewOrShell() throws IOException {
+        Path appDir = Path.of("src", "main", "java", "com", "mhtextractor", "app");
+        assertTrue(Files.isDirectory(appDir), "未找到 app 包：" + appDir);
+
+        List<String> forbidden = List.of(
+                "com.mhtextractor.gui.",
+                "com.mhtextractor.logging.",
+                "com.mhtextractor.App");   // 外壳类自身（Application 子类）
+
+        List<String> offenders = new ArrayList<>();
+        try (Stream<Path> walk = Files.walk(appDir)) {
+            for (Path p : walk.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
+                String rel = appDir.relativize(p).toString().replace('\\', '/');
+                for (String line : Files.readAllLines(p, StandardCharsets.UTF_8)) {
+                    String code = line.split("//")[0].trim();
+                    if (!code.startsWith("import ")) continue;
+                    for (String bad : forbidden) {
+                        if (code.contains(bad)) {
+                            offenders.add(rel + "  ->  " + code);
+                        }
+                    }
+                }
+            }
+        }
+
+        assertTrue(offenders.isEmpty(),
+                "无头应用层（app）不得依赖视图层/外壳，否则会**传递依赖 JavaFX** 而 V1 失效：\n  "
+                        + String.join("\n  ", offenders));
+        System.out.println("[arch] app 层未依赖 gui/logging/App（V1 闭合）");
+    }
+
     // ==================== 6. 分层前提：基准测试必须真的在跑 ====================
 
     /**
