@@ -484,6 +484,50 @@ class ArchitectureTest {
         return block.substring(i + open.length(), j).strip();
     }
 
+    /**
+     * E2.2 不变式：**GUI 层不得直接调用缓存规则方法**，必须经
+     * {@code com.mhtextractor.app.WorkspaceParamService} 收口。
+     *
+     * <p><b>为什么值得一条断言</b>：耦合点 #11 的本质是"每条参数/移除分支自己记得调一次规则" ——
+     * 这正是"分支漏调"类 bug 的温床。E2.2 把控制器里的 13 处调用收口到服务后，若日后有人图快又直接在
+     * 控制器里调 {@code previewCacheLifecycle.onParamsChangedBatch(...)}，就会重新打开这个缺口。
+     * 本测试把"收口"从一次性动作变成**持续约束**。</p>
+     *
+     * <p><b>为什么只管 GUI 层，不管业务服务</b>：本测试首版曾扫描整个 {@code com/mhtextractor}，
+     * 立刻抓出 {@code processor/ImageBatchProcessor} 直接调用规则 (b)
+     * （{@code previewCache.onExtractionCompleted(path)}）—— 但那是<b>合法</b>的：
+     * 该处理器是业务服务，缓存生命周期是它**注入的依赖**，规则 (b)"提取完成即删缓存"本就属于它的职责，
+     * 且它在无头单测中被直接驱动（{@code ImageBatchProcessorTest}）。
+     * 因此真正的不变式是"<b>GUI 不得直接调规则</b>"，而不是"全项目只许一个调用者"。</p>
+     */
+    @Test
+    void guiLayerDoesNotInvokeCacheRulesDirectly() throws IOException {
+        Path guiPkg = Path.of("src", "main", "java", "com", "mhtextractor", "gui");
+        List<String> ruleMethods = List.of(
+                "onParamsChanged", "onParamsChangedBatch", "onItemsRemoved", "onItemRemoved",
+                "onExtractionCompleted");
+
+        List<String> offenders = new ArrayList<>();
+        try (Stream<Path> walk = Files.walk(guiPkg)) {
+            for (Path p : walk.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
+                String rel = guiPkg.relativize(p).toString().replace('\\', '/');
+                for (String line : Files.readAllLines(p, StandardCharsets.UTF_8)) {
+                    String code = line.split("//")[0];
+                    for (String m : ruleMethods) {
+                        if (code.contains("." + m + "(")) {
+                            offenders.add(rel + "  ->  " + code.trim());
+                        }
+                    }
+                }
+            }
+        }
+
+        assertTrue(offenders.isEmpty(),
+                "GUI 层不得直接调用缓存规则方法（须经 com.mhtextractor.app.WorkspaceParamService）：\n  "
+                        + String.join("\n  ", offenders));
+        System.out.println("[arch] GUI 层未直接调用缓存规则（已收口到 WorkspaceParamService）");
+    }
+
     // ==================== 6. 分层前提：基准测试必须真的在跑 ====================
 
     /**

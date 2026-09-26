@@ -605,7 +605,7 @@ public class MainController {
      *  再等其在途写入结束（join，最多 2s；超时则接受删除与写入竞争——原子写入方案下最坏是写入失败被吞），
      *  最后清空。只清本应用专属根目录（PreviewCacheStore 的 root），绝不触碰 java.io.tmpdir 整体。 */
     private void onWindowCloseRequest(WindowEvent e) {
-        if (shutdownCacheCleared || !previewCacheLifecycle.hasCachedEntries()) {
+        if (shutdownCacheCleared || !workspaceParamService.hasCachedEntries()) {
             return;
         }
         e.consume();

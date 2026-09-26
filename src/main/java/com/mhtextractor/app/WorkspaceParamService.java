@@ -97,4 +97,17 @@ public final class WorkspaceParamService {
             previewCacheLifecycle.onItemsRemoved(paths);
         }
     }
+
+    // ==================== 只读查询（不含规则语义，纯转发） ====================
+
+    /**
+     * 是否还有未清理的预览缓存目录（关窗链的"是否需要提示先清空"判据）。
+     *
+     * <p>这是**只读查询**，不含任何规则语义；放在本服务是为了让控制器不必直接持有
+     * {@link PreviewCacheLifecycle} 的查询面。真正的缓存读写（{@code store()}）将在
+     * E4 抽 `PreviewService` 时一并收口 —— 那是预览加载路径的职责，不属于参数/移除规则。</p>
+     */
+    public boolean hasCachedEntries() {
+        return previewCacheLifecycle.hasCachedEntries();
+    }
 }
