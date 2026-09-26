@@ -2,6 +2,10 @@ package com.mhtextractor.app;
 
 import com.mhtextractor.baseline.BaselineCases;
 import com.mhtextractor.baseline.BaselineHasher;
+import com.mhtextractor.cache.PreviewCacheKey;
+import com.mhtextractor.cache.PreviewCacheLifecycle;
+import com.mhtextractor.cache.PreviewCacheMeta;
+import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.ErrorCode;
 import com.mhtextractor.i18n.I18n;
@@ -93,6 +97,12 @@ class StubUiAcceptanceTest {
                 Files.isDirectory(in), items.size(), (int) visible);
     }
 
+    /** 断言输出目录的产物集与黄金基线一致（逐路径 + 逐字节 SHA-256） */
+    private void assertProductsMatchBaseline(Path out, String caseName, String loc) throws Exception {
+        assertEquals(baselineProducts(caseName, loc), BaselineHasher.hashTree(out),
+                "无头产物应与 GUI 侧黄金基线逐字节一致：" + caseName + "." + loc);
+    }
+
     // ==================== 完整用户旅程 ====================
 
     @Test
@@ -111,10 +121,10 @@ class StubUiAcceptanceTest {
         List<Path> discovered = app.importFolder(in);
         assertEquals(4, discovered.size(), "应发现 4 个 MHT");
 
-        List<PreviewItem> items = discovered.stream()
+        List<PreviewItem> items = new ArrayList<>(discovered.stream()
                 .map(p -> new PreviewItem(p.toString(), p.getFileName().toString(),
                         LocalDateTime.now(), in.toString()))
-                .toList();
+                .toList());
         assertEquals(4, ws.addItems(items));
         assertEquals(4, ws.visibleCount());
 
@@ -159,28 +169,89 @@ class StubUiAcceptanceTest {
         assertFalse(image.removed);
         assertEquals(4, ws.visibleCount());
 
-        // ---------- ⑥ 提取（图片）→ 与 GUI 侧黄金基线逐字节一致 ----------
-        // 基线配对规则：必须用**与所喂夹具一一对应**的基线。
-        // 此处喂 cn-filename.mht，故配 image-cn-filename（单夹具用例）。
+        // ---------- ⑥ 预览（无头）：app 层自建缓存，桩 UI 只需"读缓存目录 + 解码" ----------
+        // 这一步是步骤 2/4 的核心：预览的业务逻辑（算键/查缓存/解析+抽图+原子落盘/元数据）
+        // 已全部在 com.mhtextractor.app.PreviewService 里，**不需要任何 UI 框架**。
+        // 桩 UI 拿到的只是"图片目录 + 缩略图元数据（名字）"，解码与上屏留给各 UI 自己。
         PreviewItem cnItem = items.stream()
                 .filter(i -> i.name.equals("cn-filename.mht")).findFirst().orElseThrow();
+        AppConfig previewCfg = imageCfgWithImageMode();
+        Path cacheRoot = Files.createDirectories(tmp.resolve("preview-cache"));
+        PreviewCacheLifecycle lifecycle =
+                new PreviewCacheLifecycle(new PreviewCacheStore(cacheRoot));
+        PreviewService previewSvc = new PreviewService(lifecycle);
+
+        PreviewService.PreviewResult pv = previewSvc.ensureCached(Path.of(cnItem.path), previewCfg, null);
+        assertNotNull(pv, "无头预览应建立缓存");
+        // 夹具 cn-filename.mht 内含 2 张图片 → meta 与缩略图元数据都应是 2 条
+        assertEquals(2, pv.meta().images().size(), "应抽出 2 张图片");
+        assertEquals(pv.meta().images().size(), pv.thumbs().size(),
+                "缩略图元数据数应与图片数一致");
+
+        // 会话级缓存的三要素（C1）：meta.json + images/ + .complete，且每张图真实可读
+        for (PreviewCacheMeta.ImageEntry entry : pv.meta().images()) {
+            Path img = pv.imagesDir().resolve(entry.file());
+            assertTrue(Files.exists(img), "缓存图片应真实存在：" + entry.file());
+            byte[] bytes = Files.readAllBytes(img);
+            assertTrue(bytes.length > 0, "缓存图片不应为空：" + entry.file());
+            // 非 JavaFX 消费者必须能自己认出格式 —— 魔数即证据（这正是"换 UI 框架仍可用"的前提）
+            assertTrue(hasKnownImageMagic(bytes), "缓存图片应为可识别的图片格式：" + entry.file());
+        }
+        // 缩略图元数据只有名字，像素留给渲染层（服务不产像素）
+        for (var t : pv.thumbs()) {
+            assertNull(t.pixels(), "像素应由渲染层解码填充，服务不产出像素");
+        }
+
+        // 再查一次：命中（不重新解析）
+        PreviewService.PreviewResult pv2 = previewSvc.ensureCached(Path.of(cnItem.path), previewCfg, null);
+        assertNotNull(pv2);
+        assertEquals(pv.meta().images().size(), pv2.meta().images().size());
+
+        // ---------- ⑦ 提取（图片，复用 ⑥ 的缓存）→ 与 GUI 侧黄金基线逐字节一致 ----------
+        List<String> cachedHashes = new ArrayList<>();
+        for (PreviewCacheMeta.ImageEntry entry : pv.meta().images()) {
+            cachedHashes.add(BaselineHasher.sha256(Files.readAllBytes(pv.imagesDir().resolve(entry.file()))));
+        }
+
         Path imageOut = Files.createDirectories(tmp.resolve("out-image"));
         List<String> progress = new ArrayList<>();
         MhtExtractorApp.ExtractResult imgResult = app.extractImages(
                 List.of(Path.of(cnItem.path)),
-                imageCfgWithImageMode(),
+                previewCfg,
                 imageOut,
                 (idx, total, name, frac) -> progress.add(idx + "/" + total),
                 () -> false,
-                null);
+                lifecycle);          // ← 注入同一个生命周期 = 复用 ⑥ 落盘的预览缓存
 
         assertEquals(1, imgResult.stats().getTotalFiles());
         assertFalse(progress.isEmpty(), "桩 UI 应收到进度回调");
+        assertProductsMatchBaseline(imageOut, "image-cn-filename", "zh");
         assertEquals(baselineProducts("image-cn-filename", "zh"),
                 BaselineHasher.hashTree(imageOut),
                 "无头提取产物应与 GUI 侧基线逐字节一致");
 
-        // ---------- ⑦ 提取（文本，合并）→ 同样与基线一致 ----------
+        // 复用等价性：输出图片的字节与预览缓存里的图片一致。
+        //
+        // ⚠️ 诚实说明（由变异测试实测得出）：本断言**不能**证明"确实复用了缓存" ——
+        // 把上面 extractImages 的 lifecycle 换成 null（禁用复用）后，这条断言**仍然通过**，
+        // 因为重新提取产生的字节本来就与缓存里的一致。它证明的是"重算与复用结果等价"。
+        // 真正证明"复用了缓存"的是紧随其后的规则 (b) 断言：只有走了缓存命中路径，
+        // 项目缓存目录才会在提取完成后被删除（变异测试实测：禁用复用时该断言失败）。
+        List<String> outHashes = baselineProducts("image-cn-filename", "zh").stream()
+                .filter(e -> isImagePath(e.path()))
+                .map(BaselineHasher.TreeEntry::sha256)
+                .sorted()
+                .toList();
+        assertEquals(cachedHashes.stream().sorted().toList(), outHashes,
+                "重算与复用产出的图片字节应完全一致（等价性，非复用证据）");
+
+        // 规则 (b)：提取完成后该项目缓存被删除 —— 这一条才是"确实复用了缓存"的**哨兵断言**
+        PreviewCacheKey usedKey = PreviewCacheKey.compute(Path.of(cnItem.path),
+                previewCfg.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
+        assertFalse(Files.exists(lifecycle.store().dirFor(usedKey)),
+                "提取完成后该项目缓存目录应被删除（规则 b）；若此断言失败，说明提取没有走缓存命中路径");
+
+        // ---------- ⑧ 提取（文本，合并）→ 同样与基线一致 ----------
         Path textOut = Files.createDirectories(tmp.resolve("out-text"));
         AppConfig textParams = new AppConfig();
         textParams.setEnableTemplate(true);
@@ -195,6 +266,25 @@ class StubUiAcceptanceTest {
         assertEquals(baselineProducts("text-template-vars", "zh"),
                 BaselineHasher.hashTree(textOut),
                 "无头文本产物应与 GUI 侧基线逐字节一致");
+    }
+
+    /** 输出图片的魔数判定（零 JavaFX；证明"换 UI 框架后仍能自己认格式"） */
+    private static boolean hasKnownImageMagic(byte[] b) {
+        if (b.length < 4) return false;
+        int b0 = b[0] & 0xFF, b1 = b[1] & 0xFF, b2 = b[2] & 0xFF, b3 = b[3] & 0xFF;
+        boolean png = b0 == 0x89 && b1 == 0x50 && b2 == 0x4E && b3 == 0x47;
+        boolean jpg = b0 == 0xFF && b1 == 0xD8 && b2 == 0xFF;
+        boolean gif = b0 == 0x47 && b1 == 0x49 && b2 == 0x46;
+        boolean bmp = b0 == 0x42 && b1 == 0x4D;
+        boolean webp = b.length >= 12 && b0 == 0x52 && b1 == 0x49 && b2 == 0x46 && b3 == 0x46
+                && b[8] == 0x57 && b[9] == 0x45 && b[10] == 0x42 && b[11] == 0x50;
+        return png || jpg || gif || bmp || webp;
+    }
+
+    private static boolean isImagePath(String p) {
+        String s = p.toLowerCase(Locale.ROOT);
+        return s.endsWith(".png") || s.endsWith(".jpg") || s.endsWith(".jpeg")
+                || s.endsWith(".gif") || s.endsWith(".bmp") || s.endsWith(".webp");
     }
 
     /** 图片提取用的参数（图片模式开启） */
