@@ -67,6 +67,74 @@ public final class ExtractionPreconditions {
         return validate(new Facts(inputFolder, outputFolder, isDir, totalItems, visibleItems));
     }
 
+    // ==================== 单条件形态（供 UI 逐条委托，保留顺序与告警级别） ====================
+
+    /**
+     * 单条件形态存在的理由：GUI 的原始写法是<b>逐条 if + 各自不同的告警级别</b>
+     * （输入/输出/条目数为 WARNING，目录不存在为 ERROR），且判定<b>顺序</b>本身是语义的一部分。
+     * 若 UI 直接调用聚合 {@link #validate(Facts)}，就会把顺序与级别压平 —— 那是行为变更。
+     *
+     * <p>因此同时提供"聚合形态"（无头调用方一次问清楚）与"单条件形态"（UI 逐条问、逐条弹）。
+     * 两者共享同一批判断，不会出现两套规则漂移。</p>
+     *
+     * @return {@code null} = 该条件通过
+     */
+    public static ErrorCode blankInput(String inputFolder) {
+        return isBlank(inputFolder) ? ErrorCode.INPUT_DIR_INVALID : null;
+    }
+
+    /** 见 {@link #blankInput(String)} 的说明 */
+    public static ErrorCode blankOutput(String outputFolder) {
+        return isBlank(outputFolder) ? ErrorCode.OUTPUT_DIR_INVALID : null;
+    }
+
+    /** 见 {@link #blankInput(String)} 的说明（调用方应先确认目录字符串非空） */
+    public static ErrorCode inputNotDirectory(String inputFolder) {
+        if (isBlank(inputFolder)) {
+            return ErrorCode.INPUT_DIR_INVALID;
+        }
+        return new File(inputFolder).isDirectory() ? null : ErrorCode.INPUT_DIR_MISSING;
+    }
+
+    /** 见 {@link #blankInput(String)} 的说明 */
+    public static ErrorCode noExtractableItems(int totalItems, int visibleItems) {
+        if (visibleItems != 0) {
+            return null;
+        }
+        return totalItems == 0 ? ErrorCode.NO_MHT_FOUND : ErrorCode.KEEP_AT_LEAST_ONE;
+    }
+
+    // ==================== 展示级别（把"该用 WARNING 还是 ERROR"也变成规则的一部分） ====================
+
+    /**
+     * 告警级别。业务规则不仅决定"是否拒绝"，也决定"该多严重地提示" ——
+     * 把它放在这里，UI 侧就只需一句 {@code showAlert(level, code.message())}，
+     * 不必再散落 {@code if (code == INPUT_DIR_MISSING) ERROR else WARNING} 这类判断。
+     *
+     * <p>对应原 {@code MainController.onStartProcessing} 的实测行为：
+     * 输入/输出目录为空、条目数为 0 → WARNING；输入目录不存在 → ERROR。</p>
+     */
+    public enum Level { WARNING, ERROR }
+
+    /** 按错误码给出展示级别（未知码保守取 WARNING） */
+    public static Level levelOf(ErrorCode code) {
+        return code == ErrorCode.INPUT_DIR_MISSING ? Level.ERROR : Level.WARNING;
+    }
+
+    /**
+     * 断言形态：条件不满足时返回带级别的拒绝结果，满足时返回 {@code null}。
+     *
+     * <p>存在的意义是<b>压缩 UI 侧的样板</b>：让控制器写成
+     * {@code var d = deny(blankInput(in)); if (d != null) { ... }} 一行一条，
+     * 而不是 {@code (x = f()) != null} 那种容易写错、且行数翻倍的形态。</p>
+     */
+    public record Denial(ErrorCode code, Level level) {
+    }
+
+    public static Denial deny(ErrorCode code) {
+        return code == null ? null : new Denial(code, levelOf(code));
+    }
+
     private static boolean isBlank(String s) {
         return s == null || s.trim().isEmpty();
     }

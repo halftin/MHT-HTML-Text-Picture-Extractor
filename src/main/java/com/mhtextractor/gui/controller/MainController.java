@@ -1,6 +1,7 @@
 package com.mhtextractor.gui.controller;
 
 import atlantafx.base.controls.ToggleSwitch;
+import com.mhtextractor.app.ExtractionPreconditions;
 import com.mhtextractor.cache.PreviewCacheKey;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheMeta;
@@ -1911,21 +1912,24 @@ public class MainController {
         String inputFolder = inputFolderField.getText();
         String outputFolder = outputFolderField.getText();
 
-        if (inputFolder == null || inputFolder.trim().isEmpty()) {
-            showAlert(Alert.AlertType.WARNING, ErrorCode.INPUT_DIR_INVALID.message());
-            return;
+        // 会话 18 · E4-3：前置校验**规则**（含"该用 WARNING 还是 ERROR"）已抽到
+        // ExtractionPreconditions（零 JavaFX、有独立单测）。
+        // 逐条委托以保持原判定**顺序**；级别由规则给出，UI 只负责展示。
+        // 刻意不调用聚合形态 validate(Facts)：那会把顺序与级别压平，属行为变更。
+        var denial = ExtractionPreconditions.deny(ExtractionPreconditions.blankInput(inputFolder));
+        if (denial == null) {
+            denial = ExtractionPreconditions.deny(ExtractionPreconditions.blankOutput(outputFolder));
         }
-        if (outputFolder == null || outputFolder.trim().isEmpty()) {
-            showAlert(Alert.AlertType.WARNING, ErrorCode.OUTPUT_DIR_INVALID.message());
-            return;
+        if (denial == null) {
+            denial = ExtractionPreconditions.deny(ExtractionPreconditions.inputNotDirectory(inputFolder));
         }
-        if (!new File(inputFolder).isDirectory()) {
-            showAlert(Alert.AlertType.ERROR, ErrorCode.INPUT_DIR_MISSING.message());
-            return;
+        if (denial == null) {
+            denial = ExtractionPreconditions.deny(ExtractionPreconditions.noExtractableItems(
+                    items.size(), (int) visibleCount()));
         }
-        if (visibleCount() == 0) {
-            showAlert(Alert.AlertType.WARNING,
-                    items.isEmpty() ? ErrorCode.NO_MHT_FOUND.message() : ErrorCode.KEEP_AT_LEAST_ONE.message());
+        if (denial != null) {
+            showAlert(denial.level() == ExtractionPreconditions.Level.ERROR
+                    ? Alert.AlertType.ERROR : Alert.AlertType.WARNING, denial.code().message());
             return;
         }
 

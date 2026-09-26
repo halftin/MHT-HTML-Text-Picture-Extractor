@@ -97,13 +97,17 @@ class ArchitectureTest {
      *   <li><b>E2.1 外迁 PreviewItem/ThumbnailData/Status 到 model 包：5002</b>（再减 107）</li>
      *   <li>E2.2-1 收口 13 处缓存规则调用到 `app` 服务：5001</li>
      *   <li><b>E2.2-2 删除 10 处冗余 imageMode 守卫：4981</b>（守卫语义移入服务，由 8 条单测锁定）</li>
+     *   <li>E4-3 控制器改为逐条委托 {@code ExtractionPreconditions}（规则出 GUI 并真正被复用）：
+     *       <b>4985</b>（+4）。这是**有意**的净增：换来"提取前置规则"成为 app 层具名、可单测、
+     *       换 UI 可复用的资产，并由规则统一给出 WARNING/ERROR 级别（原先散落在控制器里 4 处）。
+     *       注：最早的粗放写法使该块从 16 行涨到 33 行，已被改为 {@code Denial} 形态压回。</li>
      * </ul>
      *
      * <p><b>⚠️ 口径陷阱（会话 18 实测）</b>：同一文件用不同工具数出的行数<b>不一致</b> ——
      * PowerShell {@code (Get-Content f).Count} 与 Java {@code Files.readAllLines} 会给出不同结果
      * （本文件为纯 {@code LF} 换行）。**因此本常量只能与 {@code Files.readAllLines} 口径比较**。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 4981;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 4985;
 
     /**
      * E0.6 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限。

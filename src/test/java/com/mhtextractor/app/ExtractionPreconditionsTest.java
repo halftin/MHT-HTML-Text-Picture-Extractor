@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
@@ -120,6 +121,41 @@ class ExtractionPreconditionsTest {
         assertEquals(ErrorCode.INPUT_DIR_MISSING,
                 ExtractionPreconditions.validate(new ExtractionPreconditions.Facts(
                         "no-such-dir", OUT, false, 0, 0)));
+    }
+
+    // ==================== 展示级别（E4-3：级别也属规则） ====================
+
+    /**
+     * 级别映射必须与原 {@code MainController.onStartProcessing} 的实测行为一致：
+     * 输入/输出目录为空、条目数为 0 → WARNING；输入目录不存在 → ERROR。
+     */
+    @Test
+    void levelMappingMatchesOriginalAlertLevels() {
+        assertEquals(ExtractionPreconditions.Level.WARNING,
+                ExtractionPreconditions.levelOf(ErrorCode.INPUT_DIR_INVALID));
+        assertEquals(ExtractionPreconditions.Level.WARNING,
+                ExtractionPreconditions.levelOf(ErrorCode.OUTPUT_DIR_INVALID));
+        assertEquals(ExtractionPreconditions.Level.WARNING,
+                ExtractionPreconditions.levelOf(ErrorCode.NO_MHT_FOUND));
+        assertEquals(ExtractionPreconditions.Level.WARNING,
+                ExtractionPreconditions.levelOf(ErrorCode.KEEP_AT_LEAST_ONE));
+        // 唯一的 ERROR：输入目录不存在
+        assertEquals(ExtractionPreconditions.Level.ERROR,
+                ExtractionPreconditions.levelOf(ErrorCode.INPUT_DIR_MISSING));
+    }
+
+    @Test
+    void denyWrapsCodeWithItsLevelAndPassesThroughNull() {
+        assertNull(ExtractionPreconditions.deny(null), "条件通过时应返回 null");
+
+        var d = ExtractionPreconditions.deny(ErrorCode.INPUT_DIR_MISSING);
+        assertNotNull(d);
+        assertEquals(ErrorCode.INPUT_DIR_MISSING, d.code());
+        assertEquals(ExtractionPreconditions.Level.ERROR, d.level());
+
+        var w = ExtractionPreconditions.deny(ErrorCode.OUTPUT_DIR_INVALID);
+        assertNotNull(w);
+        assertEquals(ExtractionPreconditions.Level.WARNING, w.level());
     }
 
     // ==================== 便捷重载（内部自己探目录） ====================
