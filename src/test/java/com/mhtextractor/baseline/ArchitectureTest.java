@@ -58,7 +58,8 @@ class ArchitectureTest {
             "com/mhtextractor/config",
             "com/mhtextractor/i18n",
             "com/mhtextractor/model",   // E2.1：PreviewItem / ThumbnailData 外迁至此，必须保持零 JavaFX
-            "com/mhtextractor/app"      // 目标产物：E4 起建立，建立后自动纳入约束
+            "com/mhtextractor/app",     // 目标产物：E4 起建立，建立后自动纳入约束
+            "com/mhtextractor/platform" // 步骤 5：与操作系统交互的基础设施（BrowserLauncher 迁出 gui.util）
     );
 
     /**
@@ -465,8 +466,17 @@ class ArchitectureTest {
         }
         // 现状基线：以本测试自身的实测输出为准（会话 18 首次运行即打印真实值再锁定）。
         // 注：文档 §耦合点 #6 记的"46 处"口径不同（含 GuiState 与否、是否计注释未说明）；
-        // 本测试的实测口径为「businessPackages 内所有 'I18n.' 字面出现次数」= 36。
-        int currentBaseline = 36;
+        // 本测试的实测口径为「businessPackages 内所有 'I18n.' 字面出现次数」。
+        //
+        // 演进记录（步骤 5，2026-09-26）：36 → 37。**这不是新增耦合，而是口径扩大暴露出来的既有引用** ——
+        // 步骤 5 把 BrowserLauncher 从 gui.util 迁入 com.mhtextractor.platform，并把该包加入本测试扫描的
+        // BUSINESS_PACKAGES，于是它那处既有的 I18n.get("browser.sourceHtmlHead")（源码页的页头文案）
+        // 首次被计入。实测：迁移前 36，迁移后 37，差值恰为该 1 处。
+        //
+        // ⚠️ 该处引用在架构上是**可疑的**（基础设施层不应产出面向用户的本地化文案），已登记为待清理项，
+        // 见 docs/handoff/H25.md §五。彻底修法是让调用方（GUI）把文案作为参数传入。本例**有意保留原行为**，
+        // 不顺手改（与步骤 5 的"包迁移"解耦，避免一次改动同时改变行为）。
+        int currentBaseline = 37;
         assertTrue(count <= currentBaseline,
                 "业务层 I18n 引用增长：" + count + " > " + currentBaseline
                         + "（E3.1 目标是把它们改为警告码，只减不增）");

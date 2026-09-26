@@ -14,7 +14,6 @@ import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.TextExtractor;
 import com.mhtextractor.gui.component.LogTextArea;
-import com.mhtextractor.gui.util.BrowserLauncher;
 import com.mhtextractor.gui.util.JavaFxUtil;
 import com.mhtextractor.i18n.ErrorCode;
 import com.mhtextractor.i18n.I18n;

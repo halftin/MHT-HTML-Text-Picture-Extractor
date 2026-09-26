@@ -1,4 +1,4 @@
-package com.mhtextractor.gui.util;
+package com.mhtextractor.platform;
 
 import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
