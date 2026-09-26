@@ -378,6 +378,13 @@ public class MainController {
      */
     private final com.mhtextractor.app.WorkspaceParamService workspaceParamService =
             new com.mhtextractor.app.WorkspaceParamService(previewCacheLifecycle);
+    /**
+     * 预览服务（步骤 2）：把「算缓存键 → 查缓存 → 未命中则解析+抽图+原子落盘 → 组装缩略图元数据」
+     * 这条<b>业务链路</b>从本控制器搬进无头应用层（{@code com.mhtextractor.app.PreviewService}）。
+     * 控制器此后只负责：起线程、解码像素、上屏、弹窗、进度。
+     */
+    private final com.mhtextractor.app.PreviewService previewService =
+            new com.mhtextractor.app.PreviewService(previewCacheLifecycle);
     /** 在途预览加载线程（规则 d 退出清空时等待其结束用；仅 FX 线程写） */
     private volatile Thread previewLoadThread = null;
     /** 退出清空已完成：二次 close 放行（规则 d） */
@@ -4639,17 +4646,19 @@ public class MainController {
 
         Thread t = new Thread(() -> {
             try {
-                // 每项目写锁（§2.6(6)）：同项目「查缓存→提取→落盘」串行，不同项目并行
-                final PreviewCacheMeta meta;
+                // 每项目写锁（§2.6(6)）：同项目「查缓存→提取→落盘」串行，不同项目并行。
+                // 缓存业务逻辑已搬入 com.mhtextractor.app.PreviewService（步骤 2），控制器只做 UI。
+                final com.mhtextractor.app.PreviewService.PreviewResult pr;
                 synchronized (previewCacheLifecycle.lockFor(cacheKey.absolutePath())) {
-                    meta = loadOrWritePreviewCache(item, params, cacheKey, token);
+                    pr = previewService.ensureCached(Path.of(item.path), params, () -> token != requestToken);
                 }
-                if (meta == null) {
-                    return;   // 代次失效：放弃（未写缓存）
+                if (token != requestToken) {
+                    return;   // 代次失效：放弃上屏（缓存保留，重选时命中复用）
                 }
-                // C2：缩略图从磁盘真实图片逐张解码，内存只留缩略图 + meta，不驻留全尺寸字节
+                // C2：缩略图从磁盘真实图片逐张解码，内存只留缩略图 + meta，不驻留全尺寸字节。
+                // 元数据（coreName）由无头服务给出；像素解码仍在此处（JavaFX 缩放解码 + PixelReader）。
+                final PreviewCacheMeta meta = pr.meta();
                 List<ThumbnailData> thumbs = new ArrayList<>();
-                Path cacheDir = previewCacheLifecycle.store().dirFor(cacheKey);
                 for (int i = 0; i < meta.images().size(); i++) {
                     if (token != requestToken) {
                         return;
@@ -4657,11 +4666,11 @@ public class MainController {
                     PreviewCacheMeta.ImageEntry entry = meta.images().get(i);
                     final ThumbnailData thumb;
                     try {
-                        byte[] data = Files.readAllBytes(cacheDir.resolve(entry.file()));
+                        byte[] data = Files.readAllBytes(pr.imagesDir().resolve(entry.file()));
                         thumb = decodeThumb(new ImageExtractor.ImageData(
                                 entry.originalName(), entry.sourceId(), data), i, params);
                     } catch (IOException e) {
-                        log.warn("读取缓存图片失败，跳过缩略图：{}", cacheDir.resolve(entry.file()), e);
+                        log.warn("读取缓存图片失败，跳过缩略图：{}", pr.imagesDir().resolve(entry.file()), e);
                         continue;
                     }
                     thumbs.add(thumb);
@@ -4737,65 +4746,6 @@ public class MainController {
         previewLoadThread = t;
         t.setDaemon(true);
         t.start();
-    }
-
-    /**
-     * 预览缓存读取或重建（必须在每项目写锁内调用；§2.6(8)：只有点「查看预览效果」才建立缓存，预解析不写）。
-     * 命中 → 返回磁盘 meta；未命中 → 解析 + 提取 + 原子落盘（P11）。
-     * meta 损坏（有 .complete 但解析失败）→ 删目录重建（会话 8 遗留风险兜底：否则同 key 下反复报错无法恢复）。
-     * 代次失效（token 变化）时不写缓存并返回 null（放弃本次预览）。
-     */
-    private PreviewCacheMeta loadOrWritePreviewCache(PreviewItem item, AppConfig params,
-                                                     PreviewCacheKey cacheKey, int token) throws Exception {
-        try {
-            Optional<PreviewCacheMeta> hit = previewCacheLifecycle.store().load(cacheKey);
-            if (hit.isPresent()) {
-                log.info("预览缓存命中：{}", item.name);
-                return hit.get();
-            }
-        } catch (IOException e) {
-            log.warn("预览缓存元数据损坏，删除重建：{}（{}）", cacheKey.toDirName(), e.getMessage());
-            try {
-                previewCacheLifecycle.store().delete(cacheKey);
-            } catch (IOException del) {
-                log.warn("删除损坏缓存失败：{}", del.getMessage());
-            }
-        }
-
-        MimeParser parser = new MimeParser();
-        MimeParser.ParsedMht parsed = parser.parse(item.path, false, () -> false, null, null);
-        ImageExtractor imageExtractor = new ImageExtractor(parsed,
-                params.getImageNameStartMarker(), params.getImageNameEndMarker(),
-                params.getImageRegionStartMarker(), params.getImageRegionEndMarker());
-        List<ImageExtractor.ImageData> images = imageExtractor.extractImages(null);
-        if (token != requestToken) {
-            return null;
-        }
-        // 元数据先行构建；imagesWriter 写盘文件名必须与 meta.images[].file 一致（store.load 据此校验）
-        List<String> plainNames = new ArrayList<>();
-        List<PreviewCacheMeta.ImageEntry> entries = new ArrayList<>();
-        for (int i = 0; i < images.size(); i++) {
-            ImageExtractor.ImageData img = images.get(i);
-            String ext = SanitizeUtils.detectExtensionByMagicNumber(img.getData(), "jpg");
-            String plain = String.format("%04d.%s", i + 1, ext);
-            plainNames.add(plain);
-            entries.add(new PreviewCacheMeta.ImageEntry(
-                    PreviewCacheStore.IMAGES_DIR_NAME + "/" + plain,
-                    img.getContentId(), img.getFilename(), ext, List.of()));
-        }
-        PreviewCacheMeta meta = new PreviewCacheMeta(PreviewCacheMeta.FORMAT_VERSION,
-                new PreviewCacheMeta.Source(cacheKey.absolutePath(), cacheKey.size(), cacheKey.mtime()),
-                cacheKey.paramFingerprint(), true, entries,
-                imageExtractor.getLastWarnings());
-        previewCacheLifecycle.store().write(cacheKey, meta, imagesDir -> {
-            for (int i = 0; i < images.size(); i++) {
-                Files.write(imagesDir.resolve(plainNames.get(i)), images.get(i).getData());
-            }
-        });
-        log.info("预览图片已落盘缓存：{}（{} 张）", item.name, images.size());
-        // 会话 12：写盘成功后检查磁盘占用台阶（命中路径不触发；检查在每项目写锁内，见 H12 取舍）
-        previewCacheLifecycle.checkSizeAlert();
-        return meta;
     }
 
     // ==================== 预解析（文本全量 / 图片轻量） ====================

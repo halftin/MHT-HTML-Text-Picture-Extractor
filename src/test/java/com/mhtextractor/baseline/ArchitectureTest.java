@@ -101,13 +101,17 @@ class ArchitectureTest {
      *       <b>4985</b>（+4）。这是**有意**的净增：换来"提取前置规则"成为 app 层具名、可单测、
      *       换 UI 可复用的资产，并由规则统一给出 WARNING/ERROR 级别（原先散落在控制器里 4 处）。
      *       注：最早的粗放写法使该块从 16 行涨到 33 行，已被改为 {@code Denial} 形态压回。</li>
+     *   <li><b>步骤 2 把预览缓存业务逻辑搬入 {@code app.PreviewService}：4935</b>（净减 50 —— 首次回落）。
+     *       删掉 {@code loadOrWritePreviewCache}（52 行），{@code onPreviewEffect} 改为调服务并把代次
+     *       检查经 {@code Supplier<Boolean>} 传给服务（+2），故净减 50。搬迁前是"零余量"状态，
+     *       此后本上限随之收紧到 4935，继续保持只减不增。</li>
      * </ul>
      *
      * <p><b>⚠️ 口径陷阱（会话 18 实测）</b>：同一文件用不同工具数出的行数<b>不一致</b> ——
      * PowerShell {@code (Get-Content f).Count} 与 Java {@code Files.readAllLines} 会给出不同结果
      * （本文件为纯 {@code LF} 换行）。**因此本常量只能与 {@code Files.readAllLines} 口径比较**。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 4985;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 4935;
 
     /**
      * E0.6 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限。
