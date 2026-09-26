@@ -92,7 +92,7 @@ public class TextBatchProcessor extends BatchProcessor {
                             config.getTitleStartMarker(), config.getTitleEndMarker(), config.isTitleUseRegex());
                     if (title != null && !title.trim().isEmpty()) {
                         String s = SanitizeUtils.sanitize(title.trim());
-                        if (!s.isEmpty() && !s.equals("unnamed")) {
+                        if (!s.isEmpty() && !s.equals(SanitizeUtils.UNNAMED_SENTINEL)) {
                             base = s;
                         }
                     }

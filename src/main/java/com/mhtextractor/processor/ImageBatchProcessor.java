@@ -222,7 +222,7 @@ public class ImageBatchProcessor extends BatchProcessor {
         String nameWarning = null;
         if (folderName != null && !folderName.isEmpty()) {
             folderName = SanitizeUtils.sanitize(folderName);
-            if (folderName.equals("unnamed")) {
+            if (folderName.equals(SanitizeUtils.UNNAMED_SENTINEL)) {
                 folderName = null;
             }
         }

@@ -10,6 +10,13 @@ public class SanitizeUtils {
 
     private static final Logger logger = LoggerFactory.getLogger(SanitizeUtils.class);
 
+    /**
+     * 文件名回退哨兵（会话 15B 步骤 A）：sanitize 空输入的返回值。
+     * 值保持 "unnamed" 不变——消费方用它识别"无有效名字"并回退默认名，
+     * 因此用户真实标题恰为 "unnamed" 时会被误判（现存语义，测试已锁定）。
+     */
+    public static final String UNNAMED_SENTINEL = "unnamed";
+
     private static final String[] IMAGE_MAGIC_NUMBERS = {
             "FFD8FF",   // JPEG
             "89504E47", // PNG
@@ -29,7 +36,7 @@ public class SanitizeUtils {
      */
     public static String sanitize(String fileName) {
         if (fileName == null || fileName.isEmpty()) {
-            return "unnamed";
+            return UNNAMED_SENTINEL;
         }
         return fileName.replaceAll("[\\\\/:*?\"<>|]", "_")
                 .replaceAll("_+", "_")

@@ -190,6 +190,27 @@ class OutputUnitPlannerTest {
         assertEquals("组5", plan(order(g), false, null, null).get(0).getOutputName());
     }
 
+    // ==================== unnamed 哨兵（会话 15B 步骤 A）：真实名字恰为 "unnamed" 与哨兵碰撞 ====================
+
+    @Test
+    void groupNamedUnnamedFallsBackToGroupNo() {
+        // 现存语义：真实组名 "unnamed" 被当作哨兵 → 回退"组N"（如实锁定，不改语义）
+        GroupItem<TItem> g = new GroupItem<>(7, "unnamed");
+        g.getMembers().add(item("x\\1.mht", "C:\\src"));
+        assertEquals("组7", plan(order(g), false, null, null).get(0).getOutputName());
+    }
+
+    @Test
+    void sourceNamedUnnamedFallsBackToDefault() {
+        // 现存语义：来源目录名恰为 "unnamed" 被当作哨兵 → 回退默认输出名
+        assertEquals("mht_output",
+                plan(order(item("x.mht", "C:\\unnamed")), false, null, null).get(0).getOutputName());
+        AppConfig imgMerged = new AppConfig();
+        imgMerged.setSingleOutputMode(true);
+        assertEquals("All_Images",
+                plan(order(item("x.mht", "C:\\unnamed")), true, null, imgMerged).get(0).getOutputName());
+    }
+
     @Test
     void imageModeMergedOutputsToGroupDirWithoutExtension() {
         GroupItem<TItem> g = new GroupItem<>(1, "组1");

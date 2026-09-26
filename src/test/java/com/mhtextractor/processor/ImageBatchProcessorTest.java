@@ -6,6 +6,7 @@ import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.util.ExtractOutcome;
+import com.mhtextractor.util.SanitizeUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -193,6 +194,34 @@ class ImageBatchProcessorTest {
                 + Files.list(out).map(p -> p.getFileName().toString()).toList());
         assertFalse(Files.exists(out.resolve("漫画A标题")), "不得用第二个文件的标题命名合并目录");
         assertEquals(1, Files.list(merged).count());
+    }
+
+    // ==================== unnamed 哨兵（会话 15B 步骤 A）：显式输出名恰为哨兵值 ====================
+
+    @Test
+    void explicitMergedNameUnnamedFallsBackToExtractedTitle() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path a = writeImageMht(source, "a.mht", "TITLE-START漫画A标题TITLE-END");
+        Path out = Files.createDirectories(tmp.resolve("out"));
+
+        AppConfig config = preloadSeparateConfig(source);
+        config.setSingleOutputMode(true);
+        config.setEnableNameExtraction(true);
+        config.setImageNameStartMarker("TITLE-START");
+        config.setImageNameEndMarker("TITLE-END");
+
+        ImageBatchProcessor processor = new ImageBatchProcessor(config);
+        BatchProcessor.ProcessStats stats = processor.process(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())),
+                out.toString(), SanitizeUtils.UNNAMED_SENTINEL, null);
+
+        assertEquals(1, stats.getSuccessCount(), stats.toString());
+        // 现存语义：显式输出名恰为哨兵值时视为"未提供" → 回退标题提取（如实锁定，不改语义）
+        Path merged = out.resolve("漫画A标题");
+        assertTrue(Files.isDirectory(merged), "合并目录应回退标题名，实际内容："
+                + Files.list(out).map(p -> p.getFileName().toString()).toList());
+        assertFalse(Files.exists(out.resolve("unnamed")), "不得以哨兵值命名输出目录");
     }
 
     // ==================== P0-2：归档失败仍删源目录 ====================
