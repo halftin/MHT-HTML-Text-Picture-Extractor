@@ -93,10 +93,13 @@ class ArchitectureTest {
      *   <li>会话 18 起点：6111</li>
      *   <li>E1.1 接线 {@code addNameChangeListener}：6113</li>
      *   <li>E1.3a 把 {@code PreviewItem} 的 5 个 JavaFX 属性换成普通字段 + 自研监听器：
-     *       <b>6174</b>（+61）。这 61 行是<b>必要的基础设施</b>（监听器注册/移除/通知、
-     *       单元格双向联动改单向 + 可解绑），换来的是模型层去掉 JavaFX 依赖。
-     *       可预期的净减在 **E0.6**（外迁约 1141 行演练/测试代码），届时本常量大幅下调。</li>
+     *       <b>6174</b>（+61，必要基础设施）；</li>
+     *   <li>E1.4 把缩略图从 JavaFX {@code Image} 改为纯像素（{@code ThumbnailData} +
+     *       {@code ThumbnailPixels}）：<b>6252</b>（+78，同样是把 JavaFX 转换点显式化的基础设施）。</li>
      * </ul>
+     *
+     * <p><b>净减在 E0.6</b>：外迁约 1141 行演练/测试代码后，本常量应大幅下调
+     * （预期 ≤ 5200）。E1 系列皆为"解耦必要投入"，行数上升属预期，但<b>不得用于新增职责</b>。</p>
      *
      * <p><b>⚠️ 口径陷阱（会话 18 实测）</b>：同一文件用不同工具数出的行数<b>不一致</b> ——
      * PowerShell {@code (Get-Content f).Count} 得 5882（E1.1 前），Node 按 Java 规则与
@@ -105,7 +108,7 @@ class ArchitectureTest {
      * **因此本常量只能与 {@code Files.readAllLines} 口径比较**，
      * 不要拿 PowerShell 的数字来改它（会立刻假失败或假通过）。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 6174;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 6252;
 
     /** 允许引用 JavaFX 的包（视图层/外壳） */
     private static final List<String> UI_PACKAGES = List.of(

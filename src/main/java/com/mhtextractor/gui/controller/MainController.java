@@ -35,6 +35,7 @@ import com.mhtextractor.util.OutputUnitPlanner;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.SanitizeUtils;
 import com.mhtextractor.util.SelectionState;
+import com.mhtextractor.util.ThumbnailPixels;
 import com.mhtextractor.util.UndoManager;
 import com.mhtextractor.util.UnitProgressAggregator;
 import javafx.animation.Interpolator;
@@ -77,6 +78,8 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.image.PixelFormat;
+import javafx.scene.image.WritableImage;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.input.DragEvent;
@@ -105,6 +108,7 @@ import java.awt.Desktop;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.IntBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -216,8 +220,73 @@ public class MainController {
     /** 条目预解析状态 */
     enum Status { WAITING, READY, EMPTY, FAILED }
 
-    /** 缩略图条目：解码后的 JavaFX 图像 + 不含 f%02d_ 前缀的文件名（重排时按新位置重算前缀） */
-    private record ThumbEntry(Image image, String coreName) {}
+    /**
+     * 缩略图数据（会话 18 · E1.4）：<b>纯数据，零 JavaFX 依赖</b>。
+     *
+     * <p><b>为什么不用 {@code javafx.scene.image.Image}</b>：原 {@code ThumbEntry} 直接持有 JavaFX
+     * {@code Image} 对象，使模型层无法脱离 UI 框架（验收 V4）。改为持有解码缩放后的 ARGB 像素后，
+     * "模型 → JavaFX Image"的转换被收口到渲染层 {@link #toFxImage(ThumbnailData)}，
+     * 这正是"换 UI 框架只需重写适配层"的形态。</p>
+     *
+     * <p><b>为什么存 {@code int[]} 原始像素而不是原图字节或 PNG 字节</b>：</p>
+     * <ul>
+     *   <li>存<b>原图字节</b>会让内存随图片尺寸线性增长 —— 直接违反 C2
+     *       （原实现正是靠"只留 150px 缩略图、丢弃原图字节"满足 C2 的）；</li>
+     *   <li>存 <b>PNG 字节</b>需要图像编码器（{@code ImageIO} 属 {@code java.desktop}/AWT，
+     *       与本项目"为 native 镜像尽量避开 AWT"的取向冲突，且属 R5 需谨慎的新能力）；</li>
+     *   <li>存<b>缩放后的 ARGB 像素</b>无需任何编码器，且每张上限约 150×150×4 ≈ 88 KB
+     *       （缩放边界 150），整个工作集不到 1 MB —— 与原 {@code Image} 对象的量级相同，
+     *       故 <b>C2 的内存口径不变</b>。</li>
+     * </ul>
+     *
+     * <p><b>null 语义保留</b>：构造时 {@code pixels == null} 表示"无法加载"，
+     * 渲染层据此显示 {@code preview.loadFailed} 占位（与原 {@code image == null} 完全一致）。</p>
+     */
+    private record ThumbnailData(String coreName, int width, int height, int[] pixels) {
+    }
+
+    /** 缩略图纯数据 → JavaFX 图像（渲染层唯一的 JavaFX 转换点；失败返回 null 表示无法加载） */
+    private static Image toFxImage(ThumbnailData d) {
+        int[] px = d.pixels();
+        if (!ThumbnailPixels.isUsable(px, d.width(), d.height())) {
+            return null;
+        }
+        try {
+            WritableImage img = new WritableImage(d.width(), d.height());
+            // stride == width：像素为行优先连续的 ARGB int（打包/解包契约见 ThumbnailPixels）
+            img.getPixelWriter().setPixels(0, 0, d.width(), d.height(),
+                    PixelFormat.getIntArgbInstance(), px, 0, d.width());
+            return img;
+        } catch (Exception e) {
+            // 与 decodeThumb 一致：失败即视为无法加载（渲染层显示占位）
+            return null;
+        }
+    }
+
+    /** JavaFX 图像 → 缩略图纯数据（后台线程调用；失败返回 pixels=null 的数据对象） */
+    private static ThumbnailData toThumbnailData(Image img, String coreName) {
+        if (img == null) {
+            return new ThumbnailData(coreName, 0, 0, null);
+        }
+        try {
+            int w = (int) Math.round(img.getWidth());
+            int h = (int) Math.round(img.getHeight());
+            if (w <= 0 || h <= 0) {
+                return new ThumbnailData(coreName, 0, 0, null);
+            }
+            // 经 IntBuffer 接收，再交由纯 Java 的 ThumbnailPixels 打包 —— 该段逻辑有零 JavaFX 单测
+            IntBuffer buf = IntBuffer.allocate(w * h);
+            img.getPixelReader().getPixels(0, 0, w, h,
+                    PixelFormat.getIntArgbInstance(), buf, w);
+            int[] px = ThumbnailPixels.pack(buf, w, h);
+            if (px == null) {
+                return new ThumbnailData(coreName, 0, 0, null);
+            }
+            return new ThumbnailData(coreName, w, h, px);
+        } catch (Exception e) {
+            return new ThumbnailData(coreName, 0, 0, null);
+        }
+    }
 
     /** 单个 MHT 文件的预览状态 */
     class PreviewItem {
@@ -283,7 +352,7 @@ public class MainController {
         volatile String cachedText;
         volatile String cachedTitle;
         volatile List<ImageExtractor.ImageData> cachedImages;
-        volatile List<ThumbEntry> cachedThumbs;
+        volatile List<ThumbnailData> cachedThumbs;
         /** 预览缓存元数据（需求 2 会话 9）：磁盘落盘后的 meta（含图片清单，不含字节），C2「内存只留 meta + 缩略图」 */
         volatile PreviewCacheMeta cachedMeta;
         /** 最近一次提取结果（提取结果状态需求）：NONE 无结果；仅在 FX 线程回写/清除 */
@@ -4535,7 +4604,7 @@ public class MainController {
     }
 
     private void renderThumbnails(PreviewItem item) {
-        List<ThumbEntry> thumbs = item.cachedThumbs;
+        List<ThumbnailData> thumbs = item.cachedThumbs;
         thumbnailPane.getChildren().clear();
         if (thumbs == null || thumbs.isEmpty()) {
             imageHintLabel.setText(I18n.get("preview.noImages"));
@@ -4550,12 +4619,12 @@ public class MainController {
         imageScrollPane.setVisible(true);
         imageScrollPane.setManaged(true);
 
-        for (ThumbEntry entry : thumbs) {
+        for (ThumbnailData entry : thumbs) {
             thumbnailPane.getChildren().add(buildThumbBox(item, entry));
         }
     }
 
-    private void appendThumb(PreviewItem item, ThumbEntry entry) {
+    private void appendThumb(PreviewItem item, ThumbnailData entry) {
         imageHintLabel.setVisible(false);
         previewEffectButton.setVisible(false);
         imageScrollPane.setVisible(true);
@@ -4563,13 +4632,15 @@ public class MainController {
         thumbnailPane.getChildren().add(buildThumbBox(item, entry));
     }
 
-    private VBox buildThumbBox(PreviewItem item, ThumbEntry entry) {
+    private VBox buildThumbBox(PreviewItem item, ThumbnailData entry) {
         VBox box = new VBox(4);
         box.setAlignment(Pos.TOP_CENTER);
-        if (entry.image() == null) {
+        // E1.4：模型只存像素；JavaFX Image 在此（渲染层）按需构造。构造失败等价于原 image == null
+        Image fxImage = toFxImage(entry);
+        if (fxImage == null) {
             box.getChildren().add(new Label(I18n.get("preview.loadFailed")));
         } else {
-            ImageView iv = new ImageView(entry.image());
+            ImageView iv = new ImageView(fxImage);
             iv.setFitWidth(150);
             iv.setFitHeight(150);
             iv.setPreserveRatio(true);
@@ -4584,7 +4655,7 @@ public class MainController {
     }
 
     /** 合并输出且不重命名时，文件名按当前列表位置重算 f%02d_ 前缀（拖拽重排后同步刷新，按条目生效参数判定） */
-    private String thumbFileName(ThumbEntry entry, PreviewItem item) {
+    private String thumbFileName(ThumbnailData entry, PreviewItem item) {
         AppConfig params = effectiveForObject(item);
         boolean mergedNoRename = params != null && params.isSingleOutputMode()
                 && !params.isEnableBatchRenaming() && visibleCount() > 1;
@@ -4593,8 +4664,15 @@ public class MainController {
                 : entry.coreName();
     }
 
-    /** 解码单张缩略图：WebP 走 JWebP 缩放解码（150 边界），其余走 JavaFX 原生缩放解码；失败返回 image=null */
-    private ThumbEntry decodeThumb(ImageExtractor.ImageData imageData, int index, AppConfig params) {
+    /**
+     * 解码单张缩略图：WebP 走 JWebP 缩放解码（150 边界），其余走 JavaFX 原生缩放解码。
+     *
+     * <p>E1.4：返回值由"持有 JavaFX {@code Image}"改为"持有纯像素"（{@link ThumbnailData}），
+     * 使该数据可脱离 UI 框架存在。解码仍在<b>后台线程</b>完成（缩放边界与算法不变），
+     * JavaFX {@code Image} 的构造下沉到渲染层的 {@link #toFxImage}。失败时 pixels=null，
+     * 渲染层显示"无法加载"占位 —— 与原 {@code image == null} 语义一致。</p>
+     */
+    private ThumbnailData decodeThumb(ImageExtractor.ImageData imageData, int index, AppConfig params) {
         byte[] data = imageData.getData();
         String ext = SanitizeUtils.detectExtensionByMagicNumber(data, "jpg");
         boolean rename = params != null && params.isEnableBatchRenaming();
@@ -4614,7 +4692,7 @@ public class MainController {
         } catch (Exception e) {
             // img 保持 null → 占位"无法加载"
         }
-        return new ThumbEntry(img, coreName);
+        return toThumbnailData(img, coreName);
     }
 
     private void updateRenameNote(Object sel) {
@@ -4694,14 +4772,14 @@ public class MainController {
                     return;   // 代次失效：放弃（未写缓存）
                 }
                 // C2：缩略图从磁盘真实图片逐张解码，内存只留缩略图 + meta，不驻留全尺寸字节
-                List<ThumbEntry> thumbs = new ArrayList<>();
+                List<ThumbnailData> thumbs = new ArrayList<>();
                 Path cacheDir = previewCacheLifecycle.store().dirFor(cacheKey);
                 for (int i = 0; i < meta.images().size(); i++) {
                     if (token != requestToken) {
                         return;
                     }
                     PreviewCacheMeta.ImageEntry entry = meta.images().get(i);
-                    final ThumbEntry thumb;
+                    final ThumbnailData thumb;
                     try {
                         byte[] data = Files.readAllBytes(cacheDir.resolve(entry.file()));
                         thumb = decodeThumb(new ImageExtractor.ImageData(
