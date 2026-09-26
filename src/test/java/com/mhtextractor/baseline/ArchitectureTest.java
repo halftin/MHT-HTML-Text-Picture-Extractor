@@ -101,7 +101,7 @@ class ArchitectureTest {
      * PowerShell {@code (Get-Content f).Count} 与 Java {@code Files.readAllLines} 会给出不同结果
      * （本文件为纯 {@code LF} 换行）。**因此本常量只能与 {@code Files.readAllLines} 口径比较**。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 5002;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 5001;
 
     /**
      * E0.6 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限。

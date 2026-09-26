@@ -371,6 +371,12 @@ public class MainController {
     /** 预览会话缓存（需求 2 会话 9）：存储层 + 四条生命周期规则；root = <java.io.tmpdir>/mht-extractor-preview（P6/P8，与 HtmlExportBuilder 的 mht-extractor-view 并列） */
     /* test-support */ final PreviewCacheLifecycle previewCacheLifecycle = new PreviewCacheLifecycle(
             new PreviewCacheStore(Paths.get(System.getProperty("java.io.tmpdir"), "mht-extractor-preview")));
+    /**
+     * 工作区缓存失效服务（E2.2）：把原先散落在 12 处的"规则 (a)/(c)"调用收敛为具名操作，
+     * 并成为 {@code com.mhtextractor.app}（无头应用层）的第一块砖。零 JavaFX 依赖。
+     */
+    private final com.mhtextractor.app.WorkspaceParamService workspaceParamService =
+            new com.mhtextractor.app.WorkspaceParamService(previewCacheLifecycle);
     /** 在途预览加载线程（规则 d 退出清空时等待其结束用；仅 FX 线程写） */
     private volatile Thread previewLoadThread = null;
     /** 退出清空已完成：二次 close 放行（规则 d） */
@@ -1242,7 +1248,7 @@ public class MainController {
         clearExtractOutcomes(List.of(item));
         clearPreviewCache(item);
         if (imageMode) {
-            previewCacheLifecycle.onParamsChanged(item.path);   // 规则 (a)：参数变化 → 删该项目缓存目录
+            workspaceParamService.paramsChanged(imageMode, item);   // 规则 (a)：参数变化 → 删该项目缓存目录
         }
         startPreParseFor(List.of(item));
         log.info("条目 {} 已设置{}模式独立参数", item.name, imageMode ? "图片" : "文本");
@@ -1269,8 +1275,7 @@ public class MainController {
         if (imageMode) {
             // 规则 (a)：全局参数变化 → 全部条目缓存目录删除（保守全删：无独立参数的条目生效参数确实变了，
             // 有独立参数的条目删除也只是下次预览重建，语义安全）
-            previewCacheLifecycle.onParamsChangedBatch(
-                    allPreviewItems().stream().map(i -> i.path).toList());
+            workspaceParamService.paramsChanged(imageMode, allPreviewItems());
         }
         refreshAfterParamsChanged();
         updateExtractBanner(currentSelection());
@@ -1295,7 +1300,7 @@ public class MainController {
         clearExtractOutcomes(members);
         if (imageMode) {
             // 规则 (a)：组参数变化 → 该组成员缓存目录删除
-            previewCacheLifecycle.onParamsChangedBatch(members.stream().map(m -> m.path).toList());
+            workspaceParamService.paramsChanged(imageMode, members);
         }
         refreshAfterTargetedParamsChange(members);
         updateListButtons();
@@ -1678,8 +1683,7 @@ public class MainController {
         clearExtractOutcomes(allPreviewItems());
         if (imageMode) {
             // 规则 (a)：全局参数写入 + 全部独立参数清空 → 全部条目生效参数变化 → 删除全部缓存目录
-            previewCacheLifecycle.onParamsChangedBatch(
-                    allPreviewItems().stream().map(i -> i.path).toList());
+            workspaceParamService.paramsChanged(imageMode, allPreviewItems());
         }
         log.info("已应用到全局（{}模式）：所有独立参数已清空，全部条目继承新全局参数",
                 imageMode ? "图片" : "文本");
@@ -1783,7 +1787,7 @@ public class MainController {
         clearExtractOutcomes(affected);
         if (imageMode) {
             // 规则 (a)：清除参数也是参数变化（生效参数回落组/全局）→ 受影响条目缓存目录删除
-            previewCacheLifecycle.onParamsChangedBatch(affected.stream().map(i -> i.path).toList());
+            workspaceParamService.paramsChanged(imageMode, affected);
         }
         log.info("已清除 {} 个条目、{} 个组的{}模式参数", topItems.size(), groups.size(),
                 imageMode ? "图片" : "文本");
@@ -3392,7 +3396,7 @@ public class MainController {
             t.setSelected(false);
         }
         // 规则 (c)：从列表移除 → 删该项目缓存目录
-        previewCacheLifecycle.onItemsRemoved(targets.stream().map(t -> t.path).toList());
+        workspaceParamService.itemsRemoved(targets);
         // 空组自动销毁：降序遍历记录原顶层索引，撤销时按原序恢复
         List<GroupItem<PreviewItem>> destroyed = new ArrayList<>();
         List<Integer> destroyedIdx = new ArrayList<>();
@@ -3429,7 +3433,7 @@ public class MainController {
             m.setSelected(false);
         }
         // 规则 (c)：整组移除 → 删组内成员缓存目录
-        previewCacheLifecycle.onItemsRemoved(members.stream().map(m -> m.path).toList());
+        workspaceParamService.itemsRemoved(members);
         items.remove(group);
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.REMOVE_GROUP, members,
                 group, idx, List.of(group), List.of(idx), List.of()));
@@ -3496,8 +3500,7 @@ public class MainController {
                     }
                 }
                 // 规则 (c)：撤销导入 = 从列表移除这批项目 → 删其缓存目录
-                previewCacheLifecycle.onItemsRemoved(
-                        record.items().stream().map(i -> i.path).toList());
+                workspaceParamService.itemsRemoved(record.items());
                 items.removeAll(record.items());
                 // 组内项目随撤销导入移除后可能产生空组：直接销毁（撤销导入本身不再记录）
                 for (int i = items.size() - 1; i >= 0; i--) {
@@ -3561,7 +3564,7 @@ public class MainController {
                             clearPreviewCache(it);
                             if (im) {
                                 // 规则 (a)：撤销恢复旧参数 = 生效参数变化 → 删该项目缓存目录
-                                previewCacheLifecycle.onParamsChanged(it.path);
+                                workspaceParamService.paramsChanged(im, it);
                             }
                             startPreParseFor(List.of(it));
                             break;
@@ -3585,8 +3588,7 @@ public class MainController {
                             }
                             if (im) {
                                 // 规则 (a)：撤销恢复组参数 → 成员生效参数变化 → 删其缓存目录
-                                previewCacheLifecycle.onParamsChangedBatch(
-                                        members.stream().map(m -> m.path).toList());
+                                workspaceParamService.paramsChanged(im, members);
                             }
                             startPreParseFor(members);
                             break;
@@ -3601,8 +3603,7 @@ public class MainController {
                     clearExtractOutcomes(allPreviewItems());
                     if (im) {
                         // 规则 (a)：撤销恢复全局参数 → 全部条目生效参数可能变化 → 保守全删
-                        previewCacheLifecycle.onParamsChangedBatch(
-                                allPreviewItems().stream().map(i -> i.path).toList());
+                        workspaceParamService.paramsChanged(im, allPreviewItems());
                     }
                     refreshAfterParamsChanged();
                 }
@@ -3646,8 +3647,7 @@ public class MainController {
                 clearExtractOutcomes(affected);
                 if (im) {
                     // 规则 (a)：撤销恢复被清除的参数 → 受影响条目生效参数变化 → 删其缓存目录
-                    previewCacheLifecycle.onParamsChangedBatch(
-                            affected.stream().map(i -> i.path).toList());
+                    workspaceParamService.paramsChanged(im, affected);
                 }
                 refreshAfterTargetedParamsChange(affected);
                 updateListButtons();
@@ -3691,8 +3691,7 @@ public class MainController {
                 clearExtractOutcomes(allPreviewItems());
                 if (im) {
                     // 规则 (a)：撤销应用到全局 → 全部条目生效参数可能变化 → 保守全删
-                    previewCacheLifecycle.onParamsChangedBatch(
-                            allPreviewItems().stream().map(i -> i.path).toList());
+                    workspaceParamService.paramsChanged(im, allPreviewItems());
                 }
                 refreshAfterParamsChanged();
                 updateListButtons();
