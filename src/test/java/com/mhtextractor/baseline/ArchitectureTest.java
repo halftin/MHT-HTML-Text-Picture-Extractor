@@ -95,13 +95,15 @@ class ArchitectureTest {
      *   <li>E1.1 接线监听器：6113；E1.3a 属性→字段：6174；E1.4 缩略图纯像素化：6252</li>
      *   <li><b>E0.6 外迁 1139 行演练/测试代码：5109</b>（净减 1143 —— 这是本阶段的目标达成点）</li>
      *   <li><b>E2.1 外迁 PreviewItem/ThumbnailData/Status 到 model 包：5002</b>（再减 107）</li>
+     *   <li>E2.2-1 收口 13 处缓存规则调用到 `app` 服务：5001</li>
+     *   <li><b>E2.2-2 删除 10 处冗余 imageMode 守卫：4981</b>（守卫语义移入服务，由 8 条单测锁定）</li>
      * </ul>
      *
      * <p><b>⚠️ 口径陷阱（会话 18 实测）</b>：同一文件用不同工具数出的行数<b>不一致</b> ——
      * PowerShell {@code (Get-Content f).Count} 与 Java {@code Files.readAllLines} 会给出不同结果
      * （本文件为纯 {@code LF} 换行）。**因此本常量只能与 {@code Files.readAllLines} 口径比较**。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 5001;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 4981;
 
     /**
      * E0.6 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限。

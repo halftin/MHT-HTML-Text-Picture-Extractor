@@ -1247,9 +1247,7 @@ public class MainController {
                 false, null, null));
         clearExtractOutcomes(List.of(item));
         clearPreviewCache(item);
-        if (imageMode) {
-            workspaceParamService.paramsChanged(imageMode, item);   // 规则 (a)：参数变化 → 删该项目缓存目录
-        }
+        workspaceParamService.paramsChanged(imageMode, item);   // 规则 (a)：参数变化 → 删该项目缓存目录
         startPreParseFor(List.of(item));
         log.info("条目 {} 已设置{}模式独立参数", item.name, imageMode ? "图片" : "文本");
         fileListView.refresh();
@@ -1272,11 +1270,9 @@ public class MainController {
                 false, null, null));
         // 拍板：全局参数重新确认 → 全部条目旧提取结果色失效
         clearExtractOutcomes(allPreviewItems());
-        if (imageMode) {
-            // 规则 (a)：全局参数变化 → 全部条目缓存目录删除（保守全删：无独立参数的条目生效参数确实变了，
-            // 有独立参数的条目删除也只是下次预览重建，语义安全）
-            workspaceParamService.paramsChanged(imageMode, allPreviewItems());
-        }
+        // 规则 (a)：全局参数变化 → 全部条目缓存目录删除（保守全删：无独立参数的条目生效参数确实变了，
+        // 有独立参数的条目删除也只是下次预览重建，语义安全）
+        workspaceParamService.paramsChanged(imageMode, allPreviewItems());
         refreshAfterParamsChanged();
         updateExtractBanner(currentSelection());
     }
@@ -1298,10 +1294,8 @@ public class MainController {
         // 拍板：组参数重新确认 → 该组成员旧提取结果色失效
         List<PreviewItem> members = group.getMembers().stream().filter(m -> !m.removed).toList();
         clearExtractOutcomes(members);
-        if (imageMode) {
-            // 规则 (a)：组参数变化 → 该组成员缓存目录删除
-            workspaceParamService.paramsChanged(imageMode, members);
-        }
+        // 规则 (a)：组参数变化 → 该组成员缓存目录删除
+        workspaceParamService.paramsChanged(imageMode, members);
         refreshAfterTargetedParamsChange(members);
         updateListButtons();
         updateExtractBanner(currentSelection());
@@ -1681,10 +1675,8 @@ public class MainController {
                 imageMode, globalBefore, itemBefore, groupBefore, false, null, null, null,
                 false, null, null));
         clearExtractOutcomes(allPreviewItems());
-        if (imageMode) {
-            // 规则 (a)：全局参数写入 + 全部独立参数清空 → 全部条目生效参数变化 → 删除全部缓存目录
-            workspaceParamService.paramsChanged(imageMode, allPreviewItems());
-        }
+        // 规则 (a)：全局参数写入 + 全部独立参数清空 → 全部条目生效参数变化 → 删除全部缓存目录
+        workspaceParamService.paramsChanged(imageMode, allPreviewItems());
         log.info("已应用到全局（{}模式）：所有独立参数已清空，全部条目继承新全局参数",
                 imageMode ? "图片" : "文本");
         refreshAfterParamsChanged();
@@ -1785,10 +1777,8 @@ public class MainController {
         }
         // 拍板：参数变更 → 受影响条目旧提取结果色失效
         clearExtractOutcomes(affected);
-        if (imageMode) {
-            // 规则 (a)：清除参数也是参数变化（生效参数回落组/全局）→ 受影响条目缓存目录删除
-            workspaceParamService.paramsChanged(imageMode, affected);
-        }
+        // 规则 (a)：清除参数也是参数变化（生效参数回落组/全局）→ 受影响条目缓存目录删除
+        workspaceParamService.paramsChanged(imageMode, affected);
         log.info("已清除 {} 个条目、{} 个组的{}模式参数", topItems.size(), groups.size(),
                 imageMode ? "图片" : "文本");
         refreshAfterTargetedParamsChange(affected);
@@ -3562,10 +3552,8 @@ public class MainController {
                             }
                             clearExtractOutcomes(List.of(it));
                             clearPreviewCache(it);
-                            if (im) {
-                                // 规则 (a)：撤销恢复旧参数 = 生效参数变化 → 删该项目缓存目录
-                                workspaceParamService.paramsChanged(im, it);
-                            }
+                            // 规则 (a)：撤销恢复旧参数 = 生效参数变化 → 删该项目缓存目录
+                            workspaceParamService.paramsChanged(im, it);
                             startPreParseFor(List.of(it));
                             break;
                         }
@@ -3586,10 +3574,8 @@ public class MainController {
                             for (PreviewItem m : members) {
                                 clearPreviewCache(m);
                             }
-                            if (im) {
-                                // 规则 (a)：撤销恢复组参数 → 成员生效参数变化 → 删其缓存目录
-                                workspaceParamService.paramsChanged(im, members);
-                            }
+                            // 规则 (a)：撤销恢复组参数 → 成员生效参数变化 → 删其缓存目录
+                            workspaceParamService.paramsChanged(im, members);
                             startPreParseFor(members);
                             break;
                         }
@@ -3601,10 +3587,8 @@ public class MainController {
                         textParamsCache = record.paramBefore();
                     }
                     clearExtractOutcomes(allPreviewItems());
-                    if (im) {
-                        // 规则 (a)：撤销恢复全局参数 → 全部条目生效参数可能变化 → 保守全删
-                        workspaceParamService.paramsChanged(im, allPreviewItems());
-                    }
+                    // 规则 (a)：撤销恢复全局参数 → 全部条目生效参数可能变化 → 保守全删
+                    workspaceParamService.paramsChanged(im, allPreviewItems());
                     refreshAfterParamsChanged();
                 }
                 fileListView.refresh();
@@ -3645,10 +3629,8 @@ public class MainController {
                     }
                 }
                 clearExtractOutcomes(affected);
-                if (im) {
-                    // 规则 (a)：撤销恢复被清除的参数 → 受影响条目生效参数变化 → 删其缓存目录
-                    workspaceParamService.paramsChanged(im, affected);
-                }
+                // 规则 (a)：撤销恢复被清除的参数 → 受影响条目生效参数变化 → 删其缓存目录
+                workspaceParamService.paramsChanged(im, affected);
                 refreshAfterTargetedParamsChange(affected);
                 updateListButtons();
                 updateExtractBanner(currentSelection());
@@ -3689,10 +3671,8 @@ public class MainController {
                     }
                 }
                 clearExtractOutcomes(allPreviewItems());
-                if (im) {
-                    // 规则 (a)：撤销应用到全局 → 全部条目生效参数可能变化 → 保守全删
-                    workspaceParamService.paramsChanged(im, allPreviewItems());
-                }
+                // 规则 (a)：撤销应用到全局 → 全部条目生效参数可能变化 → 保守全删
+                workspaceParamService.paramsChanged(im, allPreviewItems());
                 refreshAfterParamsChanged();
                 updateListButtons();
                 updateExtractBanner(currentSelection());
