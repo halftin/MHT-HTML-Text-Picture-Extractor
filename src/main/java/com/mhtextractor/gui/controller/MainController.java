@@ -15,6 +15,8 @@ import com.mhtextractor.gui.component.LogTextArea;
 import com.mhtextractor.gui.util.BrowserLauncher;
 import com.mhtextractor.gui.util.JavaFxUtil;
 import com.mhtextractor.i18n.ErrorCode;
+import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.model.ThumbnailData;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.output.FileWriter;
 import com.mhtextractor.output.ImageWriter;
@@ -217,33 +219,7 @@ public class MainController {
     private static final String HINT_NEED_PARAMS = I18n.get("preview.hintParamsUnset");
     private static final String HINT_NO_FILES = I18n.get("preview.hintNoMht");
 
-    /** 条目预解析状态 */
-    enum Status { WAITING, READY, EMPTY, FAILED }
 
-    /**
-     * 缩略图数据（会话 18 · E1.4）：<b>纯数据，零 JavaFX 依赖</b>。
-     *
-     * <p><b>为什么不用 {@code javafx.scene.image.Image}</b>：原 {@code ThumbEntry} 直接持有 JavaFX
-     * {@code Image} 对象，使模型层无法脱离 UI 框架（验收 V4）。改为持有解码缩放后的 ARGB 像素后，
-     * "模型 → JavaFX Image"的转换被收口到渲染层 {@link #toFxImage(ThumbnailData)}，
-     * 这正是"换 UI 框架只需重写适配层"的形态。</p>
-     *
-     * <p><b>为什么存 {@code int[]} 原始像素而不是原图字节或 PNG 字节</b>：</p>
-     * <ul>
-     *   <li>存<b>原图字节</b>会让内存随图片尺寸线性增长 —— 直接违反 C2
-     *       （原实现正是靠"只留 150px 缩略图、丢弃原图字节"满足 C2 的）；</li>
-     *   <li>存 <b>PNG 字节</b>需要图像编码器（{@code ImageIO} 属 {@code java.desktop}/AWT，
-     *       与本项目"为 native 镜像尽量避开 AWT"的取向冲突，且属 R5 需谨慎的新能力）；</li>
-     *   <li>存<b>缩放后的 ARGB 像素</b>无需任何编码器，且每张上限约 150×150×4 ≈ 88 KB
-     *       （缩放边界 150），整个工作集不到 1 MB —— 与原 {@code Image} 对象的量级相同，
-     *       故 <b>C2 的内存口径不变</b>。</li>
-     * </ul>
-     *
-     * <p><b>null 语义保留</b>：构造时 {@code pixels == null} 表示"无法加载"，
-     * 渲染层据此显示 {@code preview.loadFailed} 占位（与原 {@code image == null} 完全一致）。</p>
-     */
-    private record ThumbnailData(String coreName, int width, int height, int[] pixels) {
-    }
 
     /** 缩略图纯数据 → JavaFX 图像（渲染层唯一的 JavaFX 转换点；失败返回 null 表示无法加载） */
     private static Image toFxImage(ThumbnailData d) {
@@ -288,89 +264,6 @@ public class MainController {
         }
     }
 
-    /** 单个 MHT 文件的预览状态 */
-    class PreviewItem {
-        final String path;
-        final String name;
-        final LocalDateTime modifiedTime;
-        /** 输入来源目录：随导入写入，不随输入目录切换变化（F3/R1） */
-        final String sourceFolder;
-        // ============ 会话 18 · E1.3a：以下原为 JavaFX 属性，已改为普通字段 ============
-        // 理由：本项目要出 GraalVM native EXE，且目标是把模型层做到"换 UI 框架可复用"。
-        // 这 5 个属性原先只被当作普通可变值使用 —— 全项目对它们的 observable 用法仅 3 处
-        // （见 selectedChangeListeners 注释），故改为普通字段 + 自研 ChangeListener 是等价替换。
-        Status status = Status.WAITING;
-        String errorMsg = "";
-        boolean chapterEnabled = true;
-        /** 复选框勾选状态（F1）：默认未选中，仅用于批量选择，不影响提取名单 */
-        boolean selected = false;
-        /**
-         * 勾选变更监听器（懒初始化）。替换原 {@code BooleanProperty selected} 的 observable 语义 ——
-         * 原用途仅两处：① initialize 注册 onSelectionChanged()；② 单元格 checkBox 双向绑定。
-         * 两者都只关心"值变了"，不需要属性名/旧值，故用极简回调接口（与 GroupItem 同一套）。
-         * 仅在值确实变化时通知，与 JavaFX 属性 set 的语义一致。
-         */
-        private java.util.List<ChangeListener> selectedChangeListeners;
-
-        /** 注册勾选变更监听器（同步回调；与替换前的 BooleanProperty 行为等价） */
-        void addSelectedChangeListener(ChangeListener listener) {
-            if (listener == null) return;
-            if (selectedChangeListeners == null) {
-                selectedChangeListeners = new ArrayList<>(1);
-            }
-            selectedChangeListeners.add(listener);
-        }
-
-        /** 设置勾选状态；仅在值确实变化时通知监听器（与 JavaFX 属性 set 语义一致） */
-        void setSelected(boolean value) {
-            if (this.selected == value) return;
-            this.selected = value;
-            if (selectedChangeListeners != null) {
-                for (ChangeListener l : new ArrayList<>(selectedChangeListeners)) {
-                    l.onValueChanged();
-                }
-            }
-        }
-
-        /**
-         * 移除勾选变更监听器。
-         *
-         * <p>替换原 {@code BooleanProperty} 的 {@code unbindBidirectional} —— 单元格复用（{@code PreviewListCell}）
-         * 必须能切断旧条目的联动，否则会串值/泄漏监听器。</p>
-         */
-        void removeSelectedChangeListener(ChangeListener listener) {
-            if (selectedChangeListeners != null && listener != null) {
-                selectedChangeListeners.remove(listener);
-            }
-        }
-
-        /** 移除标记（F2）：隐藏式移除——不实际从列表删除，仅隐藏并排除在序号/徽标/提取名单外 */
-        boolean removed = false;
-        /** 所属组（F5）：null = 顶层未分组；由 rebuildDisplay 统一维护，勿手工赋值（volatile：预解析线程读取） */
-        volatile GroupItem<PreviewItem> parentGroup = null;
-        String badge = null;
-        volatile String cachedText;
-        volatile String cachedTitle;
-        volatile List<ImageExtractor.ImageData> cachedImages;
-        volatile List<ThumbnailData> cachedThumbs;
-        /** 预览缓存元数据（需求 2 会话 9）：磁盘落盘后的 meta（含图片清单，不含字节），C2「内存只留 meta + 缩略图」 */
-        volatile PreviewCacheMeta cachedMeta;
-        /** 最近一次提取结果（提取结果状态需求）：NONE 无结果；仅在 FX 线程回写/清除 */
-        ExtractOutcome extractOutcome = ExtractOutcome.NONE;
-        /** 提取结果详情（失败/跳过原因 + 警告，分号拼接）；点击含红条目时预览区 banner 展示 */
-        String extractDetail;
-        /** 条目级独立参数（条目独立参数需求）：文本/图片各一套；null = 未设置；
-         *  仅顶层项目持有（入组/合并时清除）；volatile：预解析线程读取 */
-        volatile AppConfig textItemParams;
-        volatile AppConfig imageItemParams;
-
-        PreviewItem(String path, String name, LocalDateTime modifiedTime, String sourceFolder) {
-            this.path = path;
-            this.name = name;
-            this.modifiedTime = modifiedTime;
-            this.sourceFolder = sourceFolder;
-        }
-    }
 
     /** 输出单元规划的字段视图（路径/来源目录/移除标记，阶段 8） */
     /* test-support */ static final OutputUnitPlanner.ItemView<PreviewItem> ITEM_VIEW = new OutputUnitPlanner.ItemView<>() {
@@ -1956,7 +1849,7 @@ public class MainController {
                 return;
             }
         }
-        if (sel instanceof PreviewItem it && it.status == Status.FAILED) {
+        if (sel instanceof PreviewItem it && it.status == PreviewItem.Status.FAILED) {
             extractResultBanner.setText(I18n.get("extract.parseFailed") + it.errorMsg);
             extractResultBanner.setVisible(true);
             extractResultBanner.setManaged(true);
@@ -1992,7 +1885,7 @@ public class MainController {
             m.cachedTitle = null;
             m.cachedImages = null;
             m.cachedThumbs = null;
-            m.status = Status.WAITING;
+            m.status = PreviewItem.Status.WAITING;
         }
         Object sel = currentSelection();
         updateBadgeHeader();
@@ -2008,7 +1901,7 @@ public class MainController {
             preParseItems(new ArrayList<>(affected), parseToken);
         }
         List<PreviewItem> interrupted = allVisibleItems().stream()
-                .filter(i -> i.status == Status.WAITING && !affected.contains(i)).toList();
+                .filter(i -> i.status == PreviewItem.Status.WAITING && !affected.contains(i)).toList();
         if (!interrupted.isEmpty()) {
             preParseItems(new ArrayList<>(interrupted), parseToken);
         }
@@ -2590,12 +2483,12 @@ public class MainController {
                         : extractOutcomePaint(it.extractOutcome)));
                 setTooltip(it.extractDetail == null || it.extractDetail.isEmpty()
                         ? null : new Tooltip(it.extractDetail));
-            } else if (it.status == Status.FAILED) {
+            } else if (it.status == PreviewItem.Status.FAILED) {
                 setStyle(isSelected ? FAILED_SELECTED_ROW_STYLE : FAILED_ROW_STYLE);
                 setTooltip(new Tooltip(it.errorMsg));
             } else {
                 setStyle(itemParamStyle(it, isSelected));
-                setTooltip(it.status == Status.EMPTY
+                setTooltip(it.status == PreviewItem.Status.EMPTY
                         ? new Tooltip(I18n.get("preview.emptyContent")) : null);
             }
             // 深色底需白字（-fx-text-background-color 不跨节点继承，直接设 label 填充色）：
@@ -2604,7 +2497,7 @@ public class MainController {
                     || it.extractOutcome == ExtractOutcome.SKIPPED
                     || it.extractOutcome == ExtractOutcome.SUCCESS_WARNED)
                     || (it.extractOutcome == ExtractOutcome.NONE
-                            && it.status != Status.FAILED
+                            && it.status != PreviewItem.Status.FAILED
                             && ParamScope.backgroundStatus(it.parentGroup,
                                     it.textItemParams, it.imageItemParams, imageModeToggle.isSelected(),
                                     textParamsCache, imageParamsCache) == ParamScope.Status.GLOBAL);
@@ -3109,7 +3002,7 @@ public class MainController {
         it.cachedImages = null;
         it.cachedThumbs = null;
         it.cachedMeta = null;
-        it.status = Status.WAITING;
+        it.status = PreviewItem.Status.WAITING;
     }
 
     // ==================== 列表复选框（F1） ====================
@@ -4334,7 +4227,7 @@ public class MainController {
         }
         AppConfig eff = effectiveForObject(it);
         boolean numbering = isTextMode() && eff != null && eff.isAddChapterNumber();
-        if (numbering && it.status == Status.READY && it.chapterEnabled) {
+        if (numbering && it.status == PreviewItem.Status.READY && it.chapterEnabled) {
             it.badge = String.valueOf(n);
             return n + 1;
         }
@@ -4444,7 +4337,7 @@ public class MainController {
     private String separateDirName(PreviewItem item) {
         AppConfig params = effectiveForObject(item);
         if (params != null && params.isEnableNameExtraction()) {
-            if (item.status == Status.WAITING) {
+            if (item.status == PreviewItem.Status.WAITING) {
                 return I18n.get("preview.parsing");
             }
             if (item.cachedTitle != null) {
@@ -4459,7 +4352,7 @@ public class MainController {
         if (params != null && params.isEnableNameExtraction()) {
             PreviewItem first = allVisibleItems().stream().findFirst().orElse(null);
             if (first != null) {
-                if (first.status == Status.WAITING) {
+                if (first.status == PreviewItem.Status.WAITING) {
                     return I18n.get("preview.parsing");
                 }
                 if (first.cachedTitle != null) {
@@ -4537,7 +4430,7 @@ public class MainController {
                 resetImageArea(HINT_NEED_PARAMS, false);
                 return;
             }
-            if (it.status == Status.FAILED) {
+            if (it.status == PreviewItem.Status.FAILED) {
                 imageHintLabel.setText(I18n.get("preview.parseFailed") + it.errorMsg);
                 imageHintLabel.setVisible(true);
                 previewEffectButton.setVisible(true);
@@ -4836,7 +4729,7 @@ public class MainController {
                     item.cachedImages = null;
                     if (meta.images().isEmpty()) {
                         // 全量解析确认无图片 → 空内容标记
-                        item.status = Status.EMPTY;
+                        item.status = PreviewItem.Status.EMPTY;
                         fileListView.refresh();
                     }
                     renderThumbnails(item);
@@ -4962,7 +4855,7 @@ public class MainController {
                 try {
                     MimeParser.ParsedMht parsed = parser.parse(item.path, true, () -> false, null, null);
                     if (parsed.getHtmlContent() == null) {
-                        setItemStatus(token, item, Status.FAILED, I18n.get("preview.unparseable"));
+                        setItemStatus(token, item, PreviewItem.Status.FAILED, I18n.get("preview.unparseable"));
                         continue;
                     }
                     if (isTextMode()) {
@@ -4983,7 +4876,7 @@ public class MainController {
                             }
                         }
                         setItemStatus(token, item,
-                                (text == null || text.trim().isEmpty()) ? Status.EMPTY : Status.READY,
+                                (text == null || text.trim().isEmpty()) ? PreviewItem.Status.EMPTY : PreviewItem.Status.READY,
                                 null);
                     } else {
                         if (params.isEnableNameExtraction()) {
@@ -4993,10 +4886,10 @@ public class MainController {
                             String title = imageExtractor.extractTitle();
                             item.cachedTitle = (title != null && !title.isEmpty()) ? title : null;
                         }
-                        setItemStatus(token, item, Status.READY, null);
+                        setItemStatus(token, item, PreviewItem.Status.READY, null);
                     }
                 } catch (Exception e) {
-                    setItemStatus(token, item, Status.FAILED, I18n.get("preview.parseFailed") + e.getMessage());
+                    setItemStatus(token, item, PreviewItem.Status.FAILED, I18n.get("preview.parseFailed") + e.getMessage());
                 }
             }
         }, "preview-preparse");
@@ -5004,7 +4897,7 @@ public class MainController {
         t.start();
     }
 
-    private void setItemStatus(int token, PreviewItem item, Status st, String err) {
+    private void setItemStatus(int token, PreviewItem item, PreviewItem.Status st, String err) {
         if (token != parseToken) {
             return;
         }
@@ -5051,7 +4944,7 @@ public class MainController {
         List<PreviewItem> vis = allVisibleItems().stream()
                 .filter(i -> effectiveForObject(i) != null).toList();
         long total = vis.size();
-        long done = vis.stream().filter(i -> i.status != Status.WAITING).count();
+        long done = vis.stream().filter(i -> i.status != PreviewItem.Status.WAITING).count();
         if (total == 0) {
             progressBar.setVisible(false);   // 全部无生效参数：不预解析，不动状态栏文案
             setProgressBarActivity(null);

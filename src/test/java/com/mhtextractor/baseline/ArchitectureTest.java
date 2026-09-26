@@ -57,7 +57,8 @@ class ArchitectureTest {
             "com/mhtextractor/util",
             "com/mhtextractor/config",
             "com/mhtextractor/i18n",
-            "com/mhtextractor/app"   // 目标产物：E2 起建立，建立后自动纳入约束
+            "com/mhtextractor/model",   // E2.1：PreviewItem / ThumbnailData 外迁至此，必须保持零 JavaFX
+            "com/mhtextractor/app"      // 目标产物：E4 起建立，建立后自动纳入约束
     );
 
     /**
@@ -93,13 +94,14 @@ class ArchitectureTest {
      *   <li>会话 18 起点：6111</li>
      *   <li>E1.1 接线监听器：6113；E1.3a 属性→字段：6174；E1.4 缩略图纯像素化：6252</li>
      *   <li><b>E0.6 外迁 1139 行演练/测试代码：5109</b>（净减 1143 —— 这是本阶段的目标达成点）</li>
+     *   <li><b>E2.1 外迁 PreviewItem/ThumbnailData/Status 到 model 包：5002</b>（再减 107）</li>
      * </ul>
      *
      * <p><b>⚠️ 口径陷阱（会话 18 实测）</b>：同一文件用不同工具数出的行数<b>不一致</b> ——
      * PowerShell {@code (Get-Content f).Count} 与 Java {@code Files.readAllLines} 会给出不同结果
      * （本文件为纯 {@code LF} 换行）。**因此本常量只能与 {@code Files.readAllLines} 口径比较**。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 5109;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 5002;
 
     /**
      * E0.6 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限。

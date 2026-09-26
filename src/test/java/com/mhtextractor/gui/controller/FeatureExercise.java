@@ -1,5 +1,7 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.model.ThumbnailData;
 import atlantafx.base.controls.ToggleSwitch;
 import com.mhtextractor.cache.PreviewCacheKey;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
@@ -344,7 +346,7 @@ public void exerciseAllFeatures() throws Exception {
         mc.selectAllCheck.fire();
         Thread.sleep(200);
         // 部分勾选 → 移除（不弹确认框）→ 撤销移除 → 撤销两次增量导入
-        List<MainController.PreviewItem> vis = mc.allVisibleItems();
+        List<PreviewItem> vis = mc.allVisibleItems();
         if (!vis.isEmpty()) {
             vis.get(0).setSelected(true);
             Thread.sleep(200);
@@ -369,7 +371,7 @@ public void exerciseAllFeatures() throws Exception {
         }
         mc.inputFolderField.setText(groupDir.toString());
         Thread.sleep(1500);
-        List<MainController.PreviewItem> vis = mc.allVisibleItems();
+        List<PreviewItem> vis = mc.allVisibleItems();
         if (vis.size() >= 4) {
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             vis.get(0).setSelected(true);
@@ -377,16 +379,16 @@ public void exerciseAllFeatures() throws Exception {
             mc.groupButton.fire();
             Thread.sleep(400);
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
-            List<MainController.PreviewItem> tops = mc.allVisibleItems().stream()
+            List<PreviewItem> tops = mc.allVisibleItems().stream()
                     .filter(i -> i.parentGroup == null).toList();
             tops.get(0).setSelected(true);
             tops.get(1).setSelected(true);
             mc.groupButton.fire();
             Thread.sleep(400);
-            List<GroupItem<MainController.PreviewItem>> groups = mc.topLevelGroups();
+            List<GroupItem<PreviewItem>> groups = mc.topLevelGroups();
             if (groups.size() == 2) {
-                GroupItem<MainController.PreviewItem> g1 = groups.get(0);
-                GroupItem<MainController.PreviewItem> g2 = groups.get(1);
+                GroupItem<PreviewItem> g1 = groups.get(0);
+                GroupItem<PreviewItem> g2 = groups.get(1);
                 // 折叠/展开动画演练：触发后立即快进完成（演练运行于 FX 线程，sleep 会阻塞 pulse
                 // 使 Timeline 无法推进；动画真实推进由临时 JUnit 测试与人工走查验证）
                 mc.toggleGroupExpanded(g1);
@@ -438,7 +440,7 @@ public void exerciseAllFeatures() throws Exception {
 
     // Phase 10: 拖拽（performDrop 程序化驱动，覆盖组内排序/跨组/出组/组行移动/两组合并/非法落点，阶段 7）
     try {
-        List<MainController.PreviewItem> vis = mc.allVisibleItems();
+        List<PreviewItem> vis = mc.allVisibleItems();
         if (vis.size() >= 4) {
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             vis.get(0).setSelected(true);
@@ -446,16 +448,16 @@ public void exerciseAllFeatures() throws Exception {
             mc.groupButton.fire();
             Thread.sleep(400);
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
-            List<MainController.PreviewItem> tops = mc.allVisibleItems().stream()
+            List<PreviewItem> tops = mc.allVisibleItems().stream()
                     .filter(i -> i.parentGroup == null).toList();
             tops.get(0).setSelected(true);
             tops.get(1).setSelected(true);
             mc.groupButton.fire();
             Thread.sleep(400);
-            List<GroupItem<MainController.PreviewItem>> groups = mc.topLevelGroups();
+            List<GroupItem<PreviewItem>> groups = mc.topLevelGroups();
             if (groups.size() == 2) {
-                GroupItem<MainController.PreviewItem> g1 = groups.get(0);
-                GroupItem<MainController.PreviewItem> g2 = groups.get(1);
+                GroupItem<PreviewItem> g1 = groups.get(0);
+                GroupItem<PreviewItem> g2 = groups.get(1);
                 // 组内排序：g1 第二个成员拖到第一个成员之前
                 mc.performDrop(mc.visibleMembersOf(g1).get(1), mc.visibleMembersOf(g1).get(0),
                         DropResolver.Zone.TOP, null);
@@ -725,7 +727,7 @@ public void runAutomatedTests() {
                 throw new IllegalStateException("首次导入目录失败");
             }
             // 为导入条目设置条目级参数 → 重复导入不得清空（RISK-1 拍板）
-            MainController.PreviewItem r1 = mc.allPreviewItems().stream()
+            PreviewItem r1 = mc.allPreviewItems().stream()
                     .filter(i -> i.path.endsWith("r1.mht")).findFirst().orElse(null);
             if (r1 == null) {
                 throw new IllegalStateException("未找到导入条目");
@@ -779,7 +781,7 @@ public void runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Select-all checkbox: " + e.getMessage()); f++; }
 
         // 移除 + 撤销（部分勾选不弹确认框）
-        try { List<MainController.PreviewItem> vis = mc.allVisibleItems();
+        try { List<PreviewItem> vis = mc.allVisibleItems();
             vis.get(0).setSelected(true); Thread.sleep(200);
             mc.removeButton.fire(); Thread.sleep(300);
             if (vis.get(0).removed != true) { throw new IllegalStateException("移除未生效"); }
@@ -789,13 +791,13 @@ public void runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Remove + undo: " + e.getMessage()); f++; }
 
         // 合并为组 + 组名编辑 + 组参数 + 拆分组 + 撤销
-        try { List<MainController.PreviewItem> vis = mc.allVisibleItems();
+        try { List<PreviewItem> vis = mc.allVisibleItems();
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             vis.get(0).setSelected(true); vis.get(1).setSelected(true);
             mc.groupButton.fire(); Thread.sleep(400);
-            List<GroupItem<MainController.PreviewItem>> groups = mc.topLevelGroups();
+            List<GroupItem<PreviewItem>> groups = mc.topLevelGroups();
             if (groups.size() != 1) { throw new IllegalStateException("建组失败: " + groups.size()); }
-            GroupItem<MainController.PreviewItem> g = groups.get(0);
+            GroupItem<PreviewItem> g = groups.get(0);
             mc.fileListView.getSelectionModel().select(g); Thread.sleep(300);
             mc.groupNameField.setText("自动测试组"); Thread.sleep(300);
             if (!"自动测试组".equals(g.getName())) { throw new IllegalStateException("组名编辑失败"); }
@@ -831,19 +833,19 @@ public void runAutomatedTests() {
 
         // 拖拽（performDrop 程序化驱动）+ 撤销；第二组用单项目建组（R9）
         try { mc.undoButton.fire(); Thread.sleep(300);   // 撤销上一段建组，成员回顶层
-            List<MainController.PreviewItem> vis = mc.allVisibleItems();
+            List<PreviewItem> vis = mc.allVisibleItems();
             if (vis.size() < 3) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             vis.get(0).setSelected(true); vis.get(1).setSelected(true);
             mc.groupButton.fire(); Thread.sleep(400);
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
-            List<MainController.PreviewItem> tops = mc.allVisibleItems().stream()
+            List<PreviewItem> tops = mc.allVisibleItems().stream()
                     .filter(i -> i.parentGroup == null).toList();
             tops.get(0).setSelected(true);
             mc.groupButton.fire(); Thread.sleep(400);
-            List<GroupItem<MainController.PreviewItem>> groups = mc.topLevelGroups();
+            List<GroupItem<PreviewItem>> groups = mc.topLevelGroups();
             if (groups.size() != 2) { throw new IllegalStateException("建第二组失败: " + groups.size()); }
-            GroupItem<MainController.PreviewItem> g1 = groups.get(0); GroupItem<MainController.PreviewItem> g2 = groups.get(1);
+            GroupItem<PreviewItem> g1 = groups.get(0); GroupItem<PreviewItem> g2 = groups.get(1);
             mc.performDrop(mc.visibleMembersOf(g1).get(1), mc.visibleMembersOf(g1).get(0),
                     DropResolver.Zone.TOP, null); mc.rebuildDisplay(); Thread.sleep(200);
             mc.performDrop(mc.visibleMembersOf(g1).get(0), g2, DropResolver.Zone.INTO, null);
@@ -862,9 +864,9 @@ public void runAutomatedTests() {
         try {
             mc.undoButton.fire(); Thread.sleep(300);   // 撤销建组（第二组）
             mc.undoButton.fire(); Thread.sleep(300);   // 撤销建组（第一组）
-            List<MainController.PreviewItem> vis = mc.allVisibleItems();
+            List<PreviewItem> vis = mc.allVisibleItems();
             if (vis.size() < 2) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
-            MainController.PreviewItem target = vis.get(0);
+            PreviewItem target = vis.get(0);
             ParamDialogController itemDialog = ParamDialogController.showDirect(
                     null, false, mc.textParamsCache, mc.imageParamsCache,
                     new ParamScope.ItemTarget<>(target, target.textItemParams, target.imageItemParams));
@@ -894,12 +896,12 @@ public void runAutomatedTests() {
 
         // 清除参数（清除参数功能）：按钮/菜单禁用态 + 条目清除 + 撤销恢复（拍板 Q1-Q3）
         try {
-            List<MainController.PreviewItem> vis = mc.allVisibleItems();
+            List<PreviewItem> vis = mc.allVisibleItems();
             if (vis.size() < 3) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
             mc.textModeToggle.setSelected(true); Thread.sleep(300);
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
             mc.updateListButtons();
-            MainController.PreviewItem a = vis.get(0), b = vis.get(1);
+            PreviewItem a = vis.get(0), b = vis.get(1);
             if (!mc.clearParamsButton.isDisabled()) { throw new IllegalStateException("无独立参数时按钮应禁用"); }
             ParamDialogController itemDlg = ParamDialogController.showDirect(
                     null, false, mc.textParamsCache, mc.imageParamsCache,
@@ -933,15 +935,15 @@ public void runAutomatedTests() {
 
         // 清除参数组语义：组内成员/组条目 → 清整组；混合多选（组内+组外）→ 都清；一次撤销全部恢复
         try {
-            List<MainController.PreviewItem> vis = mc.allVisibleItems();
+            List<PreviewItem> vis = mc.allVisibleItems();
             if (vis.size() < 3) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
             mc.allVisibleItems().forEach(i -> i.setSelected(false));
-            MainController.PreviewItem a = vis.get(0), b = vis.get(1), c = vis.get(2);
+            PreviewItem a = vis.get(0), b = vis.get(1), c = vis.get(2);
             b.setSelected(true); c.setSelected(true);
             mc.groupButton.fire(); Thread.sleep(400);
-            List<GroupItem<MainController.PreviewItem>> groups = mc.topLevelGroups();
+            List<GroupItem<PreviewItem>> groups = mc.topLevelGroups();
             if (groups.size() != 1) { throw new IllegalStateException("建组失败: " + groups.size()); }
-            GroupItem<MainController.PreviewItem> g = groups.get(0);
+            GroupItem<PreviewItem> g = groups.get(0);
             ParamDialogController groupDlg = ParamDialogController.showDirect(
                     null, false, mc.textParamsCache, mc.imageParamsCache, new ParamScope.GroupTarget(g));
             groupDlg.enableTitleExtractCheck.setSelected(true);
@@ -971,16 +973,16 @@ public void runAutomatedTests() {
 
         // 进度条口径（修复：独立参数场景无参数条目导致进度条卡中间）——只统计有生效参数条目
         try {
-            List<MainController.PreviewItem> vis = mc.allVisibleItems();
+            List<PreviewItem> vis = mc.allVisibleItems();
             if (vis.size() < 2) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
             mc.textModeToggle.setSelected(true); Thread.sleep(300);
             mc.cancelWorkspaceActivity();   // 作废在途解析代次，保证断言确定性
             AppConfig savedGlobal = mc.textParamsCache;
-            for (MainController.PreviewItem it : mc.allPreviewItems()) {
+            for (PreviewItem it : mc.allPreviewItems()) {
                 it.textItemParams = null;
-                it.status = MainController.Status.WAITING;
+                it.status = PreviewItem.Status.WAITING;
             }
-            MainController.PreviewItem p0 = vis.get(0);
+            PreviewItem p0 = vis.get(0);
             mc.textParamsCache = null;               // 全局未确认
             p0.textItemParams = new AppConfig();  // 仅该条目有独立参数
             mc.updateProgressStatus(mc.parseToken);
@@ -990,7 +992,7 @@ public void runAutomatedTests() {
             if (!mc.progressBar.getStyleClass().contains("progress-preparse")) {
                 throw new IllegalStateException("预解析进度条应为浅蓝样式");
             }
-            p0.status = MainController.Status.READY;
+            p0.status = PreviewItem.Status.READY;
             mc.updateProgressStatus(mc.parseToken);
             if (mc.progressBar.isVisible()) {
                 throw new IllegalStateException("有参数条目全部完成后进度条应隐藏");
@@ -1024,8 +1026,8 @@ public void runAutomatedTests() {
 
         // 双击 toggle 勾选（回归：CLICKED 事件按键判定须用 getButton，isPrimaryButtonDown 恒为 false）
         try {
-            List<MainController.PreviewItem> vis = mc.allVisibleItems();
-            MainController.PreviewItem dt = vis.get(0);
+            List<PreviewItem> vis = mc.allVisibleItems();
+            PreviewItem dt = vis.get(0);
             boolean before = dt.selected;
             MainController.PreviewListCell targetCell = mc.findCell(dt);
             if (targetCell == null) { throw new IllegalStateException("未找到条目 cell"); }
@@ -1063,7 +1065,7 @@ public void runAutomatedTests() {
         // 输出单元拆分：组 + 未分组（撤销链后状态已变化，此处自行建组构造确定状态）
         try { String sessionDir = new File(System.getProperty("java.io.tmpdir"),
                     "mht-auto-session").getPath();
-            List<MainController.PreviewItem> vis = mc.allVisibleItems();
+            List<PreviewItem> vis = mc.allVisibleItems();
             if (vis.size() >= 3) {
                 mc.allVisibleItems().forEach(i -> i.setSelected(false));
                 vis.get(0).setSelected(true);
@@ -1134,7 +1136,7 @@ public void runAutomatedTests() {
 
         // 图片预览工作区：查看预览效果（懒加载 + 需求 2 C1 预览落盘断言）
         try { mc.imageModeToggle.setSelected(true); Thread.sleep(500);
-            MainController.PreviewItem pvTarget = mc.allVisibleItems().stream()
+            PreviewItem pvTarget = mc.allVisibleItems().stream()
                     .filter(i -> "t01.mht".equals(i.name)).findFirst()
                     .orElseThrow(() -> new IllegalStateException("找不到 t01.mht"));
             mc.fileListView.getSelectionModel().select(pvTarget); Thread.sleep(300);
@@ -1145,11 +1147,11 @@ public void runAutomatedTests() {
             }
             Thread.sleep(200); pumpFxEvents();
             Object selObj = mc.fileListView.getSelectionModel().getSelectedItem();
-            if (!(selObj instanceof MainController.PreviewItem pi) || pi.cachedThumbs == null
+            if (!(selObj instanceof PreviewItem pi) || pi.cachedThumbs == null
                     || pi.cachedThumbs.isEmpty()) {
                 throw new IllegalStateException("预览后应有缩略图（来自磁盘图片解码）");
             }
-            MainController.PreviewItem previewed = (MainController.PreviewItem) selObj;
+            PreviewItem previewed = (PreviewItem) selObj;
             // C1：缓存目录含 meta.json + images/ + .complete；C2：内存只留 meta + 缩略图
             AppConfig pvParams = mc.effectiveForObject(pi);
             if (pvParams == null) {
@@ -1192,7 +1194,7 @@ public void runAutomatedTests() {
 
         // 预览缓存生命周期（需求 2 会话 9）：参数失效 C3 / 移除清理 C7 / 退出清理 C8
         try { mc.imageModeToggle.setSelected(true); Thread.sleep(300);
-            MainController.PreviewItem target = mc.allVisibleItems().stream()
+            PreviewItem target = mc.allVisibleItems().stream()
                     .filter(i -> "i01.mht".equals(i.name)).findFirst()
                     .orElseThrow(() -> new IllegalStateException("找不到 i01.mht"));
             // C3：全局参数变化 → 全部缓存目录删除（含此前图片预览块落盘的目录）
