@@ -485,6 +485,11 @@ class ImageBatchProcessorTest {
                 "两棵输出树必须完全一致（文件名 + 字节）");
     }
 
+    /** 供断言失败信息展示实际产物树（相对路径 + 哈希），便于定位"到底产出了什么" */
+    private static String describeTree(Path root) throws Exception {
+        return String.join(" | ", snapshotTree(root));
+    }
+
     private static void deleteRecursivelyIfExists(Path p) throws Exception {
         if (!Files.exists(p)) {
             return;
@@ -771,10 +776,23 @@ class ImageBatchProcessorTest {
         Path out2 = Files.createDirectories(tmp.resolve("out2"));
         AppConfig config = preloadSeparateConfig(source);
 
-        // 基线：无缓存（data-URI-only 文件的「无图片内容」跳过为既有冻结语义，H10 新发现 2）
+        // 步骤 7 行为变更（有意）：纯 Data URI 的 MHT 原先被「无图片内容」快速检查误判为 SKIPPED
+        // （cidMap/locationDataMap 双空，而 Data URI 图片本来就没有这两个标识）→ 现在正常提取为 SUCCESS。
+        // 期望值由"冻结缺陷"改为"正确行为"，对应基线 image-data-uri.{zh,en}.json 同步更新。
         BatchProcessor.ProcessStats base = new ImageBatchProcessor(config).process(
                 BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out1.toString(), null, null);
         assertEquals(1, base.getFileResults().size(), base.toString());
+        assertEquals(ExtractOutcome.SUCCESS, base.getFileResults().get(0).outcome(),
+                "纯 Data URI 的 MHT 现在应成功提取（修复前是 SKIPPED）");
+        // 产物证据：应恰好落盘一张 .png，且内容是真 PNG（魔数 89 50 4E 47），字节数 > 0
+        Path produced = out1.resolve("a").resolve("image_0.png");
+        assertTrue(Files.exists(produced), "应产出 data URI 解出的图片：" + produced
+                + "（实际目录树：" + describeTree(out1) + "）");
+        byte[] png = Files.readAllBytes(produced);
+        assertTrue(png.length > 0, "产出的图片不应为空");
+        assertTrue(png.length >= 4 && (png[0] & 0xFF) == 0x89 && (png[1] & 0xFF) == 0x50
+                        && (png[2] & 0xFF) == 0x4E && (png[3] & 0xFF) == 0x47,
+                "产出的图片应是合法 PNG（魔数校验）");
 
         // 预览对 data-URI-only 文件落盘的缓存（0 图）→ 未命中 → 全量路径，结果一致
         PreviewCacheLifecycle lifecycle = newCacheLifecycle();
@@ -785,7 +803,9 @@ class ImageBatchProcessorTest {
         assertEquals(base.getFileResults().get(0).outcome(), cached.getFileResults().get(0).outcome(),
                 "有 0 图缓存时必须与无缓存结果一致");
         assertTreeEquals(out1, out2);
-        assertTrue(lifecycle.store().load(key).isPresent(), "SKIPPED 不触发规则 (b)，缓存保留可重试（C10）");
+        // SUCCESS 会触发规则 (b)：提取完成后删除该项目缓存（C6）；缓存保留可重试仅适用于 SKIPPED/FAILED（C10）
+        assertFalse(lifecycle.store().load(key).isPresent(),
+                "SUCCESS 触发规则 (b)，缓存应被删除");
     }
 
     @Test

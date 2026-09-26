@@ -118,14 +118,12 @@ public final class BaselineCases {
         out.add(new Case("image-separate", List.of("single-image.mht", "multi-image.mht"),
                 i1, true, false, "单独输出（cid + Content-Location 两种来源）", List.of()));
 
-        // ---------- ★ 会话 18 新发现缺陷的隔离用例 ----------
+        // ---------- 曾登记为缺陷的隔离用例（步骤 7 已修复） ----------
         AppConfig i1b = imageConfig();
         out.add(new Case("image-data-uri", List.of("data-uri.mht"),
-                i1b, true, false, "纯 Data URI 图片（无 cid/Content-Location part）",
-                List.of("★会话 18 发现（登记不改）：ImageBatchProcessor:324「无图片内容」快速检查"
-                        + "（cidMap 与 locationDataMap 双空）在提取前直接 SKIPPED，"
-                        + "Data URI 提取代码从未被执行 → 纯 Data URI 的 MHT 永远提取不到图片。"
-                        + "**这是缺陷，不是期望值**")));
+                i1b, true, false,
+                "纯 Data URI 图片（无 cid/Content-Location part）—— 原为缺陷隔离用例，步骤 7 已修复",
+                List.of()));
 
         AppConfig i1c = imageConfig();
         out.add(new Case("image-data-uri-mixed", List.of("data-uri-mixed.mht"),

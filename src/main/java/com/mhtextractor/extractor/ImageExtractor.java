@@ -81,11 +81,14 @@ public class ImageExtractor extends BaseExtractor {
         boolean noRegionLimit = (contentLimitStart == null || contentLimitEnd == null);
 
         if (noRegionLimit) {
-            // 没有区域限定：直接使用 imageInfoList（MHT 中的声明顺序）
-            if (parsedMht.getImageInfoList() == null || parsedMht.getImageInfoList().isEmpty()) {
-                if (progressCallback != null) progressCallback.accept(1.0);
-                return Collections.emptyList();
-            }
+            // 没有区域限定：imageInfoList（MHT 声明顺序）+ HTML 内嵌 Data URI 图片。
+            //
+            // 修复（步骤 7）：原实现在 imageInfoList 为 null/空时**直接返回空列表**，
+            // 于是「纯 Data URI 的 MHT」永远提取不到图片 —— 这类文件本就没有图片 part，
+            // imageInfoList 必然为空，而 Data URI 提取恰好写在 extractAllImagesInOrder 内部，
+            // 成了只在"有图片 part"时才可达的死代码。
+            // 现在统一委托给 extractAllImagesInOrder：它内部先遍历 imageInfoList（空则跳过），
+            // 再提取 Data URI。**注意不可在此处再调一次 extractDataUriImages**，否则会重复提取。
             return extractAllImagesInOrder(progressCallback);
         }
 

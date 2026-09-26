@@ -320,8 +320,13 @@ public class ImageBatchProcessor extends BatchProcessor {
                         continue;
                     }
 
-                    // 快速检查：无任何图片资源
-                    if (parsed.getCidMap().isEmpty() && parsed.getLocationDataMap().isEmpty()) {
+                    // 快速检查：无任何图片资源。
+                    // 修复（步骤 7）：原判据只看 cidMap / locationDataMap，漏了 HTML 内嵌的 Data URI 图片
+                    // （`<img src="data:...">` 既无 Content-ID 也无 Content-Location），
+                    // 于是「纯 Data URI 的 MHT」在提取**之前**就被判为"无图片内容"而 SKIPPED。
+                    // 现补上 Data URI 判据，只有三者皆空才真正跳过。
+                    if (parsed.getCidMap().isEmpty() && parsed.getLocationDataMap().isEmpty()
+                            && !hasDataUriImages(parsed.getHtmlContent())) {
                         log.info("[跳过] 无图片内容：{}", name);
                         stats.incrementSkip();
                         stats.addSkipDetail(I18n.get("extract.fileSkippedNoImages", "file", name));
@@ -602,6 +607,25 @@ public class ImageBatchProcessor extends BatchProcessor {
      * （回全量路径，结果与无缓存时完全一致）。
      *
      * @return 命中；任何不满足（含 IO 失败、meta 损坏）→ null（走原路径）
+     */
+    /**
+     * HTML 里是否存在 Data URI 形式的图片引用（{@code <img src="data:...">}）。
+     *
+     * <p>用于"无图片内容"的快速判据（步骤 7 修复）：Data URI 图片既无 {@code Content-ID} 也无
+     * {@code Content-Location}，因此只看 {@code cidMap}/{@code locationDataMap} 会把
+     * "纯 Data URI 的 MHT"误判为空。这里用**宽松的字符串判据**（只做快速筛查，不是提取判据）——
+     * 精确判据仍是 {@code ImageExtractor} 里基于 Jsoup 的 {@code img[src^=data:]}；
+     * 宽松只会让极少数文件多走一次完整提取（其结果是 0 张图），不会漏图。</p>
+     */
+    private static boolean hasDataUriImages(String html) {
+        if (html == null || html.isEmpty()) {
+            return false;
+        }
+        return html.toLowerCase(java.util.Locale.ROOT).contains("src=\"data:");
+    }
+
+    /**
+     * 预览缓存查找（未命中/不可用返回 null；命中返回键与元数据）。
      */
     private CacheHit lookupPreviewCache(MhtFileInfo fileInfo) {
         if (previewCache == null) {

@@ -133,4 +133,65 @@ class ImageExtractorTest {
         }
         assertTrue(ex.getLastWarnings().isEmpty());
     }
+
+    // ==================== 步骤 7 修复：纯 Data URI 的 MHT ====================
+
+    /** 1×1 PNG 的 base64（与测试夹具同源形态） */
+    private static final String PNG_B64 =
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+    private static String dataUriHtml() {
+        return "<html><body><img src=\"data:image/png;base64," + PNG_B64 + "\"></body></html>";
+    }
+
+    /**
+     * 修复点（步骤 7）：{@code imageInfoList} 为**空**时也必须提取 HTML 内嵌的 Data URI 图片。
+     *
+     * <p>修复前的实现：{@code noRegionLimit} 分支在 {@code imageInfoList} 为 null/空时直接
+     * {@code return Collections.emptyList()} —— 而纯 Data URI 的 MHT 本来就没有图片 part，
+     * {@code imageInfoList} 必然为空，于是 Data URI 提取成了**不可达的死代码**，
+     * 表现为"有图却报跳过 / 一张都提不出来"。</p>
+     */
+    @Test
+    void dataUriImagesAreExtractedWhenImageInfoListIsEmpty() {
+        ImageExtractor ex = noRegion(dataUriHtml(), List.of());
+        List<ImageExtractor.ImageData> out = ex.extractImages();
+
+        assertEquals(1, out.size(), "空 imageInfoList 时仍应提取出 Data URI 图片");
+        ImageExtractor.ImageData d = out.get(0);
+        assertTrue(d.getFilename().startsWith("image_0."), "命名应为 image_0.<ext>，实际 " + d.getFilename());
+        assertTrue(d.getFilename().endsWith(".png"), "应据魔数识别为 png，实际 " + d.getFilename());
+        assertTrue(d.getData().length > 0, "解出的字节不应为空");
+        // 魔数校验：确认真的解出了 PNG，而不是把 base64 文本当字节
+        assertEquals((byte) 0x89, d.getData()[0]);
+        assertEquals((byte) 0x50, d.getData()[1]);
+        assertEquals((byte) 0x4E, d.getData()[2]);
+        assertEquals((byte) 0x47, d.getData()[3]);
+    }
+
+    /** 回归：{@code imageInfoList} 为空且 HTML 里没有 Data URI 时，仍应返回空列表（不得凭空造图） */
+    @Test
+    void emptyImageInfoListWithoutDataUriStillYieldsNothing() {
+        ImageExtractor ex = noRegion(HTML, List.of());
+        assertTrue(ex.extractImages().isEmpty(), "无图片 part 且无 Data URI 时应为空");
+    }
+
+    /**
+     * 回归：图片 part **与** Data URI 同时存在时，两者都要提取，且 Data URI **不得重复提取**。
+     *
+     * <p>这个用例针对我在修复过程中犯的一个错：在 {@code noRegionLimit} 分支额外调了一次
+     * {@code extractDataUriImages}，而 {@code extractAllImagesInOrder} 内部已经调过 ——
+     * 结果是每张 Data URI 图片被提取两遍（产出 image_1/image_3 内容相同的重复文件）。
+     * 该缺陷被基线比对抓到（data-uri-mixed 产物多出两项）。</p>
+     */
+    @Test
+    void dataUriIsNotDoubleExtractedWhenImagePartsExist() {
+        List<MimeParser.ImageInfo> images = List.of(img("img001"));
+        ImageExtractor ex = noRegion(dataUriHtml(), images);
+        List<ImageExtractor.ImageData> out = ex.extractImages();
+
+        assertEquals(2, out.size(), "1 张图片 part + 1 张 Data URI = 2，不得重复：实际 " + filenames(out));
+        long pngCount = out.stream().filter(d -> d.getFilename().endsWith(".png")).count();
+        assertEquals(1, pngCount, "Data URI 的 PNG 只能出现一次");
+    }
 }

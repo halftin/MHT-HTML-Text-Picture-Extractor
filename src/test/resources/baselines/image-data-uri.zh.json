@@ -4,17 +4,19 @@
   "imageMode": true,
   "mergedOutput": false,
   "fixtures": ["data-uri.mht"],
-  "note": "纯 Data URI 图片（无 cid/Content-Location part）",
-  "knownIssues": ["★会话 18 发现（登记不改）：ImageBatchProcessor:324「无图片内容」快速检查（cidMap 与 locationDataMap 双空）在提取前直接 SKIPPED，Data URI 提取代码从未被执行 → 纯 Data URI 的 MHT 永远提取不到图片。**这是缺陷，不是期望值**"],
+  "note": "纯 Data URI 图片（无 cid/Content-Location part）—— 原为缺陷隔离用例，步骤 7 已修复",
+  "knownIssues": [],
   "stats": {
     "total": 1,
-    "success": 0,
+    "success": 1,
     "fail": 0,
-    "skip": 1,
+    "skip": 0,
     "warn": 0,
-    "outcomes": ["data-uri.mht=SKIPPED"]
+    "outcomes": ["data-uri.mht=SUCCESS"]
   },
   "products": [
+    {"path": "data-uri/image_0.png", "sha256": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443"},
+    {"path": "data-uri/image_1.gif", "sha256": "ef1955ae757c8b966c83248350331bd3a30f658ced11f387f8ebf05ab3368629"}
   ],
   "contentDigests": {
   }
