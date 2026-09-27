@@ -13,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.File;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -32,13 +31,6 @@ public class TextBatchProcessor extends BatchProcessor {
     }
 
     /**
-     * 合并模式：所有文件输出到一个 TXT（支持进度回调）
-     */
-    public ProcessStats processMerged(String inputFolder, String outputTxtPath, ProgressCallback callback) {
-        return processMerged(collectMhtFiles(inputFolder), outputTxtPath, callback, Collections.emptyMap());
-    }
-
-    /**
      * 合并模式（按传入顺序处理，支持每文件覆盖项）
      */
     public ProcessStats processMerged(List<MhtFileInfo> orderedFiles, String outputTxtPath,
@@ -54,14 +46,7 @@ public class TextBatchProcessor extends BatchProcessor {
             return stats;
         }
 
-        return processFiles(orderedFiles, stats, (i, parsed) -> outputTxtPath, overrides);
-    }
-
-    /**
-     * 单独模式：每个文件输出到独立 TXT（支持进度回调）
-     */
-    public ProcessStats processSeparate(String inputFolder, String outputFolder, ProgressCallback callback) {
-        return processSeparate(collectMhtFiles(inputFolder), outputFolder, callback, Collections.emptyMap());
+        return processFiles(orderedFiles, stats, (_, _) -> outputTxtPath, overrides);
     }
 
     /**

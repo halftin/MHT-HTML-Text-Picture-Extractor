@@ -34,7 +34,7 @@ public final class I18n {
 
     private static final String BASE_NAME = "i18n/messages";
 
-    private static final Pattern PLACEHOLDER = Pattern.compile("\\{(\\w+)\\}");
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{(\\w+)}");
 
     private static volatile ResourceBundle bundle = load(Locale.getDefault());
     private static volatile Locale current = Locale.getDefault();

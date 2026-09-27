@@ -137,41 +137,6 @@ public class ImageWriter {
     }
 
     /**
-     * 批量保存图片到指定目录（顺序保存）
-     *
-     * @param images 图片列表
-     * @param outputDir 输出目录
-     * @param fallbackExt 默认扩展名
-     * @param rename 是否启用批量重命名
-     * @return 保存成功的数量
-     */
-    public static int saveImages(ImageSource images, String outputDir,
-                                 String fallbackExt, boolean rename) {
-        int[] counter = {0};
-        int saved = 0;
-        for (int i = 0; i < images.size(); i++) {
-            String result = saveImage(images.get(i), outputDir, fallbackExt, rename, counter, "");
-            if (result != null) saved++;
-        }
-        return saved;
-    }
-
-    /**
-     * 顺序保存图片
-     *
-     * @param images 图片列表
-     * @param outputDir 输出目录
-     * @param fallbackExt 默认扩展名
-     * @param rename 是否启用批量重命名
-     * @param filePrefix 文件名前缀
-     * @return 保存成功的数量
-     */
-    public static int saveImagesConcurrent(ImageSource images, String outputDir,
-                                           String fallbackExt, boolean rename, String filePrefix) {
-        return saveImagesConcurrent(images, outputDir, fallbackExt, rename, filePrefix, null);
-    }
-
-    /**
      * 顺序保存图片（带进度回调）
      *
      * @param images 图片列表
@@ -196,23 +161,6 @@ public class ImageWriter {
             }
         }
         return saved;
-    }
-
-    /**
-     * 顺序保存图片（全局计数器版本 - 流式合并模式专用）
-     *
-     * @param images 图片列表
-     * @param outputDir 输出目录
-     * @param fallbackExt 默认扩展名
-     * @param rename 是否启用批量重命名
-     * @param filePrefix 文件名前缀（用于不重命名模式区分不同源文件）
-     * @param globalIndex 全局计数器（跨文件递增）
-     * @return 保存成功的数量
-     */
-    public static int saveImagesWithGlobalIndex(ImageSource images, String outputDir,
-                                                String fallbackExt, boolean rename, String filePrefix,
-                                                AtomicInteger globalIndex) {
-        return saveImagesWithGlobalIndex(images, outputDir, fallbackExt, rename, filePrefix, globalIndex, null);
     }
 
     /**

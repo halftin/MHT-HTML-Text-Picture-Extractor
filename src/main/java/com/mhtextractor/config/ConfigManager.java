@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,9 +33,10 @@ public class ConfigManager {
     }
 
     public ConfigManager() {
-        File configDir = new File(CONFIG_DIR);
-        if (!configDir.exists()) {
-            configDir.mkdirs();
+        try {
+            Files.createDirectories(Path.of(CONFIG_DIR));
+        } catch (IOException e) {
+            log.warn("创建配置目录失败（{}）：{}，后续保存配置可能失败", CONFIG_DIR, e.getMessage());
         }
     }
 
@@ -48,8 +51,7 @@ public class ConfigManager {
         if (!configFile.exists()) {
             throw new IOException("Configuration file not found: " + configFile.getAbsolutePath());
         }
-        AppConfig config = objectMapper.readValue(configFile, AppConfig.class);
-        return config;
+        return objectMapper.readValue(configFile, AppConfig.class);
     }
 
     public List<String> getConfigNames() {

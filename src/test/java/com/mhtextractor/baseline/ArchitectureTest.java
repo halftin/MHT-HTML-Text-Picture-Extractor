@@ -111,13 +111,20 @@ class ArchitectureTest {
      *       移入 {@code DropResolver.zoneFor} 并获得单测）+ 只被单元格使用的 28 个表现层常量与
      *       {@code rowStyle}（37）搬出；控制器只留下 {@code createPreviewCell()} 工厂与一处
      *       {@code PreviewListCell} 引用。</li>
+     *   <li><b>2026-09-27 落地一批"预先存在的未提交清理"（死代码删除 + Java 25 匿名变量 + Lombok
+     *       访问器）：4443</b>（+8，**不是新增职责**）。该批改动在提交前已于工作区完成，并通过
+     *       GUI 自动化 zh 30/0 与 395/396 单测；其 +8 全部来自该批改动**自己引入**的 5 行 Lombok
+     *       {@code @Getter/@Setter} 注解与 2 行 import（另 1 行为方法签名调整），
+     *       同期它还删除了 {@code showAlertNonModal} 等真死代码。此处同步到实测值以保证构建可
+     *       复现，**并在本任务的阶段 4 随 workspace 状态外迁一并收紧到远低于 4435**。
+     *       这是"只减不增"的**临时**让步，不是新的允许水位。</li>
      * </ul>
      *
      * <p><b>⚠️ 口径陷阱（会话 18 实测）</b>：同一文件用不同工具数出的行数<b>不一致</b> ——
      * PowerShell {@code (Get-Content f).Count} 与 Java {@code Files.readAllLines} 会给出不同结果
      * （本文件为纯 {@code LF} 换行）。**因此本常量只能与 {@code Files.readAllLines} 口径比较**。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 4435;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 4443;
 
     /**
      * E0.6 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限。

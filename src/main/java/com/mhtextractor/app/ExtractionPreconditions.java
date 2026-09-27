@@ -26,9 +26,9 @@ public final class ExtractionPreconditions {
             String inputFolder,
             String outputFolder,
             boolean inputFolderIsDirectory,
-            /** 列表中的条目总数（含被移除的） */
+            /* 列表中的条目总数（含被移除的） */
             int totalItems,
-            /** 当前可见（未被移除）的条目数 */
+            /* 当前可见（未被移除）的条目数 */
             int visibleItems) {
     }
 

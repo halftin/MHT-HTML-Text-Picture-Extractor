@@ -13,7 +13,6 @@ import lombok.Data;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.ArrayDeque;
@@ -296,7 +295,7 @@ public class MimeParser {
         String filename = null;
 
         if (part instanceof MimePart) {
-            String[] cids = ((MimePart) part).getHeader("Content-ID");
+            String[] cids = part.getHeader("Content-ID");
             if (cids != null && cids.length > 0) {
                 contentId = cids[0];
                 if (contentId.startsWith("<") && contentId.endsWith(">")) {
@@ -304,7 +303,7 @@ public class MimeParser {
                 }
             }
 
-            String[] locations = ((MimePart) part).getHeader("Content-Location");
+            String[] locations = part.getHeader("Content-Location");
             if (locations != null && locations.length > 0) {
                 contentLocation = locations[0];
             }
@@ -354,7 +353,7 @@ public class MimeParser {
 
         if (part instanceof MimePart) {
             name = extractMimeParam(part.getContentType(), "name");
-            if (name != null) return name;
+            return name;
         }
         return null;
     }

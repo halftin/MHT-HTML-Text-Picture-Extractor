@@ -99,11 +99,4 @@ public class Archiver {
         }
     }
 
-    /**
-     * 生成归档输出路径
-     */
-    public static String generateArchivePath(String outputFolder, String baseName, boolean isCbz) {
-        String ext = isCbz ? ".cbz" : ".zip";
-        return Paths.get(outputFolder, baseName + ext).toString();
-    }
 }

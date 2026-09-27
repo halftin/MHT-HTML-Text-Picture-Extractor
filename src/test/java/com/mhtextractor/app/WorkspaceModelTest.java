@@ -217,7 +217,7 @@ class WorkspaceModelTest {
         WorkspaceModel m = new WorkspaceModel();
         m.addItems(List.of(item("a.mht")));
         // 手动压入一条参数类记录（本模型尚未实现）
-        m.pushUnsupportedForTest(com.mhtextractor.util.UndoManager.RecordType.PARAM_SET);
+        m.pushUnsupportedForTest();
 
         int depthBefore = m.undoDepth();
         assertFalse(m.undo(), "未支持的类型应返回 false");

@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.util.Locale;
+import java.util.Objects;
 
 @Slf4j
 public class App extends Application {
@@ -58,7 +59,7 @@ public class App extends Application {
         Application.setUserAgentStylesheet(new NordLight().getUserAgentStylesheet());
 
         // 注入自定义样式到所有窗口（包括 Dialog/Alert 创建的独立 Scene）
-        customCssUrl = getClass().getResource("/custom.css").toExternalForm();
+        customCssUrl = Objects.requireNonNull(getClass().getResource("/custom.css")).toExternalForm();
         scene.getStylesheets().add(customCssUrl);
         injectStylesToAllWindows();
 
@@ -155,7 +156,7 @@ public class App extends Application {
         if (s == null) {
             // 场景可能稍后设置，监听场景变化
             javafx.beans.value.ChangeListener<Scene>[] holder = new javafx.beans.value.ChangeListener[1];
-            holder[0] = (obs, oldS, newS) -> {
+            holder[0] = (_, _, newS) -> {
                 if (newS != null) {
                     if (!newS.getStylesheets().contains(customCssUrl)) {
                         newS.getStylesheets().add(customCssUrl);

@@ -29,7 +29,7 @@ import java.util.stream.Stream;
  * }</pre>
  */
 @Slf4j
-public class PreviewCacheStore {
+public record PreviewCacheStore(Path root) {
 
     public static final String META_FILE_NAME = "meta.json";
     public static final String IMAGES_DIR_NAME = "images";
@@ -47,21 +47,15 @@ public class PreviewCacheStore {
         void write(Path imagesDir) throws IOException;
     }
 
-    private final Path root;
-
-    public PreviewCacheStore(Path root) {
-        this.root = root.toAbsolutePath().normalize();
-    }
-
-    public Path root() {
-        return root;
+    /** 紧凑构造器：注入的根目录统一规范化为绝对路径（P8） */
+    public PreviewCacheStore {
+        root = root.toAbsolutePath().normalize();
     }
 
     /** 某 key 对应的缓存目录（不保证存在） */
     public Path dirFor(PreviewCacheKey key) {
         return root.resolve(key.toDirName());
     }
-
     /**
      * 原子写入（P11）：内容与 meta 全部写入 {@code <key>.tmp/} → 改名为 {@code <key>/} → 最后写 .complete。
      * 半成品永远不叫正式名；崩溃残留由 {@link #cleanupOrphans()} 兜底清理。返回最终缓存目录。

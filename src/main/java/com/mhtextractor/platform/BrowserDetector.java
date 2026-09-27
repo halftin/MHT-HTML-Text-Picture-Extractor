@@ -2,8 +2,6 @@ package com.mhtextractor.platform;
 
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
@@ -46,8 +44,7 @@ final class BrowserDetector {
     /** 按序探测系统默认浏览器 exe：注册表 UserChoice → http 协议命令 → 固定路径 → where.exe */
     static Optional<String> detectDefaultBrowserExe() {
         String progId = readRegistryValue(
-                "HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice",
-                "ProgId");
+        );
         if (progId != null && !progId.isEmpty()) {
             String exe = exeFromRegistryCommand("HKCR\\" + progId + "\\shell\\open\\command");
             if (exe != null) {
@@ -74,9 +71,9 @@ final class BrowserDetector {
     }
 
     /** 读取注册表命名值（REG_SZ），失败返回 null */
-    private static String readRegistryValue(String key, String valueName) {
+    private static String readRegistryValue() {
         try {
-            Process p = new ProcessBuilder("reg", "query", key, "/v", valueName)
+            Process p = new ProcessBuilder("reg", "query", "HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice", "/v", "ProgId")
                     .redirectErrorStream(true).start();
             if (!p.waitFor(10, TimeUnit.SECONDS)) {
                 p.destroyForcibly();
@@ -97,7 +94,7 @@ final class BrowserDetector {
                 }
             }
         } catch (Exception e) {
-            log.debug("读取注册表失败：{}", key, e);
+            log.debug("读取注册表失败：{}", "HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice", e);
         }
         return null;
     }

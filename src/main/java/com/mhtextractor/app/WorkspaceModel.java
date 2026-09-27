@@ -6,7 +6,6 @@ import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.UndoManager;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -37,7 +36,7 @@ import java.util.function.Predicate;
  */
 public final class WorkspaceModel {
 
-    /** 顶层顺序（含组条目）；被移除的条目仍留在其组/顶层中，由 {@link #removed()} 谓词过滤 */
+    /** 顶层顺序（含组条目）；被移除的条目仍留在其组/顶层中，由  谓词过滤 */
     private final List<Object> topLevel = new ArrayList<>();
 
     private final UndoManager<PreviewItem> undoManager = new UndoManager<>();
@@ -206,7 +205,7 @@ public final class WorkspaceModel {
             t.parentGroup = g;
         }
 
-        int at = Math.max(0, Math.min(insertAt, topLevel.size()));
+        int at = Math.min(insertAt, topLevel.size());
         topLevel.add(at, g);
 
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.GROUP,
@@ -382,7 +381,7 @@ public final class WorkspaceModel {
     // ==================== 内部工具 ====================
 
     /** 默认组名前缀（"组"，与 zh bundle 的 core.groupDefault 一致；en 为 "Group"） */
-    protected String defaultGroupName() {
+    private String defaultGroupName() {
         return "组";
     }
 
@@ -419,9 +418,7 @@ public final class WorkspaceModel {
         for (Object o : topLevel) {
             if (o instanceof GroupItem<?> raw) {
                 @SuppressWarnings("unchecked") GroupItem<PreviewItem> g = (GroupItem<PreviewItem>) raw;
-                if (g.getMembers().contains(t)) {
-                    g.getMembers().remove(t);
-                }
+                g.getMembers().remove(t);
             }
         }
     }
@@ -446,18 +443,13 @@ public final class WorkspaceModel {
         return out;
     }
 
-    /** 供子类/测试读取的顶层可变视图（刻意不暴露为 public，避免绕过撤销栈） */
-    List<Object> mutableTopLevel() {
-        return topLevel;
-    }
-
     /**
      * 测试支撑：压入一条"本模型尚未支持"的撤销记录，用于验证
      * {@link #undo()} 对未支持类型的行为（返回 false 且原样压回）。
      *
      * <p>仅包级可见，生产路径不应调用。</p>
      */
-    void pushUnsupportedForTest(UndoManager.RecordType type) {
-        undoManager.push(new UndoManager.Record<>(type, List.of()));
+    void pushUnsupportedForTest() {
+        undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of()));
     }
 }

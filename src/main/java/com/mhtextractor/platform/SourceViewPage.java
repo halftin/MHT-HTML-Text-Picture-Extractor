@@ -190,10 +190,9 @@ final class SourceViewPage {
                 if (nameEnd < tag.length() && (tag.charAt(nameEnd) == '"' || tag.charAt(nameEnd) == '\'')) {
                     char q = tag.charAt(nameEnd);
                     int valStart = nameEnd;
-                    nameEnd++;
-                    while (nameEnd < tag.length() && tag.charAt(nameEnd) != q) {
+                    do {
                         nameEnd++;
-                    }
+                    } while (nameEnd < tag.length() && tag.charAt(nameEnd) != q);
                     if (nameEnd < tag.length()) {
                         nameEnd++;
                     }

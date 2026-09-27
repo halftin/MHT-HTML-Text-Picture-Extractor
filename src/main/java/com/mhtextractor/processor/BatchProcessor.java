@@ -220,8 +220,7 @@ public abstract class BatchProcessor {
      * 获取输出目录名
      */
     protected String getOutputDirName(String mhtFileName) {
-        String base = mhtFileName.replaceAll("\\.(?i)(mht|mhtml)$", "");
-        return base;
+        return mhtFileName.replaceAll("\\.(?i)(mht|mhtml)$", "");
     }
 
     /**

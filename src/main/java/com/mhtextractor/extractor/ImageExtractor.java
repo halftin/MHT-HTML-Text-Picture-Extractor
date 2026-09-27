@@ -220,11 +220,11 @@ public class ImageExtractor extends BaseExtractor {
             Elements imgs = doc.select("img[src]");
             for (var img : imgs) {
                 String src = img.attr("src");
-                if (src != null && !src.isEmpty()) {
+                if (!src.isEmpty()) {
                     refs.add(src);
                     if (src.startsWith("cid:")) refs.add(src.substring(4));
                     String dataCid = img.attr("data-cid");
-                    if (dataCid != null && !dataCid.isEmpty()) refs.add(dataCid);
+                    if (!dataCid.isEmpty()) refs.add(dataCid);
                 }
             }
         } catch (Exception e) {
@@ -295,7 +295,7 @@ public class ImageExtractor extends BaseExtractor {
                 || contentLimitStart.isEmpty() || contentLimitEnd.isEmpty()) return html;
         String result = HtmlUtils.extractRegion(html, contentLimitStart, contentLimitEnd, lastWarnings);
         if (result == null) {
-            logger.warn("[警告] {}", lastWarnings.get(lastWarnings.size() - 1));
+            logger.warn("[警告] {}", lastWarnings.getLast());
         }
         return result;
     }
@@ -331,7 +331,7 @@ public class ImageExtractor extends BaseExtractor {
             Elements imgs = doc.select("img[src^=data:]");
             for (var img : imgs) {
                 String src = img.attr("src");
-                if (src != null && !src.isEmpty()) {
+                if (!src.isEmpty()) {
                     byte[] data = SanitizeUtils.decodeDataUri(src);
                     if (data != null) {
                         String ext = SanitizeUtils.getExtensionFromUrl(src);

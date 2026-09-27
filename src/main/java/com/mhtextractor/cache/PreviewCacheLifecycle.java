@@ -1,5 +1,6 @@
 package com.mhtextractor.cache;
 
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -47,7 +48,11 @@ public class PreviewCacheLifecycle {
     private final AtomicLong lastReportedStep = new AtomicLong(0);
     /** 最近一次检查观测到的总字节数（供 UI 换算「当前实际值」；checkSizeAlert 写，hook 内同步读） */
     private volatile long lastObservedTotalBytes = 0;
-    /** 跨台阶回调：参数 = 已跨越的台阶序号（默认台阶下 1=10GiB、2=20GiB…）；null = 未注册（只推进台阶） */
+    /** 跨台阶回调：参数 = 已跨越的台阶序号（默认台阶下 1=10GiB、2=20GiB…）；null = 未注册（只推进台阶）
+     * -- SETTER --
+     * 注册磁盘占用提醒回调（会话 12）：跨台阶时在写盘线程同步调用；传 null 卸载。只允许注册一个
+     */
+    @Setter
     private volatile IntConsumer sizeAlertHook = null;
     /** 每项目写锁注册表（§2.6(6)）：key = 规范化绝对路径 */
     private final ConcurrentHashMap<String, Object> writeLocks = new ConcurrentHashMap<>();
@@ -68,7 +73,7 @@ public class PreviewCacheLifecycle {
 
     /** 取某项目的写锁（§2.6(6)）：同一路径恒同一把锁 */
     public Object lockFor(String absolutePath) {
-        return writeLocks.computeIfAbsent(normalizePath(absolutePath), p -> new Object());
+        return writeLocks.computeIfAbsent(normalizePath(absolutePath), _ -> new Object());
     }
 
     /** 规则 (a)：该项目提取参数变化 → 删除该项目全部缓存目录（含历史指纹的残留目录） */
@@ -138,11 +143,6 @@ public class PreviewCacheLifecycle {
     }
 
     // ==================== 磁盘占用提醒（会话 12） ====================
-
-    /** 注册磁盘占用提醒回调（会话 12）：跨台阶时在写盘线程同步调用；传 null 卸载。只允许注册一个 */
-    public void setSizeAlertHook(IntConsumer hook) {
-        this.sizeAlertHook = hook;
-    }
 
     /** 最近一次台阶检查观测到的总字节数（供 UI 换算「当前实际 GiB」；无任何检查时为 0） */
     public long lastObservedTotalBytes() {

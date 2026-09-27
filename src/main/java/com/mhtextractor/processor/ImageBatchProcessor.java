@@ -136,8 +136,8 @@ public class ImageBatchProcessor extends BatchProcessor {
             var mh = new MergedOutputHandler();
             // 与流式模式一致：仅当第一个文件本身解析成功才用其标题，否则回退默认目录名
             MimeParser.ParsedMht firstParsed = null;
-            if (!preload.parsedList().isEmpty() && preload.parsedList().get(0).fileIndex() == 0) {
-                firstParsed = preload.parsedList().get(0).parsed();
+            if (!preload.parsedList().isEmpty() && preload.parsedList().getFirst().fileIndex() == 0) {
+                firstParsed = preload.parsedList().getFirst().parsed();
             }
             mergedNameWarning =
                     setupMergedOutput(outputFolder, mhtFiles, firstParsed, stats, mh, mergedOutputName);
@@ -194,7 +194,7 @@ public class ImageBatchProcessor extends BatchProcessor {
             // 预解析第一个文件用于确定合并目录名
             MimeParser.ParsedMht firstParsed = null;
             try {
-                firstParsed = mimeParser.parse(mhtFiles.get(0).getPath(), recursionContinueCallback, null, null);
+                firstParsed = mimeParser.parse(mhtFiles.getFirst().getPath(), recursionContinueCallback, null, null);
             } catch (Exception e) {
                 log.warn("预解析第一个文件失败: {}", e.getMessage(), e);
             }
@@ -236,7 +236,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                     nameWarning = I18n.get("extract.titleFallback", "name", folderName);
                     stats.incrementWarn();
                     stats.addWarnDetail(I18n.get("extract.fileWarned",
-                            "file", mhtFiles.get(0).getName(), "message", nameWarning));
+                            "file", mhtFiles.getFirst().getName(), "message", nameWarning));
                     log.warn("[警告] 未从第一个文件提取到标题，使用默认名称：{}", folderName);
                 }
             }
@@ -343,9 +343,8 @@ public class ImageBatchProcessor extends BatchProcessor {
                             config.getImageRegionStartMarker(), config.getImageRegionEndMarker());
 
                     final int fi = i;
-                    final String fn = name;
                     var images = imageExtractor.extractImages(
-                            progress -> fireProgress(fi + 1, total, fn,
+                            progress -> fireProgress(fi + 1, total, name,
                                     extractionBaseProgress + extractionRange * progress));
                     fileWarnings = new ArrayList<>(imageExtractor.getLastWarnings());
                     reportExtractorWarnings(name, imageExtractor, stats);
@@ -402,7 +401,7 @@ public class ImageBatchProcessor extends BatchProcessor {
 
         // 合并目录命名警告（未从第一个文件提取到标题）并入该文件结果
         if (mergedNameWarning != null) {
-            stats.attachWarningTo(mhtFiles.get(0).getPath(), mergedNameWarning);
+            stats.attachWarningTo(mhtFiles.getFirst().getPath(), mergedNameWarning);
         }
 
         outputHandler.afterAll(outputFolder, stats);
@@ -432,7 +431,7 @@ public class ImageBatchProcessor extends BatchProcessor {
 
     // ==================== 解析策略实现 ====================
 
-    private class PreloadedProvider implements ParsedMhtProvider {
+    private static class PreloadedProvider implements ParsedMhtProvider {
         // provide 的参数是完整文件列表下标：必须按 fileIndex 查表，不能按 entries 循环位置取
         // （解析失败的文件不在表里 → 返回 null，由 processUnified 记 SKIPPED）
         private final Map<Integer, MimeParser.ParsedMht> byFileIndex = new HashMap<>();
@@ -446,7 +445,7 @@ public class ImageBatchProcessor extends BatchProcessor {
         }
 
         @Override
-        public MimeParser.ParsedMht provide(int index) throws Exception {
+        public MimeParser.ParsedMht provide(int index) {
             String failure = loadFailures.get(index);
             if (failure != null) {
                 throw new RuntimeException("加载 MHT 文件失败: " + failure);
@@ -593,20 +592,20 @@ public class ImageBatchProcessor extends BatchProcessor {
 
     // ==================== 工具方法 ====================
 
-    /**
-     * 会话 10：逐文件查预览缓存（P3 按文件、P9 四要素命中）。
-     * 指纹取单元已解析参数（本处理器 config）：OutputUnitPlanner 按「来源 + 参数内容」分桶，
-     * 同一单元内各文件生效图片参数完全相同（H7 收敛），按文件再解析只会得到同一指纹；
-     * 且条目级参数表不在本层可见。预览落盘时用的正是同一生效参数（effectiveForObject），
-     * 因此预览指纹与提取指纹必然同源。
-     *
-     * <p>除 store.load 的四要素 + .complete + 图片文件存在性校验外，额外要求：
-     * 元数据含 ≥1 张图、且 ≥1 张有非空来源标识（cid）。后者等价于未命中路径的
-     * 「无图片内容」快速检查（cidMap/locationDataMap 非空）会放行——只有能证明
-     * 未命中路径会走到提取阶段的缓存才可复用；0 图或全 data URI 的缓存按未命中处理
-     * （回全量路径，结果与无缓存时完全一致）。
-     *
-     * @return 命中；任何不满足（含 IO 失败、meta 损坏）→ null（走原路径）
+    /*
+      会话 10：逐文件查预览缓存（P3 按文件、P9 四要素命中）。
+      指纹取单元已解析参数（本处理器 config）：OutputUnitPlanner 按「来源 + 参数内容」分桶，
+      同一单元内各文件生效图片参数完全相同（H7 收敛），按文件再解析只会得到同一指纹；
+      且条目级参数表不在本层可见。预览落盘时用的正是同一生效参数（effectiveForObject），
+      因此预览指纹与提取指纹必然同源。
+
+      <p>除 store.load 的四要素 + .complete + 图片文件存在性校验外，额外要求：
+      元数据含 ≥1 张图、且 ≥1 张有非空来源标识（cid）。后者等价于未命中路径的
+      「无图片内容」快速检查（cidMap/locationDataMap 非空）会放行——只有能证明
+      未命中路径会走到提取阶段的缓存才可复用；0 图或全 data URI 的缓存按未命中处理
+      （回全量路径，结果与无缓存时完全一致）。
+
+      @return 命中；任何不满足（含 IO 失败、meta 损坏）→ null（走原路径）
      */
     /**
      * HTML 里是否存在 Data URI 形式的图片引用（{@code <img src="data:...">}）。
@@ -715,7 +714,7 @@ public class ImageBatchProcessor extends BatchProcessor {
     public static String determineDefaultFolderName(String inputFolder) {
         if (inputFolder != null && !inputFolder.isEmpty()) {
             String name = new File(inputFolder).getName();
-            if (name != null && !name.isEmpty()) {
+            if (!name.isEmpty()) {
                 return SanitizeUtils.sanitize(name);
             }
         }
@@ -744,7 +743,7 @@ public class ImageBatchProcessor extends BatchProcessor {
             zipOk = Archiver.createZip(sourceDir, Paths.get(outputFolder, baseName + ".zip").toString(), count -> {
                 if (fileIdx >= 0) {
                     fireProgress(fileIdx, totalFiles, fileName,
-                            zipBase + zipRange * ((double) count / Math.max(childCount, 1)));
+                            zipBase + zipRange * ((double) count / childCount));
                 } else {
                     log.debug("ZIP 打包进度：{}/{}", count, childCount);
                 }
@@ -754,7 +753,7 @@ public class ImageBatchProcessor extends BatchProcessor {
             cbzOk = Archiver.createCbz(sourceDir, Paths.get(outputFolder, baseName + ".cbz").toString(), count -> {
                 if (fileIdx >= 0) {
                     fireProgress(fileIdx, totalFiles, fileName,
-                            zipBase + zipRange + cbzRange * ((double) count / Math.max(childCount, 1)));
+                            zipBase + zipRange + cbzRange * ((double) count / childCount));
                 } else {
                     log.debug("CBZ 打包进度：{}/{}", count, childCount);
                 }

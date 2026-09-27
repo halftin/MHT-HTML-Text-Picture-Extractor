@@ -50,7 +50,7 @@ final class CdpClient {
     static boolean openTabAndVerify(String viewSourceUrl) {
         String encoded = URLEncoder.encode(viewSourceUrl, StandardCharsets.UTF_8);
         long deadline = System.currentTimeMillis() + 15_000;
-        String resp = httpRequest("127.0.0.1", CDP_PORT, "PUT", "/json/new?" + encoded);
+        String resp = httpRequest("PUT", "/json/new?" + encoded);
         if (resp != null && resp.startsWith("HTTP/1.1 200")) {
             return true;   // PUT 明确成功
         }
@@ -62,7 +62,7 @@ final class CdpClient {
             return false;  // 实例已退出：PUT 未落地，回退安全
         }
         if (st == TabState.ABSENT) {
-            resp = httpRequest("127.0.0.1", CDP_PORT, "PUT", "/json/new?" + encoded);
+            resp = httpRequest("PUT", "/json/new?" + encoded);
             if (resp != null && resp.startsWith("HTTP/1.1 200")) {
                 return true;
             }
@@ -92,7 +92,7 @@ final class CdpClient {
             return false;
         }
         if (st == TabState.ABSENT) {
-            resp = httpRequest("127.0.0.1", CDP_PORT, "PUT", "/json/new?" + encoded);
+            resp = httpRequest("PUT", "/json/new?" + encoded);
             if (resp != null && resp.startsWith("HTTP/1.1 200")) {
                 return true;
             }
@@ -107,18 +107,18 @@ final class CdpClient {
 
     /** 列表查询指定 URL 的标签页状态；列表拿不到时区分挂起与实例已退出 */
     private static TabState checkTab(String url) {
-        String resp = httpRequest("127.0.0.1", CDP_PORT, "GET", "/json/list");
+        String resp = httpRequest("GET", "/json/list");
         if (resp == null) {
-            return probeVersion(CDP_PORT) == Probe.REFUSED ? TabState.DEAD : TabState.UNKNOWN;
+            return probeVersion() == Probe.REFUSED ? TabState.DEAD : TabState.UNKNOWN;
         }
         return resp.contains("\"url\": \"" + url + "\"") ? TabState.EXISTS : TabState.ABSENT;
     }
 
     /** 长超时（3 秒）的列表查询，放弃前最后一搏 */
     private static TabState checkTabSlow(String url) {
-        String resp = httpRequest("127.0.0.1", CDP_PORT, "GET", "/json/list", 3000);
+        String resp = httpRequest("GET", "/json/list", 3000);
         if (resp == null) {
-            return probeVersion(CDP_PORT) == Probe.REFUSED ? TabState.DEAD : TabState.UNKNOWN;
+            return probeVersion() == Probe.REFUSED ? TabState.DEAD : TabState.UNKNOWN;
         }
         return resp.contains("\"url\": \"" + url + "\"") ? TabState.EXISTS : TabState.ABSENT;
     }
@@ -126,7 +126,7 @@ final class CdpClient {
     /** 按 URL 在列表中找到标签 target id 并关闭（找不到/失败只记 debug，不影响主流程） */
     static void closeRenderTab(String renderUrl) {
         try {
-            String list = httpRequest("127.0.0.1", CDP_PORT, "GET", "/json/list");
+            String list = httpRequest("GET", "/json/list");
             if (list == null) {
                 return;
             }
@@ -143,7 +143,7 @@ final class CdpClient {
             if (idEnd < 0) {
                 return;
             }
-            httpRequest("127.0.0.1", CDP_PORT, "GET", "/json/close/" + list.substring(idStart, idEnd));
+            httpRequest("GET", "/json/close/" + list.substring(idStart, idEnd));
             log.info("已关闭渲染标签页（保留源码标签）");
         } catch (Exception e) {
             log.debug("关闭渲染标签页失败（忽略）：{}", e.getMessage());
@@ -154,19 +154,19 @@ final class CdpClient {
     private enum Probe { OK, REFUSED, HANG }
 
     /** 确保 CDP 调试实例可用：健康即复用；挂起则结束自己的调试实例后重启；拒绝则直接新启动 */
-    static boolean ensureCdpInstance(String exe, int port, String profile, String initialUrl) {
-        Probe p = probeVersion(port);
+    static boolean ensureCdpInstance(String exe, String profile, String initialUrl) {
+        Probe p = probeVersion();
         if (p == Probe.OK) {
             return true;
         }
         if (p == Probe.HANG) {
             // 端口被监听但不应答：占用者若为本应用的调试实例（后台挂起），结束它以便干净重启
-            killListenerOnPort(port, profile);
+            killListenerOnPort(profile);
         }
-        launchCdpInstance(exe, port, profile, initialUrl);
+        launchCdpInstance(exe, profile, initialUrl);
         long deadline = System.currentTimeMillis() + 15_000;
         while (System.currentTimeMillis() < deadline) {
-            if (probeVersion(port) == Probe.OK) {
+            if (probeVersion() == Probe.OK) {
                 return true;
             }
             try {
@@ -176,16 +176,16 @@ final class CdpClient {
                 return false;
             }
         }
-        log.warn("CDP 调试端点 {} 未在 15 秒内就绪，回退源码页", port);
+        log.warn("CDP 调试端点 {} 未在 15 秒内就绪，回退源码页", CdpClient.CDP_PORT);
         return false;
     }
 
     /** 探测 /json/version：OK=200；REFUSED=端口无人监听；HANG=端口已监听但不应答 */
-    private static Probe probeVersion(int port) {
+    private static Probe probeVersion() {
         try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress("127.0.0.1", port), 700);
+            socket.connect(new InetSocketAddress("127.0.0.1", CdpClient.CDP_PORT), 700);
             socket.setSoTimeout(1200);
-            String req = "GET /json/version HTTP/1.1\r\nHost: 127.0.0.1:" + port
+            String req = "GET /json/version HTTP/1.1\r\nHost: 127.0.0.1:" + CdpClient.CDP_PORT
                     + "\r\nConnection: close\r\n\r\n";
             socket.getOutputStream().write(req.getBytes(StandardCharsets.US_ASCII));
             socket.getOutputStream().flush();
@@ -199,10 +199,10 @@ final class CdpClient {
     }
 
     /** 启动调试实例：初始标签页直接打开渲染页（首启窗口出现时即有内容），随后 PUT 再开源码标签 */
-    private static void launchCdpInstance(String exe, int port, String profile, String initialUrl) {
+    private static void launchCdpInstance(String exe, String profile, String initialUrl) {
         try {
             new ProcessBuilder(exe,
-                    "--remote-debugging-port=" + port,
+                    "--remote-debugging-port=" + CdpClient.CDP_PORT,
                     "--user-data-dir=" + profile,
                     "--no-first-run",
                     initialUrl).start();
@@ -212,7 +212,7 @@ final class CdpClient {
     }
 
     /** 结束占用端口的本应用调试实例（netstat 找 PID → wmic 校验命令行含本 profile → taskkill 进程树） */
-    private static void killListenerOnPort(int port, String profile) {
+    private static void killListenerOnPort(String profile) {
         try {
             Process np = new ProcessBuilder("netstat", "-ano", "-p", "tcp")
                     .redirectErrorStream(true).start();
@@ -223,7 +223,7 @@ final class CdpClient {
             String out = BrowserDetector.decodeConsole(np.getInputStream().readAllBytes());
             String pid = null;
             for (String line : out.lines().toList()) {
-                if (line.contains("127.0.0.1:" + port) && line.toUpperCase(Locale.ROOT).contains("LISTENING")) {
+                if (line.contains("127.0.0.1:" + CdpClient.CDP_PORT) && line.toUpperCase(Locale.ROOT).contains("LISTENING")) {
                     String[] parts = line.trim().split("\\s+");
                     pid = parts[parts.length - 1];
                     break;
@@ -240,7 +240,7 @@ final class CdpClient {
             }
             String cmd = BrowserDetector.decodeConsole(wp.getInputStream().readAllBytes());
             if (!cmd.contains(profile)) {
-                log.debug("端口 {} 的占用进程非本应用调试实例，不结束", port);
+                log.debug("端口 {} 的占用进程非本应用调试实例，不结束", CdpClient.CDP_PORT);
                 return;
             }
             log.info("结束挂起的 CDP 调试实例（PID {}）以便重启", pid);
@@ -251,16 +251,16 @@ final class CdpClient {
     }
 
     /** 极简 HTTP 客户端（原生 Socket，native-image 安全）：返回"状态行\n响应体"；连接失败/超时返回 null */
-    private static String httpRequest(String host, int port, String method, String path) {
-        return httpRequest(host, port, method, path, 1500);
+    private static String httpRequest(String method, String path) {
+        return httpRequest(method, path, 1500);
     }
 
     /** 同上，可指定读取超时 */
-    private static String httpRequest(String host, int port, String method, String path, int readTimeoutMs) {
+    private static String httpRequest(String method, String path, int readTimeoutMs) {
         try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(host, port), 800);
+            socket.connect(new InetSocketAddress("127.0.0.1", CdpClient.CDP_PORT), 800);
             socket.setSoTimeout(readTimeoutMs);
-            String req = method + " " + path + " HTTP/1.1\r\nHost: " + host + ":" + port
+            String req = method + " " + path + " HTTP/1.1\r\nHost: " + "127.0.0.1" + ":" + CdpClient.CDP_PORT
                     + "\r\nConnection: close\r\n\r\n";
             socket.getOutputStream().write(req.getBytes(StandardCharsets.US_ASCII));
             socket.getOutputStream().flush();

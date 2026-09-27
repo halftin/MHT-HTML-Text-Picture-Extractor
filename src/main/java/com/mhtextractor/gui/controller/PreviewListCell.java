@@ -9,43 +9,39 @@ import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.SelectionState;
+import javafx.event.Event;
 import lombok.extern.slf4j.Slf4j;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.layout.Priority;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
-import javafx.scene.Node;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.Dragboard;
-import javafx.scene.input.MouseEvent;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Rectangle;
-import javafx.scene.text.Text;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 @Slf4j
-/**
- * 列表单元格（步骤 3 从 {@code MainController} 的 430 行内部类外迁为顶层类）。
- *
- * <p><b>渲染与拖拽交互</b>：组行 / 项目行两种渲染（徽标、序号、文件名、状态），
- * 以及顶层项目拖拽排序（静态蓝线 + 滑动补位动画）。</p>
- *
- * <p><b>行为零变化</b>：逻辑逐字照搬，唯一改动是把原先隐式引用外部类实例的成员显式写成
- * {@code ctl.xxx} —— 顶层类不再持有隐式外部实例。</p>
- *
- * <p><b>为什么仍留在 {@code gui.controller} 包</b>：它仍依赖 {@code MainController} 的包级成员
- * （拖拽编排、参数解析、绘制取色、列表/开关控件）。这些成员的可见性是
- * {@code ArchitectureTest.testSupportSurfaceDoesNotGrow} 的约束对象，搬迁未改变它们的数量。</p>
+/*
+  列表单元格（步骤 3 从 {@code MainController} 的 430 行内部类外迁为顶层类）。
+
+  <p><b>渲染与拖拽交互</b>：组行 / 项目行两种渲染（徽标、序号、文件名、状态），
+  以及顶层项目拖拽排序（静态蓝线 + 滑动补位动画）。</p>
+
+  <p><b>行为零变化</b>：逻辑逐字照搬，唯一改动是把原先隐式引用外部类实例的成员显式写成
+  {@code ctl.xxx} —— 顶层类不再持有隐式外部实例。</p>
+
+  <p><b>为什么仍留在 {@code gui.controller} 包</b>：它仍依赖 {@code MainController} 的包级成员
+  （拖拽编排、参数解析、绘制取色、列表/开关控件）。这些成员的可见性是
+  {@code ArchitectureTest.testSupportSurfaceDoesNotGrow} 的约束对象，搬迁未改变它们的数量。</p>
  */
 class PreviewListCell extends ListCell<Object> implements CellIndicator {
 
@@ -60,7 +56,6 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
     private final Label posLabel = new Label();
     private final Label nameLabel = new Label();
     /* test-support */ final Label statusLabel = new Label();
-    private final Region spacer = new Region();
     private final Region topLine = new Region();
     private final Region bottomLine = new Region();
     private final Region intoOverlay = new Region();
@@ -86,7 +81,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         checkBox.setFocusTraversable(false);
         checkBox.setStyle("-fx-padding: 0;");
         // 从复选框按下的拖拽手势在此消费，不冒泡到单元格，避免误触发排序拖拽（F1 2.4）
-        checkBox.setOnDragDetected(e -> e.consume());
+        checkBox.setOnDragDetected(Event::consume);
         arrowLabel.setMinWidth(16);
         arrowLabel.setPrefWidth(16);
         arrowLabel.setMaxWidth(16);
@@ -106,6 +101,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         badgeLabel.setAlignment(Pos.CENTER);
         posLabel.setMinWidth(POS_COL_WIDTH);
         posLabel.setPrefWidth(POS_COL_WIDTH);
+        Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         box.getChildren().addAll(checkBox, arrowLabel, badgeLabel, posLabel, nameLabel, spacer, statusLabel);
 
@@ -277,7 +273,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         //   ① 用户点击复选框 → 写回条目勾选状态（经 setSelected 触发 onSelectionChanged）
         //   ② 条目勾选状态被程序修改 → 回写复选框显示
         // 单元格复用时靠上面的解挂切断旧联动（原先靠 unbindBidirectional）。
-        checkBox.setOnAction(e -> it.setSelected(checkBox.isSelected()));
+        checkBox.setOnAction(_ -> it.setSelected(checkBox.isSelected()));
         selectedMirror = () -> checkBox.setSelected(it.selected);
         it.addSelectedChangeListener(selectedMirror);
         boundItem = it;
@@ -384,7 +380,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             }
             // 拖拽影像：带投影快照（临时挂投影后截图，随即撤掉）
             setEffect(new DropShadow(10, 0, 0, Color.rgb(0, 0, 0, 0.35)));
-            Image snap = snapshot(ctl.transparentSnapParams(), null);
+            Image snap = snapshot(MainController.transparentSnapParams(), null);
             setEffect(null);
             Dragboard db = startDragAndDrop(TransferMode.MOVE);
             ClipboardContent cc = new ClipboardContent();

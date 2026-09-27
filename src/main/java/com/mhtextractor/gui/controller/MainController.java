@@ -27,7 +27,6 @@ import com.mhtextractor.processor.FileResult;
 import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.processor.PerFileOverrides;
 import com.mhtextractor.processor.TextBatchProcessor;
-import com.mhtextractor.util.ChangeListener;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
@@ -55,7 +54,6 @@ import javafx.fxml.FXML;
 import javafx.geometry.BoundingBox;
 import javafx.geometry.Bounds;
 import javafx.geometry.HorizontalDirection;
-import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
@@ -75,35 +73,29 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
-import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
-import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
-import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.input.DragEvent;
-import javafx.scene.input.Dragboard;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
-import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
 import javafx.util.Duration;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.kordamp.ikonli.javafx.FontIcon;
 import org.glavo.webp.WebPImage;
 import org.glavo.webp.WebPImageLoadOptions;
 import org.glavo.webp.javafx.WebPFXImage;
@@ -126,7 +118,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -146,32 +137,32 @@ public class MainController {
     /** 超大文件完整解析确认阈值（字节） */
     private static final long LARGE_FILE_THRESHOLD = 50L * 1024 * 1024;
 
-    /** 单元格内边距清零（列头与单元格列对齐由各自 HBox 的内边距控制） */
-    /** 预解析失败样式（提取结果状态需求拍板：浅黄；2026-09-25 用户反馈改为接近 Windows/WinUI 警告黄 #FFF9AE） */
-    /** 选中态 = 基础色混合 40% 浅灰 #bebebe（拍板 2026-09-22，与组行选中切换同机制） */
-    /** 提取结果背景画值（提取结果状态需求拍板，配色修订 2026-09-21、2026-09-25）：浅红=失败/跳过；标准绿=成功；分割色=成功+警告（左1/3红右2/3绿）。
-     *  2026-09-25 用户反馈：浅红改 Windows 错误红 #E81123（白字）；警告分割行右侧绿加深 #2E7D32 以承载白字 */
+    /* 单元格内边距清零（列头与单元格列对齐由各自 HBox 的内边距控制） */
+    /* 预解析失败样式（提取结果状态需求拍板：浅黄；2026-09-25 用户反馈改为接近 Windows/WinUI 警告黄 #FFF9AE） */
+    /* 选中态 = 基础色混合 40% 浅灰 #bebebe（拍板 2026-09-22，与组行选中切换同机制） */
+    /* 提取结果背景画值（提取结果状态需求拍板，配色修订 2026-09-21、2026-09-25）：浅红=失败/跳过；标准绿=成功；分割色=成功+警告（左1/3红右2/3绿）。
+       2026-09-25 用户反馈：浅红改 Windows 错误红 #E81123（白字）；警告分割行右侧绿加深 #2E7D32 以承载白字 */
     /** 进度条活动样式类（进度条活动配色拍板 2026-09-24）：预解析=浅蓝；提取成功=绿；有警告=黄；有失败/跳过=浅红 */
     private static final String STYLE_PROGRESS_PREPARSE = "progress-preparse";
     private static final String STYLE_PROGRESS_EXTRACT_SUCCESS = "progress-extract-success";
     private static final String STYLE_PROGRESS_EXTRACT_WARNED = "progress-extract-warned";
     private static final String STYLE_PROGRESS_EXTRACT_FAILED = "progress-extract-failed";
 
-    /** 8.5 条目背景画值（配色修订 2026-09-21）：深蓝 = 生效参数为全局参数（白字）；浅蓝 = 生效参数为组/条目级独立参数 */
-    /** 组条目行样式（配色修订 2026-09-21）：标准黑色底、白色文字；行高大幅缩小为比文字稍高 */
-    /** 组条目行选中样式（配色修订 2026-09-21）：黑灰底（#444444），与未选中黑色明显区分 */
+    /* 8.5 条目背景画值（配色修订 2026-09-21）：深蓝 = 生效参数为全局参数（白字）；浅蓝 = 生效参数为组/条目级独立参数 */
+    /* 组条目行样式（配色修订 2026-09-21）：标准黑色底、白色文字；行高大幅缩小为比文字稍高 */
+    /* 组条目行选中样式（配色修订 2026-09-21）：黑灰底（#444444），与未选中黑色明显区分 */
 
-    /** 组行左内边距 2px：内容朝左顶格（成员行维持 10px 列对齐） */
-    /** 组内成员行内边距（拍板）：行高略低于顶层项目行（顶层 ROW_PAD 34px → 组内约 30px） */
-    /** 插入指示线颜色（拖拽排序反馈） */
-    /** 组行"入组/合并"整行高亮（琥珀色底+边框，与成员行蓝色插入线视觉区分，6.6 视觉细节） */
-    /** 组行落点三区比例：上下边缘为行间空隙（顶层/组间落点），中间带为整行（入组末尾/两组合并） */
+    /* 组行左内边距 2px：内容朝左顶格（成员行维持 10px 列对齐） */
+    /* 组内成员行内边距（拍板）：行高略低于顶层项目行（顶层 ROW_PAD 34px → 组内约 30px） */
+    /* 插入指示线颜色（拖拽排序反馈） */
+    /* 组行"入组/合并"整行高亮（琥珀色底+边框，与成员行蓝色插入线视觉区分，6.6 视觉细节） */
+    /* 组行落点三区比例：上下边缘为行间空隙（顶层/组间落点），中间带为整行（入组末尾/两组合并） */
     /** 折叠/展开动画时长（拍板 200ms；缓动照搬 TitledPaneSkin 的 LINEAR） */
     private static final Duration EXPAND_ANIM_DURATION = Duration.millis(200);
     /** 成员行动画基准高度兜底（px）：ROW_PAD 7×2 + 单行文本 ≈ 34；动画开始时优先实测 */
     private static final double MEMBER_ROW_HEIGHT_FALLBACK = 34.0;
-    /** 组条目行目标高度（px）：比文字稍高（拍板） */
-    /** 组行复选框槽位宽度（px）：仅容纳图形，复选框与内容之间不留空白（拍板） */
+    /* 组条目行目标高度（px）：比文字稍高（拍板） */
+    /* 组行复选框槽位宽度（px）：仅容纳图形，复选框与内容之间不留空白（拍板） */
 
     /** 徽标列/位置序号列/复选框列的固定槽位宽度 */
 
@@ -371,9 +362,9 @@ public class MainController {
     // ===== 拖拽排序状态 =====
     /** 被拖对象（PreviewItem 或 GroupItem）：null = 无进行中的拖拽会话 */
     Object draggedObject = null;
-    private double dragGapTopY = 0;
     boolean dragActive = false;
     boolean dropHandled = false;
+    @Getter
     private boolean dragPositionStale = false;
     private ParallelTransition liftAnim = null;
     private List<PreviewListCell> liftCells = null;
@@ -425,7 +416,7 @@ public class MainController {
     private MenuItem ctxRemoveGroup;
     private MenuItem ctxApplyGlobal;
     /** 菜单显示期间的主窗口按压过滤：点击菜单外任意处即关闭（JavaFX autoHide 在本应用窗口组合下不可靠，手动兜底） */
-    private final EventHandler<MouseEvent> contextClickAway = e -> {
+    private final EventHandler<MouseEvent> contextClickAway = _ -> {
         if (contextMenu.isShowing()) {
             contextMenu.hide();
         }
@@ -435,8 +426,12 @@ public class MainController {
     /** 动画全局锁：动画期间列表项目不可交互（按钮可点但无效果），快速连点折叠箭头直接忽略 */
     boolean listAnimating = false;
     /** 正在动画的组；null = 无动画 */
+    @Setter
+    @Getter
     private GroupItem<PreviewItem> animatingGroup = null;
     /** true = 展开动画；false = 折叠动画 */
+    @Setter
+    @Getter
     private boolean animExpanding = false;
     /** 动画 ParallelTransition（200ms ease-out；完成/快进后置 null） */
     private ParallelTransition collapseAnim = null;
@@ -457,7 +452,7 @@ public class MainController {
         badgeHeaderLabel.setTooltip(new Tooltip(I18n.get("list.chapterNoTooltip")));
 
         // 1. 列表：单元格工厂、选择联动、逐文件章节勾选、拖拽动画滚动联动
-        fileListView.setCellFactory(lv -> createPreviewCell());
+        fileListView.setCellFactory(_ -> createPreviewCell());
         fileListView.setItems(displayItems);
         setupExternalImportDnD();
 
@@ -468,9 +463,9 @@ public class MainController {
         fileListView.setOnContextMenuRequested(this::onContextMenuRequested);
 
         // 列头全选 CheckBox 三态联动（F1）：单项勾选变化实时刷新列头与组复选框，新导入项目自动挂监听
-        selectAllCheck.setOnAction(e -> onSelectAllToggled());
-        groupNameField.textProperty().addListener((obs, old, newVal) -> onGroupNameEdited(newVal));
-        groupNameField.focusedProperty().addListener((obs, old, newVal) -> {
+        selectAllCheck.setOnAction(_ -> onSelectAllToggled());
+        groupNameField.textProperty().addListener((_, _, newVal) -> onGroupNameEdited(newVal));
+        groupNameField.focusedProperty().addListener((_, _, newVal) -> {
             if (!newVal) {
                 onGroupNameFocusLost();
             }
@@ -490,9 +485,9 @@ public class MainController {
         });
 
         fileListView.getSelectionModel().selectedItemProperty()
-                .addListener((obs, old, newVal) -> onItemSelected(newVal));
+                .addListener((_, _, newVal) -> onItemSelected(newVal));
 
-        adjustCheck.selectedProperty().addListener((obs, old, newVal) -> {
+        adjustCheck.selectedProperty().addListener((_, _, newVal) -> {
             if (updatingAdjustCheck) {
                 return;
             }
@@ -507,13 +502,13 @@ public class MainController {
         });
 
         // 拖拽动画期间若列表发生滚动（滚轮/自动滚动），标记位置失效并结束提起动画
-        fileListView.skinProperty().addListener((obs, oldSkin, newSkin) -> {
+        fileListView.skinProperty().addListener((_, _, newSkin) -> {
             if (newSkin == null) {
                 return;
             }
             for (javafx.scene.Node n : fileListView.lookupAll(".scroll-bar")) {
                 if (n instanceof ScrollBar sb && sb.getOrientation() == Orientation.VERTICAL) {
-                    sb.valueProperty().addListener((o, a, b) -> {
+                    sb.valueProperty().addListener((_, a, b) -> {
                         if (dragActive && Math.abs(b.doubleValue() - a.doubleValue()) > 0.1) {
                             dragPositionStale = true;
                             finishLift();
@@ -525,12 +520,12 @@ public class MainController {
 
         // 2. 模式切换：互斥由 modeToggleGroup 承担，点击已选按钮可取消回到"未选择"态；
         //    不清空另一模式参数：GUI 状态与已确认缓存按模式隔离保留
-        modeToggleGroup.selectedToggleProperty().addListener((obs, old, newVal) -> onModeChanged());
+        modeToggleGroup.selectedToggleProperty().addListener((_, _, _) -> onModeChanged());
 
         // 3. 目录/开关变更：刷新列表 + 持久化 GUI 状态
-        inputFolderField.textProperty().addListener((obs, old, newVal) -> onInputFolderChanged());
-        outputFolderField.textProperty().addListener((obs, old, newVal) -> saveGuiState());
-        openFolderAfterCompleteCheck.selectedProperty().addListener((obs, old, newVal) -> saveGuiState());
+        inputFolderField.textProperty().addListener((_, _, _) -> onInputFolderChanged());
+        outputFolderField.textProperty().addListener((_, _, _) -> saveGuiState());
+        openFolderAfterCompleteCheck.selectedProperty().addListener((_, _, _) -> saveGuiState());
 
         // 4. 恢复 GUI 状态（无状态文件时与旧版启动逻辑一致）
         restoreGuiState();
@@ -546,11 +541,11 @@ public class MainController {
         // 会话 12：磁盘占用提醒 hook（写盘成功且跨 10GiB 台阶时经 checkSizeAlert 触发；
         // 在预览后台线程同步回调，这里换算 GiB 文案后回 FX 线程非模态弹窗）
         previewCacheLifecycle.setSizeAlertHook(this::onSizeAlertStep);
-        fileListView.sceneProperty().addListener((obs, oldScene, newScene) -> {
+        fileListView.sceneProperty().addListener((_, _, newScene) -> {
             if (newScene == null) {
                 return;
             }
-            newScene.windowProperty().addListener((o2, oldW, newW) -> {
+            newScene.windowProperty().addListener((_, _, newW) -> {
                 if (newW instanceof Stage stage) {
                     stage.setOnCloseRequest(this::onWindowCloseRequest);
                 }
@@ -643,7 +638,7 @@ public class MainController {
             if (sameDir) {
                 onInputFolderChanged();
             }
-            autoSetOutputPath(dir);
+            autoSetOutputPath();
         }
     }
 
@@ -662,13 +657,13 @@ public class MainController {
     /**
      * 根据输入目录自动设置输出目录为项目根目录下的"输出文件"文件夹
      */
-    private void autoSetOutputPath(String inputPath) {
+    private void autoSetOutputPath() {
         String projectDir = System.getProperty("user.dir");
         String outputBaseDir = projectDir + File.separator + I18n.get("core.defaultOutputName");
 
         File outDirFile = new File(outputBaseDir);
-        if (!outDirFile.exists()) {
-            outDirFile.mkdirs();
+        if (!outDirFile.isDirectory() && !outDirFile.mkdirs() && !outDirFile.isDirectory()) {
+            log.warn("默认输出目录创建失败（提取时将重试）：{}", outputBaseDir);
         }
 
         outputFolderField.setText(outputBaseDir);
@@ -764,7 +759,7 @@ public class MainController {
             if (a == null || a.isBlank()) {
                 continue;
             }
-            if (kept.stream().anyMatch(k -> a.equals(k))) {
+            if (kept.stream().anyMatch(a::equals)) {
                 log.info("地址 {} 重复，已合并，不再重复导入", a);
                 continue;
             }
@@ -889,7 +884,7 @@ public class MainController {
         List<String> names = new ArrayList<>();
         for (Object o : items) {
             if (o instanceof GroupItem<?> g) {
-                names.add(((GroupItem<?>) g).getName());
+                names.add(g.getName());
             }
         }
         return names;
@@ -912,7 +907,7 @@ public class MainController {
                 }
                 log.info("已达每轮上限（{} 组 / {} 文件），询问用户是否继续",
                         IMPORT_QUOTA_GROUPS, IMPORT_QUOTA_FILES);
-                boolean go = awaitQuotaConfirm(round);
+                boolean go = awaitQuotaConfirm();
                 if (!go) {
                     log.info("用户选择停止导入；已完成部分保留");
                     break;
@@ -927,7 +922,7 @@ public class MainController {
     }
 
     /** 后台线程阻塞等待 FX 线程上的配额确认框 */
-    private boolean awaitQuotaConfirm(MhtImportPlanner.Plan round) {
+    private boolean awaitQuotaConfirm() {
         CompletableFuture<Boolean> future = new CompletableFuture<>();
         Platform.runLater(() -> {
             Alert a = new Alert(Alert.AlertType.CONFIRMATION);
@@ -996,9 +991,9 @@ public class MainController {
                 updateImportDropHighlight(true);
             }
         });
-        fileListView.setOnDragExited(e -> clearImportDropHighlight());
+        fileListView.setOnDragExited(_ -> clearImportDropHighlight());
         fileListView.setOnDragDropped(this::onExternalFilesDropped);
-        fileListView.setOnDragDone(e -> clearImportDropHighlight());
+        fileListView.setOnDragDone(_ -> clearImportDropHighlight());
     }
 
     private void onExternalFilesDropped(DragEvent e) {
@@ -1160,16 +1155,12 @@ public class MainController {
             return;
         }
         Object sel = currentSelection();
-        ParamScope.Target target;
-        if (sel instanceof GroupItem<?> g) {
-            target = new ParamScope.GroupTarget(g);
-        } else if (sel instanceof PreviewItem it && it.parentGroup != null) {
-            target = new ParamScope.GroupTarget(it.parentGroup);
-        } else if (sel instanceof PreviewItem it) {
-            target = new ParamScope.ItemTarget<>(it, it.textItemParams, it.imageItemParams);
-        } else {
-            target = ParamScope.GLOBAL;
-        }
+        ParamScope.Target target = switch (sel) {
+            case GroupItem<?> g -> new ParamScope.GroupTarget(g);
+            case PreviewItem it when it.parentGroup != null -> new ParamScope.GroupTarget(it.parentGroup);
+            case PreviewItem it -> new ParamScope.ItemTarget<>(it, it.textItemParams, it.imageItemParams);
+            case null, default -> ParamScope.GLOBAL;
+        };
         openParamDialog(target);
     }
 
@@ -1182,8 +1173,8 @@ public class MainController {
                     inputFolderField.getScene().getWindow(), imageMode,
                     textParamsCache, imageParamsCache, target);
             if (ctrl.isConfirmed()) {
-                if (target instanceof ParamScope.GroupTarget gt) {
-                    applyGroupParams((GroupItem<PreviewItem>) gt.group(), imageMode, ctrl.getResult());
+                if (target instanceof ParamScope.GroupTarget(GroupItem<?> group)) {
+                    applyGroupParams((GroupItem<PreviewItem>) group, imageMode, ctrl.getResult());
                 } else if (target instanceof ParamScope.ItemTarget<?> it) {
                     applyItemParams((PreviewItem) it.item(), imageMode, ctrl.getResult());
                 } else {
@@ -1281,18 +1272,18 @@ public class MainController {
         ctxRemove = new MenuItem(I18n.get("list.menuRemove"));
         ctxRemoveGroup = new MenuItem(I18n.get("group.menuRemove"));
 
-        ctxSelect.setOnAction(e -> onContextSelect());
-        ctxSelectAll.setOnAction(e -> onContextSelectAll());
-        ctxOpenFolder.setOnAction(e -> onContextOpenFolder());
-        ctxOpenInBrowser.setOnAction(e -> onContextOpenInBrowser());
-        ctxViewSource.setOnAction(e -> onContextViewSource());
-        ctxParams.setOnAction(e -> onContextParams());
-        ctxClearParams.setOnAction(e -> onContextClearParams());
-        ctxApplyGlobal.setOnAction(e -> onContextApplyGlobal());
-        ctxGroup.setOnAction(e -> onGroupClicked());
-        ctxUngroup.setOnAction(e -> onUngroupClicked());
-        ctxRemove.setOnAction(e -> onRemoveClicked());
-        ctxRemoveGroup.setOnAction(e -> onContextRemoveGroup());
+        ctxSelect.setOnAction(_ -> onContextSelect());
+        ctxSelectAll.setOnAction(_ -> onContextSelectAll());
+        ctxOpenFolder.setOnAction(_ -> onContextOpenFolder());
+        ctxOpenInBrowser.setOnAction(_ -> onContextOpenInBrowser());
+        ctxViewSource.setOnAction(_ -> onContextViewSource());
+        ctxParams.setOnAction(_ -> onContextParams());
+        ctxClearParams.setOnAction(_ -> onContextClearParams());
+        ctxApplyGlobal.setOnAction(_ -> onContextApplyGlobal());
+        ctxGroup.setOnAction(_ -> onGroupClicked());
+        ctxUngroup.setOnAction(_ -> onUngroupClicked());
+        ctxRemove.setOnAction(_ -> onRemoveClicked());
+        ctxRemoveGroup.setOnAction(_ -> onContextRemoveGroup());
 
         contextMenu = new ContextMenu(
                 ctxSelect, ctxSelectAll,
@@ -1306,13 +1297,13 @@ public class MainController {
                 ctxRemove, ctxRemoveGroup);
 
         // 菜单显示期间挂主窗口按压过滤（点击菜单外即关闭），隐藏时移除
-        contextMenu.setOnShown(e -> {
+        contextMenu.setOnShown(_ -> {
             if (fileListView.getScene() != null) {
                 fileListView.getScene().getWindow()
                         .addEventFilter(MouseEvent.MOUSE_PRESSED, contextClickAway);
             }
         });
-        contextMenu.setOnHidden(e -> {
+        contextMenu.setOnHidden(_ -> {
             if (fileListView.getScene() != null) {
                 fileListView.getScene().getWindow()
                         .removeEventFilter(MouseEvent.MOUSE_PRESSED, contextClickAway);
@@ -1391,9 +1382,9 @@ public class MainController {
             if (contextTarget instanceof PreviewItem it && !it.removed) {
                 it.setSelected(true);
             } else if (contextTarget instanceof GroupItem<?> g) {
-                for (PreviewItem m : ((GroupItem<PreviewItem>) g).getMembers()) {
-                    if (!m.removed) {
-                        m.setSelected(true);
+                for (Object m : g.getMembers()) {
+                    if (m instanceof PreviewItem pi && !pi.removed) {
+                        pi.setSelected(true);
                     }
                 }
             }
@@ -1411,7 +1402,7 @@ public class MainController {
         }
         List<PreviewItem> targets;
         if (contextTarget instanceof GroupItem<?> g) {
-            targets = visibleMembersOf((GroupItem<PreviewItem>) g);
+            targets = visibleMembersOf(g);
         } else if (contextTarget instanceof PreviewItem it && it.parentGroup != null) {
             targets = visibleMembersOf(it.parentGroup);
         } else {
@@ -1544,7 +1535,7 @@ public class MainController {
         }
         GroupItem<PreviewItem> group = null;
         if (contextTarget instanceof GroupItem<?> g) {
-            group = (GroupItem<PreviewItem>) g;
+            group = asPreviewGroup(g);
         } else if (contextTarget instanceof PreviewItem it && it.parentGroup != null) {
             group = it.parentGroup;
         }
@@ -1553,14 +1544,30 @@ public class MainController {
         }
     }
 
+    /**
+     * 把 {@code GroupItem<?>} 安全转换为 {@code GroupItem<PreviewItem>}（unchecked 转换的唯一收口点）。
+     *
+     * <p>转换前先验证全部成员确为 {@code PreviewItem}：验证通过则转换必然安全
+     * （本控制器的建组路径只会产生 {@code GroupItem<PreviewItem>}）；验证失败立即抛异常，
+     * 避免堆污染导致的 {@code ClassCastException} 在远离根因处爆发。</p>
+     */
+    @SuppressWarnings("unchecked")
+    private static GroupItem<PreviewItem> asPreviewGroup(GroupItem<?> g) {
+        for (Object m : g.getMembers()) {
+            if (!(m instanceof PreviewItem)) {
+                throw new IllegalStateException("组 " + g.getName() + " 内存在非 PreviewItem 成员：" + m);
+            }
+        }
+        return (GroupItem<PreviewItem>) g;
+    }
+
     // ==================== 应用到全局（条目独立参数需求） ====================
 
     /** 目标生效参数来源是否为独立参数（条目级或组参数；拍板：仅此状态"应用到全局"可用） */
     private boolean hasIndependentParams(Object target) {
         if (target instanceof GroupItem<?> g) {
-            GroupItem<PreviewItem> group = (GroupItem<PreviewItem>) g;
             return imageModeToggle.isSelected()
-                    ? group.getImageParamsCache() != null : group.getTextParamsCache() != null;
+                    ? g.getImageParamsCache() != null : g.getTextParamsCache() != null;
         }
         if (target instanceof PreviewItem it) {
             return ParamScope.backgroundStatus(it.parentGroup,
@@ -1572,7 +1579,7 @@ public class MainController {
 
     /** 右键菜单"应用到全局"：目标 = 右键点击的条目 */
     private void onContextApplyGlobal() {
-        if (listAnimating || contextTarget == null || !hasIndependentParams(contextTarget)) {
+        if (listAnimating || !hasIndependentParams(contextTarget)) {
             return;
         }
         applyGlobalParamsTo(contextTarget);
@@ -1585,7 +1592,7 @@ public class MainController {
             return;
         }
         Object sel = currentSelection();
-        if (sel != null && hasIndependentParams(sel)) {
+        if (hasIndependentParams(sel)) {
             applyGlobalParamsTo(sel);
         }
     }
@@ -1607,9 +1614,8 @@ public class MainController {
         Map<Integer, AppConfig> groupBefore = new HashMap<>();
         for (Object o : items) {
             if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> grp = (GroupItem<PreviewItem>) g;
-                groupBefore.put(grp.getGroupNo(),
-                        imageMode ? grp.getImageParamsCache() : grp.getTextParamsCache());
+                groupBefore.put(g.getGroupNo(),
+                        imageMode ? g.getImageParamsCache() : g.getTextParamsCache());
             }
         }
         if (imageMode) {
@@ -1626,11 +1632,10 @@ public class MainController {
         }
         for (Object o : items) {
             if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> group = (GroupItem<PreviewItem>) g;
                 if (imageMode) {
-                    group.setImageParamsCache(null);
+                    g.setImageParamsCache(null);
                 } else {
-                    group.setTextParamsCache(null);
+                    g.setTextParamsCache(null);
                 }
             }
         }
@@ -1696,7 +1701,7 @@ public class MainController {
                     topItems.add(it);
                 }
             } else if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> grp = (GroupItem<PreviewItem>) g;
+                GroupItem<PreviewItem> grp = asPreviewGroup(g);
                 if ((imageMode ? grp.getImageParamsCache() : grp.getTextParamsCache()) != null) {
                     groups.add(grp);
                 }
@@ -1902,8 +1907,9 @@ public class MainController {
         if (imageMode) {
             AppConfig params = currentParamsOrDefaults();
             if (params.isEnableZipPackaging() || params.isEnableCbzPackaging()) {
-                if (!new File(outputFolder).isDirectory()) {
-                    new File(outputFolder).mkdirs();
+                File outRoot = new File(outputFolder);
+                if (!outRoot.isDirectory() && !outRoot.mkdirs() && !outRoot.isDirectory()) {
+                    log.warn("输出根目录预创建失败（会话目录创建时将重试）：{}", outputFolder);
                 }
             }
         }
@@ -2022,7 +2028,7 @@ public class MainController {
                                 unit.getOutputPath());
                         final int unitIndex = i;
                         BatchProcessor.ProgressCallback progressCallback =
-                                (current, totalInUnit, fileName, subProgress) ->
+                                (current, _, _, subProgress) ->
                                         updateProgress(progress.overall(unitIndex, current, subProgress), 1.0);
                         try {
                             BatchProcessor.ProcessStats unitStats = processUnit(unit, sessionOutputFolder,
@@ -2056,11 +2062,9 @@ public class MainController {
             }
         };
 
-        task.progressProperty().addListener((obs, oldVal, newVal) -> {
-            progressBar.setProgress(newVal.doubleValue());
-        });
+        task.progressProperty().addListener((_, _, newVal) -> progressBar.setProgress(newVal.doubleValue()));
 
-        task.setOnSucceeded(e -> {
+        task.setOnSucceeded(_ -> {
             running.set(false);
             currentTask = null;
             startButton.setDisable(false);
@@ -2083,7 +2087,9 @@ public class MainController {
                 File folder = new File(sessionOutputFolder);
                 if (folder.exists()) {
                     try {
-                        Runtime.getRuntime().exec("explorer.exe " + folder.getAbsolutePath());
+                        // 步骤 7 同款写法：ProcessBuilder 数组形式（Runtime.exec(String) 自 Java 18 弃用，
+                        // 且按空格切分会拆坏含空格的路径）；native 镜像规避 AWT，不用 Desktop.open
+                        new ProcessBuilder("explorer.exe", folder.getAbsolutePath()).start();
                     } catch (Exception ex) {
                         log.error("打开文件夹失败", ex);
                     }
@@ -2091,7 +2097,7 @@ public class MainController {
             }
         });
 
-        task.setOnFailed(e -> {
+        task.setOnFailed(_ -> {
             running.set(false);
             currentTask = null;
             startButton.setDisable(false);
@@ -2104,7 +2110,7 @@ public class MainController {
             showAlert(Alert.AlertType.ERROR, ErrorCode.PROCESS_FAILED.message());
         });
 
-        task.setOnCancelled(e -> {
+        task.setOnCancelled(_ -> {
             // 拍板：中途取消回写已处理部分（未处理的保持原样）
             BatchProcessor.ProcessStats partial = lastExtractStats.get();
             if (partial != null) {
@@ -2296,7 +2302,7 @@ public class MainController {
         draggedObject = sourceCell.getItem();
         dragPositionStale = false;
         dragActive = true;
-        dragGapTopY = cellBoundsInOverlay(sourceCell).getMinY();
+        double dragGapTopY = cellBoundsInOverlay(sourceCell).getMinY();
         double rowHeight = sourceCell.getHeight();
 
         List<PreviewListCell> cells = new ArrayList<>();
@@ -2335,7 +2341,7 @@ public class MainController {
             tt.setByY(-rowHeight);
             liftAnim.getChildren().add(tt);
         }
-        liftAnim.setOnFinished(e -> finishLift());
+        liftAnim.setOnFinished(_ -> finishLift());
         liftAnim.play();
     }
 
@@ -2420,7 +2426,7 @@ public class MainController {
             tt.setByY(rowHeight);
             pt.getChildren().add(tt);
         }
-        pt.setOnFinished(e -> {
+        pt.setOnFinished(_ -> {
             dragOverlay.getChildren().clear();
             cells.forEach(c -> c.setVisible(true));
             if (itemCell != null) {
@@ -2484,20 +2490,25 @@ public class MainController {
     }
 
     /** 顶层组列表（按数据序；供 agent 演练使用） */
-    @SuppressWarnings("unchecked")
     /* test-support */ List<GroupItem<PreviewItem>> topLevelGroups() {
         List<GroupItem<PreviewItem>> out = new ArrayList<>();
         for (Object o : items) {
             if (o instanceof GroupItem<?> g) {
-                out.add((GroupItem<PreviewItem>) g);
+                out.add(asPreviewGroup(g));
             }
         }
         return out;
     }
 
     /** 组内有效成员（removed == false；供 agent 演练使用） */
-    /* test-support */ List<PreviewItem> visibleMembersOf(GroupItem<PreviewItem> g) {
-        return g.getMembers().stream().filter(m -> !m.removed).toList();
+    /* test-support */ List<PreviewItem> visibleMembersOf(GroupItem<?> g) {
+        List<PreviewItem> out = new ArrayList<>();
+        for (Object m : g.getMembers()) {
+            if (m instanceof PreviewItem p && !p.removed) {
+                out.add(p);
+            }
+        }
+        return out;
     }
 
     /** 清空预览缓存并回到待解析（生效参数切换后重新预解析，阶段 5 机制）。只清内存态；磁盘缓存由 PreviewCacheLifecycle 四条规则管理 */
@@ -2540,7 +2551,6 @@ public class MainController {
      * 区间勾选（区间内组行 = 整组勾选）；无修饰键 = 维持现状并更新锚点。
      * 动画锁定期间忽略；removed 项不可交互。
      */
-    @SuppressWarnings("unchecked")
     void onCellPressed(Object item, javafx.scene.input.MouseEvent e) {
         // 拖拽状态自愈：真实拖拽期间鼠标被 DnD 手势捕获，按压事件不会到达；
         // 此处仍有 dragActive = 上次拖拽异常残留（如列表外松手后 DONE 丢失）→ 立即恢复显示与状态，
@@ -2553,7 +2563,7 @@ public class MainController {
             return;
         }
         if (item instanceof GroupItem<?> g) {
-            GroupItem<PreviewItem> group = (GroupItem<PreviewItem>) g;
+            GroupItem<PreviewItem> group = asPreviewGroup(g);
             // 箭头槽位（cell x 22-46）：折叠/展开，优先于 Ctrl/Shift 多选手势；
             // pressed 判定比 released 可靠（released 会被 checkbox 吞掉导致间歇丢失）
             if (e.getX() >= 22 && e.getX() <= 46) {
@@ -2616,7 +2626,7 @@ public class MainController {
             return it.selected;
         }
         if (o instanceof GroupItem<?> g) {
-            for (Object m : ((GroupItem<PreviewItem>) g).getMembers()) {
+            for (Object m : g.getMembers()) {
                 if (!(m instanceof PreviewItem p) || (!p.removed && !p.selected)) {
                     return false;
                 }
@@ -2631,7 +2641,7 @@ public class MainController {
         if (o instanceof PreviewItem it && !it.removed) {
             it.setSelected(target);
         } else if (o instanceof GroupItem<?> g) {
-            for (Object m : ((GroupItem<PreviewItem>) g).getMembers()) {
+            for (Object m : g.getMembers()) {
                 if (m instanceof PreviewItem p && !p.removed) {
                     p.setSelected(target);
                 }
@@ -2644,7 +2654,6 @@ public class MainController {
      * 反选自身；组行双击组名区域（cell x ≥ 46，折叠判定区之外）整组反选。
      * 图形交互槽位（复选框/折叠箭头）内双击不触发，避免与单击行为叠加。
      */
-    @SuppressWarnings("unchecked")
     void onCellDoubleClicked(Object item, javafx.scene.input.MouseEvent e) {
         // 仅左键双击（CLICKED 事件在松开后生成，isPrimaryButtonDown 恒为 false，须用 getButton 判定）。
         // 多击时间窗口内 clickCount 连续递增（快速连续双击会得到 3、4、5…），
@@ -2655,7 +2664,7 @@ public class MainController {
         }
         if (item instanceof GroupItem<?> g) {
             if (e.getX() >= 46) {
-                onGroupCheckToggled((GroupItem<PreviewItem>) g);
+                onGroupCheckToggled(asPreviewGroup(g));
             }
         } else if (item instanceof PreviewItem it && !it.removed) {
             if (e.getX() >= 50) {
@@ -2715,10 +2724,11 @@ public class MainController {
     /** 重建父组指针：以数据序为准统一维护 PreviewItem.parentGroup（显示序重建时同步调用） */
     private void rebuildParentPointers() {
         for (Object o : items) {
-            if (o instanceof GroupItem<?> g) {
+            if (o instanceof GroupItem<?> raw) {
+                GroupItem<PreviewItem> g = asPreviewGroup(raw);
                 for (Object m : g.getMembers()) {
                     if (m instanceof PreviewItem it) {
-                        it.parentGroup = (GroupItem<PreviewItem>) g;
+                        it.parentGroup = g;
                     }
                 }
             } else if (o instanceof PreviewItem it) {
@@ -2768,7 +2778,7 @@ public class MainController {
         fileCountLabel.setText(I18n.get("list.fileCount", "count", visibleCount()));
     }
 
-    /** 列表操作按钮可用性：列表为空时移除禁用；撤销栈为空时撤销禁用；合并为组需勾选集合或选中项目；拆分组仅选中组条目时可用（F6） */
+    /* 列表操作按钮可用性：列表为空时移除禁用；撤销栈为空时撤销禁用；合并为组需勾选集合或选中项目；拆分组仅选中组条目时可用（F6） */
     /** 查看HTML源码按钮（浏览器查看HTML需求）：对列表当前选中条目打开源码视图 */
     @FXML
     private void onViewSourceButton() {
@@ -2837,7 +2847,7 @@ public class MainController {
         // D7：无勾选且选中组条目 → 整组移除（组名/参数随组对象保留在撤销记录中）
         if (targets.isEmpty() && sel instanceof GroupItem<?> g) {
             // G2（拍板）：整组移除一律必弹确认（R6"仅列表将空时确认"的有意例外），按钮行与右键菜单共用
-            removeGroupWithConfirm((GroupItem<PreviewItem>) g);
+            removeGroupWithConfirm(asPreviewGroup(g));
             return;
         }
         if (targets.isEmpty()) {
@@ -2903,7 +2913,7 @@ public class MainController {
         List<Integer> destroyedIdx = new ArrayList<>();
         for (int i = items.size() - 1; i >= 0; i--) {
             if (items.get(i) instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> group = (GroupItem<PreviewItem>) g;
+                GroupItem<PreviewItem> group = asPreviewGroup(g);
                 if (GroupStructure.isEmptyGroup(group, m -> m.removed)) {
                     destroyed.add(group);
                     destroyedIdx.add(i);
@@ -2949,7 +2959,7 @@ public class MainController {
         List<String> parts = new ArrayList<>();
         for (Object o : items) {
             if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> group = (GroupItem<PreviewItem>) g;
+                GroupItem<PreviewItem> group = asPreviewGroup(g);
                 if (!group.isExpanded()) {
                     long cnt = group.getMembers().stream()
                             .filter(m -> !m.removed && targets.contains(m)).count();
@@ -2974,220 +2984,218 @@ public class MainController {
         Object selectAfter = null;
         // 结构恢复类操作（REORDER/MERGE_GROUPS）：恢复后生效参数可能变化，受影响项目重新预解析
         List<PreviewItem> reparseAfter = List.of();
-        switch (record.type()) {
-            case REMOVE, REMOVE_GROUP -> {
-                for (PreviewItem it : record.items()) {
-                    it.removed = false;
-                    it.setSelected(false);
-                }
-                // 销毁的空组/整组按记录的原顶层索引恢复（降序记录，直接按序插回）
-                for (int k = 0; k < record.destroyedGroups().size(); k++) {
-                    GroupItem<PreviewItem> g = record.destroyedGroups().get(k);
-                    items.add(Math.min(record.destroyedIndexes().get(k), items.size()), g);
-                }
-                log.info("撤销移除：恢复 {} 个项目、{} 个组", record.items().size(), record.destroyedGroups().size());
-            }
-            case IMPORT -> {
-                Object sel = fileListView.getSelectionModel().getSelectedItem();
-                int selIndex = displayItems.indexOf(sel);
-                boolean selRemoved = sel != null && record.items().contains(sel);
-                for (PreviewItem it : record.items()) {
-                    it.removed = true;
-                    it.setSelected(false);
-                    // 防遗漏：导入项若已进入组（组内成员），一并从成员列表移除
-                    GroupItem<PreviewItem> pg = it.parentGroup;
-                    if (pg != null) {
-                        pg.getMembers().remove(it);
-                    }
-                }
-                // 规则 (c)：撤销导入 = 从列表移除这批项目 → 删其缓存目录
-                workspaceParamService.itemsRemoved(record.items());
-                items.removeAll(record.items());
-                // 组内项目随撤销导入移除后可能产生空组：直接销毁（撤销导入本身不再记录）
-                for (int i = items.size() - 1; i >= 0; i--) {
-                    if (items.get(i) instanceof GroupItem<?> g
-                            && GroupStructure.isEmptyGroup((GroupItem<PreviewItem>) g, m -> m.removed)) {
-                        items.remove(i);
-                    }
-                }
-                if (selRemoved) {
-                    selectNearestVisible(selIndex);
-                }
-                log.info("撤销导入：本次新增的 {} 个项目、{} 个自动创建的组已移除",
-                        record.items().size(), record.groups().size());
-            }
-            case GROUP, REORDER, MERGE_GROUPS -> {
-                // 撤销恢复拖拽前结构（顶层顺序、组位置、各组内顺序），组对象复用（组名/参数保留）
-                GroupStructure.restoreStructure(items, record.structureBefore());
-                if (record.type() == UndoManager.RecordType.GROUP) {
-                    PreviewItem firstVisible = record.items().stream()
-                            .filter(i -> !i.removed).findFirst().orElse(null);
-                    if (firstVisible != null) {
-                        fileListView.getSelectionModel().select(firstVisible);
-                    }
-                    log.info("撤销合并为组：组 {} 已解散，成员回到原位置", record.group().getName());
-                } else {
-                    reparseAfter = new ArrayList<>();
+        if (record != null) {
+            switch (record.type()) {
+                case REMOVE, REMOVE_GROUP -> {
                     for (PreviewItem it : record.items()) {
-                        if (!it.removed) {
-                            clearPreviewCache(it);
-                            reparseAfter.add(it);
-                        }
+                        it.removed = false;
+                        it.setSelected(false);
                     }
-                    log.info("撤销{}：列表结构已恢复拖拽前状态",
-                            record.type() == UndoManager.RecordType.REORDER ? "拖拽排序" : "组合并");
+                    // 销毁的空组/整组按记录的原顶层索引恢复（降序记录，直接按序插回）
+                    for (int k = 0; k < record.destroyedGroups().size(); k++) {
+                        GroupItem<PreviewItem> g = record.destroyedGroups().get(k);
+                        items.add(Math.min(record.destroyedIndexes().get(k), items.size()), g);
+                    }
+                    log.info("撤销移除：恢复 {} 个项目、{} 个组", record.items().size(), record.destroyedGroups().size());
                 }
-            }
-            case UNGROUP -> {
-                // F6：组重建——成员从顶层移除并重新划入，组对象（组名/组参数）原样插回原位置
-                GroupStructure.restoreGroup(items, record.group(), record.groupIndex(), record.items());
-                // 条目独立参数生命周期拍板：撤销拆分后成员回组，拆分时复制的条目级参数清除
-                for (PreviewItem m : record.items()) {
-                    m.textItemParams = null;
-                    m.imageItemParams = null;
+                case IMPORT -> {
+                    Object sel = fileListView.getSelectionModel().getSelectedItem();
+                    int selIndex = displayItems.indexOf(sel);
+                    boolean selRemoved = sel != null && record.items().contains(sel);
+                    for (PreviewItem it : record.items()) {
+                        it.removed = true;
+                        it.setSelected(false);
+                        // 防遗漏：导入项若已进入组（组内成员），一并从成员列表移除
+                        GroupItem<PreviewItem> pg = it.parentGroup;
+                        if (pg != null) {
+                            pg.getMembers().remove(it);
+                        }
+                    }
+                    // 规则 (c)：撤销导入 = 从列表移除这批项目 → 删其缓存目录
+                    workspaceParamService.itemsRemoved(record.items());
+                    items.removeAll(record.items());
+                    // 组内项目随撤销导入移除后可能产生空组：直接销毁（撤销导入本身不再记录）
+                    for (int i = items.size() - 1; i >= 0; i--) {
+                        if (items.get(i) instanceof GroupItem<?> g
+                                && GroupStructure.isEmptyGroup(asPreviewGroup(g), m -> m.removed)) {
+                            items.remove(i);
+                        }
+                    }
+                    if (selRemoved) {
+                        selectNearestVisible(selIndex);
+                    }
+                    log.info("撤销导入：本次新增的 {} 个项目、{} 个自动创建的组已移除",
+                            record.items().size(), record.groups().size());
                 }
-                selectAfter = record.group();
-                log.info("撤销拆分：组 {} 已重建（{} 个项目），组名与组参数恢复",
-                        record.group().getName(), record.items().size());
-            }
-            case PARAM_SET -> {
-                // 条目独立参数需求拍板：设置参数类操作（条目/组/全局）可撤销，恢复设置前的参数
-                boolean im = record.paramImageMode();
-                if (record.paramTargetPath() != null) {
-                    for (PreviewItem it : allPreviewItems()) {
-                        if (it.path.equals(record.paramTargetPath())) {
-                            if (im) {
-                                it.imageItemParams = record.paramBefore();
-                            } else {
-                                it.textItemParams = record.paramBefore();
-                            }
-                            clearExtractOutcomes(List.of(it));
-                            clearPreviewCache(it);
-                            // 规则 (a)：撤销恢复旧参数 = 生效参数变化 → 删该项目缓存目录
-                            workspaceParamService.paramsChanged(im, it);
-                            startPreParseFor(List.of(it));
-                            break;
-                        }
-                    }
-                } else if (record.paramTargetGroupNo() != null) {
-                    for (Object o : items) {
-                        if (o instanceof GroupItem<?> g
-                                && ((GroupItem<PreviewItem>) g).getGroupNo() == record.paramTargetGroupNo()) {
-                            GroupItem<PreviewItem> grp = (GroupItem<PreviewItem>) g;
-                            if (im) {
-                                grp.setImageParamsCache(record.paramBefore());
-                            } else {
-                                grp.setTextParamsCache(record.paramBefore());
-                            }
-                            List<PreviewItem> members = grp.getMembers().stream()
-                                    .filter(m -> !m.removed).toList();
-                            clearExtractOutcomes(members);
-                            for (PreviewItem m : members) {
-                                clearPreviewCache(m);
-                            }
-                            // 规则 (a)：撤销恢复组参数 → 成员生效参数变化 → 删其缓存目录
-                            workspaceParamService.paramsChanged(im, members);
-                            startPreParseFor(members);
-                            break;
-                        }
-                    }
-                } else {
-                    if (im) {
-                        imageParamsCache = record.paramBefore();
+                case GROUP, REORDER, MERGE_GROUPS -> {
+                    // 撤销恢复拖拽前结构（顶层顺序、组位置、各组内顺序），组对象复用（组名/参数保留）
+                    GroupStructure.restoreStructure(items, record.structureBefore());
+                    if (record.type() == UndoManager.RecordType.GROUP) {
+                        record.items().stream()
+                                .filter(i -> !i.removed).findFirst().ifPresent(firstVisible -> fileListView.getSelectionModel().select(firstVisible));
+                        log.info("撤销合并为组：组 {} 已解散，成员回到原位置", record.group().getName());
                     } else {
-                        textParamsCache = record.paramBefore();
+                        reparseAfter = new ArrayList<>();
+                        for (PreviewItem it : record.items()) {
+                            if (!it.removed) {
+                                clearPreviewCache(it);
+                                reparseAfter.add(it);
+                            }
+                        }
+                        log.info("撤销{}：列表结构已恢复拖拽前状态",
+                                record.type() == UndoManager.RecordType.REORDER ? "拖拽排序" : "组合并");
+                    }
+                }
+                case UNGROUP -> {
+                    // F6：组重建——成员从顶层移除并重新划入，组对象（组名/组参数）原样插回原位置
+                    GroupStructure.restoreGroup(items, record.group(), record.groupIndex(), record.items());
+                    // 条目独立参数生命周期拍板：撤销拆分后成员回组，拆分时复制的条目级参数清除
+                    for (PreviewItem m : record.items()) {
+                        m.textItemParams = null;
+                        m.imageItemParams = null;
+                    }
+                    selectAfter = record.group();
+                    log.info("撤销拆分：组 {} 已重建（{} 个项目），组名与组参数恢复",
+                            record.group().getName(), record.items().size());
+                }
+                case PARAM_SET -> {
+                    // 条目独立参数需求拍板：设置参数类操作（条目/组/全局）可撤销，恢复设置前的参数
+                    boolean im = record.paramImageMode();
+                    if (record.paramTargetPath() != null) {
+                        for (PreviewItem it : allPreviewItems()) {
+                            if (it.path.equals(record.paramTargetPath())) {
+                                if (im) {
+                                    it.imageItemParams = record.paramBefore();
+                                } else {
+                                    it.textItemParams = record.paramBefore();
+                                }
+                                clearExtractOutcomes(List.of(it));
+                                clearPreviewCache(it);
+                                // 规则 (a)：撤销恢复旧参数 = 生效参数变化 → 删该项目缓存目录
+                                workspaceParamService.paramsChanged(im, it);
+                                startPreParseFor(List.of(it));
+                                break;
+                            }
+                        }
+                    } else if (record.paramTargetGroupNo() != null) {
+                        for (Object o : items) {
+                            if (o instanceof GroupItem<?> g
+                                    && g.getGroupNo() == record.paramTargetGroupNo()) {
+                                GroupItem<PreviewItem> grp = asPreviewGroup(g);
+                                if (im) {
+                                    grp.setImageParamsCache(record.paramBefore());
+                                } else {
+                                    grp.setTextParamsCache(record.paramBefore());
+                                }
+                                List<PreviewItem> members = grp.getMembers().stream()
+                                        .filter(m -> !m.removed).toList();
+                                clearExtractOutcomes(members);
+                                for (PreviewItem m : members) {
+                                    clearPreviewCache(m);
+                                }
+                                // 规则 (a)：撤销恢复组参数 → 成员生效参数变化 → 删其缓存目录
+                                workspaceParamService.paramsChanged(im, members);
+                                startPreParseFor(members);
+                                break;
+                            }
+                        }
+                    } else {
+                        if (im) {
+                            imageParamsCache = record.paramBefore();
+                        } else {
+                            textParamsCache = record.paramBefore();
+                        }
+                        clearExtractOutcomes(allPreviewItems());
+                        // 规则 (a)：撤销恢复全局参数 → 全部条目生效参数可能变化 → 保守全删
+                        workspaceParamService.paramsChanged(im, allPreviewItems());
+                        refreshAfterParamsChanged();
+                    }
+                    fileListView.refresh();
+                    updateInfoArea(currentSelection());
+                    updateExtractBanner(currentSelection());
+                    updateListButtons();
+                    log.info("撤销设置提取参数：{}模式参数已恢复", im ? "图片" : "文本");
+                }
+                case CLEAR_PARAMS -> {
+                    // 清除参数拍板 Q4：按 before 快照一次恢复全部被清除的条目/组参数，并重走联动刷新
+                    boolean im = record.clearImageMode();
+                    Map<String, AppConfig> itemBefore = record.clearItemParamsBefore();
+                    List<PreviewItem> restoredItems = new ArrayList<>();
+                    for (PreviewItem it : allPreviewItems()) {
+                        if (itemBefore.containsKey(it.path)) {
+                            if (im) {
+                                it.imageItemParams = itemBefore.get(it.path);
+                            } else {
+                                it.textItemParams = itemBefore.get(it.path);
+                            }
+                            restoredItems.add(it);
+                        }
+                    }
+                    Map<Integer, AppConfig> groupBefore = record.clearGroupParamsBefore();
+                    List<PreviewItem> affected = new ArrayList<>(restoredItems);
+                    for (Object o : items) {
+                        if (o instanceof GroupItem<?> g) {
+                            GroupItem<PreviewItem> grp = asPreviewGroup(g);
+                            if (groupBefore.containsKey(grp.getGroupNo())) {
+                                if (im) {
+                                    grp.setImageParamsCache(groupBefore.get(grp.getGroupNo()));
+                                } else {
+                                    grp.setTextParamsCache(groupBefore.get(grp.getGroupNo()));
+                                }
+                                affected.addAll(grp.getMembers().stream()
+                                        .filter(m -> !m.removed).toList());
+                            }
+                        }
+                    }
+                    clearExtractOutcomes(affected);
+                    // 规则 (a)：撤销恢复被清除的参数 → 受影响条目生效参数变化 → 删其缓存目录
+                    workspaceParamService.paramsChanged(im, affected);
+                    refreshAfterTargetedParamsChange(affected);
+                    updateListButtons();
+                    updateExtractBanner(currentSelection());
+                    log.info("撤销清除参数：{}模式 {} 个条目、{} 个组的参数已恢复",
+                            im ? "图片" : "文本", restoredItems.size(), groupBefore.size());
+                }
+                case APPLY_GLOBAL -> {
+                    // 条目独立参数需求拍板：恢复应用前的全局参数与全部独立参数快照
+                    boolean im = record.applyGlobalImageMode();
+                    if (im) {
+                        imageParamsCache = record.applyGlobalBefore();
+                    } else {
+                        textParamsCache = record.applyGlobalBefore();
+                    }
+                    Map<String, AppConfig> itemBefore = record.applyGlobalItemParamsBefore();
+                    for (PreviewItem it : allPreviewItems()) {
+                        if (itemBefore.containsKey(it.path)) {
+                            AppConfig p = itemBefore.get(it.path);
+                            if (im) {
+                                it.imageItemParams = p;
+                            } else {
+                                it.textItemParams = p;
+                            }
+                        }
+                    }
+                    Map<Integer, AppConfig> groupBefore = record.applyGlobalGroupParamsBefore();
+                    for (Object o : items) {
+                        if (o instanceof GroupItem<?> g) {
+                            if (groupBefore.containsKey(g.getGroupNo())) {
+                                AppConfig p = groupBefore.get(g.getGroupNo());
+                                if (im) {
+                                    g.setImageParamsCache(p);
+                                } else {
+                                    g.setTextParamsCache(p);
+                                }
+                            }
+                        }
                     }
                     clearExtractOutcomes(allPreviewItems());
-                    // 规则 (a)：撤销恢复全局参数 → 全部条目生效参数可能变化 → 保守全删
+                    // 规则 (a)：撤销应用到全局 → 全部条目生效参数可能变化 → 保守全删
                     workspaceParamService.paramsChanged(im, allPreviewItems());
                     refreshAfterParamsChanged();
+                    updateListButtons();
+                    updateExtractBanner(currentSelection());
+                    log.info("撤销应用到全局：{}模式参数与全部独立参数已恢复", im ? "图片" : "文本");
                 }
-                fileListView.refresh();
-                updateInfoArea(currentSelection());
-                updateExtractBanner(currentSelection());
-                updateListButtons();
-                log.info("撤销设置提取参数：{}模式参数已恢复", im ? "图片" : "文本");
-            }
-            case CLEAR_PARAMS -> {
-                // 清除参数拍板 Q4：按 before 快照一次恢复全部被清除的条目/组参数，并重走联动刷新
-                boolean im = record.clearImageMode();
-                Map<String, AppConfig> itemBefore = record.clearItemParamsBefore();
-                List<PreviewItem> restoredItems = new ArrayList<>();
-                for (PreviewItem it : allPreviewItems()) {
-                    if (itemBefore.containsKey(it.path)) {
-                        if (im) {
-                            it.imageItemParams = itemBefore.get(it.path);
-                        } else {
-                            it.textItemParams = itemBefore.get(it.path);
-                        }
-                        restoredItems.add(it);
-                    }
-                }
-                Map<Integer, AppConfig> groupBefore = record.clearGroupParamsBefore();
-                List<PreviewItem> affected = new ArrayList<>(restoredItems);
-                for (Object o : items) {
-                    if (o instanceof GroupItem<?> g) {
-                        GroupItem<PreviewItem> grp = (GroupItem<PreviewItem>) g;
-                        if (groupBefore.containsKey(grp.getGroupNo())) {
-                            if (im) {
-                                grp.setImageParamsCache(groupBefore.get(grp.getGroupNo()));
-                            } else {
-                                grp.setTextParamsCache(groupBefore.get(grp.getGroupNo()));
-                            }
-                            affected.addAll(grp.getMembers().stream()
-                                    .filter(m -> !m.removed).toList());
-                        }
-                    }
-                }
-                clearExtractOutcomes(affected);
-                // 规则 (a)：撤销恢复被清除的参数 → 受影响条目生效参数变化 → 删其缓存目录
-                workspaceParamService.paramsChanged(im, affected);
-                refreshAfterTargetedParamsChange(affected);
-                updateListButtons();
-                updateExtractBanner(currentSelection());
-                log.info("撤销清除参数：{}模式 {} 个条目、{} 个组的参数已恢复",
-                        im ? "图片" : "文本", restoredItems.size(), groupBefore.size());
-            }
-            case APPLY_GLOBAL -> {
-                // 条目独立参数需求拍板：恢复应用前的全局参数与全部独立参数快照
-                boolean im = record.applyGlobalImageMode();
-                if (im) {
-                    imageParamsCache = record.applyGlobalBefore();
-                } else {
-                    textParamsCache = record.applyGlobalBefore();
-                }
-                Map<String, AppConfig> itemBefore = record.applyGlobalItemParamsBefore();
-                for (PreviewItem it : allPreviewItems()) {
-                    if (itemBefore.containsKey(it.path)) {
-                        AppConfig p = itemBefore.get(it.path);
-                        if (im) {
-                            it.imageItemParams = p;
-                        } else {
-                            it.textItemParams = p;
-                        }
-                    }
-                }
-                Map<Integer, AppConfig> groupBefore = record.applyGlobalGroupParamsBefore();
-                for (Object o : items) {
-                    if (o instanceof GroupItem<?> g) {
-                        GroupItem<PreviewItem> grp = (GroupItem<PreviewItem>) g;
-                        if (groupBefore.containsKey(grp.getGroupNo())) {
-                            AppConfig p = groupBefore.get(grp.getGroupNo());
-                            if (im) {
-                                grp.setImageParamsCache(p);
-                            } else {
-                                grp.setTextParamsCache(p);
-                            }
-                        }
-                    }
-                }
-                clearExtractOutcomes(allPreviewItems());
-                // 规则 (a)：撤销应用到全局 → 全部条目生效参数可能变化 → 保守全删
-                workspaceParamService.paramsChanged(im, allPreviewItems());
-                refreshAfterParamsChanged();
-                updateListButtons();
-                updateExtractBanner(currentSelection());
-                log.info("撤销应用到全局：{}模式参数与全部独立参数已恢复", im ? "图片" : "文本");
             }
         }
         refreshAfterListChange();
@@ -3301,7 +3309,7 @@ public class MainController {
         if (!(sel instanceof GroupItem<?> g)) {
             return;
         }
-        GroupItem<PreviewItem> group = (GroupItem<PreviewItem>) g;
+        GroupItem<PreviewItem> group = asPreviewGroup(g);
         int topIdx = items.indexOf(group);
         if (topIdx < 0) {
             return;
@@ -3465,7 +3473,7 @@ public class MainController {
         collapseViews = memberViews;
         collapseViews.addAll(belowViews);
         collapseCells = belowCells;
-        pt.setOnFinished(e -> finishExpandAnim());
+        pt.setOnFinished(_ -> finishExpandAnim());
         pt.play();
     }
 
@@ -3573,7 +3581,7 @@ public class MainController {
         collapseViews = memberViews;
         collapseViews.addAll(belowViews);
         collapseCells = hiddenCells;
-        pt.setOnFinished(e -> finishExpandAnim());
+        pt.setOnFinished(_ -> finishExpandAnim());
         pt.play();
     }
 
@@ -3697,7 +3705,7 @@ public class MainController {
         for (Object o : items) {
             if (o instanceof GroupItem<?> g) {
                 int n = 1;
-                for (Object m : ((GroupItem<?>) g).getMembers()) {
+                for (Object m : g.getMembers()) {
                     if (m instanceof PreviewItem it) {
                         n = assignBadge(it, n);
                     }
@@ -3729,7 +3737,7 @@ public class MainController {
         // 第三行：文本模式 = 章节复选框（逐文件调整）；图片模式 = 输出结果展示（全局打包配置）；组条目两者均不显示
         boolean isItem = item instanceof PreviewItem it && !it.removed;
         AppConfig eff = isItem ? effectiveForObject(item) : null;
-        boolean checkVisible = isTextMode() && eff != null && isItem && eff.isAddChapterNumber();
+        boolean checkVisible = isTextMode() && eff != null && eff.isAddChapterNumber();
         adjustCheck.setVisible(checkVisible);
         adjustCheck.setManaged(checkVisible);
         if (checkVisible) {
@@ -3739,7 +3747,7 @@ public class MainController {
             adjustCheck.setSelected(it.chapterEnabled);
             updatingAdjustCheck = false;
         }
-        boolean resultVisible = !isTextMode() && eff != null && isItem;
+        boolean resultVisible = !isTextMode() && eff != null;
         outputResultLabel.setVisible(resultVisible);
         outputResultLabel.setManaged(resultVisible);
     }
@@ -3771,7 +3779,7 @@ public class MainController {
             outputNameLabel.setManaged(false);
             groupNameBox.setVisible(true);
             groupNameBox.setManaged(true);
-            attachGroupNameEditor((GroupItem<PreviewItem>) g);
+            attachGroupNameEditor(asPreviewGroup(g));
             return;
         }
         AppConfig params = effectiveForObject(item);
@@ -3808,7 +3816,7 @@ public class MainController {
                 outputNameLabel.setText(I18n.get("preview.outputFilePrefix") + stripMhtExt(it.name) + ".txt");
             } else {
                 String inputDirName = new File(inputFolderField.getText()).getName();
-                if (inputDirName == null || inputDirName.isEmpty()) {
+                if (inputDirName.isEmpty()) {
                     inputDirName = "mht_output";
                 }
                 outputNameLabel.setText(I18n.get("preview.outputFilePrefix") + inputDirName + ".txt"
@@ -3868,7 +3876,7 @@ public class MainController {
         }
         // 组条目：预览区显示组信息与参数状态提示（6.5）
         if (item instanceof GroupItem<?> g) {
-            GroupItem<PreviewItem> group = (GroupItem<PreviewItem>) g;
+            GroupItem<PreviewItem> group = asPreviewGroup(g);
             String info = I18n.get("preview.groupInfo") + group.getName()
                     + I18n.get("preview.groupItemCount", "count", visibleMemberCount(group))
                     + I18n.get("preview.paramsLabel") + groupParamStatusText(group);
@@ -4421,15 +4429,15 @@ public class MainController {
                         "step", stepGiB, "actual", String.format("%.1f", actualGiB),
                         "dir", previewCacheLifecycle.store().root())
                 + I18n.get("cache.sizeAlertNote");
-        Platform.runLater(() -> showAlertNonModal(Alert.AlertType.INFORMATION, message));
+        Platform.runLater(() -> showAlertNonModal(message));
     }
 
     /** 会话 12：非模态提醒弹窗（show() 不阻塞）；上一提醒未关则先关再弹，防台阶连续跨越时窗口堆积 */
-    private void showAlertNonModal(Alert.AlertType type, String message) {
+    private void showAlertNonModal(String message) {
         if (sizeAlertWindow != null && sizeAlertWindow.isShowing()) {
             sizeAlertWindow.close();
         }
-        sizeAlertWindow = new Alert(type, message, ButtonType.OK);
+        sizeAlertWindow = new Alert(Alert.AlertType.INFORMATION, message, ButtonType.OK);
         sizeAlertWindow.show();
     }
 }

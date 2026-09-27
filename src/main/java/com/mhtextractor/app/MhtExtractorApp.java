@@ -6,7 +6,6 @@ import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.processor.TextBatchProcessor;
 
-import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -195,14 +194,4 @@ public final class MhtExtractorApp {
         return out;
     }
 
-    /** 便捷方法：把 {@code File} 列表转为 {@code Path} 列表（供 GUI 适配层使用） */
-    public static List<Path> toPaths(List<File> files) {
-        List<Path> out = new ArrayList<>();
-        if (files != null) {
-            for (File f : files) {
-                if (f != null) out.add(f.toPath());
-            }
-        }
-        return out;
-    }
 }

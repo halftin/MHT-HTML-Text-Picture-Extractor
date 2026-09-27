@@ -3,11 +3,13 @@ package com.mhtextractor.core;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.EncodingUtils;
 import com.mhtextractor.util.HtmlUtils;
+import lombok.Getter;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -17,14 +19,11 @@ import java.util.regex.Pattern;
  * 内容提取协调器
  * 基于 MimeParser 解析结果，提取文本和章节标题
  */
+@Getter
 public class ContentExtractor {
     private static final Logger logger = LoggerFactory.getLogger(ContentExtractor.class);
 
     private final List<String> lastWarnings = new ArrayList<>();
-
-    public List<String> getLastWarnings() {
-        return lastWarnings;
-    }
 
     /**
      * 从HTML内容中提取纯文本
@@ -39,7 +38,7 @@ public class ContentExtractor {
             String detectedCharset = EncodingUtils.detectCharsetFromHtml(htmlContent);
             if (detectedCharset != null) {
                 try {
-                    byte[] htmlBytes = htmlContent.getBytes("ISO-8859-1");
+                    byte[] htmlBytes = htmlContent.getBytes(StandardCharsets.ISO_8859_1);
                     String reDecoded = new String(htmlBytes, detectedCharset);
                     if (!EncodingUtils.containsGarbled(reDecoded) && EncodingUtils.containsChinese(reDecoded)) {
                         htmlContent = reDecoded;
@@ -59,10 +58,11 @@ public class ContentExtractor {
 
         // HTML → 纯文本
         Document doc = Jsoup.parse(htmlContent);
-        String text = doc.body() != null ? doc.body().wholeText() : "";
+        doc.body();
+        String text = doc.body().wholeText();
 
         // 乱码修复
-        if (autoFixEncoding && text != null) {
+        if (autoFixEncoding) {
             text = EncodingUtils.smartFix(text);
         }
         return text;

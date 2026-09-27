@@ -3,27 +3,10 @@ package com.mhtextractor.platform;
 import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.net.URLEncoder;
-import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.Charset;
-import java.nio.charset.CodingErrorAction;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * 用系统默认浏览器打开本地 HTML（渲染视图 + 源码视图 + 多级兜底）。
@@ -77,7 +60,7 @@ public final class BrowserLauncher {
         }
         String profile = Paths.get(System.getProperty("java.io.tmpdir"), CdpClient.CDP_PROFILE_NAME).toString();
         String renderUrl = toFileUrl(htmlFile);
-        if (!CdpClient.ensureCdpInstance(exe.get(), CdpClient.CDP_PORT, profile, renderUrl)) {
+        if (!CdpClient.ensureCdpInstance(exe.get(), profile, renderUrl)) {
             return false;
         }
         String viewSourceUrl = "view-source:" + renderUrl;
