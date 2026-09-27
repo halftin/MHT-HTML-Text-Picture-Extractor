@@ -634,6 +634,15 @@ class ArchitectureTest {
      * <p><b>允许的形态</b>：读（{@code for (Object o : items)} / {@code items.indexOf(x)}）与
      * 模型转发（{@code ws.xxx(...)}）。禁止的是在数据序上做增删改调用。</p>
      *
+     * <p><b>⚠️ 本断言的边界（诚实标注）</b>：它只保证"GUI 里没有<b>直接</b>写数据序"，
+     * <b>不</b>保证"没有<b>间接</b>写"。实测另有两处把 {@code items} 交给 {@code util} 层方法去写，
+     * 都在**有意不迁移**的拖拽路径（REORDER / MERGE_GROUPS）上：
+     * {@code DropResolver.apply(items, ...)}（正向改结构，见 MainController:2222）与
+     * {@code GroupStructure.restoreStructure(items, ...)}（拖拽类撤销，见 MainController:2975）。
+     * 它们是"结构操作"、与模型写法同构，且拖拽记录本就由 GUI 自己压自己用，故一致；
+     * 本断言把这两处的数量打印出来，以便日后新增时能被看见
+     * （决策依据见 {@code docs/handoff/H33.md} §六.2）。</p>
+     *
      * <p><b>口径说明</b>：只认小写 {@code items.} 且要求前一个字符不是标识符字符 ——
      * 否则 {@code displayItems.setAll(...)}（显示序，GUI 本来就该自己维护）与
      * {@code topItems.add(...)} 会被误判。</p>
@@ -665,7 +674,28 @@ class ArchitectureTest {
                 "GUI 层不得直接改动 workspace 数据序（须经 com.mhtextractor.app.WorkspaceModel）：\n  "
                         + String.join("\n  ", offenders)
                         + "\n数据序是与模型共享的同一个列表，直写会绕过撤销记录与结构维护而静默分叉。");
-        System.out.println("[arch] GUI 未直接改动数据序（已全部经 WorkspaceModel）");
+
+        // 边界可视化：把"间接写"（把 items 交给 util 层方法去写）的数量与位置打印出来。
+        // 当前应为 2 处，都在有意不迁移的拖拽路径上（见本方法 javadoc 与 H33 §六.2）。
+        List<String> passthrough = new ArrayList<>();
+        List<String> passthroughApis = List.of(
+                "DropResolver.apply(items", "GroupStructure.restoreStructure(items",
+                "GroupStructure.restoreGroup(items", "GroupStructure.dissolveGroup(items");
+        try (Stream<Path> walk = Files.walk(guiPkg)) {
+            for (Path p : walk.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
+                String rel = guiPkg.relativize(p).toString().replace('\\', '/');
+                for (String line : Files.readAllLines(p, StandardCharsets.UTF_8)) {
+                    String code = line.split("//")[0];
+                    for (String api : passthroughApis) {
+                        if (code.contains(api)) {
+                            passthrough.add(rel + " -> " + api + "…)");
+                        }
+                    }
+                }
+            }
+        }
+        System.out.println("[arch] GUI 未直接改动数据序；间接写（拖拽路径，有意保留）"
+                + passthrough.size() + " 处：" + passthrough);
     }
 
     /**

@@ -2,8 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **最后更新：2026-09-27**（架构重构 + 全量国际化 + 预览缓存持久化 + **WorkspaceModel 接入生产（阶段 1b/2，5/6 条写路径）** 之后）
-> 本轮交接：`docs/handoff/H33.md`（含"接入生产前必须先核对模型语义"的 3 处实例）
+> **最后更新：2026-09-27**（架构重构 + 全量国际化 + 预览缓存持久化 + **WorkspaceModel 接入生产：阶段 1b/2/3/4 全部完成**）
+> 本轮交接：`docs/handoff/H33.md`（含**共享存储路线**、以及"接入生产前必须先逐行核对模型语义"的 3 个实例）
 
 ---
 
@@ -50,7 +50,7 @@ app          ← 无头应用层（零 JavaFX）：MhtExtractorApp / WorkspaceMo
 model        ← 纯数据模型（PreviewItem / ThumbnailData），零 JavaFX，被 app 与 gui 共用
 ```
 
-**架构红线（由 `ArchitectureTest` 的 10 条不变式自动强制）**：
+**架构红线（由 `ArchitectureTest` 的 11 条不变式自动强制）**：
 
 | 不变式 | 含义 |
 |---|---|
@@ -58,6 +58,7 @@ model        ← 纯数据模型（PreviewItem / ThumbnailData），零 JavaFX�
 | `applicationLayerDoesNotDependOnViewOrShell` | `app` 不得 import `gui` / `logging` / `App` |
 | `mainControllerIsShrinking` | `MainController` 行数**只减不增**（当前上限值见测试内注释） |
 | `guiLayerDoesNotInvokeCacheRulesDirectly` | GUI 不得直接调用预览缓存的删除规则（须经 `WorkspaceParamService`） |
+| `guiDoesNotMutateDataOrderDirectly` | **GUI 不得直接改动 workspace 数据序**（须经 `WorkspaceModel`）。数据序是 GUI 与模型**共享的同一个列表**，直写会绕过撤销记录与结构维护而**静默分叉**（不报错）。当前实测 **0 处** |
 | `headlessTestPackagesHaveNoJavaFx` | 无头测试包源码不得出现 UI 框架字面量 |
 | `businessLayerI18nUsageDoesNotGrow` | 业务层 `I18n.` 引用数不得超过基线（防"业务层继续拼文案"） |
 | `noNewThirdPartyDependencies` | 不得新增第三方依赖（**保护 native 打包**） |
@@ -89,6 +90,7 @@ MhtExtractorApp                      // 门面
 
 WorkspaceModel          // 无头工作区，**已是生产路径的数据序唯一写入者**
                         //   语义操作：addItems（去重+压记录）/group/ungroup/removeItems/removeGroup/undo/clear
+                        //   撤销应用：applyUndo(record) —— undo() 与 GUI 共用的**唯一**结构恢复实现
                         //   结构原语：appendItems/appendGroup（不去重、不压记录，供导入路径用）
                         //   共享构造：new WorkspaceModel(list) —— 与 GUI 共用同一份数据序列表（见 H33 §二）
                         //   + displayOrder/topLevel/allItems/visibleCount/groups/undoDepth/nextGroupNo
@@ -100,9 +102,9 @@ ExtractionPreconditions // 提取前置校验规则（含 Level 分级 + Denial�
 
 ### GUI
 
-- **`MainController`** — FXML 控制器（**4362 行**，`ArchitectureTest.mainControllerIsShrinking` 强制**只减不增**，上限常量 **4435**，余量 73）：模式切换、输入/输出目录、文件列表（拖拽排序/分组/勾选/章节徽标）、文本与图片预览、预解析线程、提取任务启停、`logs/gui-state.json` 持久化。持有两个按模式确认的参数缓存（null = 该模式未确认参数）。
-  > 会话 18 起持续减重：6111 → 5109（外迁演练代码）→ 5002（外迁 `PreviewItem`）→ 4985 → **4935**（步骤 2 预览编排 → `app.PreviewService`）→ **4435**（步骤 3 `PreviewListCell` 外迁为顶层类）→ **4362**（WorkspaceModel 接入生产：导入/移除/整组移除/建组/拆分组五条写路径切到模型）。列表单元格渲染/拖拽已不在本类。
-  > ⚠️ 数据序（`items`）已与 `WorkspaceModel` **共享同一份列表**，GUI 不得再直接增删 —— 目前仅 `onUndoClicked` 3 处（撤销应用）尚未迁移，见 `H33.md` §六。
+- **`MainController`** — FXML 控制器（**4334 行**，`ArchitectureTest.mainControllerIsShrinking` 强制**只减不增**，上限常量 **4370**，余量 36）：模式切换、输入/输出目录、文件列表（拖拽排序/分组/勾选/章节徽标）、文本与图片预览、预解析线程、提取任务启停、`logs/gui-state.json` 持久化。持有两个按模式确认的参数缓存（null = 该模式未确认参数）。
+  > 会话 18 起持续减重：6111 → 5109（外迁演练代码）→ 5002（外迁 `PreviewItem`）→ 4985 → **4935**（步骤 2 预览编排 → `app.PreviewService`）→ **4435**（步骤 3 `PreviewListCell` 外迁为顶层类）→ **4334**（WorkspaceModel 接入生产：导入/移除/整组移除/建组/拆分组/撤销应用六条路径全部切到模型）。列表单元格渲染/拖拽已不在本类。
+  > ✅ 数据序（`items`）与 `WorkspaceModel` **共享同一份列表**，GUI 对它的**直接**写入点已 **归零**，由第 11 条不变式 `guiDoesNotMutateDataOrderDirectly` 持续强制（该断言同时把"间接写"的处数打印出来）。⚠️ 边界：另有 **2 处间接写** —— 把 `items` 交给 util 层方法改写：`DropResolver.apply(items, …)`（拖拽正向，:2222）与 `GroupStructure.restoreStructure(items, …)`（拖拽类撤销，:2975）。两者都在**有意不迁移**的拖拽路径（REORDER / MERGE_GROUPS）上，决策依据见 `H33.md` §六.2。
 - **`ParamDialogController`** — 「提取参数设置」模态弹窗；仅「确定」提交；底部固定行是命名配置 CRUD。
 - **`LogTextArea`** — 自定义 JavaFX 组件，经 `TextAreaAppender` 注册为 Logback consumer（日志进界面）。
 - **`MainView.fxml` / `ParamDialog.fxml`** — 全部文案为 `%key`（经 `loader.setResources(I18n.bundle())` 注入），**不得再出现中文字面量**。
@@ -126,14 +128,14 @@ ExtractionPreconditions // 提取前置校验规则（含 Level 分级 + Denial�
 
 | 资产 | 位置 | 规模 |
 |---|---|---|
-| 单元测试 | `src/test/java` | **402 测试 / 35 类**（`util`/`processor` 覆盖最好） |
+| 单元测试 | `src/test/java` | **406 测试 / 35 类**（`util`/`processor` 覆盖最好） |
 | MHT 夹具 | `src/test/resources/fixtures/` | 11 个（simple-text / single-image / multi-image / data-uri / data-uri-mixed / region / titles / cn-filename / garbage / deep-nesting / no-cte） |
 | **产物黄金基线** | `src/test/resources/baselines/` | **32 份**（16 例 × zh/en）——重构的字节级标尺；只证明"没变"不证明"对"，已知缺陷以 `knownIssues` 标注 |
-| 架构不变式 | `src/test/java/com/mhtextractor/baseline/ArchitectureTest.java` | 10 条 |
+| 架构不变式 | `src/test/java/com/mhtextractor/baseline/ArchitectureTest.java` | 11 条 |
 
-> **回归门槛（每个改动都必须全绿）**：`mvn test` = 默认执行 **402/0**（35 类）+ `headless-layer-b` **50/0**；
-> 产物基线 **32 份**；架构不变式 **10 条**；GUI 自动化 **zh 30/0、en 30/0**。
-> 两条"顶格"约束：`MainController` ≤ **4435** 行（实测 4362）、`/* test-support */` 标记 ≤ **44** 个（实测 44，顶格）—— 均**只减不增**。
+> **回归门槛（每个改动都必须全绿）**：`mvn test` = 默认执行 **406/0**（35 类）+ `headless-layer-b` **53/0**；
+> 产物基线 **32 份**；架构不变式 **11 条**；GUI 自动化 **zh 30/0、en 30/0**。
+> 两条约束：`MainController` ≤ **4370** 行（实测 4334，**刻意留 36 行余量** —— 零余量会让一次常规清理直接打红，见 `ArchitectureTest` 常量 javadoc）、`/* test-support */` 标记 ≤ **44** 个（实测 44，顶格）—— 均**只减不增**。
 
 ---
 
@@ -267,7 +269,7 @@ java -agentlib:native-image-agent=config-output-dir=target/agent-out -cp ... <�
 - **git 身份未配置**：`git commit` 会报 `Author identity unknown`，须内联
   `git -c user.name="Administrator" -c user.email="admin@mht-extractor.local" commit -m "..."`（**不要** `git config`，那会改用户环境）。
 - **`git` 忽略规则已锚定到仓库根**：`.gitignore` 用 `/config/`、`/logs/`、`/temp/`、`/输出文件/`。**不要改回不带前导 `/` 的写法**——那样会误伤 `src/test/java/com/mhtextractor/config/`，导致新测试文件被静默忽略（本项目真发生过）。
-- **不要整文件读取 `MainController.java`**（**4362 行**）：用 `grep -n` 定位 + 区间读，否则上下文会被吃掉。
+- **不要整文件读取 `MainController.java`**（**4334 行**）：用 `grep -n` 定位 + 区间读，否则上下文会被吃掉。
 - **行号会漂移**：本文件或任何文档中提到的行号，引用前先用 `grep -n` 复核。
 
 ---
