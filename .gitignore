@@ -47,3 +47,7 @@ build/
 
 ### 探针编译产物（由 tools/probes/run-probe.ps1 生成，不入库） ###
 /tools/probes/out/
+
+### Python 缓存（bug_tests.py 运行后产生） ###
+__pycache__/
+*.pyc

@@ -1,44 +1,73 @@
 """
-MHT Extractor Bug 复现测试
-测试文件：X:\123\新建文件夹\view\ 目录下的 MHT 文件
+MHT Extractor Bug 复现测试（独立脚本：不参与构建、不被测试框架加载）
+
+在打包机上的用法：
+    1) 先确保已编译（产出 target\\classes 与 target\\lib）：
+         build-native.cmd --prepare-only      （或 mvn package -DskipTests）
+    2) 填好下面「环境参数」一节（直接改脚本，或用同名环境变量覆盖）
+    3) python bug_tests.py
+
+环境参数（都可留空，由同名环境变量提供）：
+    MHT_TEST_DIR     待测 .mht 文件所在目录
+    NIK25_HOME       BellSoft Liberica NIK 25 安装目录（其下有 bin\\javac.exe 与 bin\\java.exe）
+    MHT_OUTPUT_DIR   产物输出目录，默认 <仓库>\\dist
+    MSVC_ENV         vcvars64.bat 完整路径（本脚本自身不调用 MSVC，仅留给 native-image 相关步骤参考）
+
+下面由仓库布局推导的路径**不需要改**：仓库结构不变时零配置可用。
 """
 import subprocess
 import os
 import sys
 
-TEST_MHT_DIR = r"X:\123\新建文件夹\view"
-JAVA_SRC = r"X:\123\mht-resource-extractor\src\main\java"
-TARGET_CLASSES = r"X:\123\mht-resource-extractor\target\classes"
-TARGET_LIB = r"X:\123\mht-resource-extractor\target\lib"
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+
+def _cfg(env_name: str, default: str) -> str:
+    """环境变量优先，为空则用默认值（默认值是占位符时会在主流程被拦下并给出提示）"""
+    value = os.environ.get(env_name)
+    return value if value else default
+
+
+# ══════════════════════════════════════════════════════════════════
+# 环境参数 —— 打包机上只需改这一段（或设同名环境变量）
+# ══════════════════════════════════════════════════════════════════
+TEST_MHT_DIR = _cfg("MHT_TEST_DIR", r"<打包机上填写：待测 MHT 文件所在目录>")
+NIK25_HOME = _cfg("NIK25_HOME", r"<打包机上填写：Liberica NIK 25 安装目录>")
+OUTPUT_DIR = _cfg("MHT_OUTPUT_DIR", os.path.join(REPO_ROOT, "dist"))
+MSVC_ENV = _cfg("MSVC_ENV", r"<打包机上填写：vcvars64.bat 完整路径>")
+
+# ── 以下由仓库布局推导，正常不需要改 ──
+JAVA_SRC = os.path.join(REPO_ROOT, "src", "main", "java")
+TARGET_CLASSES = os.path.join(REPO_ROOT, "target", "classes")
+TARGET_LIB = os.path.join(REPO_ROOT, "target", "lib")
+TEST_CLASSES_DIR = os.path.join(REPO_ROOT, "target", "test-classes")
+JAVAC = os.path.join(NIK25_HOME, "bin", "javac.exe")
+JAVA = os.path.join(NIK25_HOME, "bin", "java.exe")
 
 
 def run_java_test(test_class_name: str, test_source: str) -> str:
     """编译并执行一段 Java 测试代码，返回标准输出"""
-    test_dir = r"X:\123\mht-resource-extractor\target\test-classes"
+    test_dir = TEST_CLASSES_DIR
     os.makedirs(test_dir, exist_ok=True)
+
+    # 测试源码里的 @@MHT_TEST_DIR@@ 占位符换成实际目录（Java 源码里用正斜杠更稳）
+    test_source = test_source.replace("@@MHT_TEST_DIR@@", TEST_MHT_DIR.replace("\\", "/"))
 
     src_file = os.path.join(test_dir, f"{test_class_name}.java")
     with open(src_file, "w", encoding="utf-8") as f:
         f.write(test_source)
 
     classpath = os.pathsep.join([
-        os.path.join(TARGET_CLASSES, ""),
+        TARGET_CLASSES,
         *[os.path.join(TARGET_LIB, f) for f in os.listdir(TARGET_LIB) if f.endswith(".jar")]
     ])
 
-    javac = r"X:\bellsoft-liberica-vm-full-openjdk25-25.0.3\bin\javac.exe"
-    compile_cmd = [
-        javac, "-encoding", "UTF-8",
-        "-cp", classpath,
-        "-d", test_dir,
-        src_file
-    ]
+    compile_cmd = [JAVAC, "-encoding", "UTF-8", "-cp", classpath, "-d", test_dir, src_file]
     r = subprocess.run(compile_cmd, capture_output=True, text=True, timeout=30)
     if r.returncode != 0:
         return f"[COMPILE ERROR]\n{r.stderr}"
 
-    java = r"X:\bellsoft-liberica-vm-full-openjdk25-25.0.3\bin\java.exe"
-    run_cmd = [java, "-cp", f"{test_dir}{os.pathsep}{classpath}", test_class_name]
+    run_cmd = [JAVA, "-cp", f"{test_dir}{os.pathsep}{classpath}", test_class_name]
     r = subprocess.run(run_cmd, capture_output=True, text=True, timeout=60)
     return r.stdout + ("\n" + r.stderr if r.stderr else "")
 
@@ -54,7 +83,7 @@ import java.util.List;
 
 public class Bug1_RegionLimitTest {
     public static void main(String[] args) throws Exception {
-        File viewDir = new File("X:/123/新建文件夹/view");
+        File viewDir = new File("@@MHT_TEST_DIR@@");
         File[] mhtFiles = viewDir.listFiles((d, n) -> n.toLowerCase().endsWith(".mht"));
         if (mhtFiles == null || mhtFiles.length == 0) {
             System.out.println("ERROR: No MHT files found");
@@ -152,7 +181,7 @@ import java.util.List;
 
 public class Bug2_ImageNamingTest {
     public static void main(String[] args) throws Exception {
-        File viewDir = new File("X:/123/新建文件夹/view");
+        File viewDir = new File("@@MHT_TEST_DIR@@");
         File[] mhtFiles = viewDir.listFiles((d, n) -> n.toLowerCase().endsWith(".mht"));
         if (mhtFiles == null || mhtFiles.length == 0) {
             System.out.println("ERROR: No MHT files found");
@@ -251,7 +280,7 @@ import java.util.List;
 
 public class Bug3_ProgressBarTest {
     public static void main(String[] args) throws Exception {
-        File viewDir = new File("X:/123/新建文件夹/view");
+        File viewDir = new File("@@MHT_TEST_DIR@@");
         File[] mhtFiles = viewDir.listFiles((d, n) -> n.toLowerCase().endsWith(".mht"));
         if (mhtFiles == null || mhtFiles.length == 0) {
             System.out.println("ERROR: No MHT files found");
@@ -329,9 +358,36 @@ if __name__ == "__main__":
     print("MHT Extractor Bug 复现测试")
     print("=" * 60)
 
-    if not os.path.isdir(TARGET_CLASSES):
-        print("[ERROR] 项目未编译，请先执行: mvn package -DskipTests")
+    # 占位符没填就先拦下：否则会"编译过了但一个文件都没测"的假绿
+    missing = []
+    if "<打包机上填写" in TEST_MHT_DIR:
+        missing.append("MHT_TEST_DIR  —— 待测 MHT 文件所在目录")
+    if "<打包机上填写" in NIK25_HOME:
+        missing.append("NIK25_HOME    —— Liberica NIK 25 安装目录")
+    if missing:
+        print("[ERROR] 还没配置下列环境参数（改脚本顶部，或设同名环境变量）：")
+        for m in missing:
+            print("        - " + m)
+        sys.exit(2)
+
+    if not os.path.isfile(JAVAC):
+        print(f"[ERROR] 找不到 javac：{JAVAC}")
+        print("        请确认 NIK25_HOME 指向 NIK 25 安装目录（其下应有 bin\\javac.exe）。")
         sys.exit(1)
+
+    if not os.path.isdir(TARGET_CLASSES) or not os.path.isdir(TARGET_LIB):
+        print("[ERROR] 项目未编译。请先执行：build-native.cmd --prepare-only")
+        print("        （或 mvn package -DskipTests；需要 target\\classes 与 target\\lib）")
+        sys.exit(1)
+
+    if not os.path.isdir(TEST_MHT_DIR):
+        print(f"[ERROR] 待测 MHT 目录不存在：{TEST_MHT_DIR}")
+        sys.exit(1)
+
+    print(f"待测目录 : {TEST_MHT_DIR}")
+    print(f"JDK      : {NIK25_HOME}")
+    print(f"产物目录 : {OUTPUT_DIR}")
+    print(f"MSVC     : {MSVC_ENV}")
 
     print("\n>>> 运行 Bug 1 测试: 区域限定逻辑...")
     output1 = run_java_test("Bug1_RegionLimitTest", TEST1_SOURCE)
