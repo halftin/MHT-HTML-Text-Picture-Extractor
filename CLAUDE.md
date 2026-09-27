@@ -2,7 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **最后更新：2026-09-26**（架构重构 + 全量国际化 + 预览缓存持久化之后）
+> **最后更新：2026-09-27**（架构重构 + 全量国际化 + 预览缓存持久化 + **WorkspaceModel 接入生产（阶段 1b/2，5/6 条写路径）** 之后）
+> 本轮交接：`docs/handoff/H33.md`（含"接入生产前必须先核对模型语义"的 3 处实例）
 
 ---
 
@@ -86,8 +87,11 @@ MhtExtractorApp                      // 门面
   interface ProgressSink / CancelToken               // 纯接口，UI 侧自行适配（JavaFX 或其他）
   record ExtractResult(BatchProcessor.ProcessStats stats, Path sessionOutputDir)
 
-WorkspaceModel          // 无头工作区：addItems/group/ungroup/removeItems/undo/clear
-                        //   + displayOrder/topLevel/allItems/visibleCount/groups/undoDepth
+WorkspaceModel          // 无头工作区，**已是生产路径的数据序唯一写入者**
+                        //   语义操作：addItems（去重+压记录）/group/ungroup/removeItems/removeGroup/undo/clear
+                        //   结构原语：appendItems/appendGroup（不去重、不压记录，供导入路径用）
+                        //   共享构造：new WorkspaceModel(list) —— 与 GUI 共用同一份数据序列表（见 H33 §二）
+                        //   + displayOrder/topLevel/allItems/visibleCount/groups/undoDepth/nextGroupNo
 WorkspaceParamService   // 参数变更与移除的缓存规则收口（13 处调用点归一到此类）
 ExtractionPreconditions // 提取前置校验规则（含 Level 分级 + Denial），把规则从 GUI 移出
 ```
@@ -96,8 +100,9 @@ ExtractionPreconditions // 提取前置校验规则（含 Level 分级 + Denial�
 
 ### GUI
 
-- **`MainController`** — FXML 控制器（**4435 行**，`ArchitectureTest.mainControllerIsShrinking` 强制**只减不增**，上限常量与实测**同步顶格**）：模式切换、输入/输出目录、文件列表（拖拽排序/分组/勾选/章节徽标）、文本与图片预览、预解析线程、提取任务启停、`logs/gui-state.json` 持久化。持有两个按模式确认的参数缓存（null = 该模式未确认参数）。
-  > 会话 18 起持续减重：6111 → 5109（外迁演练代码）→ 5002（外迁 `PreviewItem`）→ 4985 → **4935**（步骤 2 预览编排 → `app.PreviewService`）→ **4435**（步骤 3 `PreviewListCell` 外迁为顶层类）。列表单元格渲染/拖拽已不在本类。
+- **`MainController`** — FXML 控制器（**4362 行**，`ArchitectureTest.mainControllerIsShrinking` 强制**只减不增**，上限常量 **4435**，余量 73）：模式切换、输入/输出目录、文件列表（拖拽排序/分组/勾选/章节徽标）、文本与图片预览、预解析线程、提取任务启停、`logs/gui-state.json` 持久化。持有两个按模式确认的参数缓存（null = 该模式未确认参数）。
+  > 会话 18 起持续减重：6111 → 5109（外迁演练代码）→ 5002（外迁 `PreviewItem`）→ 4985 → **4935**（步骤 2 预览编排 → `app.PreviewService`）→ **4435**（步骤 3 `PreviewListCell` 外迁为顶层类）→ **4362**（WorkspaceModel 接入生产：导入/移除/整组移除/建组/拆分组五条写路径切到模型）。列表单元格渲染/拖拽已不在本类。
+  > ⚠️ 数据序（`items`）已与 `WorkspaceModel` **共享同一份列表**，GUI 不得再直接增删 —— 目前仅 `onUndoClicked` 3 处（撤销应用）尚未迁移，见 `H33.md` §六。
 - **`ParamDialogController`** — 「提取参数设置」模态弹窗；仅「确定」提交；底部固定行是命名配置 CRUD。
 - **`LogTextArea`** — 自定义 JavaFX 组件，经 `TextAreaAppender` 注册为 Logback consumer（日志进界面）。
 - **`MainView.fxml` / `ParamDialog.fxml`** — 全部文案为 `%key`（经 `loader.setResources(I18n.bundle())` 注入），**不得再出现中文字面量**。
@@ -106,7 +111,7 @@ ExtractionPreconditions // 提取前置校验规则（含 Level 分级 + Denial�
   - `SourceViewPage`（314）— 源码视图页生成（HTML 转义 + 行号 + 语法高亮 + 链接下划线）。页头文案由**调用方**传入（本层不产本地化文案）
   - `CdpClient`（320）— CDP 协议客户端 + 调试实例的进程/端口管理（原生 Socket，native-image 安全）
   - `BrowserDetector`（197）— 浏览器探测与识别（注册表 `UserChoice` → `http` 协议命令 → 常见路径 → `where.exe`）
-- `JavaFxUtil` / `SmoothProgressProperty`（留在 `gui.util`：确实依赖 JavaFX）。
+- `JavaFxUtil`（留在 `gui.util`：确实依赖 JavaFX）。⚠️ 其中 `SmoothProgressProperty` 与 `runLater`/`isFxThread`/`createSmoothProgressProperty` 已在 2026-09-27 的清理中作为**零引用死代码**删除；`reflect-config.json` 里仍有指向它的旧条目（悬空，见下文 reflect-config 说明）。
 
 ### 测试代码位置（重要）
 
@@ -121,14 +126,14 @@ ExtractionPreconditions // 提取前置校验规则（含 Level 分级 + Denial�
 
 | 资产 | 位置 | 规模 |
 |---|---|---|
-| 单元测试 | `src/test/java` | **384 测试 / 34 类**（`util`/`processor` 覆盖最好） |
+| 单元测试 | `src/test/java` | **402 测试 / 35 类**（`util`/`processor` 覆盖最好） |
 | MHT 夹具 | `src/test/resources/fixtures/` | 11 个（simple-text / single-image / multi-image / data-uri / data-uri-mixed / region / titles / cn-filename / garbage / deep-nesting / no-cte） |
 | **产物黄金基线** | `src/test/resources/baselines/` | **32 份**（16 例 × zh/en）——重构的字节级标尺；只证明"没变"不证明"对"，已知缺陷以 `knownIssues` 标注 |
 | 架构不变式 | `src/test/java/com/mhtextractor/baseline/ArchitectureTest.java` | 10 条 |
 
-> **回归门槛（每个改动都必须全绿）**：`mvn test` = 默认执行 **384/0** + `headless-layer-b` **44/0**；
+> **回归门槛（每个改动都必须全绿）**：`mvn test` = 默认执行 **402/0**（35 类）+ `headless-layer-b` **50/0**；
 > 产物基线 **32 份**；架构不变式 **10 条**；GUI 自动化 **zh 30/0、en 30/0**。
-> 两条"顶格"约束：`MainController` ≤ **4435** 行、`/* test-support */` 标记 ≤ **44** 个 —— 均**只减不增**。
+> 两条"顶格"约束：`MainController` ≤ **4435** 行（实测 4362）、`/* test-support */` 标记 ≤ **44** 个（实测 44，顶格）—— 均**只减不增**。
 
 ---
 
@@ -170,7 +175,7 @@ Jakarta Mail 2.0.2（MIME）· Jsoup 1.18.1（HTML）· Jackson 2.18.6（JSON）
 | 文件 | 状态 |
 |---|---|
 | `reachability-metadata.json` | **权威**（现代统一格式）。含 reflection（含 `PreviewCacheMeta` 及嵌套 record 的 Jackson 构造器）+ resources（含 `{"bundle": "i18n/messages"}` 等） |
-| `reflect-config.json` | ⚠️ **旧格式，已过时且与上者不一致**（不含 cache 包与近期新增类）。建议确认后删除，只保留统一格式 |
+| `reflect-config.json` | ⚠️ **旧格式。CLAUDE.md 曾写"建议删旧留新"——该建议已被实测推翻，见下** |
 | `resource-config.json` | 含 FXML / `custom.css` / logback / 字体 / i18n bundle pattern |
 | `jni-config.json` · `proxy-config.json` · `serialization-config.json` · `native-image.properties` | `native-image.properties` 仅设 `JavaArgs = -Djava.library.path=target\\jfx-dlls` |
 
@@ -235,7 +240,8 @@ java -agentlib:native-image-agent=config-output-dir=target/agent-out -cp ... <�
 | 业务层仍在产"已解析文案" | `ImageExtractor` 经 `I18n.get` 产 warning 文案 → 写入 `PreviewCacheMeta.warnings` | 缓存内警告语言取决于预览时 locale；彻底修需业务层产码值，会触及缓存 schema |
 | `AD_KEYWORDS` 硬编码 | `ImageExtractor` | 若参数化，**必须同步加入 `imageExtractionFingerprint()`**，否则预览缓存串味 |
 | `BrowserLauncher` 包归属 | ✅ **已修复（步骤 5，2026-09-26）** | 已迁出 `gui.util` 到新建的 `com.mhtextractor.platform`，并按 4 类职责拆分：`BrowserLauncher`（159 行门面）/ `SourceViewPage`（314）/ `CdpClient`（320）/ `BrowserDetector`（197）。`platform` 包已纳入"零 UI 框架"不变式扫描 |
-| `reflect-config.json` 与统一元数据并存不一致 | 见上 | 建议删旧留新 |
+| `reflect-config.json` 与统一元数据并存 | `src/main/resources/META-INF/native-image/` | 🚨 **不可直接删除**（H31 §四 实测）：旧格式 **291** 个类型、统一格式 **194** 个，其中 **231 个仅存在于旧格式**；native-image 对同 type 取**并集**，删旧文件会丢 231 条。且**本机 native 被 MSVC 阻塞、无法验证**，在无法验证时改元数据风险 > 收益 —— 正解是"并集合并 + 方法/字段级对账（丢失数=0）"。另：该文件里指向 `JavaFxUtil$SmoothProgressProperty` 的条目已**悬空**（该类已被删除） |
+| 工作区有 22/105 个 java 文件是 CRLF | 全仓库 | 与 `.gitattributes` 的 `*.java text eol=lf` 不符。因 `eol` 规则在 `git add` 时会规范化为 LF，**仓库内存储不受影响**；但会让 `git status` 反复告警。一次性修法：`git add --renormalize .` |
 
 ---
 
@@ -249,12 +255,19 @@ java -agentlib:native-image-agent=config-output-dir=target/agent-out -cp ... <�
 - **写无 BOM 的 UTF-8**：`Set-Content -Encoding UTF8` 会写 BOM（Node 解析失败），须用
   `[System.IO.File]::WriteAllText($p,$s,(New-Object System.Text.UTF8Encoding($false)))`
 - **PS 参数被吞**：`-Dfoo=bar` 形式的参数会被 PowerShell 解析坏（`ClassNotFoundException: /mode=true`），**用参数数组 `@(...)` 传**。
+- 🚨 **"PowerShell 数行比 Java 少"的真正原因是编码，不是换行**（2026-09-27 实测定位）：
+  PS 5.1 的 `Get-Content` **不带 `-Encoding` 时按系统 ANSI(GBK) 读** UTF-8 无 BOM 文件，
+  DBCS 解码回退会**吞掉"以非 ASCII 字符结尾那一行"的换行符**，把行合并。
+  实测同一个 `MainController.java`（纯 LF、4443 个 LF 字节）：
+  `Get-Content`（默认）= **4277**，`Get-Content -Encoding UTF8` = **4443**，`ReadAllLines` = **4443** —— 少的 166 行正好是"行尾是中文"的行数。
+  **因此：数行/读源码一律显式 `-Encoding UTF8`（或直接读字节），不要用默认 `Get-Content`。**
+  同理，`.claude-work/*.ps1` 里读源码的 `Get-Content` 调用都应补上该参数（当前 13 处里只有 2 处带）。
 - **驱动 Claude Code**：直连原生 exe `%APPDATA%\npm\node_modules\@anthropic-ai\claude-code\bin\claude.exe`，
   **不要用 `shell: true` 或 `.cmd` shim**（触发 `DEP0190` 注入风险警告）。提示词走 stdin（写后必须 `end()`）。
 - **git 身份未配置**：`git commit` 会报 `Author identity unknown`，须内联
   `git -c user.name="Administrator" -c user.email="admin@mht-extractor.local" commit -m "..."`（**不要** `git config`，那会改用户环境）。
 - **`git` 忽略规则已锚定到仓库根**：`.gitignore` 用 `/config/`、`/logs/`、`/temp/`、`/输出文件/`。**不要改回不带前导 `/` 的写法**——那样会误伤 `src/test/java/com/mhtextractor/config/`，导致新测试文件被静默忽略（本项目真发生过）。
-- **不要整文件读取 `MainController.java`**（**4435 行**）：用 `grep -n` 定位 + 区间读，否则上下文会被吃掉。
+- **不要整文件读取 `MainController.java`**（**4362 行**）：用 `grep -n` 定位 + 区间读，否则上下文会被吃掉。
 - **行号会漂移**：本文件或任何文档中提到的行号，引用前先用 `grep -n` 复核。
 
 ---
