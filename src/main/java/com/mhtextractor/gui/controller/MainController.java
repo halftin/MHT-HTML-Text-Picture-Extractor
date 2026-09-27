@@ -881,15 +881,9 @@ public class MainController {
         group.addNameChangeListener(fileListView::refresh);
     }
 
-    /** 全部组名集合（供自动建组唯一化使用） */
+    /** 全部组名集合（供自动建组唯一化使用）—— 委托模型（顶层组由 WorkspaceModel 持有） */
     private List<String> allGroupNames() {
-        List<String> names = new ArrayList<>();
-        for (Object o : items) {
-            if (o instanceof GroupItem<?> g) {
-                names.add(g.getName());
-            }
-        }
-        return names;
+        return ws.groups().stream().map(GroupItem::getName).toList();
     }
 
     /** 后台线程：轮扫描 + 询问 FX 确认；不经手 GUI 控件 */
@@ -2491,15 +2485,9 @@ public class MainController {
         return o instanceof PreviewItem it && it.removed;
     }
 
-    /** 顶层组列表（按数据序；供 agent 演练使用） */
+    /** 顶层组列表（按数据序；供 agent 演练使用）—— 委托模型 */
     /* test-support */ List<GroupItem<PreviewItem>> topLevelGroups() {
-        List<GroupItem<PreviewItem>> out = new ArrayList<>();
-        for (Object o : items) {
-            if (o instanceof GroupItem<?> g) {
-                out.add(asPreviewGroup(g));
-            }
-        }
-        return out;
+        return ws.groups();
     }
 
     /** 组内有效成员（removed == false；供 agent 演练使用） */
