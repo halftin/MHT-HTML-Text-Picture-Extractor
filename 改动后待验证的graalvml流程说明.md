@@ -1,23 +1,33 @@
 # 改动后待验证的 GraalVM 打包流程说明
 
-> 本文档面向**打包电脑上的智能体/操作者**：说明**当前代码状态**（2026-09 架构重构 + 全量国际化 + 预览缓存持久化之后）对 GraalVM native-image 打包的影响、需执行的步骤与验收清单。
+> 本文档面向**打包电脑上的智能体/操作者**：说明**当前代码状态**对 GraalVM native-image 打包的影响、需执行的步骤与验收清单。
 > 打包总体流程以《基于graalvm的MHT资源提取器项目打包工作流程.md》为准，本文只补充**变动相关项**。
 >
-> **最后更新：2026-09-26**（架构重构 + 国际化 + 预览缓存之后）
+> **最后更新：2026-09-27**（⚠️ **打包脚本与可观测性已大改，请先读 §零**）
+> 本次变更的实测依据：`docs/handoff/H34.md`；构建可观测性契约见打包工作流程文档 §6.1 与 `CLAUDE.md`。
 
 ---
 
-## 零、先看这个：当前的阻塞与必改项
+## 零、先看这个：当前的阻塞与必做项（2026-09-27 复核）
 
 | 项 | 状态 | 必须做的 |
 |---|---|---|
-| **MSVC 工具链** | ⛔ **本机缺失 → native 构建无法进行** | 安装 **VS 2022 Build Tools 17.6+**（勾「使用 C++ 的桌面开发」+「MSVC v143」+「Windows SDK」）。**这是硬阻塞**：实测最小 HelloWorld 也报 `Failed to find 'vswhere.exe'`（exit=20） |
-| **独立 GraalVM** | ✅ **不需要** | NIK 25.0.3 自带 `native-image 25.0.3`（实测可用）。`build-native.cmd:42` 的 `GRAALVM_HOME` 直接指向 NIK 目录即可 |
-| `build-native.cmd` 的 **4 处 `X:\` 硬编码** | ❌ 全部不可用（本机无 X: 盘） | 改 `:39 BUILD_JAVA_HOME`、`:42 GRAALVM_HOME`、`:45 MAVEN_HOME`、`:80 OUTPUT_DIR`（取值见打包工作流程文档 §5.1） |
-| `-J-Xmx8G` | ⚠️ 偏高 | 下调至 `-J-Xmx6G`（本机总内存约 15 GB / 可用约 10 GB） |
-| **元数据重采** | ⚠️ **必做** | 本次重构/国际化引入了新的反射与资源需求，见 §二 |
+| **MSVC 工具链** | ⛔ **仍是唯一卡点** | 安装 **VS 2022 Build Tools 17.6+**（勾「使用 C++ 的桌面开发」+「MSVC v143」+「Windows SDK」）。实测钉死：`vswhere.exe` 不在任何标准位置、**C:/D: 全盘（深度 5）无 `cl.exe`/`vswhere.exe`**；最小 HelloWorld 探针也报 `Failed to find 'vswhere.exe'`（exit=20） |
+| **独立 GraalVM** | ✅ **不需要** | NIK 25.0.3 自带 `native-image 25.0.3`，脚本自动采用 |
+| ~~`build-native.cmd` 的 4 处 `X:\` 硬编码~~ | ✅ **已修掉（2026-09-27）** | **不用再手改路径**：脚本自动探测 JDK / native-image / Maven / 输出目录；要覆盖就用环境变量（`BUILD_JAVA_HOME` / `GRAALVM_HOME` / `MAVEN_CMD` / `OUTPUT_DIR` / `NATIVE_XMX` / `VSWHERE` / `LOG_DIR`） |
+| ~~`-J-Xmx8G`~~ | ✅ **已改为 `NATIVE_XMX`，默认 4G** | 机器内存大可用环境变量调高 |
+| **四个脚本的关系** | ✅ **已归一** | `build-native.cmd` 是**唯一实现**；`.ps1` / `.sh` / `run-native-image.bat` 只是委托入口（原先四份各写死自己的路径与 VS 版本号） |
+| **元数据重采** | ⚠️ **仅当元数据相关代码有改动时才做** | 见 §二 |
+| **构建可观测性** | ✅ **已就绪（2026-09-27）** | 打包机上的构建会**实时**输出到控制台**与日志**，并产出机器可读报告 —— 见 §三 第 7 点 |
 
-> **一句话**：**先把 MSVC 装上、把脚本 4 处路径改掉**，否则后面所有步骤都无法验证。
+> **一句话**：**先把 MSVC 装上**，其余都不用手工改；装完直接 `build-native.cmd`。
+> 缺 MSVC 时脚本会在**开跑前**就拦下并给出修复指引（`exit 20`），不会跑到一半才失败。
+
+> **解除 MSVC（需管理员；引导器已实测可下载 4.48 MB）**：
+> ```bat
+> curl -L -o vs_BuildTools.exe https://aka.ms/vs/17/release/vs_BuildTools.exe
+> vs_BuildTools.exe --quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended
+> ```
 
 ---
 
@@ -31,7 +41,7 @@
 | 新增 `com.mhtextractor.model`（`PreviewItem` / `ThumbnailData`） | 同上（`ThumbnailData` 持 `int[]` ARGB 像素，无 AWT/ImageIO 依赖，对 native 友好） | **无需反射条目** |
 | 1139 行演练/测试代码从 `MainController` 外迁至**测试源集** `src/test/java/.../FeatureExercise.java` | `App.java` 通过**反射**调用 `invokeFeatureExercise(...)`。**类名以字符串形式出现**（`"com.mhtextractor.gui.controller.FeatureExercise"`），**可能需要在 reflect-config 中注册该类及其 `exerciseAllFeatures` / `runAutomatedTests` 方法** | ⚠️ **用 agent 采集确认**（`-Dtest.mode=true` 或 `-Dagent.exit.delay` 演练时会触发）；若 agent 未捕获而 native 下 test.mode 报 `NoSuchMethodException`，需手工补 |
 | `MainController` 6111 → 约 4800 行 | 无影响 | 无 |
-| `ArchitectureTest` 的 10 条不变式 | 纯测试，不进产物 | 无 |
+| `ArchitectureTest` 的 11 条不变式 | 纯测试，不进产物 | 无 |
 
 ### 1.2 全量国际化（zh_CN / en_US）
 
@@ -110,25 +120,37 @@ Maven 会把该目录**全部**内容打进 jar。本项目真发生过
 
 ## 三、打包电脑上的操作流程
 
-1. **拉取最新代码**；
-2. **前置检查**：`java --list-modules | findstr javafx`（确认有 7 个 javafx 模块）、
-   `where vswhere.exe` 或 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe` 是否存在、
-   `pom.xml` 的 `<version>`；
-3. **改 `build-native.cmd` 的 4 处路径**（见 §零 与打包工作流程文档 §5.1），并下调 `-Xmx`；
-4. **编译**：`"%MAVEN_HOME%\bin\mvn.cmd" clean package -DskipTests`，`JAVA_HOME` 指向 NIK 25；
-5. **（若元数据有改动）重采并合并**：按 §二.3 执行，先核对 `git diff --numstat` 是纯增量；
-6. **跑 JVM 侧回归**（确认改动没破坏功能，再花时间做 native）：
+1. **拉取最新代码**。
+2. **前置检查**：`pom.xml` 的 `<version>`；`where vswhere.exe` 或 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe` 是否存在。
+   （**不用**再手工核对 4 处路径——脚本已自动探测。）
+3. **先跑一次"只准备、不链接"的构建**（不依赖 MSVC，约 12 秒，用来确认脚本与环境就绪）：
+   ```bat
+   build-native.cmd --prepare-only
+   ```
+   期望：`exit 0`、Maven `BUILD SUCCESS`、`target\jfx-dlls` 下 **12 个 DLL**，
+   并在 `logs\` 下产出 `native-build-<stamp>.log` / `.steps.tsv` / `.report.json` 三件套。
+4. **（仅当元数据相关代码有改动时才做）重采并合并**：按 §二.3 执行，先核对 `git diff --numstat` 是纯增量。
+5. **跑 JVM 侧回归**（确认功能没坏，再花时间做 native）：
    ```bash
-   # 单测（注意：当前有 1 个已知失败，见 §四）
-   "%MAVEN_HOME%\bin\mvn.cmd" test
+   "%MAVEN_HOME%\bin\mvn.cmd" test        # 期望 406/0（默认）+ 53/0（headless-layer-b）
    # GUI 自动化（勿用 mvn javafx:run，-D 会被 Maven 吃掉）
    java --module-path <jfx-win-jars> --add-modules javafx.controls,javafx.fxml \
         -Duser.language=zh -Duser.country=CN -Dtest.mode=true \
         -cp "target/classes;target/test-classes;<cp.txt>" com.mhtextractor.App
-   # 期望：logs/test-results.txt 中 30 passed / 0 failed
+   # 期望 logs/test-results.txt：30 passed / 0 failed（zh；en 同样 30/0）
    ```
-7. **运行 `build-native.cmd`**（Step 1–6）；
-8. **按 §五 清单在 native EXE 上真机验收**；
+6. **完整构建**：
+   ```bat
+   build-native.cmd
+   ```
+   在 `dist\` 产出 `MhtExtractor.exe` + 12 个 DLL（"整个目录拷走即用"）。
+7. **给智能体的实时跟踪**——构建**进行中**即可读：
+   ```powershell
+   Get-Content logs\native-build-*.log -Wait -Tail 50
+   ```
+   三件套与报告的字段含义见《基于graalvm的…打包工作流程.md》§6.1。
+   ⚠️ 读正在写的日志请用 `Get-Content`／`FileStream + FileShare.ReadWrite`；**`File.ReadAllText` 会失败**。
+8. **按 §五 清单在 native EXE 上真机验收**。
 9. **（可选）native 下复验自动化**：native EXE 加 `-Dtest.mode=true`
    （注意：`test.mode` 走的是**测试源集**的 `FeatureExercise`，需确认该 jar/类在 native 镜像可达——
    若不可达，改为按 §五 手工验收）。
@@ -139,9 +161,9 @@ Maven 会把该目录**全部**内容打进 jar。本项目真发生过
 
 | 项 | 说明 |
 |---|---|
-| **`mvn test` 有 1 个失败** | `LayerBTest.runsWithoutUiFrameworkOnClasspathWhenHeadlessExecutionIsActive:218`。根因是 `pom.xml` 的 `headless-layer-b` 执行**无法真正剔除 JavaFX** —— ① 排除坐标缺 classifier；② **决定性：Liberica Full JDK 把 JavaFX 内置为 JDK 模块**，`classpathDependencyExcludes` 剔不掉。**这是构建配置缺陷，非代码 bug。** 修法见打包工作流程文档 §8.6 |
-| **native 构建阻塞** | 缺 MSVC（见 §零） |
-| **纯 Data URI 的 MHT 提取不到图片** | 已知产品缺陷（`ImageBatchProcessor` 的"无图片内容"快速跳过）。native 验收时该夹具输出为 0 产物属**预期**（基线已标 `knownIssues`） |
+| ~~`mvn test` 有 1 个失败~~ | ✅ **已修复（步骤 0，2026-09-26）**。原 `LayerBTest.runsWithoutUiFrameworkOnClasspathWhenHeadlessExecutionIsActive` 失败，根因是 `headless-layer-b` 执行**无法真正剔除 JavaFX**：既需 ① `argLine` 把 boot layer 限定 `java.se`（JDK 模块层），又需 ② `classpathDependencyExcludes` 剔 jar（classpath），**且排除坐标必须带 classifier 与不带 classifier 各写一遍**。现基线 **406/0（默认）+ 53/0（headless）** |
+| **native 构建阻塞** | 缺 MSVC（见 §零）。**脚本侧已全部就绪**——装上 MSVC 即可直接构建 |
+| ~~纯 Data URI 的 MHT 提取不到图片~~ | ✅ **已修复（步骤 7a，2026-09-26）**。两个根因：① `ImageExtractor.extractAllImagesInOrder` 在 `imageInfoList` 为空时提前 return，使 Data URI 提取成为**死代码**；② `ImageBatchProcessor` 的"无图片内容"快速检查只看 `cidMap`/`locationDataMap`。`data-uri.mht` 由 `SKIPPED` 变 `SUCCESS`（2 张图），基线已同步 |
 
 ---
 
@@ -223,11 +245,13 @@ Maven 会把该目录**全部**内容打进 jar。本项目真发生过
 
 | 项 | 基线 |
 |---|---|
-| 单元测试 | **374 测试 / 33 类**（其中 **1 个已知失败**，见 §四） |
-| GUI 自动化（zh） | **30 passed / 0 failed** |
-| GUI 自动化（en） | **30 passed / 0 failed** |
-| 产物黄金基线 | 32 份（16 例 × zh/en）全部 SHA 一致 |
-| 架构不变式 | 10 条（业务层零 JavaFX 等） |
+| 单元测试（默认执行） | **406 测试 / 35 类 / 0 失败** |
+| `headless-layer-b` | **53 / 0** |
+| GUI 自动化（zh / en） | **各 30 passed / 0 failed** |
+| 产物黄金基线 | **32 份**（16 例 × zh/en）全部 SHA-256 一致 |
+| 架构不变式 | **11 条**（业务层零 JavaFX、GUI 不得直写数据序 等） |
+| `MainController` | **4334 行 / 上限 4370**（刻意留 36 行余量） |
+| 业务层 `I18n.` 引用 | **37**（基线 37） |
 
 > **跑 GUI 自动化时注意**（本项目踩过）：**不要**用 `mvn javafx:run -Dtest.mode=true` ——
 > `-D` 会被 Maven 吃掉、不传进子 JVM，测试根本没跑起来。必须直接 `java` 起（见 §三.6）。

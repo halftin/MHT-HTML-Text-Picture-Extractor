@@ -5,16 +5,31 @@
 > **最后更新**: 2026-09-26 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
 > **项目版本**: 以 `pom.xml` 的 `<version>` 为**唯一来源**（当前 `2.6-beta`）。所有构建脚本（`build-native.cmd` / `.ps1` / `.sh` / `run-native-image.bat`）均从 pom 动态读取，**禁止**在脚本里硬编码 jar 名（历史问题：曾写死 `mhtExtractor-2.3.1.jar` / `-2.2-SNAPSHOT.jar`，与 pom 不一致导致打包找不到 jar）。
 
-> ## ⚠️ 打包前必读：当前的阻塞与待改项（2026-09-26 复核）
+> ## 📌 状态更新（2026-09-27 实测）—— **以脚本与 CLAUDE.md 为准**
+>
+> **权威来源**：`build-native.cmd`（脚本本身）、`CLAUDE.md` 的「native 打包现状」、`docs/handoff/H34.md`。
+> 本文档其余章节保留为**背景与原理**；其中的示例路径 / 版本号可能已过时（下表已逐条标注）。
 >
 > | 项 | 状态 |
 > |---|---|
-> | **MSVC 工具链** | ⛔ **本机缺失 → 无法构建**。`native-image` 在 Windows 上**只支持 MSVC**（**不支持 MinGW/GCC**）。实测最小 HelloWorld 也失败：`Error: Failed to find 'vswhere.exe' for locating Visual Studio installations.`（exit=20）。解除：装 **VS 2022 Build Tools 17.6+**，勾选「使用 C++ 的桌面开发」+「MSVC v143」+「Windows SDK」 |
-> | **独立 GraalVM** | ✅ **不再需要**。NIK 25.0.3 **自带 `native-image 25.0.3`**（`<NIK>/bin/native-image.cmd`，实测可用）。§2.1 关于"NIK 静态链接缺符号"的历史结论已被现状取代——本项目当前用 **NIK 作为统一 JDK + native-image** |
-> | **`build-native.cmd` 的 4 处 `X:\` 硬编码** | ❌ **全部不可用**（本机无 X: 盘）：`:39 BUILD_JAVA_HOME`、`:42 GRAALVM_HOME`、`:45 MAVEN_HOME`、`:80 OUTPUT_DIR`。详见 §5.1 的修正说明 |
-> | **`-J-Xmx8G`** | ⚠️ 建议下调（本机总内存约 15 GB，可用约 10 GB）→ 例如 `-J-Xmx6G` |
-> | **本机 `mvn` 不在 PATH** | ⚠️ 必须用 Maven wrapper，并令 `JAVA_HOME` 指向 NIK 25。**用 Oracle OpenJDK 时 javac + Lombok 会静默失效**（全项目报 `找不到符号 log`） |
-> | **JavaFX 来源** | ⚠️ **Liberica `Full` JDK 把 JavaFX 25.0.3 内置为 JDK 模块**（7 个：`javafx.base/controls/fxml/graphics/media/swing/web`）。因此 pom 里的 JavaFX 依赖在**编译期**起作用，运行期由 JDK 提供；这会导致 §4.3 之外的"无 JavaFX classpath"类验证**在本机物理不可达**（详见 CLAUDE.md） |
+> | **MSVC 工具链** | ⛔ **仍是唯一卡点**。实测钉死：`vswhere.exe` 不在任何标准位置、**C:/D: 全盘（深度 5）无 `cl.exe`/`vswhere.exe`**、无 VS 安装目录、无 Windows SDK 注册表项；最小 HelloWorld 探针 `exit=20`。`native-image` 在 Windows 上**只支持 MSVC**（不支持 MinGW/GCC）。解除见下方命令 |
+> | **独立 GraalVM** | ✅ **不再需要**。NIK 25.0.3 **自带 `native-image 25.0.3`**，脚本已把它作为 native-image 来源 |
+> | ~~`build-native.cmd` 的 4 处 `X:\` 硬编码~~ | ✅ **已全部修掉（2026-09-27）**：脚本改为**自动探测** JDK / native-image / Maven / 输出目录，且四者均可用环境变量覆盖（`BUILD_JAVA_HOME` / `GRAALVM_HOME` / `MAVEN_CMD` / `OUTPUT_DIR`）。**§5.1 与 §六 里"手工改 4 处路径"的说明已作废** |
+> | ~~`-J-Xmx8G`~~ | ✅ 已改为可配置的 `NATIVE_XMX`，**默认 4G**（本机总内存约 15 GB） |
+> | **本机 `mvn` 不在 PATH** | ⚠️ 必须用 Maven wrapper。脚本会自动到 `%USERPROFILE%\.m2\wrapper\dists` 下递归找 `mvn.cmd` |
+> | **四个脚本的关系** | ✅ 已归一（2026-09-27）：`build-native.cmd` 是**唯一实现**，`.ps1` / `.sh` / `run-native-image.bat` 只是**委托入口**。原先四份脚本各写死自己的 `X:\` / `Y:\` 路径与 VS 版本号（甚至写到 VS "18"），且 native-image 参数被抄了三份 |
+> | **构建可观测性** | ✅ **新增（2026-09-27）**：全过程**实时**同时输出到控制台与日志、每步 `[STEP k/n] BEGIN/END` + ISO 时间、结束时产出**机器可读报告**（输入 jar 与产物清单都带 SHA256）。见 §六 的「构建用法」 |
+> | **JavaFX 来源** | ⚠️ **Liberica `Full` JDK 把 JavaFX 25.0.3 内置为 JDK 模块**（7 个：`javafx.base/controls/fxml/graphics/media/swing/web`）。因此 pom 里的 JavaFX 依赖在**编译期**起作用，运行期由 JDK 提供；这会导致"无 JavaFX classpath"类验证在本机物理不可达（详见 `CLAUDE.md`） |
+>
+> **解除 MSVC 的唯一一步**（需管理员；引导器已实测可下载 4.48 MB）：
+>
+> ```bat
+> curl -L -o vs_BuildTools.exe https://aka.ms/vs/17/release/vs_BuildTools.exe
+> vs_BuildTools.exe --quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended
+> ```
+>
+> 装完 `vswhere.exe` 出现在 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\`，重跑脚本即可。
+> 注：本机 `winget` **源打不开**（`0x8A15000B`），故走引导器直下。
 >
 > **另需知**：项目已完成架构重构（新增零 JavaFX 的 `app` 应用层）与全量国际化（276 键 + 20 错误码）。
 > **这带来两类新的 native 元数据需求**：① Jackson 序列化的纯 DTO（如 `PreviewCacheMeta` 及其嵌套 record）
@@ -34,7 +49,7 @@
 | 主类 | `com.mhtextractor.App` |
 | 关键依赖 | Jackson, Ikonli, AtlantaFX, Jakarta Mail, Jsoup, Logback, Lombok 1.18.44, **glavo webp 0.2.0**（纯 Java，无 JNI） |
 | 打包路径 | pom.xml → fat JAR → native-image → EXE + DLLs |
-| **架构分层**（2026-09 重构后） | `gui → app → {core, extractor, processor, output, util, cache, config, i18n}`；`model` 为纯数据模型。**业务层与 app 层零 JavaFX**，由 `ArchitectureTest` 的 10 条不变式强制 |
+| **架构分层**（2026-09 重构后） | `gui → app → {core, extractor, processor, output, util, cache, config, i18n}`；`model` 为纯数据模型。**业务层与 app 层零 JavaFX**，由 `ArchitectureTest` 的 11 条不变式强制 |
 | **国际化** | zh_CN / en_US，276 键（`src/main/resources/i18n/messages_*.properties`）+ 20 错误码 → **native 需资源注册**（见 §4.9） |
 | **预览缓存** | 会话级 `<java.io.tmpdir>/mht-extractor-preview/`，Jackson 读写 `PreviewCacheMeta` → **native 需反射条目**（见 §4.9） |
 | **测试** | 374 单测 / 33 类；32 份产物黄金基线；30 项 GUI 自动化（`test.mode`，zh/en 各 30/0） |
@@ -121,7 +136,7 @@ Windows SDK 随 Visual Studio 一起安装，无需额外操作。如果未安�
 
 | 检查项 | 最低要求 | 推荐 |
 |--------|----------|------|
-| 内存 | 16 GB | 32 GB（native-image 使用 `-J-Xmx8G`） |
+| 内存 | 16 GB | **32 GB 以上**（native-image 是内存大户；脚本默认 `-J-Xmx4G`，可用 `NATIVE_XMX` 调高） |
 | 磁盘 | 2 GB 空闲 | 5 GB（含依赖缓存） |
 | CPU | 4 核 | 8 核以上（构建更快） |
 
@@ -1204,7 +1219,7 @@ java -agentlib:native-image-agent=config-output-dir=target/agent-out \
 | `reflect-config.json` | 旧分离格式（291 条） | ⚠️ **已过时**：不含 `com.mhtextractor.cache.*`，也不含 `ImageBatchProcessor` / `ImageSource` 等近期类 |
 
 两种格式**可以共存**，native-image 对同一 type 取**并集**。因此补齐统一格式即可，**无需同步维护旧文件**。
-**建议**：确认该旧文件无独立价值后**删除**，只保留统一格式，消除双份真相。
+**🚨 该"建议删除"已被实测推翻（2026-09-27，见 H31 §四 / CLAUDE.md）**：旧格式 **291** 个类型、统一格式 **194** 个，其中 **231 个仅存在于旧格式**；native-image 对同一 type 取**并集**，**直接删旧文件会丢 231 条**。且本机 native 被 MSVC 阻塞、**无法验证**，在无法验证时改元数据风险 > 收益。正解是"并集合并 + 方法/字段级对账（丢失数=0）"。另：该文件里指向 `JavaFxUtil$SmoothProgressProperty` 的条目已**悬空**（该类已被删除）。
 （§4.4 的手工模板仅作历史参考；若仍保留该文件，注意其条目会与统一格式合并。）
 
 ---
@@ -1221,19 +1236,22 @@ JDK25_HOME=<你的 JDK 25 路径（Liberica Full JDK 25）>
 GRAALVM_HOME=<你的 GraalVM JDK 25+ 路径>
 PROJECT_DIR=<项目根目录>
 
-# ⚠️ 本机（打包开发机）实际取值参考（2026-09-26 复核）—— build-native.cmd 需改这 4 处：
-#   set "BUILD_JAVA_HOME=D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3"   (原 :39 写 X:\...)
-#   set "GRAALVM_HOME=D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3"      (原 :42；NIK 自带 native-image，无需独立 GraalVM)
-#   set "MAVEN_HOME=C:\Users\Admin\.m2\wrapper\dists\apache-maven-3.9.16-bin\5grr65jo27hi51sujmtcldfovl\apache-maven-3.9.16"  (原 :45)
-#   set "OUTPUT_DIR=D:\install\MhtExtractorV2.6"                                  (原 :80 写 X:\123\MHTtoEX)
-# 前提核对：① Step 1 的 vcvars64.bat(MSVC) 本机【不存在】→ 必须先装 VS 2022 Build Tools 17.6+，
-#             否则 native-image 直接报 "Failed to find 'vswhere.exe'"（exit=20）
-#           ② mvn 不在 PATH → Step 2 实际用 "%MAVEN_HOME%\bin\mvn.cmd"，且 JAVA_HOME 必须指向 NIK 25
-#           ③ Step 4 的 -J-Xmx8G 建议下调（本机总内存约 15 GB / 可用约 10 GB）→ 如 -J-Xmx6G
+# ⚠️ 已作废（2026-09-27）：build-native.cmd **不再需要手改路径** —— 它自动探测 JDK / native-image /
+#   Maven / 输出目录；要覆盖就用**环境变量**（不改脚本）：
+#     BUILD_JAVA_HOME / GRAALVM_HOME / MAVEN_CMD / OUTPUT_DIR / NATIVE_XMX / VSWHERE / LOG_DIR
+#   本机实测（仅供参考，脚本会自己找到）：
+#     BUILD_JAVA_HOME = 取 JAVA_HOME —— 本机那是**纯 JDK 25（无 native-image）**，
+#                       所以脚本把编译 JDK 与 native-image JDK **分开解析**，后者取 NIK
+#     GRAALVM_HOME    = D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3（NIK 自带 native-image）
+#     MAVEN_CMD       = 自动到 %USERPROFILE%\.m2\wrapper\dists 下递归找 mvn.cmd
+#     OUTPUT_DIR      = <仓库>\dist（默认）
+#     NATIVE_XMX      = 4G（默认；原脚本写死 8G，本机总内存约 15 GB）
+#   ⚠️ 本机仍缺 MSVC → native-image 会报 "Failed to find 'vswhere.exe'"（exit=20）。
+#      必须先装 VS 2022 Build Tools 17.6+（勾选「使用 C++ 的桌面开发」）；脚本会在**开跑前**就拦下并提示。
 
 # ========== Step 1: 初始化 MSVC 环境（必须最先执行） ==========
 # 找到 vcvars64.bat 的位置（通常在 VS 安装目录下）
-# 示例路径: "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+# 示例路径: "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 call "<VS安装目录>\VC\Auxiliary\Build\vcvars64.bat"
 
 # ========== Step 2: 编译（JDK 25） ==========
@@ -1280,7 +1298,7 @@ native-image.cmd \
   --enable-url-protocols=file,http,https \
   --initialize-at-run-time=com.sun.glass,com.sun.prism,com.sun.scenario,com.sun.javafx.font,com.sun.javafx.iio,com.sun.media,com.sun.webkit,com.sun.javafx.tk.quantum,com.sun.marlin \
   -Djava.library.path="target/jfx-dlls" \
-  -J-Xmx8G \
+  -J-Xmx4G \
   -Ob
 
 # ========== Step 5: 打包分发 ==========
@@ -1314,7 +1332,7 @@ fi
 | `--enable-url-protocols=file,http,https` | 注册 URL 协议处理器 | **必须**: Ikonli 通过 `file:` URL 加载字体 |
 | `--initialize-at-run-time=<包列表>` | 指定在运行时初始化的包 | **必须**: JavaFX 在 `<clinit>` 中加载原生 DLL，构建时执行会失败 |
 | `-Djava.library.path=target/jfx-dlls` | 构建时原生库路径 | **必须**: 构建时需要验证原生方法签名 |
-| `-J-Xmx8G` | Native Image 构建堆上限 | 内存充足时保持 8G |
+| `NATIVE_XMX`（原写死 `-J-Xmx8G`） | Native Image 构建堆上限 | **默认 4G**；可按机器内存用环境变量调高（本机总内存约 15 GB，勿盲目 8G） |
 | `-Ob` | 优化级别 balanced | 平衡构建速度和输出大小 |
 
 ### 5.3 `--initialize-at-run-time` 详解
@@ -1339,9 +1357,51 @@ com.sun.marlin         → 2D 渲染器
 
 ---
 
-## 六、生成 `build-native.cmd` 一键构建脚本
+## 六、`build-native.cmd`：构建入口与可观测性
 
-以下脚本内容可以通过 Claude Code CLI 在新设备上直接写入项目根目录：
+> ⚠️ **本节原有的"脚本模板"已过时（2026-09-27）**。`build-native.cmd` **已在仓库里**且是**唯一实现**，
+> 不需要再"生成"；下面保留的模板**仅作历史参考**，其中的 `<你的 JDK 25 路径>` 占位符与"手工改 4 处路径"
+> 的做法**都不要再照做**。当前用法：
+
+```bat
+build-native.cmd                 完整构建：预检 -> mvn package -> 抽 DLL -> native-image -> 组装 dist
+build-native.cmd --prepare-only  只做 JVM 侧准备（不调用 native-image）—— 无 MSVC 时也能跑
+build-native.cmd --skip-package  跳过 mvn package
+build-native.cmd --no-editbin    保留控制台子系统（便于看启动期崩溃）
+```
+
+环境变量覆盖（不设则自动探测）：`BUILD_JAVA_HOME` / `GRAALVM_HOME` / `MAVEN_CMD` /
+`OUTPUT_DIR`（默认 `<仓库>\dist`）/ `NATIVE_XMX`（默认 4G）/ `VSWHERE` / `LOG_DIR`。
+
+**退出码**：`0` 成功 / `1` 其它失败 / **`20` 缺 MSVC 工具链**（与 native-image 同码，便于脚本判断）。
+
+### 6.1 可观测性契约（给在打包机上驱动构建的智能体）
+
+每次构建产出三件套（`<stamp>` = `yyyyMMdd-HHmmss`）：
+
+| 产物 | 位置 | 内容 |
+|---|---|---|
+| 主日志 | `logs/native-build-<stamp>.log` | **全过程实时**（控制台与日志同步）：环境探测值、每个外部命令的**完整输出**、每步 `[STEP k/n] BEGIN/END … exit=` 标记（ISO 时间） |
+| 步骤明细 | `logs/native-build-<stamp>.steps.tsv` | TSV：`step / name / begin / end / exit` |
+| **机器可读报告** | `logs/native-build-<stamp>.report.json` | `status` / `failedStep` / `gitCommit` / **context**（JDK、native-image、Maven、VS、版本、xmx）→ **input**（jar 体积+SHA256）→ **steps**（逐步耗时与退出码）→ **artifacts**（`dist` 内每个文件的体积+SHA256） |
+
+> 报告放 `logs/` 而**不是** `dist/`，让 `dist/` 只留交付物（exe + DLL），"整个目录拷走即用"。
+
+**实时跟踪**（构建进行中即可用，实测）：
+
+```powershell
+Get-Content logs\native-build-*.log -Wait -Tail 50
+```
+
+⚠️ 读正在写的日志必须用 `Get-Content` 或 `FileStream + FileShare.ReadWrite`；
+**`File.ReadAllText` 会失败**（它用 `FileShare.Read`，与活跃写者不兼容）。
+
+**失败时**：脚本打印 `=== FAILURE ===` 段（失败步 + 退出码 + 日志末 40 行），**仍然产出报告**。
+
+---
+
+以下为历史模板（**勿再照做**，仅作演进参考）：
+
 
 ```batch
 @echo off
@@ -1439,7 +1499,7 @@ set PATH=%JAVA_HOME%\bin;%PATH%
   --enable-url-protocols=file,http,https ^
   --initialize-at-run-time=com.sun.glass,com.sun.prism,com.sun.scenario,com.sun.javafx.font,com.sun.javafx.iio,com.sun.media,com.sun.webkit,com.sun.javafx.tk.quantum,com.sun.marlin ^
   -Djava.library.path="target/jfx-dlls" ^
-  -J-Xmx8G ^
+  -J-Xmx4G ^
   -Ob
 
 if %ERRORLEVEL% NEQ 0 (
