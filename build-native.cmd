@@ -66,6 +66,15 @@ call :say "============================================================"
 REM ==================== 步骤 1/6：环境探测 ====================
 call :begin "1/6" "环境探测"
 
+REM PowerShell 是硬依赖：时间戳 / 实时 tee / 构建报告 / mvnw.cmd 全都靠它。
+REM 缺了它的现象很难看（退出码 9009、时间戳与日志名全空），所以这里提前挡住并说清原因。
+where powershell.exe >nul 2>&1
+if errorlevel 1 (
+    call :say "[ERROR] 找不到 powershell.exe —— 本脚本的时间戳 / 实时日志 / 构建报告 / mvnw.cmd 都依赖它。"
+    call :say "        请确认 %SystemRoot%\System32\WindowsPowerShell\v1.0 在 PATH 里。"
+    set "RC=1" & set "FAILSTEP=1/6 环境探测" & goto :done
+)
+
 set "APP_VERSION="
 for /f "tokens=*" %%i in ('powershell -NoProfile -Command "([xml](Get-Content pom.xml -Raw)).project.version"') do set "APP_VERSION=%%i"
 if not defined APP_VERSION for /f "tokens=3 delims=<>" %%i in ('findstr /r /c:"^    <version>" pom.xml') do set "APP_VERSION=%%i"
@@ -77,14 +86,16 @@ if not defined JFX_VERSION ( call :say "[ERROR] 无法从 pom.xml 读取 javafx.
 
 REM 编译用 JDK 与 native-image JDK **必须独立解析**（本机 JAVA_HOME 实测是纯 JDK，无 native-image）
 if not defined BUILD_JAVA_HOME if defined JAVA_HOME if exist "%JAVA_HOME%\bin\javac.exe" set "BUILD_JAVA_HOME=%JAVA_HOME%"
-if not defined BUILD_JAVA_HOME if exist "D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3\bin\javac.exe" set "BUILD_JAVA_HOME=D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3"
-if not defined BUILD_JAVA_HOME ( call :say "[ERROR] 找不到 JDK。请设 BUILD_JAVA_HOME 指向含 bin\javac.exe 的 JDK 25。" & set "RC=1" & goto :done )
+REM 探测顺序：JAVA_HOME -> PATH 上的 javac -> 常见安装根目录通配（**不写死任何机器路径**，打包机零配置可用）
+if not defined BUILD_JAVA_HOME for /f "delims=" %%i in ('where javac.exe 2^>nul') do if not defined BUILD_JAVA_HOME call :jdk_dir "%%~dpi.."
+if not defined BUILD_JAVA_HOME call :detect_jdk
+if not defined BUILD_JAVA_HOME ( call :say "[ERROR] 找不到 JDK —— 需要 JDK 25 且含 bin\javac.exe。" & call :say "        修复：设 BUILD_JAVA_HOME 指向 JDK 目录，或把该 JDK 的 bin 加进 PATH。" & call :say "        推荐：BellSoft Liberica NIK 25 Full 版 https://bell-sw.com/pages/downloads/native-image-kit/" & set "RC=1" & goto :done )
 
 if defined GRAALVM_HOME if not exist "%GRAALVM_HOME%\bin\native-image.cmd" set "GRAALVM_HOME="
 if not defined GRAALVM_HOME if exist "%BUILD_JAVA_HOME%\bin\native-image.cmd" set "GRAALVM_HOME=%BUILD_JAVA_HOME%"
 if not defined GRAALVM_HOME if defined JAVA_HOME if exist "%JAVA_HOME%\bin\native-image.cmd" set "GRAALVM_HOME=%JAVA_HOME%"
-if not defined GRAALVM_HOME if exist "D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3\bin\native-image.cmd" set "GRAALVM_HOME=D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3"
-if not defined GRAALVM_HOME ( call :say "[ERROR] 找不到带 native-image 的 JDK（NIK 自带）。请设 GRAALVM_HOME。" & set "RC=1" & goto :done )
+if not defined GRAALVM_HOME call :detect_nik
+if not defined GRAALVM_HOME ( call :say "[ERROR] 找不到带 native-image 的 JDK —— Windows 上必须用 NIK 或 GraalVM 发行版。" & call :say "        修复：设 GRAALVM_HOME 指向该目录，其下应有 bin\native-image.cmd。" & call :say "        注意：编译 JDK 与 native-image JDK 是**分开解析**的，两者可以不同。" & set "RC=1" & goto :done )
 set "NATIVE_IMAGE=%GRAALVM_HOME%\bin\native-image.cmd"
 
 REM dir 的 /s 不支持中间目录通配，必须把 mvn.cmd 作为**文件名**交给 /s
@@ -192,6 +203,7 @@ if "%PREPARE_ONLY%"=="1" ( set "STATUS=PREPARE_ONLY" & set "RC=0" & goto :done )
 
 REM ==================== 步骤 5/6：native-image ====================
 call :begin "5/6" "native-image 编译"
+if not exist "target\mhtExtractor-%APP_VERSION%.jar" ( call :say "[ERROR] 找不到 target\mhtExtractor-%APP_VERSION%.jar —— 先跑一次完整打包，别用 --skip-package。" & call :end 1 & set "RC=1" & set "FAILSTEP=5/6 native-image" & goto :done )
 call :say "      正在运行: native-image -jar target\mhtExtractor-%APP_VERSION%.jar"
 call :say "      （首次通常 1-3 分钟；输出会实时追加到上面的日志）"
 call "%VCVARS%" >nul 2>&1
@@ -229,7 +241,9 @@ call :say "=== FAILURE ==="
 call :say " 失败步 : %FAILSTEP%"
 call :say " 退出码 : %RC%"
 call :say " 日志尾部（末 40 行）："
-powershell -NoProfile -Command "if (Test-Path -LiteralPath '%LOG%') { Get-Content -LiteralPath '%LOG%' -Tail 40 | ForEach-Object { '   ' + $_ } }"
+REM 🚨 必须带 -Encoding UTF8：日志是 UTF-8 写的，PS 5.1 的 Get-Content 默认按 ANSI(GBK) 读，
+REM    会把"环境探测"这类中文读成 鐜鎺㈡祴 —— 而这段正是排障时要看的东西
+powershell -NoProfile -Command "if (Test-Path -LiteralPath '%LOG%') { Get-Content -LiteralPath '%LOG%' -Encoding UTF8 -Tail 40 | ForEach-Object { '   ' + $_ } }"
 call :say "=== /FAILURE ==="
 
 :report
@@ -303,8 +317,32 @@ call :stamp
 call :say "[STEP %STEP_ID%] END   %STEP_NAME%  exit=%~1"
 goto :eof
 
+:jdk_dir
+REM 把一个"可能的 JDK 根目录"登记为编译 JDK（先到先得）
+if not defined BUILD_JAVA_HOME if exist "%~1\bin\javac.exe" set "BUILD_JAVA_HOME=%~1"
+goto :eof
+
+:detect_jdk
+REM 常见安装根目录通配探测；开发机与打包机共用同一套逻辑，**不含任何机器专属路径**
+REM 注意：这里**故意不列 %ProgramFiles(x86)%** —— 它的值含 ')'，放进 for 的列表会直接拆坏解析
+for %%r in ("%ProgramFiles%\BellSoft" "%ProgramFiles%\Java" "%ProgramFiles%\Eclipse Adoptium" "%ProgramFiles%\Microsoft" "%ProgramFiles%\Zulu" "%LOCALAPPDATA%\Programs\BellSoft" "%USERPROFILE%\jdk" "C:\Java" "D:\Java" "D:\install") do (
+    if exist "%%~r" for /d %%d in ("%%~r\*") do call :jdk_dir "%%~d"
+)
+goto :eof
+
+:detect_nik
+REM 找一个带 bin\native-image.cmd 的发行版（NIK / GraalVM）
+for %%r in ("%ProgramFiles%\BellSoft" "%LOCALAPPDATA%\Programs\BellSoft" "%USERPROFILE%\jdk" "C:\Java" "D:\Java" "D:\install") do (
+    if exist "%%~r" for /d %%d in ("%%~r\*") do (
+        if not defined GRAALVM_HOME if exist "%%~d\bin\native-image.cmd" set "GRAALVM_HOME=%%~d"
+    )
+)
+goto :eof
+
 :tee
 REM 执行 %TMPCMD% 并把输出实时同时送到控制台与日志；退出码放入 RC
+REM 🚨 本标签与下面两行**必须紧邻**：中间插任何东西（哪怕一行 REM 或另一个 :label）都会让
+REM    `call :tee` 落空滑进下一个子程序 —— 表现是"该步 exit=0 但什么都没执行"（本项目真踩过）
 powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\native-tee.ps1" -CmdFile "%TMPCMD%" -Log "%LOG%"
 set "RC=%ERRORLEVEL%"
 goto :eof

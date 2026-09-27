@@ -44,3 +44,6 @@ build/
 
 ### DSH 驱动 claudecode 的工作目录 ###
 .claude-work/
+
+### 探针编译产物（由 tools/probes/run-probe.ps1 生成，不入库） ###
+/tools/probes/out/
