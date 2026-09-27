@@ -3270,20 +3270,13 @@ public class MainController {
             return;
         }
         GroupItem<PreviewItem> group = asPreviewGroup(g);
-        int topIdx = items.indexOf(group);
-        if (topIdx < 0) {
+        if (items.indexOf(group) < 0) {
             return;
         }
         int displayIdx = displayItems.indexOf(group);
-        // 拆分为整组操作，与展开/折叠无关（GroupStructure.dissolveGroup 不依赖 expanded）
-        List<PreviewItem> members = GroupStructure.dissolveGroup(items, group);
-        // 条目独立参数生命周期拍板：拆分组后成员回到顶层，组参数集复制为成员条目级参数
-        for (PreviewItem m : members) {
-            m.textItemParams = group.getTextParamsCache();
-            m.imageItemParams = group.getImageParamsCache();
-        }
-        ws.push(new UndoManager.Record<>(UndoManager.RecordType.UNGROUP, members,
-                group, topIdx, List.of(), List.of(), List.of()));
+        // 拆分是整组操作，与展开/折叠无关。结构变更（成员按组内顺序回顶层原位置 + 组参数下发为
+        // 成员条目级参数 + 压 UNGROUP 撤销记录）全部由模型负责，本类只做刷新与选中收尾。
+        List<PreviewItem> members = ws.ungroup(group);
         refreshAfterListChange();
         // 选中的组已解散：跳转到原组位置的最近有效行（拆分后为原组第一个成员）
         selectNearestVisible(displayIdx);
