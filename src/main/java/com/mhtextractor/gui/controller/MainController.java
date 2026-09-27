@@ -2882,56 +2882,32 @@ public class MainController {
         }
     }
 
-    /** 隐藏式移除：removed=true、selected 重置、压撤销栈；成员全被移除的空组自动销毁（D11），撤销时一并恢复 */
+    /** 隐藏式移除：结构变更（removed 标记 + 空组自动销毁 D11）与撤销记录由 {@link WorkspaceModel#removeItems} 负责；
+     *  本类只做缓存规则 (c) 与选择/刷新收尾 */
     /* test-support */ void removeItems(List<PreviewItem> targets) {
         Object sel = fileListView.getSelectionModel().getSelectedItem();
         int selIndex = displayItems.indexOf(sel);
-        for (PreviewItem t : targets) {
-            t.removed = true;
-            t.setSelected(false);
-        }
+        ws.removeItems(targets);                              // 结构 + 撤销记录（模型是唯一实现）
         // 规则 (c)：从列表移除 → 删该项目缓存目录
         workspaceParamService.itemsRemoved(targets);
-        // 空组自动销毁：降序遍历记录原顶层索引，撤销时按原序恢复
-        List<GroupItem<PreviewItem>> destroyed = new ArrayList<>();
-        List<Integer> destroyedIdx = new ArrayList<>();
-        for (int i = items.size() - 1; i >= 0; i--) {
-            if (items.get(i) instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> group = asPreviewGroup(g);
-                if (GroupStructure.isEmptyGroup(group, m -> m.removed)) {
-                    destroyed.add(group);
-                    destroyedIdx.add(i);
-                    items.remove(i);
-                    log.info("组 {} 已无有效成员，自动销毁", group.getName());
-                }
-            }
-        }
-        ws.push(new UndoManager.Record<>(UndoManager.RecordType.REMOVE, targets,
-                null, -1, destroyed, destroyedIdx, List.of()));
+        // 被选中项若已被移除（含"所在组被销毁"）→ 选最近的可见项
         boolean selRemoved = sel != null
                 && ((sel instanceof PreviewItem it && targets.contains(it))
-                || (sel instanceof GroupItem<?> g && destroyed.contains(g)));
+                || (sel instanceof GroupItem<?> g && items.stream().noneMatch(o -> o == g)));
         if (selRemoved) {
             selectNearestVisible(selIndex);
         }
         refreshAfterListChange();
     }
 
-    /** 整组移除（D7）：组内成员全部标记 removed，组条目隐藏；组对象（名/参数）保留在撤销记录中可整体恢复 */
+    /** 整组移除（D7）：结构变更与撤销记录由 {@link WorkspaceModel#removeGroup} 负责；本类只做缓存规则 (c) 与选择/刷新收尾 */
     private void removeGroup(GroupItem<PreviewItem> group) {
         Object sel = fileListView.getSelectionModel().getSelectedItem();
         int selIndex = displayItems.indexOf(sel);
-        int idx = items.indexOf(group);
         List<PreviewItem> members = new ArrayList<>(group.getMembers());
-        for (PreviewItem m : members) {
-            m.removed = true;
-            m.setSelected(false);
-        }
+        ws.removeGroup(group);                                // 结构 + 撤销记录（模型是唯一实现）
         // 规则 (c)：整组移除 → 删组内成员缓存目录
         workspaceParamService.itemsRemoved(members);
-        items.remove(group);
-        ws.push(new UndoManager.Record<>(UndoManager.RecordType.REMOVE_GROUP, members,
-                group, idx, List.of(group), List.of(idx), List.of()));
         if (sel == group) {
             selectNearestVisible(selIndex);
         }

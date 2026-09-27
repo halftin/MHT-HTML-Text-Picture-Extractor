@@ -2,6 +2,7 @@ package com.mhtextractor.app;
 
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.util.UndoManager;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -177,6 +178,62 @@ class WorkspaceModelTest {
         assertTrue(a.removed, "移除 = 标记 removed（隐藏式）");
         assertEquals(1, m.visibleCount());
         assertEquals(2, m.allItems().size(), "数据序仍保留被移除项（供撤销恢复）");
+    }
+
+    /** D7 整组移除：成员标记 removed、组条目从顶层摘除，但组对象**不销毁**（供撤销整体恢复） */
+    @Test
+    void removeGroupDropsGroupFromTopLevelButKeepsGroupObjectAlive() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht"), c = item("c.mht");
+        m.addItems(List.of(a, b, c));
+        GroupItem<PreviewItem> g = m.group(List.of(a, b));
+        assertNotNull(g);
+
+        assertEquals(2, m.removeGroup(g));
+
+        assertTrue(a.removed && b.removed, "整组移除 = 全部成员标记 removed");
+        assertFalse(m.topLevel().contains(g), "组条目应从顶层摘除");
+        assertTrue(m.topLevel().contains(c), "未参与的顶层条目不受影响");
+        assertEquals(1, m.visibleCount());
+        assertEquals(2, g.getMembers().size(), "组对象保留（成员仍在 members 里，撤销时整体恢复）");
+    }
+
+    @Test
+    void removeGroupOfGroupNotInTopLevelIsNoOp() {
+        WorkspaceModel m = new WorkspaceModel();
+        m.addItems(List.of(item("a.mht")));
+        int depth = m.undoDepth();
+
+        assertEquals(0, m.removeGroup(new GroupItem<>(99, "orphan")));
+        assertEquals(0, m.removeGroup(null));
+
+        assertEquals(depth, m.undoDepth(), "无变更就不应产生撤销记录");
+        assertEquals(1, m.visibleCount());
+    }
+
+    /**
+     * 撤销记录的**形状契约**：GUI 的 {@code REMOVE / REMOVE_GROUP} 两个分支共用同一段恢复代码，
+     * 它靠 {@code destroyedGroups/destroyedIndexes} 把组插回原顶层位置。因此整组移除必须把
+     * 「组 + 其原索引」放进这两个字段（而不是另造字段），否则撤销会把组插错位置。
+     */
+    @Test
+    void removeGroupRecordCarriesGroupAndItsTopLevelIndexForUndo() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht"), c = item("c.mht");
+        m.addItems(List.of(a, b, c));
+        GroupItem<PreviewItem> g = m.group(List.of(a, b));
+        assertNotNull(g);
+        int idx = m.topLevel().indexOf(g);
+
+        m.removeGroup(g);
+        UndoManager.Record<PreviewItem> r = m.popRecord();
+
+        assertNotNull(r);
+        assertEquals(UndoManager.RecordType.REMOVE_GROUP, r.type());
+        assertSame(g, r.group());
+        assertEquals(idx, r.groupIndex());
+        assertEquals(List.of(g), r.destroyedGroups());
+        assertEquals(List.of(idx), r.destroyedIndexes());
     }
 
     @Test

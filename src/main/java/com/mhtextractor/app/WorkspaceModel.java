@@ -4,6 +4,7 @@ import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.UndoManager;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -35,6 +36,7 @@ import java.util.function.Predicate;
  * <p><b>语义来源</b>：所有操作语义对齐 GUI 的对应功能（F1 勾选、F2 隐藏式移除、F5 建组、
  * F6 拆分组、撤销栈深 35），但不含任何 UI 交互（确认框、动画、选中管理）。</p>
  */
+@Slf4j
 public final class WorkspaceModel {
 
     /** 顶层顺序（含组条目）；被移除的条目仍留在其组/顶层中，由谓词过滤 */
@@ -293,12 +295,43 @@ public final class WorkspaceModel {
                     destroyed.add(g);
                     destroyedIdx.add(i);
                     topLevel.remove(i);
+                    log.info("组 {} 已无有效成员，自动销毁", g.getName());
                 }
             }
         }
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.REMOVE,
                 targets, null, -1, destroyed, destroyedIdx, snapshot));
         return targets.size();
+    }
+
+    /**
+     * 整组移除（D7）：组内成员全部标记 {@code removed}，组条目从顶层摘除但不销毁
+     * （组对象连同组名与组参数保留在撤销记录里，可整体恢复）。
+     *
+     * <p>撤销记录沿用与 {@link #removeItems} 相同的形状：把"被摘除的组 + 其原顶层索引"
+     * 放进 {@code destroyedGroups/destroyedIndexes}，于是 GUI 侧 {@code REMOVE / REMOVE_GROUP}
+     * 两个分支可以共用同一段恢复代码。</p>
+     *
+     * @return 受影响的成员数；组不在顶层时返回 0 且不产生任何变更
+     */
+    public int removeGroup(GroupItem<PreviewItem> group) {
+        if (group == null) {
+            return 0;
+        }
+        int idx = topLevel.indexOf(group);
+        if (idx < 0) {
+            return 0;
+        }
+        List<Object> snapshot = GroupStructure.snapshotStructure(topLevel);
+        List<PreviewItem> members = distinctNonNull(new ArrayList<>(group.getMembers()));
+        for (PreviewItem m : members) {
+            m.removed = true;
+            m.setSelected(false);
+        }
+        topLevel.remove(group);
+        undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.REMOVE_GROUP,
+                members, group, idx, List.of(group), List.of(idx), snapshot));
+        return members.size();
     }
 
     // ==================== 变更：撤销 ====================
