@@ -83,6 +83,39 @@ class WorkspaceModelTest {
         assertEquals(1, m.allItems().size());
     }
 
+    /**
+     * 结构原语 {@code appendItems} / {@code appendGroup}：只写数据序，**不去重、不压撤销记录**。
+     *
+     * <p>与语义操作 {@link WorkspaceModel#addItems} 的区别是导入路径必需的 ——
+     * 导入的去重已由 {@code IncrementalImport} 完成，而撤销记录必须保持
+     * "一次用户导入 = 一条"的粒度（跨批次先累积、最后压一条）。</p>
+     */
+    @Test
+    void appendPrimitivesWriteDataOrderWithoutPushOrDedupe() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht");
+
+        m.appendItems(List.of(a, b));
+        assertEquals(2, m.topLevel().size());
+        assertEquals(0, m.undoDepth(), "结构原语不得压撤销记录");
+
+        m.appendItems(List.of(a));
+        assertEquals(3, m.topLevel().size(), "appendItems 不做身份去重（去重由导入路径负责）");
+        m.appendItems(null);
+        assertEquals(3, m.topLevel().size(), "null 是 no-op");
+
+        GroupItem<PreviewItem> g = new GroupItem<>(1, "组1");
+        g.getMembers().add(a);
+        m.appendGroup(g);
+        assertSame(g, m.topLevel().get(3), "组应追加到末尾");
+        m.appendGroup(g);
+        assertEquals(4, m.topLevel().size(), "同一组对象不得被追加两次");
+        m.appendGroup(null);
+        assertEquals(4, m.topLevel().size());
+
+        assertEquals(0, m.undoDepth(), "结构原语全程不得产生撤销记录");
+    }
+
     // ==================== 建组 / 拆组 ====================
 
     @Test

@@ -825,7 +825,7 @@ public class MainController {
                 GroupItem<PreviewItem> group = createGroupForImport(added, gb.folderName());
                 createdGroups.add(group);
             } else {
-                items.addAll(added);              // TopLevelBatch：平铺
+                ws.appendItems(added);            // TopLevelBatch：平铺（数据序写入统一经模型）
             }
             importAccumulated.addAll(added);
 
@@ -870,7 +870,7 @@ public class MainController {
         // ⑤ 成员入组
         group.getMembers().addAll(members);
         // ⑥ 追加顶层末尾（导入一律追加到末尾，不与落点/既有项目交互）—— 数据序写入统一经模型
-        ws.addGroup(group);
+        ws.appendGroup(group);
         return group;
     }
 

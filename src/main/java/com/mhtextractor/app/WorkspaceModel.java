@@ -303,7 +303,7 @@ public final class WorkspaceModel {
      * <p><b>不产生撤销记录</b>：导入的撤销记录由调用方按"整批一次"的粒度压入
      * （一次导入可能跨多个批次，逐批压栈会破坏"一次撤销撤整批"的既有语义）。</p>
      */
-    public void addGroup(GroupItem<PreviewItem> group) {
+    public void appendGroup(GroupItem<PreviewItem> group) {
         if (group == null) {
             return;
         }
@@ -311,6 +311,30 @@ public final class WorkspaceModel {
             if (o == group) return;
         }
         topLevel.add(group);
+    }
+
+    /**
+     * 把若干条目追加到顶层末尾（平铺导入用）。
+     *
+     * <p><b>与 {@link #addItems} 的区别（两个方法必须分清）</b>：</p>
+     * <ul>
+     *   <li>{@link #addItems} 是<b>语义操作</b>：按身份去重，并压一条 IMPORT 撤销记录
+     *       —— 供无头调用方与桩 UI 使用；</li>
+     *   <li>本方法是<b>结构原语</b>：只把给定条目接到数据序末尾，不去重、不压记录
+     *       —— 供导入路径使用。导入路径的去重已由 {@code IncrementalImport} 完成，
+     *       而撤销记录必须保持"一次用户导入 = 一条"的粒度（跨批次先累积、最后压一条），
+     *       逐批压栈会让用户要按 N 次才能撤掉一次导入。</li>
+     * </ul>
+     */
+    public void appendItems(List<PreviewItem> items) {
+        if (items == null) {
+            return;
+        }
+        for (PreviewItem it : items) {
+            if (it != null) {
+                topLevel.add(it);
+            }
+        }
     }
 
     /**
