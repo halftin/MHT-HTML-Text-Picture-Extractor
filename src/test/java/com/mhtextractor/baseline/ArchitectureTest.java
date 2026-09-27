@@ -121,13 +121,24 @@ class ArchitectureTest {
      *       4435</b>。即那次临时让步只在"清理提交"这一个提交内存在，随后被真实的结构性减行
      *      （模型共享数据序后删除重复的只读遍历、移除路径与拆分组逻辑）抵消并留出余量，
      *      因此**上限已恢复到清理前的 4435，不再是 4443**。</li>
+     *   <li><b>2026-09-27 阶段 2/3 完成：4334 → 上限 4370</b>。首次**刻意不顶格**，留 36 行余量，
+     *       理由见下方"零余量的代价"。</li>
      * </ul>
      *
-     * <p><b>⚠️ 口径陷阱（会话 18 实测）</b>：同一文件用不同工具数出的行数<b>不一致</b> ——
-     * PowerShell {@code (Get-Content f).Count} 与 Java {@code Files.readAllLines} 会给出不同结果
-     * （本文件为纯 {@code LF} 换行）。**因此本常量只能与 {@code Files.readAllLines} 口径比较**。</p>
+     * <p><b>2026-09-27 阶段 2/3 完成后再收紧，并首次刻意留出余量：4334 → 上限 4370</b>。
+     * 本会话实测到"零余量"的真实代价：一次常规清理（净 +8 行）直接把构建打红，
+     * 而它的功能正确性已被 GUI 30/0 与 395/396 单测证明 —— 护栏没有拦住任何缺陷，
+     * 只拦住了一次改进。故本次**不顶格**：留 36 行余量，上限仍比清理前的 4435 低 65 行，
+     * "只减不增"的方向不变，但不再要求"先删后加"这种为迁就常量而扭曲的工作顺序。
+     * 若日后确需上调，请先确认那不是"职责增长"—— 那才是本条断言真正要拦的东西。</p>
+     *
+     * <p><b>⚠️ 口径陷阱（2026-09-27 查明根因）</b>：同一文件用不同工具数出的行数<b>不一致</b> ——
+     * 根因是 PowerShell 5.1 的 Get-Content 不带 -Encoding 时按系统 ANSI(GBK) 读取 UTF-8 无 BOM 文件，
+     * DBCS 解码回退会吞掉"以非 ASCII 字符结尾那一行"的换行符。同类场景实测：
+     * 默认 Get-Content = 4277 行，-Encoding UTF8 = Files.readAllLines = 4443 行。
+     * 因此本常量只能与 Files.readAllLines 口径比较，且数行/读源码一律显式指定 UTF-8。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 4435;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 4370;
 
     /**
      * E0.6 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限。
@@ -610,6 +621,51 @@ class ArchitectureTest {
                 "GUI 层不得直接调用缓存规则方法（须经 com.mhtextractor.app.WorkspaceParamService）：\n  "
                         + String.join("\n  ", offenders));
         System.out.println("[arch] GUI 层未直接调用缓存规则（已收口到 WorkspaceParamService）");
+    }
+
+    /**
+     * 「WorkspaceModel 接入生产」的**固化断言**：GUI 不得直接改动 workspace 数据序。
+     *
+     * <p><b>为什么必须有它</b>：数据序列表是 GUI 与 {@code WorkspaceModel} <b>共享的同一个对象</b>
+     * （见 {@code docs/handoff/H33.md} §二）。因此 GUI 里任何一处 {@code items.add(...)} 都会绕过
+     * 模型的撤销记录与结构维护 —— 不会报错，只会**静默分叉**。收口工作把 GUI 的写入点降到了
+     * <b>0</b>；本断言把那次的成果变成持续约束，防止日后有人图快又写回去。</p>
+     *
+     * <p><b>允许的形态</b>：读（{@code for (Object o : items)} / {@code items.indexOf(x)}）与
+     * 模型转发（{@code ws.xxx(...)}）。禁止的是在数据序上做增删改调用。</p>
+     *
+     * <p><b>口径说明</b>：只认小写 {@code items.} 且要求前一个字符不是标识符字符 ——
+     * 否则 {@code displayItems.setAll(...)}（显示序，GUI 本来就该自己维护）与
+     * {@code topItems.add(...)} 会被误判。</p>
+     */
+    @Test
+    void guiDoesNotMutateDataOrderDirectly() throws IOException {
+        Path guiPkg = Path.of("src", "main", "java", "com", "mhtextractor", "gui");
+        List<String> mutators = List.of("add", "addAll", "remove", "removeAll", "removeIf",
+                "set", "setAll", "clear", "retainAll", "sort", "replaceAll");
+
+        List<String> offenders = new ArrayList<>();
+        try (Stream<Path> walk = Files.walk(guiPkg)) {
+            for (Path p : walk.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
+                String rel = guiPkg.relativize(p).toString().replace('\\', '/');
+                for (String line : Files.readAllLines(p, StandardCharsets.UTF_8)) {
+                    String code = line.split("//")[0];
+                    for (String m : mutators) {
+                        String needle = "items." + m + "(";
+                        int at = code.indexOf(needle);
+                        if (at < 0) continue;
+                        if (at > 0 && Character.isJavaIdentifierPart(code.charAt(at - 1))) continue;
+                        offenders.add(rel + "  ->  " + code.trim());
+                    }
+                }
+            }
+        }
+
+        assertTrue(offenders.isEmpty(),
+                "GUI 层不得直接改动 workspace 数据序（须经 com.mhtextractor.app.WorkspaceModel）：\n  "
+                        + String.join("\n  ", offenders)
+                        + "\n数据序是与模型共享的同一个列表，直写会绕过撤销记录与结构维护而静默分叉。");
+        System.out.println("[arch] GUI 未直接改动数据序（已全部经 WorkspaceModel）");
     }
 
     /**
