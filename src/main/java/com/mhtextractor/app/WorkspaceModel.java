@@ -8,6 +8,7 @@ import com.mhtextractor.util.UndoManager;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -36,14 +37,40 @@ import java.util.function.Predicate;
  */
 public final class WorkspaceModel {
 
-    /** 顶层顺序（含组条目）；被移除的条目仍留在其组/顶层中，由  谓词过滤 */
-    private final List<Object> topLevel = new ArrayList<>();
+    /** 顶层顺序（含组条目）；被移除的条目仍留在其组/顶层中，由谓词过滤 */
+    private final List<Object> topLevel;
 
     private final UndoManager<PreviewItem> undoManager = new UndoManager<>();
 
     private int lastGroupNo = 0;
 
     private static final Predicate<Object> REMOVED = o -> o instanceof PreviewItem it && it.removed;
+
+    // ==================== 构造 ====================
+
+    /** 无头构造：自持数据序列表（单测与桩 UI 使用）。 */
+    public WorkspaceModel() {
+        this(new ArrayList<>());
+    }
+
+    /**
+     * 共享构造：由调用方提供数据序列表，本模型**在它上面直接操作**。
+     *
+     * <p><b>为什么这样设计</b>：GUI 的数据序是 {@code ObservableList}（被 {@code ListView} 的变更监听
+     * 依赖），而本类不得触碰任何 UI 框架类型。把列表**作为 {@code java.util.List} 注入**，
+     * 既让两侧共享同一份存储（不存在"两套状态"与投影时滞），又让本类字节码保持零 javafx ——
+     * 这正是 {@code ArchitectureTest.businessPackagesHaveNoUiFrameworkDependency} 允许的形态
+     * （它扫的是常量池，而 {@code List} 不是 UI 类型）。</p>
+     *
+     * <p><b>由此消除的风险</b>：接入生产时若采用"模型持一份、GUI 持一份 + 单向投影"，
+     * 迁移期间任何未迁移的直写都会造成分叉。共享存储下，GUI 的直写与模型的写是同一份数据，
+     * 因此可以逐操作迁移、每一步都自洽。</p>
+     *
+     * @param sharedTopLevel 由调用方持有的数据序列表（不得为 null）
+     */
+    public WorkspaceModel(List<Object> sharedTopLevel) {
+        this.topLevel = Objects.requireNonNull(sharedTopLevel, "sharedTopLevel");
+    }
 
     // ==================== 查询 ====================
 

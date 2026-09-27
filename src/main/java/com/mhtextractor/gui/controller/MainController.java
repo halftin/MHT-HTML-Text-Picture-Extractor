@@ -303,7 +303,9 @@ public class MainController {
     /* test-support */ final AtomicReference<BatchProcessor.ProcessStats> lastExtractStats = new AtomicReference<>();
 
     // 撤销栈（F4）：唯一栈由 app.WorkspaceModel 独占；结构类由模型 undo() 应用，参数 / 拖拽类由本类 popRecord() 后自行应用
-    /* test-support */ final WorkspaceModel ws = new WorkspaceModel();
+    // 数据序共享：模型直接在本类的 items 上操作（注入为 java.util.List，模型字节码因此仍零 javafx）。
+    // 这样"模型拥有的结构"与"GUI 渲染的数据序"是同一份存储，迁移期间不存在两套状态分叉。
+    /* test-support */ final WorkspaceModel ws = new WorkspaceModel(items);
     private volatile Task<BatchProcessor.ProcessStats> currentTask;
 
     /** 两套已确认提取参数缓存：null 表示该模式尚未确认过参数 */
@@ -2692,33 +2694,15 @@ public class MainController {
 
     // ==================== 显示序 / 数据序（F5） ====================
 
-    /** 数据模型中的所有项目（含组内成员与已移除项） */
+    /** 数据模型中的所有项目（含组内成员与已移除项）—— 委托 {@link WorkspaceModel#allItems()}（本类只读查询） */
     /* test-support */ List<PreviewItem> allPreviewItems() {
-        List<PreviewItem> out = new ArrayList<>();
-        for (Object o : items) {
-            if (o instanceof PreviewItem it) {
-                out.add(it);
-            } else if (o instanceof GroupItem<?> g) {
-                for (Object m : g.getMembers()) {
-                    if (m instanceof PreviewItem it) {
-                        out.add(it);
-                    }
-                }
-            }
-        }
-        return out;
+        return ws.allItems();
     }
 
     /** 全部有效项目（removed == false，含组内成员）。按数据序遍历：折叠组的成员不在显示序中，
      *  若按显示序遍历会导致全选/提取名单/进度统计漏掉折叠组成员（冒烟测试发现，阶段 4 遗留） */
     /* test-support */ List<PreviewItem> allVisibleItems() {
-        List<PreviewItem> out = new ArrayList<>();
-        for (PreviewItem it : allPreviewItems()) {
-            if (!it.removed) {
-                out.add(it);
-            }
-        }
-        return out;
+        return ws.allItems().stream().filter(i -> !i.removed).toList();
     }
 
     /** 重建父组指针：以数据序为准统一维护 PreviewItem.parentGroup（显示序重建时同步调用） */
@@ -2764,9 +2748,9 @@ public class MainController {
 
     // ==================== 移除 / 撤销（F2 / F4） ====================
 
-    /** 可见文件数：removed 标记的项目在列表中完全隐藏，不参与任何计数（组条目不计入） */
+    /** 可见文件数：removed 标记的项目在列表中完全隐藏，不参与任何计数（组条目不计入）—— 委托 {@link WorkspaceModel#visibleCount()} */
     /* test-support */ long visibleCount() {
-        return allVisibleItems().size();
+        return ws.visibleCount();
     }
 
     /** 显示序中"可见行"判定：有效项目或组条目 */

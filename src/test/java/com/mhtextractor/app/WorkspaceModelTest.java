@@ -5,6 +5,7 @@ import com.mhtextractor.util.GroupItem;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,6 +25,40 @@ class WorkspaceModelTest {
 
     private static PreviewItem item(String name) {
         return new PreviewItem("C:/x/" + name, name, LocalDateTime.now(), "C:/x");
+    }
+
+    // ==================== 构造 / 共享存储 ====================
+
+    /**
+     * 共享构造：模型必须在调用方提供的列表上**直接**操作 —— 这是"模型与 GUI 共享数据序、
+     * 迁移期间不会分叉"的全部依据。用「外部直写 → 模型可见」与「模型写 → 外部可见」
+     * 双向断言锁住，防止日后有人改成防御性拷贝而悄悄恢复成两套状态。
+     */
+    @Test
+    void sharedConstructorOperatesOnTheCallerProvidedList() {
+        List<Object> shared = new ArrayList<>();
+        WorkspaceModel m = new WorkspaceModel(shared);
+
+        // ① 外部直写 → 模型可见（迁移期间尚未迁移的 GUI 直写必须被模型看到）
+        PreviewItem a = item("a.mht");
+        shared.add(a);
+        assertEquals(1, m.allItems().size());
+        assertEquals(1, m.visibleCount());
+
+        // ② 模型写 → 外部可见（模型成为唯一写入口后 GUI 仍能渲染到）
+        PreviewItem b = item("b.mht");
+        m.addItems(List.of(b));
+        assertTrue(shared.contains(b), "模型的新增必须落到调用方列表上（不得拷贝）");
+        assertEquals(2, shared.size());
+
+        // ③ 移除是同一份存储：隐藏式移除不改动列表长度
+        m.removeItems(List.of(a));
+        assertTrue(a.removed);
+        assertEquals(2, shared.size());
+
+        // ④ clear 同样作用于调用方的列表
+        m.clear();
+        assertTrue(shared.isEmpty());
     }
 
     // ==================== 导入 / 添加 ====================
