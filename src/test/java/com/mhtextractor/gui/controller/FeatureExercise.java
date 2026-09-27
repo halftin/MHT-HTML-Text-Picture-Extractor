@@ -1308,6 +1308,42 @@ public void runAutomatedTests() {
             out.println("[PASS] GuiState locale persisted after save"); p++;
         } catch (Exception e) { out.println("[FAIL] GuiState locale: " + e.getMessage()); f++; }
 
+        // 导入 → 移除 → 同目录再导入：被移除的项目必须能加回来。
+        // 背景（本项目真实 bug，从导入功能落地起就存在）：F2 移除是"隐藏式移除"——只把 removed 置真，
+        // 对象仍留在数据序里（为了撤销）。因此导入去重的比对集合必须是"可见项"（allVisibleItems）；
+        // 一旦误用 allPreviewItems（其 javadoc 明写"含已移除项"），被移除文件的绝对路径仍被视作
+        // "已导入"，整批被静默跳过（只打一条 debug 日志），用户在界面上再也加不回来、也看不到原因。
+        try {
+            java.nio.file.Path root = java.nio.file.Files.createTempDirectory("mht-reimport-after-remove");
+            createSampleMht(root, "k1.mht");
+            createSampleMht(root, "k2.mht");
+            int itemsBefore = (int) mc.visibleCount();
+            mc.importByPaths(List.of(root.toString()), I18n.get("test.autoReimport"), false);
+            Thread.sleep(800);
+            waitForImportDone();
+            if (mc.visibleCount() != itemsBefore + 2) {
+                throw new IllegalStateException("首次导入目录失败，可见数=" + mc.visibleCount());
+            }
+            List<PreviewItem> imported = new ArrayList<>(mc.allVisibleItems().stream()
+                    .filter(i -> i.path.contains("mht-reimport-after-remove")).toList());
+            if (imported.size() != 2) {
+                throw new IllegalStateException("未找到本次导入的 2 个条目，实际 " + imported.size());
+            }
+            mc.removeItems(imported);
+            Thread.sleep(300);
+            if (mc.visibleCount() != itemsBefore) {
+                throw new IllegalStateException("移除后可见数不符，可见数=" + mc.visibleCount());
+            }
+            mc.importByPaths(List.of(root.toString()), I18n.get("test.autoReimport"), false);
+            Thread.sleep(800);
+            waitForImportDone();
+            if (mc.visibleCount() != itemsBefore + 2) {
+                throw new IllegalStateException("被移除的项目无法通过同目录再加回来，可见数="
+                        + mc.visibleCount() + "（应为 " + (itemsBefore + 2) + "）");
+            }
+            out.println("[PASS] Re-import after remove restores items"); p++;
+        } catch (Exception e) { out.println("[FAIL] Re-import after remove: " + e.getMessage()); f++; }
+
         out.println(); out.println("=== RESULTS: " + p + " passed, " + f + " failed ===");
         out.flush();
         log.info("Automated tests complete: {} passed, {} failed", p, f);

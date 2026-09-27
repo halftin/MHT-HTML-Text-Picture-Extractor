@@ -823,9 +823,9 @@ public class MainController {
         List<GroupItem<PreviewItem>> createdGroups = new ArrayList<>();
 
         for (MhtImportPlanner.Batch batch : plan.batches()) {
-            // 去重：与列表已有项比对（复用 F4），只保留真正的新文件
+            // 去重：与列表可见项比对（复用 F4）——已移除项仍在数据序中，不得视为"已导入"而整批跳过
             List<File> fresh = IncrementalImport.findNewFiles(
-                    batch.files(), allPreviewItems().stream().map(i -> i.path).toList());
+                    batch.files(), allVisibleItems().stream().map(i -> i.path).toList());
             if (fresh.isEmpty()) {
                 // RISK-1 硬约束：无新文件则该批次不建组
                 log.debug(I18n.msg("log.maincontroller.08", batch.dirPath()));

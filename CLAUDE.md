@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **最后更新：2026-09-27**（架构重构 + 全量国际化 + 预览缓存持久化 + **WorkspaceModel 接入生产：阶段 1b/2/3/4 全部完成** + **预览区"单击缩略图用系统默认图片查看器打开缓存图片"恢复** + **交互提醒从模态 Alert 全量替换为应用内通知**）
+> **最后更新：2026-09-27**（架构重构 + 全量国际化 + 预览缓存持久化 + **WorkspaceModel 接入生产：阶段 1b/2/3/4 全部完成** + **预览区"单击缩略图用系统默认图片查看器打开缓存图片"恢复** + **交互提醒从模态 Alert 全量替换为应用内通知** + **修复「移除项目后用同目录无法再加回来」：导入去重口径改为可见项**）
 > 文档集**只有三份**：**本文件**（工程约定，改代码前必读）+ **两份 GraalVM 打包文档**（构建 / 打包机操作）。
 > 历史会话交接（H19–H36、架构重构最终报告、任务规划、新会话启动包等 20 份）已从仓库移除 —— 需要追溯时见 git 历史（提交 `386c249` 及更早）。
 
@@ -34,10 +34,10 @@ MVN='/c/Users/Admin/.m2/wrapper/dists/apache-maven-3.9.16-bin/5grr65jo27hi51sujm
 java --module-path <jfx-win-jars> --add-modules javafx.controls,javafx.fxml \
      -Duser.language=zh -Duser.country=CN \
      -Dtest.mode=true -cp "target/classes;target/test-classes;<cp.txt>" com.mhtextractor.App
-# 结果写入 logs/test-results.txt（当前基线：30 passed / 0 failed；zh 与 en 各 30/0）
+# 结果写入 logs/test-results.txt（当前基线：31 passed / 0 failed；zh 与 en 各 31/0）
 ```
 🚨 **跑之前先删 `logs/test-results.txt`**：那只是"上一次运行留下的文件"。本次若在断言之前就崩了
-（例如 `App.start()` 抛异常），你读到的会是**上一次的 30/0** —— 本项目真发生过。
+（例如 `App.start()` 抛异常），你读到的会是**上一次的 31/0** —— 本项目真发生过。
 **判据**：跑完核对结果文件的 **mtime**，并确认日志里没有 `Exception in Application start method`。
 
 🚨 **GUI 自动化想验某个语言时，`-Duser.language` 可能被吃掉**：`App.start()` 先读
@@ -142,7 +142,7 @@ ExtractionPreconditions // 提取前置校验规则（含 Level 分级 + Denial�
 
 演练与自动化测试**已从生产类外迁**：
 
-- **`src/test/java/com/mhtextractor/gui/controller/FeatureExercise.java`**（约 1250 行）— 承载 `exerciseAllFeatures()`（追踪 agent 演练）与 `runAutomatedTests()`（30 项 GUI 断言）
+- **`src/test/java/com/mhtextractor/gui/controller/FeatureExercise.java`**（1402 行）— 承载 `exerciseAllFeatures()`（追踪 agent 演练）与 `runAutomatedTests()`（31 项 GUI 断言）
 - `App.java` 通过**反射** `invokeFeatureExercise("exerciseAllFeatures" | "runAutomatedTests")` 调用
 - **好处**：`MainController` 不再内嵌测试代码（A-2 自锁解除），且测试代码**不进生产 jar / 不进 native 镜像**
 - 反射是字符串形式，故 `App` 源码中不会出现 `FeatureExercise` 字面量（不触发无头包扫描守卫）
@@ -157,7 +157,7 @@ ExtractionPreconditions // 提取前置校验规则（含 Level 分级 + Denial�
 | 架构不变式 | `src/test/java/com/mhtextractor/baseline/ArchitectureTest.java` | 11 条 |
 
 > **回归门槛（每个改动都必须全绿）**：`mvn test` = 默认执行 **420/0**（36 类）+ `headless-layer-b` **53/0**；
-> 产物基线 **32 份**；架构不变式 **11 条**；GUI 自动化 **zh 30/0、en 30/0**。
+> 产物基线 **32 份**；架构不变式 **11 条**；GUI 自动化 **zh 31/0、en 31/0**。
 > 两条约束：`MainController` ≤ **4370** 行（实测 **4361**，**留 9 行余量** —— 零余量会让一次常规清理直接打红，见 `ArchitectureTest` 常量 javadoc）、`/* test-support */` 标记 ≤ **44** 个（实测 44，顶格）—— 均**只减不增**。
 > ⚠️ **标记计数口径只覆盖 `MainController`**（`ArchitectureTest` 的 javadoc 明写"留在 MainController 里的测试支撑暴露面上限"，实现是按该文件文本 `indexOf` 计数）——
 > 实测 `PreviewListCell.java` 里还有 **1 处**同类标记，**不在该不变式的管辖范围内**。谁要把测试支撑面挪到别的 GUI 类，这道闸门**不会拦**。
@@ -469,6 +469,8 @@ Get-Content logs\native-build-*.log -Wait -Tail 50     # 实时跟踪（构建�
 | `reflect-config.json` 与统一元数据并存 | `src/main/resources/META-INF/native-image/` | 🚨 **不可直接删除**（实测）：旧格式 **291** 个类型、统一格式 **194** 个，其中 **231 个仅存在于旧格式**；native-image 对同 type 取**并集**，删旧文件会丢 231 条。且**本机 native 被 MSVC 阻塞、无法验证**，在无法验证时改元数据风险 > 收益 —— 正解是"并集合并 + 方法/字段级对账（丢失数=0）"。另：该文件里指向 `JavaFxUtil$SmoothProgressProperty` 的条目已**悬空**（该类已被删除） |
 | 工作区有 22/105 个 java 文件是 CRLF | 全仓库 | 与 `.gitattributes` 的 `*.java text eol=lf` 不符。因 `eol` 规则在 `git add` 时会规范化为 LF，**仓库内存储不受影响**；但会让 `git status` 反复告警。一次性修法：`git add --renormalize .` |
 | ~~`.claude-work/*.ps1` 的三类脚本隐患~~ | ✅ **已修复（2026-09-27）** | ① **`release=21`**：`run-matrix.ps1` 三处 + **`mutation-workspace-parity.ps1` 四处**（源码已用 Java 22+ 未命名变量 `_`，pom 的 release 是 25）——后者整个变异测试 harness 都会死在编译上；② **换行**：8 个脚本全部 **LF → CRLF**（`.gitattributes` 要求 `*.ps1 eol=crlf`，且 PS 5.1 在 LF-only 的 `.ps1` 里会静默丢键）；③ **编码**：含中文的 4 个脚本加 **UTF-8 BOM**（`inspect-cache.ps1`/`e2e-verify.ps1` 此前因 GBK 误解码**根本无法解析运行**）；④ `drive-claude.ps1` 的 `$args = @(...)`（自动变量陷阱）改名 `$cliArgs`。**验证**：`[Parser]::ParseFile` 8/8 通过、`inspect-cache`/`s0-verify-reports`/`s1-member-usage` 实跑 exit 0、整张矩阵实跑 `MATRIX ALL GREEN`。⚠️ 仍含中文且无 BOM 的**已跟踪**脚本仅 `native-report.ps1`（非 ASCII 只在注释里、解析正常，**未改**） |
+| ~~移除项目后，用同一目录再也加不回来~~ | ✅ **已修复（2026-09-27）** | 根因是**两个特性从第一天起的语义冲突**：F2 移除是**隐藏式**（只置 `PreviewItem.removed`、对象仍留在数据序，为撤销服务），而导入去重（`MainController.applyImportPlan`）把 `allPreviewItems()`（javadoc 明写"含已移除项"）当作"列表中已有项目"——于是被移除文件的**绝对路径仍被视作已导入**，`IncrementalImport.findNewFiles` 返回空 → 整批 `continue`（RISK-1）→ 界面上"新增 0 个项目"。且跳过只打 `log.debug`，root level 是 INFO，**用户完全看不到原因**。受影响：目录本层平铺项、以及"组内个别成员被移除但组还在"（整组移除/致空组销毁后成员不可达，反倒能加回来——两种移除方式表现相反，纯属副作用）。修法：去重口径改为 `allVisibleItems()`（**1 行，`MainController` 行数不变 = 4361**）；契约写进 `IncrementalImport.findNewFiles` javadoc；新增 GUI 断言 `[PASS] Re-import after remove restores items` 守护（zh/en 各 **31/0**）。⚠️ 该缺陷自导入功能落地（`552ae47`）起一直存在：原有断言"重复导入同目录是 no-op"只覆盖**条目仍可见**的情形，恰好排除了触发条件 |
+| `MATRIX ALL GREEN` 会与断言失败并存 | `.claude-work/run-matrix.ps1`（**gitignored，不随仓库分发**） | 该脚本只看子进程 **退出码**，而 GUI 自动化断言失败时 JVM **仍 exit 0** —— 实测出现过"`MATRIX ALL GREEN`"压在"`30 passed, 1 failed`"上面（**假绿**）。✅ 已修（2026-09-27）：脚本尾部改为同时校验 `RESULTS:` 行的 `N passed, 0 failed`，不满足即计入失败并以 exit 1 收场 |
 
 ---
 
@@ -546,11 +548,11 @@ Get-Content logs\native-build-*.log -Wait -Tail 50     # 实时跟踪（构建�
 | **包围语句分析**（对"剩余中文"向上回溯判断是否 log/注释/测试） | 证明无 UI 泄漏 |
 | `git diff --numstat` 看增删行数 | 发现合并脚本**重排整文件**（−606 行） |
 | 字节码/常量池扫描（而非 grep import） | 发现全限定名引用可绕过 import 扫描 |
-| 跑 GUI 自动化**前先删 `logs/test-results.txt`**，跑完核对 **mtime** | 本轮被它骗过一次：`App.start()` 抛 `ClassCastException` 使断言根本没跑，读到的却是上一次会话的 **"30 passed, 0 failed"** |
+| 跑 GUI 自动化**前先删 `logs/test-results.txt`**，跑完核对 **mtime** | 本轮被它骗过一次：`App.start()` 抛 `ClassCastException` 使断言根本没跑，读到的却是上一次会话的 **"31 passed, 0 failed"** |
 | 给"预期不成立"的断言配**控制组**（先造一个必然成立的反例跑同一段测量） | 发现两条断言是**假通过**：ESC 根本没送达皮肤处理器，所以"ESC 没关掉它"什么也没证明 |
 | **会自己消失的 UI**（自动收起的卡片 / 瞬时状态）：断言必须**同帧**做，或用**闸门**卡住后台任务 | 等待卡片只显示几毫秒，+300ms 再去查已经收完了 —— 我第一版探针据此把**正确的实现**误判成 FAIL |
 
-**并且：验证脚本自身也可能是错的。** 本项目三次被自己的验证脚本误导——`mvn -q` 吞掉 surefire 摘要（误判 0 测试）；正则 `[,)]` 漏掉分号结尾的枚举常量（误判"少一个"）；`$null -eq $int` 判断不可靠（误判"全部未完成"）。**对"不一致"要再核一遍再下结论。**
+**并且：验证脚本自身也可能是错的。** 本项目四次被自己的验证脚本误导——`mvn -q` 吞掉 surefire 摘要（误判 0 测试）；正则 `[,)]` 漏掉分号结尾的枚举常量（误判"少一个"）；`$null -eq $int` 判断不可靠（误判"全部未完成"）。**第四次（2026-09-27）是「过滤器反噬」**：聚合 surefire 报告时用 `-notlike '*output*'` 排除 `*-output.txt`，把 `output.ImageWriterTest` 与 `OutputUnit*` 一并滤掉（少算 38 个测试，误判「聚合数与 Maven 汇总不符」）。**对"不一致"要再核一遍再下结论。**
 
 ---
 
