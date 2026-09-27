@@ -434,8 +434,9 @@ public final class WorkspaceModel {
     /**
      * 撤销一步。
      *
-     * <p><b>范围说明（诚实标注）</b>：本类只实现与"列表结构"相关的撤销类型
-     * （{@code IMPORT / GROUP / UNGROUP / REMOVE}），这四类覆盖了"桩 UI 跑通工作区功能"所需。
+     * <p><b>范围说明（诚实标注）</b>：本类实现与"列表结构"相关的撤销类型
+     * （{@code IMPORT / GROUP / UNGROUP / REMOVE / REMOVE_GROUP}），
+     * 覆盖了"桩 UI 跑通工作区功能"与生产 GUI 的结构类撤销所需。
      * 参数类撤销（{@code PARAM_SET / CLEAR_PARAMS / APPLY_GLOBAL}）与
      * {@code REORDER / MERGE_GROUPS} 尚未纳入 —— 它们需要参数快照与落点解析，
      * 属后续步骤（见 {@code docs/handoff/H17.md}）。</p>
@@ -449,13 +450,37 @@ public final class WorkspaceModel {
         // UndoManager 只提供 pop()（无 peek）。故先弹出，遇到尚未支持的类型再原样压回 ——
         // 这样"不支持"不会静默改变状态（若直接忽略，用户会看到"撤销了但什么都没变"）。
         UndoManager.Record<PreviewItem> record = undoManager.pop();
+        if (!applyUndo(record)) {
+            undoManager.push(record);   // 原样压回，保持栈序不变
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 应用一条**已被弹出**的结构类撤销记录（本方法<b>不触碰撤销栈</b>）。
+     *
+     * <p><b>为什么需要它</b>：GUI 的撤销流程必须先拿到记录、据类型做 UI 收尾
+     * （选中跳转、缓存规则 (c)、重新预解析、日志），因此不能用 {@link #undo()}；
+     * 但"结构如何恢复"这份实现必须只有一处。本方法即那唯一一处 ——
+     * {@link #undo()} 与 GUI 都经它，从而消除"栈统一了、应用仍有两份"的重复。</p>
+     *
+     * <p>支持类型：{@code REMOVE / REMOVE_GROUP / GROUP / UNGROUP / IMPORT}。
+     * 其余（参数类与 {@code REORDER / MERGE_GROUPS}）返回 {@code false} 且
+     * <b>不改变任何状态</b>，由调用方自行应用。</p>
+     *
+     * @return true = 本类应用了该记录；false = 该类型本类尚未支持（未做任何变更）
+     */
+    public boolean applyUndo(UndoManager.Record<PreviewItem> record) {
+        if (record == null) {
+            return false;
+        }
         switch (record.type()) {
-            case REMOVE -> undoRemove(record);
+            case REMOVE, REMOVE_GROUP -> undoRemove(record);
             case GROUP -> undoGroup(record);
             case UNGROUP -> undoUngroup(record);
             case IMPORT -> undoImport(record);
             default -> {
-                undoManager.push(record);   // 原样压回，保持栈序不变
                 return false;
             }
         }
@@ -500,11 +525,13 @@ public final class WorkspaceModel {
     }
 
     private void undoUngroup(UndoManager.Record<PreviewItem> record) {
-        if (record.structureBefore() != null) {
-            GroupStructure.restoreStructure(topLevel, record.structureBefore());
-        }
+        // 与生产（MainController.onUndoClicked 的 UNGROUP 分支）**同一套机制**：
+        // 用 restoreGroup 把组按原顶层索引插回并恢复成员。原实现走 restoreStructure
+        // （整体清空 topLevel 再按快照重建），虽然在本例结果相同，但机制不同、边界语义不同
+        // —— 既然要"接入生产"，就统一到生产那一套，避免留下第二份语义。
+        GroupStructure.restoreGroup(topLevel, record.group(), record.groupIndex(), record.items());
         for (PreviewItem m : record.items()) {
-            m.parentGroup = record.group();
+            m.parentGroup = record.group();   // 生产侧靠 rebuildParentPointers 兜底，这里显式维护
             m.textItemParams = null;   // 撤销拆分：清除拆分时下发的条目级参数
             m.imageItemParams = null;
         }

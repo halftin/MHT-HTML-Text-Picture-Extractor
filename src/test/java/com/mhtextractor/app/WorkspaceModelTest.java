@@ -376,6 +376,69 @@ class WorkspaceModelTest {
         assertEquals(depthBefore, m.undoDepth(), "记录应原样压回，栈深不变");
     }
 
+    // ==================== applyUndo（GUI 复用的入口） ====================
+
+    /**
+     * {@code applyUndo} 是"结构恢复"的**唯一实现** —— {@link WorkspaceModel#undo()} 与生产 GUI
+     * 的撤销链都经它。因此它必须支持整组移除（REMOVE_GROUP），生产会压入该类型。
+     * 该类型此前只由 GUI 自己恢复（模型 {@code undo()} 会原样压回并返回 false）。
+     */
+    @Test
+    void applyUndoHandlesRemoveGroupRecord() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht");
+        m.addItems(List.of(a, b));
+        GroupItem<PreviewItem> g = m.group(List.of(a, b));
+        assertNotNull(g);
+        int idx = m.topLevel().indexOf(g);
+        m.removeGroup(g);
+        assertTrue(a.removed && b.removed);
+
+        assertTrue(m.applyUndo(m.popRecord()), "整组移除的撤销必须由模型应用");
+
+        assertFalse(a.removed, "成员应恢复可见");
+        assertFalse(b.removed);
+        assertSame(g, m.topLevel().get(idx), "组应按原顶层索引插回");
+        assertEquals(List.of(a, b), g.getMembers(), "组成员不得因撤销而丢失");
+        assertEquals(2, m.visibleCount());
+    }
+
+    /** {@code undo()} 现在也支持整组移除（此前会原样压回并返回 false）。 */
+    @Test
+    void undoNowSupportsRemoveGroup() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht");
+        m.addItems(List.of(a, b));
+        GroupItem<PreviewItem> g = m.group(List.of(a, b));
+        assertNotNull(g);
+        m.removeGroup(g);
+
+        assertTrue(m.undo(), "整组移除应可被 undo() 撤销");
+        assertFalse(a.removed);
+        assertTrue(m.topLevel().contains(g));
+    }
+
+    /**
+     * 未支持的类型（参数类 / 拖拽类）必须返回 false 且**不改变任何状态**；
+     * 且 {@code applyUndo} **不触碰撤销栈**（它只应用一条已弹出的记录）。
+     */
+    @Test
+    void applyUndoRejectsUnsupportedTypesWithoutTouchingStackOrStructure() {
+        WorkspaceModel m = new WorkspaceModel();
+        m.addItems(List.of(item("a.mht")));
+        List<Object> before = m.topLevel();
+        int depth = m.undoDepth();
+
+        assertFalse(m.applyUndo(null), "null 记录应返回 false");
+        assertFalse(m.applyUndo(new UndoManager.Record<>(UndoManager.RecordType.REORDER, List.of())),
+                "拖拽排序尚未支持，应返回 false");
+        assertFalse(m.applyUndo(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of())),
+                "参数类尚未支持，应返回 false");
+
+        assertEquals(before, m.topLevel(), "未支持类型不得改变结构");
+        assertEquals(depth, m.undoDepth(), "applyUndo 不得改动撤销栈");
+    }
+
     // ==================== 显示序 ====================
 
     @Test

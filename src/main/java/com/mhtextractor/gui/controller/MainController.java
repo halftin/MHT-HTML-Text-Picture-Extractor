@@ -2947,14 +2947,10 @@ public class MainController {
         if (record != null) {
             switch (record.type()) {
                 case REMOVE, REMOVE_GROUP -> {
+                    // 结构恢复（removed 复位 + 被销毁的空组/整组按原顶层索引插回）由模型负责
+                    ws.applyUndo(record);
                     for (PreviewItem it : record.items()) {
-                        it.removed = false;
-                        it.setSelected(false);
-                    }
-                    // 销毁的空组/整组按记录的原顶层索引恢复（降序记录，直接按序插回）
-                    for (int k = 0; k < record.destroyedGroups().size(); k++) {
-                        GroupItem<PreviewItem> g = record.destroyedGroups().get(k);
-                        items.add(Math.min(record.destroyedIndexes().get(k), items.size()), g);
+                        it.setSelected(false);      // 选中态属 UI 职责，模型不管
                     }
                     log.info("撤销移除：恢复 {} 个项目、{} 个组", record.items().size(), record.destroyedGroups().size());
                 }
@@ -2962,58 +2958,46 @@ public class MainController {
                     Object sel = fileListView.getSelectionModel().getSelectedItem();
                     int selIndex = displayItems.indexOf(sel);
                     boolean selRemoved = sel != null && record.items().contains(sel);
+                    // 撤销导入 = 这批项目被移除：先做 UI 侧标记（removed 供致空组判定），
+                    // 结构摘除（从组内与顶层两处 + 致空组销毁）交由模型——原先本类手写了等价的两段
                     for (PreviewItem it : record.items()) {
                         it.removed = true;
                         it.setSelected(false);
-                        // 防遗漏：导入项若已进入组（组内成员），一并从成员列表移除
-                        GroupItem<PreviewItem> pg = it.parentGroup;
-                        if (pg != null) {
-                            pg.getMembers().remove(it);
-                        }
                     }
                     // 规则 (c)：撤销导入 = 从列表移除这批项目 → 删其缓存目录
                     workspaceParamService.itemsRemoved(record.items());
-                    items.removeAll(record.items());
-                    // 组内项目随撤销导入移除后可能产生空组：直接销毁（撤销导入本身不再记录）
-                    for (int i = items.size() - 1; i >= 0; i--) {
-                        if (items.get(i) instanceof GroupItem<?> g
-                                && GroupStructure.isEmptyGroup(asPreviewGroup(g), m -> m.removed)) {
-                            items.remove(i);
-                        }
-                    }
+                    ws.applyUndo(record);
                     if (selRemoved) {
                         selectNearestVisible(selIndex);
                     }
                     log.info("撤销导入：本次新增的 {} 个项目、{} 个自动创建的组已移除",
                             record.items().size(), record.groups().size());
                 }
-                case GROUP, REORDER, MERGE_GROUPS -> {
+                case GROUP -> {
+                    // 撤销建组：结构恢复（组解散、成员回原位置）由模型负责
+                    ws.applyUndo(record);
+                    record.items().stream()
+                            .filter(i -> !i.removed).findFirst().ifPresent(firstVisible -> fileListView.getSelectionModel().select(firstVisible));
+                    log.info("撤销合并为组：组 {} 已解散，成员回到原位置", record.group().getName());
+                }
+                case REORDER, MERGE_GROUPS -> {
+                    // 拖拽类：模型尚未支持（需落点解析），仍由本类恢复。
+                    // 注意：不能与 GROUP 合并成一个分支——GROUP 已交给模型，合并会导致恢复两次。
                     // 撤销恢复拖拽前结构（顶层顺序、组位置、各组内顺序），组对象复用（组名/参数保留）
                     GroupStructure.restoreStructure(items, record.structureBefore());
-                    if (record.type() == UndoManager.RecordType.GROUP) {
-                        record.items().stream()
-                                .filter(i -> !i.removed).findFirst().ifPresent(firstVisible -> fileListView.getSelectionModel().select(firstVisible));
-                        log.info("撤销合并为组：组 {} 已解散，成员回到原位置", record.group().getName());
-                    } else {
-                        reparseAfter = new ArrayList<>();
-                        for (PreviewItem it : record.items()) {
-                            if (!it.removed) {
-                                clearPreviewCache(it);
-                                reparseAfter.add(it);
-                            }
+                    reparseAfter = new ArrayList<>();
+                    for (PreviewItem it : record.items()) {
+                        if (!it.removed) {
+                            clearPreviewCache(it);
+                            reparseAfter.add(it);
                         }
-                        log.info("撤销{}：列表结构已恢复拖拽前状态",
-                                record.type() == UndoManager.RecordType.REORDER ? "拖拽排序" : "组合并");
                     }
+                    log.info("撤销{}：列表结构已恢复拖拽前状态",
+                            record.type() == UndoManager.RecordType.REORDER ? "拖拽排序" : "组合并");
                 }
                 case UNGROUP -> {
-                    // F6：组重建——成员从顶层移除并重新划入，组对象（组名/组参数）原样插回原位置
-                    GroupStructure.restoreGroup(items, record.group(), record.groupIndex(), record.items());
-                    // 条目独立参数生命周期拍板：撤销拆分后成员回组，拆分时复制的条目级参数清除
-                    for (PreviewItem m : record.items()) {
-                        m.textItemParams = null;
-                        m.imageItemParams = null;
-                    }
+                    // F6：组重建（成员回组、组按原索引插回、条目级参数清除）由模型负责
+                    ws.applyUndo(record);
                     selectAfter = record.group();
                     log.info("撤销拆分：组 {} 已重建（{} 个项目），组名与组参数恢复",
                             record.group().getName(), record.items().size());
