@@ -168,10 +168,11 @@ class WorkspaceModelParityTest {
         assertEquals(List.of(d), g2.getMembers(), "d 必须留在原组");
         assertSame(g3, a.parentGroup);
         assertSame(g3, c.parentGroup);
-        // 插入槽位 = 目标中最靠前的顶层位置 → g1 的位置（索引 0）
-        assertTopLevelIs(m, "跨组建组后", g3, g1, g2, e);
-        // allItems() 按保留顺序遍历：新组 g3(a,c) → g1(b) → g2(d) → e
-        assertEquals(List.of(a, c, b, d, e), m.allItems(), "成员总数不得因建组而增加，且不得出现重复项");
+        // 插入槽位 = 目标中最靠前的落点：a 在 g1 内（g1 在索引 0）→ 落点 1；c 在 g2 内（g2 在索引 1）→ 落点 2
+        // → 槽位 = 1，即紧接 g1 之后（生产语义，见 groupSlotIsEarliestTopLevelPositionIncludingOwningGroup）
+        assertTopLevelIs(m, "跨组建组后", g1, g3, g2, e);
+        // allItems() 按顶层保留顺序遍历：g1(b) → g3(a,c) → g2(d) → e
+        assertEquals(List.of(b, a, c, d, e), m.allItems(), "成员总数不得因建组而增加，且不得出现重复项");
         assertEquals(5, m.visibleCount());
         // 显示序由 GUI 现用纯函数独立重算 → 组条目 + 其可见成员
         assertDisplayOrderMatchesStructure(m, removedPredicate());
@@ -239,7 +240,14 @@ class WorkspaceModelParityTest {
     // ==================== 4. 顶层槽位语义 ====================
 
     /**
-     * 插入槽位 = 目标在**顶层**的最靠前位置；组内成员所属的组也按该组的顶层位置参与比较。
+     * 插入槽位 = 所有目标中**最靠前的落点**；落点定义为
+     * {@code 目标在顶层 → 其自身索引；目标在组内 → 其所属组索引 + 1}。
+     *
+     * <p><b>规格修正（接入生产时）</b>：原实现只取"目标（或其所属组）在顶层的最靠前索引"，
+     * 组内成员用的是**所属组自身的索引**而非"组索引 + 1"，与生产
+     * {@code MainController.onGroupClicked} 不一致。两者在"跨组重建组"时给出不同顺序 ——
+     * 本测试原来钉的是旧模型的顺序（{@code a, g2, g}），现按生产顺序修正为 {@code a, g, g2}。
+     * 这正是"接入生产前必须逐行核对语义"的价值所在：否则用户会看到组位置变化。</p>
      */
     @Test
     void groupSlotIsEarliestTopLevelPositionIncludingOwningGroup() {
@@ -250,10 +258,11 @@ class WorkspaceModelParityTest {
         assertNotNull(g);
         assertTopLevelIs(m, "b,c 建组后", a, g, d);
 
-        // b 在组 g 内（g 位于顶层索引 1），d 在顶层索引 2 → 两者建组，槽位 = g 的位置（索引 1）
+        // b 在组 g 内（g 位于顶层索引 1）→ 落点 = 1+1 = 2；d 在顶层索引 2 → 落点 = 2。
+        // 槽位 = 2 → 组插在 g 之后（生产语义：组内成员的落点在其所属组之后）。
         GroupItem<PreviewItem> g2 = m.group(List.of(b, d));
         assertNotNull(g2);
-        assertTopLevelIs(m, "跨组重建组后", a, g2, g);
+        assertTopLevelIs(m, "跨组重建组后", a, g, g2);
         assertEquals(List.of(b, d), g2.getMembers());
         assertEquals(List.of(c), g.getMembers(), "c 必须留在原组");
 
@@ -264,16 +273,25 @@ class WorkspaceModelParityTest {
 
     // ==================== 5. 拒绝路径不得产生撤销记录 ====================
 
-    /** 不足两项的建组（含单项/空列表）必须是纯 no-op：结构、栈深、可见数都不变。 */
+    /**
+     * 拒绝路径（空输入 / null / 不在工作区内的条目）必须是纯 no-op：结构、栈深、可见数都不变。
+     *
+     * <p><b>规格修正（接入生产时）</b>：原断言把"单项建组"列为拒绝路径，但生产
+     * （{@code MainController.onGroupClicked}）允许单项建组（R9）。模型的 {@code < 2} 守卫与生产
+     * 不符，已改为只拒绝空输入；并补上"不在工作区内的条目"这一条 —— 它是实测出来的真实故障：
+     * 若只用 {@code parentGroup != null} 判断归属，{@code clear()} 后残留的幽灵归属会让空工作区
+     * 建出组来。</p>
+     */
     @Test
     void groupRejectionIsPureNoOp() {
         PreviewItem a = item("a"), b = item("b");
+        PreviewItem ghost = item("ghost");      // 从未加入本工作区
         WorkspaceModel m = workspaceWith(a, b);
         int depthBefore = m.undoDepth();
 
-        assertNull(m.group(List.of(a)), "单项不得建组");
         assertNull(m.group(List.of()), "空列表不得建组");
         assertNull(m.group(null), "null 不得建组");
+        assertNull(m.group(List.of(ghost)), "不在工作区内的条目不得建组");
 
         assertEquals(depthBefore, m.undoDepth(), "no-op 不得产生撤销记录");
         assertEquals(2, m.visibleCount());
@@ -333,8 +351,8 @@ class WorkspaceModelParityTest {
         // ⚠️ 实测的重要语义（接入生产时必须知道）：
         //  (1) clear() 只清模型内部状态，**不触碰条目对象**的 parentGroup —— 清空后旧条目的
         //      parentGroup 仍指向已脱离的旧组对象；
-        //  (2) group() 只对**已在本模型数据序中的**条目生效（内部靠 firstTopLevelIndex 定位），
-        //      因此"clear 后拿旧条目再建组"会静默返回 null。
+        //  (2) 因此"归属判定"不能只看 parentGroup，必须校验其所属组**仍在顶层**
+        //      （WorkspaceModel.slotOf 即如此实现），于是"clear 后拿旧条目再建组"是纯 no-op。
         GroupItem<PreviewItem> afterClear = m.group(List.of(a, b));
         assertNull(afterClear, "clear 后未重新导入，旧条目不在数据序中 → 建组必须是无副作用的 null");
         assertTrue(m.topLevel().isEmpty());

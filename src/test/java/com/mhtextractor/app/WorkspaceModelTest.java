@@ -107,17 +107,44 @@ class WorkspaceModelTest {
         assertEquals(2, m.topLevel().size());
     }
 
+    /**
+     * 拒绝路径只剩"空输入"与"不在工作区内的条目"。
+     *
+     * <p><b>规格修正（接入生产时）</b>：原断言 {@code groupWithFewerThanTwoItemsIsNoOp} 把
+     * "单项建组"也判为 no-op，但生产（{@code MainController.onGroupClicked}）允许单项建组
+     * （R9：勾选集合为空时退化为当前选中项）。模型的 {@code size() < 2} 守卫与生产不符，
+     * 已改为只拒绝空输入；单项建组见 {@link #singleItemCanBeGrouped()}。</p>
+     */
     @Test
-    void groupWithFewerThanTwoItemsIsNoOp() {
+    void groupRejectsOnlyEmptyOrOutOfWorkspaceInput() {
         WorkspaceModel m = new WorkspaceModel();
         PreviewItem a = item("a.mht");
+        PreviewItem ghost = item("ghost.mht");   // 从未加入本工作区
         m.addItems(List.of(a));
         int depthBefore = m.undoDepth();
 
-        assertNull(m.group(List.of(a)));
-        assertNull(m.group(List.of()));
-        assertEquals(1, m.topLevel().size(), "输入不足 2 项不得改变结构");
+        assertNull(m.group(List.of()), "空列表不得建组");
+        assertNull(m.group(null), "null 不得建组");
+        assertNull(m.group(List.of(ghost)), "不在工作区内的条目不得建组（否则会在空工作区上建出组）");
+
+        assertEquals(1, m.topLevel().size(), "拒绝路径不得改变结构");
         assertEquals(depthBefore, m.undoDepth(), "无变更就不应产生撤销记录");
+    }
+
+    /** 单项建组是合法操作（R9），与生产一致。 */
+    @Test
+    void singleItemCanBeGrouped() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht");
+        m.addItems(List.of(a));
+
+        GroupItem<PreviewItem> g = m.group(List.of(a));
+
+        assertNotNull(g, "单项应可建组（R9）");
+        assertEquals(List.of(a), g.getMembers());
+        assertSame(g, a.parentGroup);
+        assertEquals(1, m.topLevel().size());
+        assertSame(g, m.topLevel().get(0));
     }
 
     @Test

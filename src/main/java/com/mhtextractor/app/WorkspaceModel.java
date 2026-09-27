@@ -197,49 +197,120 @@ public final class WorkspaceModel {
     // ==================== 变更：分组 / 拆分 ====================
 
     /**
-     * 把给定条目合并为一个新组（F5）。
+     * 便捷重载：默认组名前缀为 zh 的"组"。
      *
-     * <p>与 GUI 对齐的关键语义：<b>插入槽位 = 目标中最靠前的位置</b>；成员从原位置摘除；
-     * 组名冲突自动唯一化；组号全局单调递增；入栈一条 GROUP 撤销记录（携带结构快照）。</p>
-     *
-     * @return 新建的组；输入不足 2 项时返回 null（不产生任何变更）
+     * <p>供无头调用方与单测使用；<b>GUI 一律用下面带前缀的重载</b>并传入
+     * {@code I18n.get("core.groupDefault")} —— 本层不产出面向用户的文案
+     * （与 {@code SourceViewPage} 页头文案由调用方传入同一处理）。</p>
      */
     public GroupItem<PreviewItem> group(List<PreviewItem> members) {
+        return group(members, defaultGroupName());
+    }
+
+    /**
+     * 把给定条目合并为一个新组（F5）。
+     *
+     * <p><b>⚠️ 本方法的语义在"接入生产"阶段被逐行核对并修正过</b>。修正前它与
+     * {@code MainController.onGroupClicked}（生产实现）有 <b>3 处</b>不一致，若直接接入会造成
+     * "用户可见的顺序/命名变化"：</p>
+     * <ol>
+     *   <li><b>单项也可建组</b>（R9）—— 原实现要求 ≥2 项，与生产的"勾选集合为空时退化为当前选中项"不符；</li>
+     *   <li><b>插入槽位</b> —— 原实现只取"目标（或其所属组）在顶层的最靠前索引"；
+     *       生产取"最靠前的<b>落点</b>"，落点定义为 {@code 目标在顶层 → 其自身索引；
+     *       目标在组内 → 其所属组索引 + 1}，且每摘除一个位于槽位之前的条目槽位随之左移。
+     *       两者在"跨组重建组"时给出不同顺序（实测：生产 [a, g, g2]，原实现 [a, g2, g]）；</li>
+     *   <li><b>摘除成员后致空的组要自动销毁</b>，销毁位置同样参与槽位左移 —— 原实现不做，
+     *       会留下空组。</li>
+     * </ol>
+     *
+     * <p>其余语义与原实现一致并保留：成员从原位置摘除、入组清除条目级参数、
+     * 组名唯一化（R7）、组号全局单调递增（{@link #nextGroupNo()}）、入栈一条 GROUP 撤销记录。</p>
+     *
+     * @param defaultNamePrefix 默认组名前缀（GUI 传本地化文案；无头调用方传 "组"）
+     * @return 新建的组；目标为空或均不在本工作区时返回 {@code null}（不产生任何变更）
+     */
+    public GroupItem<PreviewItem> group(List<PreviewItem> members, String defaultNamePrefix) {
         List<PreviewItem> targets = distinctNonNull(members);
-        if (targets.size() < 2) {
+        if (targets.isEmpty()) {
             return null;
         }
-        // 插入槽位 = 目标中最靠前的顶层位置
-        int insertAt = firstTopLevelIndex(targets);
-        if (insertAt < 0) {
-            return null;
+        // 插入槽位 = 所有目标中最靠前的落点（组内成员的落点在其所属组之后）
+        int insertIdx = Integer.MAX_VALUE;
+        for (PreviewItem t : targets) {
+            int at = slotOf(t);
+            if (at >= 0) {
+                insertIdx = Math.min(insertIdx, at);
+            }
+        }
+        if (insertIdx == Integer.MAX_VALUE) {
+            return null;   // 目标均不在本工作区 → 纯 no-op
         }
 
         List<Object> snapshot = GroupStructure.snapshotStructure(topLevel);
 
-        // 从原位置（顶层或其所在组）摘除
+        // 从原位置（顶层或其所在组）摘除；致空组自动销毁；槽位随摘除左移
         for (PreviewItem t : targets) {
-            removeFromItsParent(t);
+            GroupItem<PreviewItem> pg = t.parentGroup;
+            if (pg != null && topLevel.indexOf(pg) >= 0) {
+                pg.getMembers().remove(t);
+                if (GroupStructure.isEmptyGroup(pg, m -> m.removed)) {
+                    int i = topLevel.indexOf(pg);
+                    topLevel.remove(pg);
+                    if (i >= 0 && i < insertIdx) insertIdx--;
+                    log.info("组 {} 已无有效成员，自动销毁", pg.getName());
+                }
+            } else {
+                int i = topLevel.indexOf(t);
+                topLevel.remove(t);
+                if (i >= 0 && i < insertIdx) insertIdx--;
+            }
             t.parentGroup = null;
             t.textItemParams = null;   // 入组清除条目级参数（GUI 语义：组内成员不持有独立参数）
             t.imageItemParams = null;
         }
 
-        int groupNo = GroupStructure.nextGroupNo(lastGroupNo);
-        lastGroupNo = groupNo;
-        String name = GroupStructure.uniqueGroupName(defaultGroupName() + groupNo, allGroupNames());
+        int groupNo = nextGroupNo();
+        String name = GroupStructure.uniqueGroupName(defaultNamePrefix + groupNo, allGroupNames());
         GroupItem<PreviewItem> g = new GroupItem<>(groupNo, name);
         g.getMembers().addAll(targets);
         for (PreviewItem t : targets) {
             t.parentGroup = g;
         }
 
-        int at = Math.min(insertAt, topLevel.size());
+        int at = Math.max(0, Math.min(insertIdx, topLevel.size()));
         topLevel.add(at, g);
 
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.GROUP,
                 targets, g, at, List.of(), List.of(), snapshot));
         return g;
+    }
+
+    /**
+     * 取下一个全局组号（单调递增，不复用已销毁组的编号）。
+     *
+     * <p><b>为什么公开</b>：自动建组（导入时按文件夹建组）走的是控制器自己的构造路径，
+     * 但也必须与手工建组<b>共用同一个计数器</b>，否则两条路径会各自 +1、产生重号。
+     * 计数器由本类独占后，控制器不再持有 {@code groupNoCounter}。</p>
+     */
+    public int nextGroupNo() {
+        lastGroupNo = GroupStructure.nextGroupNo(lastGroupNo);
+        return lastGroupNo;
+    }
+
+    /**
+     * 把一个既有组追加到顶层末尾（自动建组用）。
+     *
+     * <p><b>不产生撤销记录</b>：导入的撤销记录由调用方按"整批一次"的粒度压入
+     * （一次导入可能跨多个批次，逐批压栈会破坏"一次撤销撤整批"的既有语义）。</p>
+     */
+    public void addGroup(GroupItem<PreviewItem> group) {
+        if (group == null) {
+            return;
+        }
+        for (Object o : topLevel) {
+            if (o == group) return;
+        }
+        topLevel.add(group);
     }
 
     /**
@@ -445,17 +516,32 @@ public final class WorkspaceModel {
         return "组";
     }
 
-    private int firstTopLevelIndex(List<PreviewItem> targets) {
-        int best = Integer.MAX_VALUE;
-        for (int i = 0; i < topLevel.size(); i++) {
-            Object o = topLevel.get(i);
-            if (targets.contains(o)) {
-                best = Math.min(best, i);
-            } else if (o instanceof GroupItem<?> g && g.getMembers().stream().anyMatch(targets::contains)) {
-                best = Math.min(best, i);
+    /**
+     * 目标在顶层的**落点**：在顶层 → 其自身索引；在某组内**且该组也仍在顶层** → 该组索引 + 1；
+     * 否则返回 -1（该目标不在本工作区内）。
+     *
+     * <p><b>为什么必须先判"是否直接在顶层"</b>：{@code parentGroup} 会残留 ——
+     * ① {@link #clear()} 只清模型内部状态，不触碰条目对象；
+     * ② 撤销建组后成员回到顶层，但其 {@code parentGroup} 仍指向已脱离顶层的旧组
+     * （这是**有意保留**的既有语义，见 {@code WorkspaceModelParityTest} 的实测记录）。
+     * 若先看 {@code parentGroup}，就会把这些条目误判为"仍在该组内"，实测会导致
+     * **在空工作区上建出组**或**把已回到顶层的条目漏删而留下重复项**。
+     * 这正是 {@code docs/handoff/H32.md} §三.3 的教训："任何靠 parentGroup 判断成员归属的代码
+     * 都不可靠，必须看结构" —— 本方法即"看结构"，且顶层直接成员优先。</p>
+     */
+    private int slotOf(PreviewItem t) {
+        int selfIdx = topLevel.indexOf(t);
+        if (selfIdx >= 0) {
+            return selfIdx;                      // 直接在顶层（残留 parentGroup 不参与判定）
+        }
+        GroupItem<PreviewItem> pg = t.parentGroup;
+        if (pg != null) {
+            int gi = topLevel.indexOf(pg);
+            if (gi >= 0 && pg.getMembers().contains(t)) {
+                return gi + 1;                   // 确在某顶层组内 → 落点在组之后
             }
         }
-        return best == Integer.MAX_VALUE ? -1 : best;
+        return -1;                               // 不在本工作区内
     }
 
     /**

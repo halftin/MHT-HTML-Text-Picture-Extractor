@@ -349,8 +349,8 @@ public class MainController {
     private Object selectionAnchor = null;
 
     // ===== 分组状态（F5） =====
-    /** 组编号全局自增计数器（组1、组2…，不复用已销毁组的编号） */
-    private int groupNoCounter = 0;
+    // 组编号计数器已归一到 WorkspaceModel.nextGroupNo()（手工建组与自动建组共用，避免重号）——
+    // 控制器不再持有 groupNoCounter。
     /** 正在编辑组名的组（信息区第二行输入框挂接对象） */
     private GroupItem<PreviewItem> nameEditingGroup = null;
     /** 最近一次有效组名（输入框失焦时空名恢复用） */
@@ -851,26 +851,26 @@ public class MainController {
      * 不要照抄 onGroupClicked 的条目参数清除（那会清掉既有条目的参数，RISK-1）。
      */
     private GroupItem<PreviewItem> createGroupForImport(List<PreviewItem> members, String folderName) {
-        // ① 组名：sanitize（保证"列表显示名 == 输出名"，F10/BC-6）
+        // ① 组号：全局唯一来源在模型（与手工建组共用同一计数器，避免两条路径各自 +1 产生重号）
+        int groupNo = ws.nextGroupNo();
+        // ② 组名：sanitize（保证"列表显示名 == 输出名"，F10/BC-6）；空名退化为"默认前缀 + 组号"
         String base = SanitizeUtils.sanitize(folderName);
         if (base.isEmpty()) {
-            base = I18n.get("core.groupDefault") + GroupStructure.nextGroupNo(groupNoCounter);
+            base = I18n.get("core.groupDefault") + groupNo;
         }
-        // ② 唯一化：复用既有实现（F7）
+        // ③ 唯一化：复用既有实现（F7）
         String name = GroupStructure.uniqueGroupName(base, allGroupNames());
         if (!name.equals(base)) {
             log.info("组名冲突：{} 已被其它组使用，自动改为 {}", base, name);
         }
-        // ③ 建组 + 注册名字刷新监听（F8——漏了会导致改名后列表不刷新）
-        int groupNo = GroupStructure.nextGroupNo(groupNoCounter);
-        groupNoCounter = groupNo;
+        // ④ 建组 + 注册名字刷新监听（F8——漏了会导致改名后列表不刷新）
         GroupItem<PreviewItem> group = new GroupItem<>(groupNo, name);
         registerGroupNameRefresh(group);
         group.setExpanded(true);                  // BC-4：默认展开
-        // ④ 成员入组
+        // ⑤ 成员入组
         group.getMembers().addAll(members);
-        // ⑤ 追加顶层（导入一律追加到末尾，不与落点/既有项目交互）
-        items.add(group);
+        // ⑥ 追加顶层末尾（导入一律追加到末尾，不与落点/既有项目交互）—— 数据序写入统一经模型
+        ws.addGroup(group);
         return group;
     }
 
@@ -3204,47 +3204,13 @@ public class MainController {
                 return;
             }
         }
-        List<Object> before = GroupStructure.snapshotStructure(items);
-        int groupNo = GroupStructure.nextGroupNo(groupNoCounter);
-        groupNoCounter = groupNo;
-        GroupItem<PreviewItem> group = new GroupItem<>(groupNo, I18n.get("core.groupDefault") + groupNo);
+        // 结构（落点计算 / 成员摘除 / 致空组销毁 / 条目级参数清除 / 压 GROUP 撤销记录）全部由模型负责；
+        // 组名前缀由本类传入本地化文案 —— 模型不产出面向用户的文案。
+        GroupItem<PreviewItem> group = ws.group(targets, I18n.get("core.groupDefault"));
+        if (group == null) {
+            return;
+        }
         registerGroupNameRefresh(group);
-
-        // 插入槽位：最早目标在显示序中的位置（顶层项目=自身位置；组内成员=其组之后），拆出时同步修正索引
-        int insertIdx = Integer.MAX_VALUE;
-        for (PreviewItem t : targets) {
-            insertIdx = Math.min(insertIdx,
-                    t.parentGroup == null ? items.indexOf(t) : items.indexOf(t.parentGroup) + 1);
-        }
-        for (PreviewItem t : targets) {
-            GroupItem<PreviewItem> g = t.parentGroup;
-            if (g == null) {
-                int i = items.indexOf(t);
-                items.remove(t);
-                if (i < insertIdx) {
-                    insertIdx--;
-                }
-            } else {
-                g.getMembers().remove(t);
-                if (GroupStructure.isEmptyGroup(g, m -> m.removed)) {
-                    int i = items.indexOf(g);
-                    items.remove(g);
-                    if (i < insertIdx) {
-                        insertIdx--;
-                    }
-                    log.info("组 {} 已无有效成员，自动销毁", g.getName());
-                }
-            }
-        }
-        group.getMembers().addAll(targets);
-        // 条目独立参数生命周期拍板：合并为组清除成员条目级参数（新组参数未设，继承全局）
-        for (PreviewItem t : targets) {
-            t.textItemParams = null;
-            t.imageItemParams = null;
-        }
-        items.add(Math.max(0, Math.min(insertIdx, items.size())), group);
-        ws.push(new UndoManager.Record<>(UndoManager.RecordType.GROUP, targets, group,
-                items.indexOf(group), List.of(), List.of(), before));
         // 拍板：合并为组后勾选集合复位，避免勾选残留导致下一批建组误合并
         updatingSelection = true;
         try {
