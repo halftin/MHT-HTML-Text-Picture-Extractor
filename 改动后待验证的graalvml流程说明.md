@@ -4,7 +4,7 @@
 > 打包总体流程以《基于graalvm的MHT资源提取器项目打包工作流程.md》为准，本文只补充**变动相关项**。
 >
 > **最后更新：2026-09-27**（⚠️ **打包脚本与可观测性已大改，请先读 §零**）
-> 本次变更的实测依据：`docs/handoff/H34.md`；构建可观测性契约见打包工作流程文档 §6.1 与 `CLAUDE.md`。
+> 本文件是**打包机操作手册**：先跑 `check-env.cmd` 预检 → 再按第三节构建 → 最后按第五节验收。构建可观测性契约见打包工作流程文档 §6.1 与 `CLAUDE.md`。
 
 ---
 
@@ -19,6 +19,9 @@
 | **四个脚本的关系** | ✅ **已归一** | `build-native.cmd` 是**唯一实现**；`.ps1` / `.sh` / `run-native-image.bat` 只是委托入口（原先四份各写死自己的路径与 VS 版本号） |
 | **元数据重采** | ⚠️ **仅当元数据相关代码有改动时才做** | 见 §二 |
 | **构建可观测性** | ✅ **已就绪（2026-09-27）** | 打包机上的构建会**实时**输出到控制台**与日志**，并产出机器可读报告 —— 见 §三 第 7 点 |
+| **Maven 要不要装** | ✅ **不必预装** | 仓库自带 wrapper（`mvnw` / `mvnw.cmd` / `.mvn/wrapper/`，`only-script` 模式**无 jar**）。实测：清空分发缓存 + Maven 不在 PATH → `build-native.cmd --prepare-only` 仍 `exit=0`（自动下 Maven 3.9.16）。内网可用 `MVNW_REPOURL` 指镜像 |
+| **打包前第一步** | ✅ **先跑 `check-env.cmd`** | 9 项预检（PowerShell / JDK / native-image / Maven / MSVC / SDK / 内存磁盘 / git / 网络）+ 修复命令。退出码 **0=就绪 / 20=缺 MSVC / 1=缺其它关键项**，与 `build-native.cmd` 对齐。**别等构建跑到一半才发现缺东西** |
+| **排障工具** | ✅ 随仓库分发 | `tools\probes\run-probe.ps1`（UI 探针：布局截断 / 提醒 / 等待卡片 / 关窗残留）、`tools\recovery\*`（文档误改后的恢复）、`tools\diag\tee-probe.cmd`。清单见 `CLAUDE.md` 文末「验证工具」 |
 
 > **一句话**：**先把 MSVC 装上**，其余都不用手工改；装完直接 `build-native.cmd`。
 > 缺 MSVC 时脚本会在**开跑前**就拦下并给出修复指引（`exit 20`），不会跑到一半才失败。

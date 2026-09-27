@@ -3,8 +3,8 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 > **最后更新：2026-09-27**（架构重构 + 全量国际化 + 预览缓存持久化 + **WorkspaceModel 接入生产：阶段 1b/2/3/4 全部完成** + **预览区"单击缩略图用系统默认图片查看器打开缓存图片"恢复** + **交互提醒从模态 Alert 全量替换为应用内通知**）
-> 本轮交接：`docs/handoff/H36.md`（**交互提醒全面换成窗口内通知**：错误居中必须点确定 / 警告信息右上 toast / 确认回调式 / **等待卡片无按钮、干完自动关窗**；含 4 个"编译通过但运行炸或不显示"的坑 —— 改提醒或 `App.start()` 前必读）
-> 前序交接：`H35.md`（预览点击查看的丢失诊断与恢复）、`H33.md`（共享存储路线 / 模型语义的 3 个实例）、`H34.md`（native 打包脚本与构建可观测性）
+> 文档集**只有三份**：**本文件**（工程约定，改代码前必读）+ **两份 GraalVM 打包文档**（构建 / 打包机操作）。
+> 历史会话交接（H19–H36、架构重构最终报告、任务规划、新会话启动包等 20 份）已从仓库移除 —— 需要追溯时见 git 历史（提交 `386c249` 及更早）。
 
 ---
 
@@ -37,7 +37,7 @@ java --module-path <jfx-win-jars> --add-modules javafx.controls,javafx.fxml \
 # 结果写入 logs/test-results.txt（当前基线：30 passed / 0 failed；zh 与 en 各 30/0）
 ```
 🚨 **跑之前先删 `logs/test-results.txt`**：那只是"上一次运行留下的文件"。本次若在断言之前就崩了
-（例如 `App.start()` 抛异常），你读到的会是**上一次的 30/0** —— 本项目真发生过（见 `H36.md` §五.2）。
+（例如 `App.start()` 抛异常），你读到的会是**上一次的 30/0** —— 本项目真发生过。
 **判据**：跑完核对结果文件的 **mtime**，并确认日志里没有 `Exception in Application start method`。
 
 🚨 **GUI 自动化想验某个语言时，`-Duser.language` 可能被吃掉**：`App.start()` 先读
@@ -108,7 +108,7 @@ WorkspaceModel          // 无头工作区，**已是生产路径的数据序唯
                         //   语义操作：addItems（去重+压记录）/group/ungroup/removeItems/removeGroup/undo/clear
                         //   撤销应用：applyUndo(record) —— undo() 与 GUI 共用的**唯一**结构恢复实现
                         //   结构原语：appendItems/appendGroup（不去重、不压记录，供导入路径用）
-                        //   共享构造：new WorkspaceModel(list) —— 与 GUI 共用同一份数据序列表（见 H33 §二）
+                        //   共享构造：new WorkspaceModel(list) —— 与 GUI 共用同一份数据序列表
                         //   + displayOrder/topLevel/allItems/visibleCount/groups/undoDepth/nextGroupNo
 WorkspaceParamService   // 参数变更与移除的缓存规则收口（13 处调用点归一到此类）
 ExtractionPreconditions // 提取前置校验规则（含 Level 分级 + Denial），把规则从 GUI 移出
@@ -119,8 +119,8 @@ ExtractionPreconditions // 提取前置校验规则（含 Level 分级 + Denial�
 ### GUI
 
 - **`MainController`** — FXML 控制器（**4361 行**，`ArchitectureTest.mainControllerIsShrinking` 强制**只减不增**，上限常量 **4370**，余量 9）：模式切换、输入/输出目录、文件列表（拖拽排序/分组/勾选/章节徽标）、文本与图片预览、预解析线程、提取任务启停、`logs/gui-state.json` 持久化。持有两个按模式确认的参数缓存（null = 该模式未确认参数）。
-  > 会话 18 起持续减重：6111 → 5109（外迁演练代码）→ 5002（外迁 `PreviewItem`）→ 4985 → **4935**（步骤 2 预览编排 → `app.PreviewService`）→ **4435**（步骤 3 `PreviewListCell` 外迁为顶层类）→ **4334**（WorkspaceModel 接入生产：导入/移除/整组移除/建组/拆分组/撤销应用六条路径全部切到模型）→ **4326**（日志全面国际化：多行 log 调用折叠为单行 `I18n.msg(...)`）→ **4355**（恢复"单击缩略图打开缓存图片"并加环境兜底，**+29 行，是唯一一次净增**——见 `H35.md`）→ **4352**（会话 19：**27 处模态 Alert 全量换成 `NotificationHost` 应用内提醒，净减 3 行**——见 `H36.md`）→ **4356**（同一会话续：关窗前清缓存改成**无按钮等待卡片**，清完自动关窗；**+4 行**）→ **4360**（同轮交付审计：补上"有未答确认卡时不许关窗"的守卫，**+4 行**——防"窗口关了但进程残留"，见 `H36.md` §5.7）→ **4361**（提醒卡片**按用途给图标**：只多 1 行 `FontAwesomeSolid` import，20 个图标覆盖 27 个调用点）。列表单元格渲染/拖拽已不在本类。
-  > ✅ 数据序（`items`）与 `WorkspaceModel` **共享同一份列表**，GUI 对它的**直接**写入点已 **归零**，由第 11 条不变式 `guiDoesNotMutateDataOrderDirectly` 持续强制（该断言同时把"间接写"的处数打印出来）。⚠️ 边界：另有 **2 处间接写** —— 把 `items` 交给 util 层方法改写：`DropResolver.apply(items, …)`（拖拽正向，:2222）与 `GroupStructure.restoreStructure(items, …)`（拖拽类撤销，:2975）。两者都在**有意不迁移**的拖拽路径（REORDER / MERGE_GROUPS）上，决策依据见 `H33.md` §六.2。
+  > 会话 18 起持续减重：6111 → 5109（外迁演练代码）→ 5002（外迁 `PreviewItem`）→ 4985 → **4935**（步骤 2 预览编排 → `app.PreviewService`）→ **4435**（步骤 3 `PreviewListCell` 外迁为顶层类）→ **4334**（WorkspaceModel 接入生产：导入/移除/整组移除/建组/拆分组/撤销应用六条路径全部切到模型）→ **4326**（日志全面国际化：多行 log 调用折叠为单行 `I18n.msg(...)`）→ **4355**（恢复"单击缩略图打开缓存图片"并加环境兜底，**+29 行，是唯一一次净增**）→ **4352**（会话 19：**27 处模态 Alert 全量换成 `NotificationHost` 应用内提醒，净减 3 行**）→ **4356**（同一会话续：关窗前清缓存改成**无按钮等待卡片**，清完自动关窗；**+4 行**）→ **4360**（同轮交付审计：补上"有未答确认卡时不许关窗"的守卫，**+4 行**——防"窗口关了但进程残留"）→ **4361**（提醒卡片**按用途给图标**：只多 1 行 `FontAwesomeSolid` import，20 个图标覆盖 27 个调用点）。列表单元格渲染/拖拽已不在本类。
+  > ✅ 数据序（`items`）与 `WorkspaceModel` **共享同一份列表**，GUI 对它的**直接**写入点已 **归零**，由第 11 条不变式 `guiDoesNotMutateDataOrderDirectly` 持续强制（该断言同时把"间接写"的处数打印出来）。⚠️ 边界：另有 **2 处间接写** —— 把 `items` 交给 util 层方法改写：`DropResolver.apply(items, …)`（拖拽正向，:2222）与 `GroupStructure.restoreStructure(items, …)`（拖拽类撤销，:2975）。两者都在**有意不迁移**的拖拽路径（REORDER / MERGE_GROUPS）上。这是**有意保留的边界**：这两条路径尚未切到模型，别再往这里加新的直写。
 - **`ParamDialogController`** — 「提取参数设置」模态弹窗；仅「确定」提交；底部固定行是命名配置 CRUD。
 - **`LogTextArea`** — 自定义 JavaFX 组件，经 `TextAreaAppender` 注册为 Logback consumer（日志进界面）。
 - **`NotificationHost`（2026-09-27 新建，`gui/component`）** — **应用内提醒的唯一入口**（生产代码已**零模态 Alert**）：
@@ -128,14 +128,14 @@ ExtractionPreconditions // 提取前置校验规则（含 Level 分级 + Denial�
   **等待卡片** = 居中 `Message`（零可交互控件，后台干完自动收卡片 + 收尾，关窗前清缓存用）。
   每个窗口把场景根包一层 `StackPane` 后 `install` 一次（主窗口在 `App.start()`、参数窗口在 `ParamDialogController.create()`）；
   调用点只传一个锚点节点（如 `statusLabel`），**控制器不持有宿主字段**——这是保住 `MainController` 只减不增的关键。
-  ⚠️ 改这块之前先读 `docs/handoff/H36.md`（含 3 个"编译通过但运行炸"的坑与 ESC 未验证项）。
+  ⚠️ 改这块之前先把下面「交互提醒约定」整节读完（含 3 个"编译通过但运行炸"的坑与 1 项"机制未证实"）。
 - **`MainView.fxml` / `ParamDialog.fxml`** — 全部文案为 `%key`（经 `loader.setResources(I18n.bundle())` 注入），**不得再出现中文字面量**。
 - **`com.mhtextractor.platform`（步骤 5 新建）** — 与操作系统交互的基础设施，**零 JavaFX**，已纳入"零 UI 框架"不变式扫描：
   - `BrowserLauncher`（159 行，**门面**）— `openHtml` / `openViewSource` + 启动三级兜底（直接起 exe → `cmd start` → `rundll32 url.dll,FileProtocolHandler`）
   - `SourceViewPage`（314）— 源码视图页生成（HTML 转义 + 行号 + 语法高亮 + 链接下划线）。页头文案由**调用方**传入（本层不产本地化文案）
   - `CdpClient`（320）— CDP 协议客户端 + 调试实例的进程/端口管理（原生 Socket，native-image 安全）
   - `BrowserDetector`（197）— 浏览器探测与识别（注册表 `UserChoice` → `http` 协议命令 → 常见路径 → `where.exe`）
-  - `FileOpener`（~250）— **用系统默认程序打开文件**：`cmd /c start "" "<file>"` + **退出码/输出校验** → 「照片」协议兜底（`ms-photos:viewer?fileName=<urlencoded>`）→ 如实报失败。含"UAC 关闭 → UWP 文件激活被静默阻断"的环境预判（见「预览缓存约定」与 `H35.md` §九）
+  - `FileOpener`（~250）— **用系统默认程序打开文件**：`cmd /c start "" "<file>"` + **退出码/输出校验** → 「照片」协议兜底（`ms-photos:viewer?fileName=<urlencoded>`）→ 如实报失败。含"UAC 关闭 → UWP 文件激活被静默阻断"的环境预判（见「预览缓存约定」）
 - `JavaFxUtil`（留在 `gui.util`：确实依赖 JavaFX）。⚠️ 其中 `SmoothProgressProperty` 与 `runLater`/`isFxThread`/`createSmoothProgressProperty` 已在 2026-09-27 的清理中作为**零引用死代码**删除；`reflect-config.json` 里仍有指向它的旧条目（悬空，见下文 reflect-config 说明）。
 
 ### 测试代码位置（重要）
@@ -232,9 +232,9 @@ en_US 下主界面 7 个按钮的 pref 宽度合计 **1093px**，而中栏（列
   缩略图与 `meta.images()` **同序 1:1**（下标语义见 `openCachedImage` 与 `renderThumbnails` 的注释）。
   🚨 **本机环境陷阱**：`EnableLUA=0`（UAC 关闭）→ 全会话高完整性 → Windows **静默阻断 UWP 的「文件激活」**
   （处理器进程起来了、窗口永不出现、**退出码仍是 0**）——此时**资源管理器里双击图片同样打不开**。
-  `FileOpener` 以「UAC 关闭 **且** 该扩展名默认处理器是打包应用（ProgId `AppX*`）」预判该状态。详见 `H35.md` §九。
+  `FileOpener` 以「UAC 关闭 **且** 该扩展名默认处理器是打包应用（ProgId `AppX*`）」预判该状态。
 - 🚨 **这条功能曾在 E1.4 被静默抹掉**（它从未进过任何提交 → 改 `buildThumbBox` 签名时被顺手删干净，
-  而**编译通过、测试全绿**，所以三轮重构都没发现）。**动缩略图渲染 / `ThumbnailData` 前先读 `docs/handoff/H35.md`**。
+  而**编译通过、测试全绿**，所以三轮重构都没发现）。**动缩略图渲染 / `ThumbnailData` 前先把本节读完**。
 
 ---
 
@@ -274,7 +274,7 @@ en_US 下主界面 7 个按钮的 pref 宽度合计 **1093px**，而中栏（列
   ⚠️ 加图标只是**改实参**，不增加行数（`MainController` 的"只减不增"红线不受影响）；
   但**每加一个图标常量都要先确认 `ikonli-fontawesome5-pack` 里有**（本项目只有这一个图标包）。
 - 🚨 **不要 `showAndWait`**：`ModalPane` 只有非阻塞 `show(Node)` / `hide()`；"确认后继续"必须写成回调。
-  后面的代码长就按 `docs/handoff/H36.md` §四 的三种落法选（直接塞 lambda / 抽私有方法 / 加"已确认"布尔参数**重入自己**）。
+  后面的代码长就按三种落法选：直接塞 lambda / 抽私有方法 / 加"已确认"布尔参数**重入自己**。
 - 🚨 **通知里的按钮不要设 `setDefaultButton(true)`**：`defaultButton` 是**场景级**的，实测会把全窗口 ENTER
   劫持到通知的按钮上（本项目主源码原本零 `defaultButton`）。
 - 🚨 **放进 `ModalPane` 的内容必须 `setMaxHeight(Region.USE_PREF_SIZE)`**：否则被拉满整窗高度（实测 400×761 → 400×149）。
@@ -282,12 +282,12 @@ en_US 下主界面 7 个按钮的 pref 宽度合计 **1093px**，而中栏（列
   ① 先 `modalPane.applyCss()` 让**皮肤就位** → ② 再 `setContent(node)`（内容是**皮肤的内容监听器**挂上去的，
   皮肤不在就永远挂不上：现象是 `display=true` 但高度 0、屏幕上什么都没有）→ ③ 最后才 `show(node)`
   （`ModalPaneSkin` 构造时会自己 `hide()` 一次，会把它之前的显示打回 false）。**启动早期就发提醒时必现**。
-- ⚠️ **"ESC / 点遮挡层不会关掉确认卡"属"行为符合预期、机制未证实"**（本机送不进皮肤处理器，见 `H36.md` §七）——
+- ⚠️ **"ESC / 点遮挡层不会关掉确认卡"属"行为符合预期、机制未证实"**（本机送不进皮肤处理器）——
   以后要验这条，**必须带控制组**（非 persistent 的反例必须先能关掉），否则是**假通过**。
 - 🚨 **有"未回答的确认卡"时不许关窗**（`MainController.onWindowCloseRequest` 里的 `NotificationHost.hasPendingDecision(statusLabel)` 守卫）。
   旧的 Alert 是 `APPLICATION_MODAL`，等回答期间主窗**根本关不掉**；换成窗口内卡片后 ✕ 仍然可点，
   于是"关窗卡片顶掉确认卡 → 回调永不触发 → 后台线程（提取线程是**非 daemon**）永久阻塞 → **窗口消失但进程残留**"。
-  实测证据与三层防护见 `H36.md` §5.7。**任何人再动关窗路径都要保住这两条**：
+  **任何人再动关窗路径都要保住这两条**：
   ① 有未答确认 → 不放行；② 真有卡片顶替未答确认 → 按"取消"交付决定（`showModal` 里做）。
 - 🚨 **非 daemon 线程活着时，关掉最后一个窗口 JVM 不会退出**（本机实测：60s 仍不退，只能杀进程）。
   所以任何"让某个线程永久等待"的路径都会变成用户眼里的**残留进程** —— 提醒类的回调"可能不触发"就等于风险。
@@ -437,7 +437,7 @@ Get-Content logs\native-build-*.log -Wait -Tail 50     # 实时跟踪（构建�
 ### ✅ 无头执行（`headless-layer-b`）——**已修复（步骤 0，2026-09-26）**
 
 > 本节原先记录"该执行失败、`mvn test` 恒有 1 个失败、无 JavaFX classpath 在本机物理不可达"。
-> **该结论已作废**，原因与修法如下（详见 `docs/handoff/H19.md`）。
+> **该结论已作废**，原因与修法如下。
 
 让 `headless-layer-b` 真正"无 JavaFX"需要**两个条件同时满足**，缺一不可：
 
@@ -462,11 +462,11 @@ Get-Content logs\native-build-*.log -Wait -Tail 50     # 实时跟踪（构建�
 
 | 缺陷 | 位置 | 影响 |
 |---|---|---|
-| ~~纯 Data URI 的 MHT 永远提取不到图片~~ | ✅ **已修复（步骤 7a，2026-09-26）** | 有**两个**根因：① `ImageExtractor.extractAllImagesInOrder` 在 `imageInfoList` 为空时提前 return，使同方法末尾的 Data URI 提取成为**死代码**；② `ImageBatchProcessor` 的"无图片内容"快速检查只看 `cidMap`/`locationDataMap`。两处均已修；`data-uri.mht` 由 `SKIPPED` 变为 `SUCCESS`（提取出 2 张图），基线同步更新。详见 `docs/handoff/H30.md` §四 |
+| ~~纯 Data URI 的 MHT 永远提取不到图片~~ | ✅ **已修复（步骤 7a，2026-09-26）** | 有**两个**根因：① `ImageExtractor.extractAllImagesInOrder` 在 `imageInfoList` 为空时提前 return，使同方法末尾的 Data URI 提取成为**死代码**；② `ImageBatchProcessor` 的"无图片内容"快速检查只看 `cidMap`/`locationDataMap`。两处均已修；`data-uri.mht` 由 `SKIPPED` 变为 `SUCCESS`（提取出 2 张图），基线同步更新。 |
 | 业务层仍在产"已解析文案" | `ImageExtractor` 经 `I18n.get` 产 warning 文案 → 写入 `PreviewCacheMeta.warnings` | 缓存内警告语言取决于预览时 locale；彻底修需业务层产码值，会触及缓存 schema |
 | `AD_KEYWORDS` 硬编码 | `ImageExtractor` | 若参数化，**必须同步加入 `imageExtractionFingerprint()`**，否则预览缓存串味 |
 | `BrowserLauncher` 包归属 | ✅ **已修复（步骤 5，2026-09-26）** | 已迁出 `gui.util` 到新建的 `com.mhtextractor.platform`，并按 4 类职责拆分：`BrowserLauncher`（159 行门面）/ `SourceViewPage`（314）/ `CdpClient`（320）/ `BrowserDetector`（197）。`platform` 包已纳入"零 UI 框架"不变式扫描 |
-| `reflect-config.json` 与统一元数据并存 | `src/main/resources/META-INF/native-image/` | 🚨 **不可直接删除**（H31 §四 实测）：旧格式 **291** 个类型、统一格式 **194** 个，其中 **231 个仅存在于旧格式**；native-image 对同 type 取**并集**，删旧文件会丢 231 条。且**本机 native 被 MSVC 阻塞、无法验证**，在无法验证时改元数据风险 > 收益 —— 正解是"并集合并 + 方法/字段级对账（丢失数=0）"。另：该文件里指向 `JavaFxUtil$SmoothProgressProperty` 的条目已**悬空**（该类已被删除） |
+| `reflect-config.json` 与统一元数据并存 | `src/main/resources/META-INF/native-image/` | 🚨 **不可直接删除**（实测）：旧格式 **291** 个类型、统一格式 **194** 个，其中 **231 个仅存在于旧格式**；native-image 对同 type 取**并集**，删旧文件会丢 231 条。且**本机 native 被 MSVC 阻塞、无法验证**，在无法验证时改元数据风险 > 收益 —— 正解是"并集合并 + 方法/字段级对账（丢失数=0）"。另：该文件里指向 `JavaFxUtil$SmoothProgressProperty` 的条目已**悬空**（该类已被删除） |
 | 工作区有 22/105 个 java 文件是 CRLF | 全仓库 | 与 `.gitattributes` 的 `*.java text eol=lf` 不符。因 `eol` 规则在 `git add` 时会规范化为 LF，**仓库内存储不受影响**；但会让 `git status` 反复告警。一次性修法：`git add --renormalize .` |
 | ~~`.claude-work/*.ps1` 的三类脚本隐患~~ | ✅ **已修复（2026-09-27）** | ① **`release=21`**：`run-matrix.ps1` 三处 + **`mutation-workspace-parity.ps1` 四处**（源码已用 Java 22+ 未命名变量 `_`，pom 的 release 是 25）——后者整个变异测试 harness 都会死在编译上；② **换行**：8 个脚本全部 **LF → CRLF**（`.gitattributes` 要求 `*.ps1 eol=crlf`，且 PS 5.1 在 LF-only 的 `.ps1` 里会静默丢键）；③ **编码**：含中文的 4 个脚本加 **UTF-8 BOM**（`inspect-cache.ps1`/`e2e-verify.ps1` 此前因 GBK 误解码**根本无法解析运行**）；④ `drive-claude.ps1` 的 `$args = @(...)`（自动变量陷阱）改名 `$cliArgs`。**验证**：`[Parser]::ParseFile` 8/8 通过、`inspect-cache`/`s0-verify-reports`/`s1-member-usage` 实跑 exit 0、整张矩阵实跑 `MATRIX ALL GREEN`。⚠️ 仍含中文且无 BOM 的**已跟踪**脚本仅 `native-report.ps1`（非 ASCII 只在注释里、解析正常，**未改**） |
 
@@ -490,7 +490,7 @@ Get-Content logs\native-build-*.log -Wait -Tail 50     # 实时跟踪（构建�
 - **PS 参数被吞**：`-Dfoo=bar` 形式的参数会被 PowerShell 解析坏（`ClassNotFoundException: /mode=true`），**用参数数组 `@(...)` 传**。
 - 🚨 **禁止用 PowerShell 做"文本替换"来改文档内容**（2026-09-27 真实事故）：PS 里「反引号 + 字母」是转义序列，
   `$text.Replace(...)` 批量改 markdown 时会把**每个反引号**换成它后面那个字母 ——
-  实测 `CLAUDE.md` 整篇变成 `tmvn packaget` 这种样子（反引号→`t`），`docs/新会话启动包.md` 变成 `mCLAUDE.mdm`（反引号→`m`）。
+  实测 `CLAUDE.md` 整篇变成 `tmvn packaget` 这种样子（反引号→`t`），另一份文档变成 `mCLAUDE.mdm`（反引号→`m`）。
   **改内容一律用 edit 工具，或写成 Node/Java 小程序；永远不要用 PS 字符串替换碰文档。**
 - 🚨 **文档被改坏时的恢复路径（已实测可行）**：DSH 会话 transcript 里存着"改坏前"的完整文本 ——
   `%USERPROFILE%\.dsh\sessions\<项目目录名>\session-<id>\session.v4.jsonl.zstd`。
@@ -527,7 +527,7 @@ Get-Content logs\native-build-*.log -Wait -Tail 50     # 实时跟踪（构建�
 - 🚨 **本机 UAC 是关闭的（`HKLM\...\Policies\System\EnableLUA = 0`）**：整个会话（含 `explorer.exe`、IDE、本工具的 pwsh）
   都是**高完整性令牌**。后果：**UWP/AppX 应用的「文件激活」被 Windows 静默阻断** —— 处理器进程会被拉起但**没有窗口**、
   **退出码仍是 0**，**连在资源管理器里双击图片也打不开**（2026-09-27 实测）。协议激活不受影响（`start ms-photos:` 正常）。
-  凡"调用系统默认程序打开文件"的功能都要走 `platform.FileOpener`（见「预览缓存约定」与 `H35.md` §九）。
+  凡"调用系统默认程序打开文件"的功能都要走 `platform.FileOpener`（见「预览缓存约定」）。
 - **不要整文件读取 `MainController.java`**（**4361 行**）：用 `grep -n` 定位 + 区间读，否则上下文会被吃掉。
 - **行号会漂移**：本文件或任何文档中提到的行号，引用前先用 `grep -n` 复核。
 
@@ -546,9 +546,9 @@ Get-Content logs\native-build-*.log -Wait -Tail 50     # 实时跟踪（构建�
 | **包围语句分析**（对"剩余中文"向上回溯判断是否 log/注释/测试） | 证明无 UI 泄漏 |
 | `git diff --numstat` 看增删行数 | 发现合并脚本**重排整文件**（−606 行） |
 | 字节码/常量池扫描（而非 grep import） | 发现全限定名引用可绕过 import 扫描 |
-| 跑 GUI 自动化**前先删 `logs/test-results.txt`**，跑完核对 **mtime** | 本轮被它骗过一次：`App.start()` 抛 `ClassCastException` 使断言根本没跑，读到的却是上一次会话的 **"30 passed, 0 failed"**（见 `H36.md` §五.2） |
-| 给"预期不成立"的断言配**控制组**（先造一个必然成立的反例跑同一段测量） | 发现两条断言是**假通过**：ESC 根本没送达皮肤处理器，所以"ESC 没关掉它"什么也没证明（见 `H36.md` §七） |
-| **会自己消失的 UI**（自动收起的卡片 / 瞬时状态）：断言必须**同帧**做，或用**闸门**卡住后台任务 | 等待卡片只显示几毫秒，+300ms 再去查已经收完了 —— 我第一版探针据此把**正确的实现**误判成 FAIL（见 `H36.md` §六） |
+| 跑 GUI 自动化**前先删 `logs/test-results.txt`**，跑完核对 **mtime** | 本轮被它骗过一次：`App.start()` 抛 `ClassCastException` 使断言根本没跑，读到的却是上一次会话的 **"30 passed, 0 failed"** |
+| 给"预期不成立"的断言配**控制组**（先造一个必然成立的反例跑同一段测量） | 发现两条断言是**假通过**：ESC 根本没送达皮肤处理器，所以"ESC 没关掉它"什么也没证明 |
+| **会自己消失的 UI**（自动收起的卡片 / 瞬时状态）：断言必须**同帧**做，或用**闸门**卡住后台任务 | 等待卡片只显示几毫秒，+300ms 再去查已经收完了 —— 我第一版探针据此把**正确的实现**误判成 FAIL |
 
 **并且：验证脚本自身也可能是错的。** 本项目三次被自己的验证脚本误导——`mvn -q` 吞掉 surefire 摘要（误判 0 测试）；正则 `[,)]` 漏掉分号结尾的枚举常量（误判"少一个"）；`$null -eq $int` 判断不可靠（误判"全部未完成"）。**对"不一致"要再核一遍再下结论。**
 

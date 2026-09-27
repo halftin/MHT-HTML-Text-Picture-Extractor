@@ -7,7 +7,7 @@
 
 > ## 📌 状态更新（2026-09-27 实测）—— **以脚本与 CLAUDE.md 为准**
 >
-> **权威来源**：`build-native.cmd`（脚本本身）、`CLAUDE.md` 的「native 打包现状」、`docs/handoff/H34.md`。
+> **权威来源**：`build-native.cmd`（脚本本身）与 `CLAUDE.md` 的「native 打包现状」。本文件是**参考手册**（环境清单 / 元数据体系 / 构建细节）；**打包机上的最短路径**见《改动后待验证的graalvml流程说明.md》。
 > 本文档其余章节保留为**背景与原理**；其中的示例路径 / 版本号可能已过时（下表已逐条标注）。
 >
 > | 项 | 状态 |
@@ -16,6 +16,9 @@
 > | **独立 GraalVM** | ✅ **不再需要**。NIK 25.0.3 **自带 `native-image 25.0.3`**，脚本已把它作为 native-image 来源 |
 > | ~~`build-native.cmd` 的 4 处 `X:\` 硬编码~~ | ✅ **已全部修掉（2026-09-27）**：脚本改为**自动探测** JDK / native-image / Maven / 输出目录，且四者均可用环境变量覆盖（`BUILD_JAVA_HOME` / `GRAALVM_HOME` / `MAVEN_CMD` / `OUTPUT_DIR`）。**§5.1 与 §六 里"手工改 4 处路径"的说明已作废** |
 > | ~~`-J-Xmx8G`~~ | ✅ 已改为可配置的 `NATIVE_XMX`，**默认 4G**（本机总内存约 15 GB） |
+> | **Maven 要不要预装** | ✅ **不必**：仓库自带 wrapper（`mvnw` / `mvnw.cmd` / `.mvn/wrapper/`，`only-script` 模式，**无 jar**）。实测清空分发缓存 + Maven 不在 PATH → `build-native.cmd --prepare-only` 仍 `exit=0` |
+> | **打包前第一步** | ✅ **先跑 `check-env.cmd`**（§3.8）：9 项预检 + 修复命令；退出码 **0=就绪 / 20=缺 MSVC / 1=缺其它关键项**，与 `build-native.cmd` 对齐 |
+> | **排障工具** | ✅ 随仓库分发：`tools\probes\run-probe.ps1`（UI 探针）、`tools\recovery\*`（文档误改恢复）、`tools\diag\tee-probe.cmd`；清单见 `CLAUDE.md` 文末「验证工具」 |
 > | **本机 `mvn` 不在 PATH** | ⚠️ 必须用 Maven wrapper。脚本会自动到 `%USERPROFILE%\.m2\wrapper\dists` 下递归找 `mvn.cmd` |
 > | **四个脚本的关系** | ✅ 已归一（2026-09-27）：`build-native.cmd` 是**唯一实现**，`.ps1` / `.sh` / `run-native-image.bat` 只是**委托入口**。原先四份脚本各写死自己的 `X:\` / `Y:\` 路径与 VS 版本号（甚至写到 VS "18"），且 native-image 参数被抄了三份 |
 > | **构建可观测性** | ✅ **新增（2026-09-27）**：全过程**实时**同时输出到控制台与日志、每步 `[STEP k/n] BEGIN/END` + ISO 时间、结束时产出**机器可读报告**（输入 jar 与产物清单都带 SHA256）。见 §六 的「构建用法」 |
@@ -144,9 +147,25 @@ Windows SDK 随 Visual Studio 一起安装，无需额外操作。如果未安�
 
 构建时建议**临时禁用实时扫描**或将项目目录加入排除列表，否则 native-image 构建可能从几十秒膨胀到数十分钟。
 
-### 3.8 一键检查脚本
+### 3.8 一键检查脚本 —— **已随仓库提供：`check-env.cmd`**
 
-将以下内容保存为 `check-env.sh`（需要 Git Bash 或 WSL），在新设备上运行以快速诊断环境：
+**不要手工复制粘贴脚本**：仓库根目录已有 `check-env.cmd`，打包机上直接运行即可（9 项预检 + 结论 + 修复命令）：
+
+| 检查 | 内容 |
+|---|---|
+| 1/9 项目文件 | `pom.xml` 可读 + 版本号 |
+| 2/9 PowerShell | ⚠️ **构建链硬依赖**（时间戳 / 实时 tee / 构建报告 / `mvnw.cmd` 都用它） |
+| 3/9 编译 JDK | 需要 JDK 25，打印 `javac -version` |
+| 4/9 native-image | 从 NIK / GraalVM 目录探测（**与编译 JDK 分开解析**） |
+| 5/9 Maven | PATH → 仓库内 `mvnw.cmd` → wrapper 缓存；**有 `mvnw` 时无需预装 Maven** |
+| 6/9 MSVC | `vswhere.exe` → `VC.Tools.x86.x64` → `vcvars64.bat` → `editbin.exe` + Windows SDK |
+| 7/9 内存与磁盘 | native-image 默认 `-J-Xmx4G`，编译期需数 GB 临时空间 |
+| 8/9 git | 只影响构建报告里的 `gitCommit` |
+| 9/9 网络 | 首次构建要拉依赖；连不上会预警 |
+
+**退出码**：`0` 全部就绪 / `20` 只缺 MSVC（native-image 的唯一硬依赖）/ `1` 缺其它关键项 —— 与 `build-native.cmd` 的码位对齐。
+
+> 下面这份 bash 版**仅为历史参考**（Git Bash / WSL 可继续用）；**维护中的唯一实现是 `check-env.cmd`**。
 
 ```bash
 #!/bin/bash
@@ -1219,7 +1238,7 @@ java -agentlib:native-image-agent=config-output-dir=target/agent-out \
 | `reflect-config.json` | 旧分离格式（291 条） | ⚠️ **已过时**：不含 `com.mhtextractor.cache.*`，也不含 `ImageBatchProcessor` / `ImageSource` 等近期类 |
 
 两种格式**可以共存**，native-image 对同一 type 取**并集**。因此补齐统一格式即可，**无需同步维护旧文件**。
-**🚨 该"建议删除"已被实测推翻（2026-09-27，见 H31 §四 / CLAUDE.md）**：旧格式 **291** 个类型、统一格式 **194** 个，其中 **231 个仅存在于旧格式**；native-image 对同一 type 取**并集**，**直接删旧文件会丢 231 条**。且本机 native 被 MSVC 阻塞、**无法验证**，在无法验证时改元数据风险 > 收益。正解是"并集合并 + 方法/字段级对账（丢失数=0）"。另：该文件里指向 `JavaFxUtil$SmoothProgressProperty` 的条目已**悬空**（该类已被删除）。
+**🚨 该"建议删除"已被实测推翻（2026-09-27 实测，详见 `CLAUDE.md`）**：旧格式 **291** 个类型、统一格式 **194** 个，其中 **231 个仅存在于旧格式**；native-image 对同一 type 取**并集**，**直接删旧文件会丢 231 条**。且本机 native 被 MSVC 阻塞、**无法验证**，在无法验证时改元数据风险 > 收益。正解是"并集合并 + 方法/字段级对账（丢失数=0）"。另：该文件里指向 `JavaFxUtil$SmoothProgressProperty` 的条目已**悬空**（该类已被删除）。
 （§4.4 的手工模板仅作历史参考；若仍保留该文件，注意其条目会与统一格式合并。）
 
 ---
