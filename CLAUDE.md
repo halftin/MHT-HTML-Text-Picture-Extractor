@@ -201,14 +201,50 @@ java -agentlib:native-image-agent=config-output-dir=target/agent-out -cp ... <�
 
 ---
 
-## 🚨 native 打包现状（截至 2026-09-26）
+## 🚨 native 打包现状（截至 2026-09-27）
+
+**目标产物**：GraalVM native EXE **绿色免安装版**（`MhtExtractor.exe` + DLL，双击即用、无需装 JDK/JRE）。
 
 | 项 | 状态 |
 |---|---|
 | NIK 自带 native-image | ✅ 可用（`D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3\bin\native-image.cmd`，`native-image 25.0.3`）—— **无需单独安装 GraalVM** |
-| **MSVC 工具链** | ❌ **缺失** → native 构建**阻塞**。`native-image` 在 Windows 上**只支持 MSVC**（不支持 MinGW）。实测最小 HelloWorld 也失败：`Error: Failed to find 'vswhere.exe' for locating Visual Studio installations.`（exit=20） |
-| `build-native.cmd` 内 4 处硬编码 `X:\` 路径 | ❌ **全部不可用**（本机无 X: 盘）。需改为本机实际路径：`BUILD_JAVA_HOME`/`GRAALVM_HOME` → NIK 目录（NIK 自带 native-image）；`MAVEN_HOME` → wrapper；`OUTPUT_DIR` → 本机可写目录。另建议把 `-J-Xmx8G` 下调（本机总内存约 15 GB） |
-| 解除方式 | 安装 **Visual Studio 2022 Build Tools（17.6+）**，勾选「使用 C++ 的桌面开发」+「MSVC v143」+「Windows SDK」 |
+| **MSVC 工具链** | ❌ **缺失，且是唯一卡点**。已实测钉死：`vswhere.exe` 不在任何标准位置、**C:/D: 全盘（深度 5）无 `cl.exe`/`vswhere.exe`**、无 VS 安装目录、无 Windows SDK 注册表项。最小 HelloWorld 探针 `exit=20`：`Failed to find 'vswhere.exe' for locating Visual Studio installations.`（`native-image` 在 Windows 上**只支持 MSVC**，不支持 MinGW） |
+| 打包脚本 | ✅ **已修好（2026-09-27）**：四个脚本归一为 `build-native.cmd` **唯一实现**，其余入口委托调用；自动探测 JDK / native-image / Maven / 输出目录；MSVC 缺失时**提前** `exit 20` |
+| JVM 侧链路 | ✅ **已端到端验证**：`build-native.cmd --prepare-only` → `exit 0`、Maven `BUILD SUCCESS`、**12 个 DLL** 正确落到 `target\jfx-dlls`（**含 `msvcp140*.dll` / `vcruntime140*.dll`** —— 证实 VC 运行库确实在 `javafx-graphics-*-win.jar` 内，绿色分发来源成立） |
+| exe 产出与启动 | ❌ **未验证**（受 MSVC 阻塞） |
+
+### 解除方式（需管理员）
+
+```bat
+curl -L -o vs_BuildTools.exe https://aka.ms/vs/17/release/vs_BuildTools.exe
+vs_BuildTools.exe --quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended
+```
+装完 `vswhere.exe` 出现在 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\`，重跑脚本即可。
+> 本机 `winget` **源打不开**（`0x8A15000B`），故走引导器直下；引导器已实测可下载（4.48 MB）。
+
+### 构建用法
+
+```bat
+build-native.cmd                 完整构建：预检 -> mvn package -> 抽 DLL -> native-image -> 组装 dist
+build-native.cmd --prepare-only  只做 JVM 侧准备（不调用 native-image）—— 无 MSVC 时也能跑
+build-native.cmd --skip-package  跳过 mvn package
+build-native.cmd --no-editbin    保留控制台子系统（便于看启动期崩溃）
+```
+环境变量覆盖：`BUILD_JAVA_HOME` / `GRAALVM_HOME` / `MAVEN_CMD` / `OUTPUT_DIR`（默认 `<仓库>\dist`，已在 `.gitignore`）/ `NATIVE_XMX`（默认 4G，原脚本写死 8G，本机总内存约 15 GB）/ `VSWHERE`。
+
+### ⚠️ 两个已实测的坑（改脚本前必读）
+
+1. **编译 JDK 与 native-image JDK 必须独立解析**：本机机器级 `JAVA_HOME=D:\install\New Folder`
+   是**纯 JDK 25（有 `javac`、没有 `native-image`）**。写成"先定编译 JDK、再只在它里面找
+   native-image"会必然误报"找不到 native-image"。
+2. **`dir` 的 `/s` 不支持中间目录通配**：`dists\apache-maven-*\*\bin\mvn.cmd` 恒无输出；
+   必须把 `mvn.cmd` 作为**文件名**交给 `/s`（wrapper 真实层级是三层）。
+
+### ❓ 仍需实测确认（拿到 MSVC 之后）
+
+`-Djava.library.path="target/jfx-dlls"` 会把**相对路径**烘焙进镜像。Windows 加载 DLL 时默认
+先搜 exe 所在目录，故"绿色分发"大概率成立 —— 但**必须实测**：把 `dist` 拷到别处、
+从任意工作目录双击 `MhtExtractor.exe`，确认能启动并完成一次真实提取。
 
 ### ✅ 无头执行（`headless-layer-b`）——**已修复（步骤 0，2026-09-26）**
 
