@@ -34,6 +34,7 @@
 *.properties text eol=lf
 *.css        text eol=lf
 *.cmd        text eol=crlf
+*.bat        text eol=crlf
 *.ps1        text eol=crlf
 
 # 测试夹具与基线是"字节即语义"的验收资产，显式标注（fixtures 已在上面 binary，此处仅示意基线）
