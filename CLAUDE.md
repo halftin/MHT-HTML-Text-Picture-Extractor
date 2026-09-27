@@ -232,13 +232,51 @@ build-native.cmd --no-editbin    保留控制台子系统（便于看启动期�
 ```
 环境变量覆盖：`BUILD_JAVA_HOME` / `GRAALVM_HOME` / `MAVEN_CMD` / `OUTPUT_DIR`（默认 `<仓库>\dist`，已在 `.gitignore`）/ `NATIVE_XMX`（默认 4G，原脚本写死 8G，本机总内存约 15 GB）/ `VSWHERE`。
 
-### ⚠️ 两个已实测的坑（改脚本前必读）
+### 📡 构建可观测性契约（打包机上给智能体的实时反馈）
+
+**目标**：在打包机上跑构建时，智能体要能**实时**拿到完整数据流，而不是等结束或只看成败。
+
+| 产物 | 位置 | 内容 |
+|---|---|---|
+| 主日志 | `logs/native-build-<stamp>.log` | **全过程实时**（控制台与日志同步，经 `native-tee.ps1`）：环境探测值、每个外部命令的**完整输出**、每步 `[STEP k/n] BEGIN/END … exit=` 标记（带 ISO 时间） |
+| 步骤明细 | `logs/native-build-<stamp>.steps.tsv` | TSV：`step / name / begin / end / exit`（TAB 分隔） |
+| **机器可读报告** | `logs/native-build-<stamp>.report.json` | `status` / `failedStep` / `gitCommit` / **context**（JDK、native-image、Maven、VS、版本、xmx）→ **input**（jar 体积+SHA256）→ **steps**（逐步耗时与退出码）→ **artifacts**（dist 内每个文件的体积+SHA256） |
+
+> 报告放在 `logs/` 而**不是** `dist/`：`dist/` 只放交付物（exe + DLL），保证"整个目录拷走即用"。
+
+**智能体读取配方**（实测）：构建**进行中**读日志必须用 `Get-Content`／`FileStream + FileShare.ReadWrite`；
+**`File.ReadAllText` 会失败**（它用 `FileShare.Read`，与正在写入的句柄不兼容）。
+
+```powershell
+Get-Content logs\native-build-*.log -Wait -Tail 50     # 实时跟踪（构建中可用）
+```
+
+**失败时**脚本打印 `=== FAILURE ===` 段（失败步 + 退出码 + 日志末 40 行），并**仍然产出报告**；
+退出码区分类别：`0` 成功 / `20` 缺 MSVC 工具链（与 native-image 同码）/ `1` 其它。
+
+### ⚠️ 四个已实测的坑（改脚本前必读）
 
 1. **编译 JDK 与 native-image JDK 必须独立解析**：本机机器级 `JAVA_HOME=D:\install\New Folder`
    是**纯 JDK 25（有 `javac`、没有 `native-image`）**。写成"先定编译 JDK、再只在它里面找
    native-image"会必然误报"找不到 native-image"。
 2. **`dir` 的 `/s` 不支持中间目录通配**：`dists\apache-maven-*\*\bin\mvn.cmd` 恒无输出；
    必须把 `mvn.cmd` 作为**文件名**交给 `/s`（wrapper 真实层级是三层）。
+3. 🚨 **`.ps1` 必须 CRLF**（`.gitattributes` 早已规定 `*.ps1 text eol=crlf`，**不要违反**）：
+   实测 PowerShell 5.1 在 **LF-only** 的 `.ps1` 里，会**静默丢弃**哈希表字面量中「`#` 注释行之后」
+   的那个键 —— 不报错、不警告。最小复现：
+   ```powershell
+   $o = [pscustomobject][ordered]@{ x = 1
+       # 注释
+       y = 2
+       z = 3 }
+   # LF 文件   -> keys = x,z      （y 被吞）
+   # CRLF 文件 -> keys = x,y,z    （正确）
+   ```
+   本条曾真实导致 `build-report.json` 里的 `steps` 字段凭空消失（排查了数轮）。
+   注：`.claude-work/*.ps1` 目前**全部是 LF-only**，属同类隐患。
+4. 🚨 **日志要能被别人边写边读**：写入方用 `FileStream(..., FileShare.ReadWrite)`；
+   读取方用 `Get-Content` 或 `FileShare.ReadWrite`。用 `File.ReadAllText` 读正在写的日志会
+   报"文件正由另一进程使用" —— 而这正是"实时反馈"要避免的。
 
 ### ❓ 仍需实测确认（拿到 MSVC 之后）
 
