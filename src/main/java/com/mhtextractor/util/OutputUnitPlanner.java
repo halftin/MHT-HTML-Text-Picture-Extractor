@@ -90,7 +90,7 @@ public final class OutputUnitPlanner {
 
         /** 日志/展示用单元名：未分组单独单元显示"未分组" */
         public String label() {
-            return outputName != null ? outputName : "未分组";
+            return outputName != null ? outputName : I18n.get("core.ungrouped");
         }
     }
 

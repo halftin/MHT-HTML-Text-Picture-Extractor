@@ -141,7 +141,7 @@ public class AppConfig {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(md.digest(sb.toString().getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 不可用", e);
+            throw new IllegalStateException("SHA-256 not available", e);
         }
     }
 

@@ -3,6 +3,7 @@ package com.mhtextractor.cache;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -56,6 +57,22 @@ public record PreviewCacheStore(Path root) {
     public Path dirFor(PreviewCacheKey key) {
         return root.resolve(key.toDirName());
     }
+
+    /**
+     * 缓存 meta 清单里第 {@code index} 张图片的真实路径（<b>不保证存在</b>；meta 为 null 或下标越界返回 null）。
+     * key 由 meta 自身四要素反推（与 {@link #listKeys()} 同法）——{@code load} 命中判定已要求
+     * {@code meta.matches(key)}，故反推目录必然是这些图片的来源，与"当前参数是否已变"无关。
+     * 供调用方（如预览区的"点击查看"）在不了解目录布局的前提下取到图片文件。
+     */
+    public Path imageFileFor(PreviewCacheMeta meta, int index) {
+        if (meta == null || index < 0 || index >= meta.images().size()) {
+            return null;
+        }
+        PreviewCacheKey key = new PreviewCacheKey(meta.source().absolutePath(), meta.source().size(),
+                meta.source().mtime(), meta.paramFingerprint(), meta.formatVersion());
+        return dirFor(key).resolve(meta.images().get(index).file());
+    }
+
     /**
      * 原子写入（P11）：内容与 meta 全部写入 {@code <key>.tmp/} → 改名为 {@code <key>/} → 最后写 .complete。
      * 半成品永远不叫正式名；崩溃残留由 {@link #cleanupOrphans()} 兜底清理。返回最终缓存目录。
@@ -64,7 +81,7 @@ public record PreviewCacheStore(Path root) {
     public Path write(PreviewCacheKey key, PreviewCacheMeta meta, ImagesWriter imagesWriter)
             throws IOException {
         if (!meta.matches(key)) {
-            throw new IllegalArgumentException("meta 与 key 不一致：" + key);
+            throw new IllegalArgumentException("cache meta does not match key: " + key);
         }
         Path target = dirFor(key);
         Path tmp = root.resolve(key.toDirName() + TMP_SUFFIX);
@@ -81,7 +98,7 @@ public record PreviewCacheStore(Path root) {
         deleteRecursivelyIfExists(target);
         Files.move(tmp, target);
         Files.createFile(target.resolve(COMPLETE_MARKER));
-        log.debug("预览缓存写入完成：{}", target);
+        log.debug(I18n.msg("log.previewcachestore.01", target));
         return target;
     }
 
@@ -100,7 +117,7 @@ public record PreviewCacheStore(Path root) {
         }
         for (PreviewCacheMeta.ImageEntry entry : meta.images()) {
             if (!Files.isRegularFile(dir.resolve(entry.file()))) {
-                log.warn("缓存图片缺失，视为未命中：{}", dir.resolve(entry.file()));
+                log.warn(I18n.msg("log.previewcachestore.02", dir.resolve(entry.file())));
                 return Optional.empty();
             }
         }
@@ -198,7 +215,7 @@ public record PreviewCacheStore(Path root) {
             }
         }
         if (count > 0) {
-            log.info("清理预览缓存孤儿 {} 项：{}", count, root);
+            log.info(I18n.msg("log.previewcachestore.03", count, root));
         }
         return count;
     }

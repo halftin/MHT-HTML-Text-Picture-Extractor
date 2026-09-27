@@ -147,6 +147,20 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <p><b>入口</b>：{@code App} 的 {@code -Dagent.exit.delay}（演练）与 {@code -Dtest.mode=true}
  * （自动化回归）两个特殊模式。</p>
+ *
+ * <p><b>⚠️ 本类里的中文分两类，处理方式不同（2026-09-27 明确）</b>：
+ * <ul>
+ *   <li><b>夹具数据</b>（导入来源名、组名、生成的 MHT 正文与标题、资源缺失提示）—— 它们会被
+ *       {@code MainController} 打进<b>界面日志区</b>与预览区，属用户可见文案，因此一律取
+ *       {@code test.*} bundle 键（{@code test.autoReimport} / {@code test.autoGroup} /
+ *       {@code test.demoGroup} / {@code test.autoButtonState} / {@code test.previewHtml} /
+ *       {@code test.samplePreviewMissing}）。曾漏接线，导致英文运行的日志里出现
+ *       "导入开始：来源=自动化重复导入"。</li>
+ *   <li><b>断言失败消息</b>（{@code "组名编辑失败"} 等）—— 只写 {@code logs/test-results.txt}，
+ *       <b>从不进日志区</b>，属测试诊断而非产品文案，故保持中文、不入 bundle
+ *       （与 CLAUDE.md「测试/演练代码不国际化」一致）。</li>
+ * </ul>
+ * 判定口径：<b>这段文字会不会出现在用户看得见的地方</b>；会 → 走 bundle。</p>
  */
 @lombok.extern.slf4j.Slf4j
 public final class FeatureExercise {
@@ -268,7 +282,8 @@ public void exerciseAllFeatures() throws Exception {
     }
     Thread.sleep(200);
 
-    // Phase 3: 图片参数弹窗演练（highSpeedMemoryCheck 跳过：勾选触发模态 Alert 阻塞 agent）
+    // Phase 3: 图片参数弹窗演练（highSpeedMemoryCheck 跳过：勾选会改变提取路径——高速内存预加载，非演练范围；
+    //   会话 19 起该确认已是窗口内非阻塞卡片，"模态 Alert 阻塞 agent" 已不是跳过理由）
     textModeToggle().setSelected(false);
     imageModeToggle().setSelected(true);
     Thread.sleep(200);
@@ -448,11 +463,11 @@ public void exerciseAllFeatures() throws Exception {
                 // 组名编辑：g2 改成与 g1 重名 → 自动追加序号（R7）
                 mc.fileListView.getSelectionModel().select(g1);
                 Thread.sleep(300);
-                groupNameField().setText("演练分组");
+                groupNameField().setText(I18n.get("test.demoGroup"));
                 Thread.sleep(300);
                 mc.fileListView.getSelectionModel().select(g2);
                 Thread.sleep(300);
-                groupNameField().setText("演练分组");
+                groupNameField().setText(I18n.get("test.demoGroup"));
                 Thread.sleep(300);
                 // 组参数（文本模式）：g1 确认独立参数 → 深绿背景 + 组内重解析
                 ParamDialogController groupDialog = ParamDialogController.showDirect(
@@ -770,7 +785,7 @@ public void runAutomatedTests() {
             createSampleMht(sub1, "s1.mht");
             int itemsBefore = (int) mc.visibleCount();
             int groupsBefore = mc.topLevelGroups().size();
-            mc.importByPaths(List.of(root.toString()), "自动化重复导入", false); Thread.sleep(800);
+            mc.importByPaths(List.of(root.toString()), I18n.get("test.autoReimport"), false); Thread.sleep(800);
             waitForImportDone();
             if (mc.visibleCount() != itemsBefore + 2 || mc.topLevelGroups().size() != groupsBefore + 1) {
                 throw new IllegalStateException("首次导入目录失败");
@@ -782,7 +797,7 @@ public void runAutomatedTests() {
                 throw new IllegalStateException("未找到导入条目");
             }
             r1.textItemParams = new AppConfig();
-            mc.importByPaths(List.of(root.toString()), "自动化重复导入", false); Thread.sleep(800);
+            mc.importByPaths(List.of(root.toString()), I18n.get("test.autoReimport"), false); Thread.sleep(800);
             waitForImportDone();
             if (mc.visibleCount() != itemsBefore + 2 || mc.topLevelGroups().size() != groupsBefore + 1) {
                 throw new IllegalStateException("重复导入不应改变列表");
@@ -797,7 +812,7 @@ public void runAutomatedTests() {
 
         // 按钮状态：导入期间禁用 + 收尾恢复
         try {
-            mc.importPending = new MainController.ImportSession(List.of(), "自动化按钮状态", false);
+            mc.importPending = new MainController.ImportSession(List.of(), I18n.get("test.autoButtonState"), false);
             mc.updateStartButtonState();
             if (!startButton().isDisabled()) throw new IllegalStateException("导入期间开始提取应禁用");
             mc.importPending = null;
@@ -848,8 +863,9 @@ public void runAutomatedTests() {
             if (groups.size() != 1) { throw new IllegalStateException("建组失败: " + groups.size()); }
             GroupItem<PreviewItem> g = groups.get(0);
             mc.fileListView.getSelectionModel().select(g); Thread.sleep(300);
-            groupNameField().setText("自动测试组"); Thread.sleep(300);
-            if (!"自动测试组".equals(g.getName())) { throw new IllegalStateException("组名编辑失败"); }
+            String autoGroup = I18n.get("test.autoGroup");
+            groupNameField().setText(autoGroup); Thread.sleep(300);
+            if (!autoGroup.equals(g.getName())) { throw new IllegalStateException("组名编辑失败"); }
             // 折叠/展开动画（触发后立即快进验证终态；FX 线程 sleep 会阻塞 pulse 动画无法推进）
             mc.toggleGroupExpanded(g);
             mc.finishExpandAnim();
@@ -870,7 +886,7 @@ public void runAutomatedTests() {
             ungroupButton().fire(); Thread.sleep(300);
             if (mc.topLevelGroups().size() != 0) { throw new IllegalStateException("拆分组失败"); }
             undoButton().fire(); Thread.sleep(300);
-            if (mc.topLevelGroups().size() != 1 || !"自动测试组".equals(mc.topLevelGroups().get(0).getName())) {
+            if (mc.topLevelGroups().size() != 1 || !autoGroup.equals(mc.topLevelGroups().get(0).getName())) {
                 throw new IllegalStateException("撤销拆分失败（组名/参数未恢复）");
             }
             undoButton().fire(); Thread.sleep(300);   // 撤销组参数（PARAM_SET）
@@ -1305,7 +1321,7 @@ private File createSampleMht(java.nio.file.Path dir, String fileName) throws jav
     byte[] webpBytes;
     try (java.io.InputStream is = MainController.class.getResourceAsStream("/sample-preview.webp")) {
         if (is == null) {
-            throw new java.io.IOException("sample-preview.webp 资源缺失");
+            throw new java.io.IOException(I18n.get("test.samplePreviewMissing"));
         }
         webpBytes = is.readAllBytes();
     }
@@ -1318,7 +1334,7 @@ private File createSampleMht(java.nio.file.Path dir, String fileName) throws jav
     sb.append("--").append(boundary).append("\r\n");
     sb.append("Content-Type: text/html; charset=\"utf-8\"\r\n");
     sb.append("Content-Transfer-Encoding: 8bit\r\n\r\n");
-    sb.append("<html><head><title>预览测试标题</title></head><body>这是正文内容，用于预览窗口文本展示测试。")
+    sb.append(I18n.get("test.previewHtml"))
             .append("<img src=\"cid:img001\"></body></html>\r\n");
     sb.append("--").append(boundary).append("\r\n");
     sb.append("Content-Type: image/webp\r\n");

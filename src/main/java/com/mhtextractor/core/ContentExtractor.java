@@ -42,10 +42,10 @@ public class ContentExtractor {
                     String reDecoded = new String(htmlBytes, detectedCharset);
                     if (!EncodingUtils.containsGarbled(reDecoded) && EncodingUtils.containsChinese(reDecoded)) {
                         htmlContent = reDecoded;
-                        logger.info("编码修复成功，使用 {} 重新解码", detectedCharset);
+                        logger.info(I18n.msg("log.contentextractor.01", detectedCharset));
                     }
                 } catch (Exception e) {
-                    logger.warn("编码修复失败：{}", e.getMessage(), e);
+                    logger.warn(I18n.msg("log.contentextractor.02", e.getMessage()), e);
                 }
             }
         }
@@ -90,7 +90,7 @@ public class ContentExtractor {
                 return title.isEmpty() ? null : title;
             }
         } catch (Exception e) {
-            logger.warn("提取章节标题失败：{}", e.getMessage(), e);
+            logger.warn(I18n.msg("log.contentextractor.03", e.getMessage()), e);
         }
         return null;
     }
@@ -109,7 +109,7 @@ public class ContentExtractor {
                     return matcher.group(1);
                 } else {
                     String msg = I18n.get("core.areaMarkersNotFound", "start", startMarker, "end", endMarker);
-                    logger.warn("[警告] {}", msg);
+                    logger.warn(I18n.msg("log.contentextractor.04", msg));
                     lastWarnings.add(msg);
                 }
             } else {

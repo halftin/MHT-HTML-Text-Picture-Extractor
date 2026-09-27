@@ -1,5 +1,6 @@
 package com.mhtextractor.platform;
 
+import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -61,10 +62,10 @@ final class SourceViewPage {
                     + "</body></html>";
             Path page = indexHtml.resolveSibling(SOURCE_VIEW_NAME);
             Files.writeString(page, pageHtml, StandardCharsets.UTF_8);
-            log.info("已生成源码视图页：{}", page);
+            log.info(I18n.msg("log.sourceviewpage.01", page));
             return page;
         } catch (IOException e) {
-            log.warn("生成源码视图页失败：{}", indexHtml, e);
+            log.warn(I18n.msg("log.sourceviewpage.02", indexHtml), e);
             return null;
         }
     }

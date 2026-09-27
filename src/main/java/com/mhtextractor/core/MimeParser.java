@@ -1,5 +1,6 @@
 package com.mhtextractor.core;
 
+import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.EncodingUtils;
 import com.mhtextractor.util.SanitizeUtils;
 import jakarta.mail.Multipart;
@@ -141,7 +142,7 @@ public class MimeParser {
                     }
                 }
             } catch (Exception e) {
-                logger.debug("统计MIME部件总数失败：{}", e.getMessage(), e);
+                logger.debug(I18n.msg("log.mimeparser.01", e.getMessage()), e);
             }
         }
         return count;
@@ -200,11 +201,10 @@ public class MimeParser {
             for (int i = 0; i < mp.getCount(); i++) {
                 int childDepth = depth + 1;
                 if (childDepth > RECURSION_LIMIT) {
-                    logger.warn("[递归警告] MIME树深度已达 {} 层（阈值 {}），可能为损坏文件", childDepth, RECURSION_LIMIT);
+                    logger.warn(I18n.msg("log.mimeparser.02", childDepth, RECURSION_LIMIT));
                     if (continueCallback != null) {
                         if (!continueCallback.get()) {
-                            logger.warn("[递归警告] 用户取消解析，已提取 {} 个CID映射，{} 个资源",
-                                    result.getCidMap().size(), result.getLocationDataMap().size());
+                            logger.warn(I18n.msg("log.mimeparser.03", result.getCidMap().size(), result.getLocationDataMap().size()));
                             continue;
                         }
                         // 用户选择继续：不再重复询问
@@ -257,7 +257,7 @@ public class MimeParser {
                     if (cs != null) declaredCharset = cs;
                 }
             } catch (Exception e) {
-                logger.debug("获取Content-Type charset失败：{}", e.getMessage(), e);
+                logger.debug(I18n.msg("log.mimeparser.04", e.getMessage()), e);
             }
 
             try (InputStream decodedIs = MimeUtility.decode(is, encoding)) {
@@ -270,11 +270,11 @@ public class MimeParser {
                         String result = new String(bytes, tryCharset);
                         // 如果包含中文且没有U+FFFD替换字符，说明编码正确
                         if (EncodingUtils.containsChinese(result) && !EncodingUtils.containsGarbled(result)) {
-                            logger.info("使用编码: {} 解码成功", tryCharset);
+                            logger.info(I18n.msg("log.mimeparser.05", tryCharset));
                             return result;
                         }
                     } catch (Exception e) {
-                        logger.debug("编码 {} 解析失败：{}", tryCharset, e.getMessage(), e);
+                        logger.debug(I18n.msg("log.mimeparser.06", tryCharset, e.getMessage()), e);
                     }
                 }
 

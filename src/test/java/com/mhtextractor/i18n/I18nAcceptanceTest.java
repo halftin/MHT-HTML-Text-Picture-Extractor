@@ -37,7 +37,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class I18nAcceptanceTest {
 
     private static final Pattern BANG = Pattern.compile("^![A-Za-z0-9_.]+!$");
-    private static final Pattern GET_KEY = Pattern.compile("I18n\\.get\\(\\s*\"([^\"]+)\"");
+    /** 两个入口都要扫：{@code I18n.get}（具名占位符）与 {@code I18n.msg}（日志位置占位符） */
+    private static final Pattern GET_KEY = Pattern.compile("I18n\\.(?:get|msg)\\(\\s*\"([^\"]+)\"");
     private static final Pattern FXML_KEY = Pattern.compile("%([a-zA-Z][a-zA-Z0-9_.]*)");
 
     @AfterEach
@@ -123,7 +124,9 @@ class I18nAcceptanceTest {
         Set<String> keys = new LinkedHashSet<>();
         try (var stream = Files.walk(root.resolve("src/main/java"))) {
             for (Path p : stream.filter(Files::isRegularFile).filter(f -> f.toString().endsWith(".java")).toList()) {
-                String src = Files.readString(p, StandardCharsets.UTF_8);
+                // 先剥注释：javadoc 里的示例（如 I18n.msg("log.x", a, b)）不是"活跃键"，
+                // 若不剥，示例会被当成真实键去查表并报缺键 —— 这正是本断言引入 I18n.msg 后第一次运行踩到的假失败。
+                String src = stripComments(Files.readString(p, StandardCharsets.UTF_8));
                 Matcher m = GET_KEY.matcher(src);
                 while (m.find()) {
                     keys.add(m.group(1));
@@ -159,8 +162,67 @@ class I18nAcceptanceTest {
         assertEquals(0, failures, failures + " 个活跃键在两 locale 下渲染异常（缺键/空值）");
     }
 
-    /** 从 user.dir 向上找 pom.xml，确定项目根（Surefire 以 basedir 为工作目录）。 */
-    private static Path projectRoot() {
+    /**
+     * 极简注释剥离：行注释 / 块注释替换为空格（保留换行与长度），字符串字面量原样保留。
+     *
+     * <p>为什么需要：本测试扫的是<b>源码文本</b>，注释里的 {@code I18n.get("…")} 示例同样会被
+     * {@link #GET_KEY} 命中。断言"活跃键"必须只看代码。</p>
+     */
+    private static String stripComments(String src) {
+        StringBuilder out = new StringBuilder(src.length());
+        int i = 0;
+        boolean inLine = false;
+        boolean inBlock = false;
+        boolean inString = false;
+        while (i < src.length()) {
+            char ch = src.charAt(i);
+            char next = i + 1 < src.length() ? src.charAt(i + 1) : '\0';
+            if (inLine) {
+                if (ch == '\n') {
+                    inLine = false;
+                    out.append(ch);
+                } else {
+                    out.append(' ');
+                }
+            } else if (inBlock) {
+                if (ch == '*' && next == '/') {
+                    inBlock = false;
+                    out.append("  ");
+                    i += 2;
+                    continue;
+                }
+                out.append(ch == '\n' ? '\n' : ' ');
+            } else if (inString) {
+                out.append(ch);
+                if (ch == '\\') {
+                    if (i + 1 < src.length()) {
+                        out.append(src.charAt(++i));
+                    }
+                } else if (ch == '"') {
+                    inString = false;
+                }
+            } else if (ch == '/' && next == '/') {
+                inLine = true;
+                out.append("  ");
+                i += 2;
+                continue;
+            } else if (ch == '/' && next == '*') {
+                inBlock = true;
+                out.append("  ");
+                i += 2;
+                continue;
+            } else {
+                if (ch == '"') {
+                    inString = true;
+                }
+                out.append(ch);
+            }
+            i++;
+        }
+        return out.toString();
+    }
+
+    /** 从 user.dir 向上找 pom.xml，确定项目根（Surefire 以 basedir 为工作目录）。 */    private static Path projectRoot() {
         Path dir = Path.of("").toAbsolutePath();
         while (dir != null) {
             if (Files.exists(dir.resolve("pom.xml"))) {

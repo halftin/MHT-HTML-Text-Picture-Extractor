@@ -1,5 +1,6 @@
 package com.mhtextractor.util;
 
+import com.mhtextractor.i18n.I18n;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -144,7 +145,7 @@ public class SanitizeUtils {
             String base64Data = content.substring(commaIndex + 1);
             return java.util.Base64.getDecoder().decode(base64Data.trim());
         } catch (Exception e) {
-            logger.debug("Data URI解码失败：{}", e.getMessage(), e);
+            logger.debug(I18n.msg("log.sanitizeutils.01", e.getMessage()), e);
             return null;
         }
     }

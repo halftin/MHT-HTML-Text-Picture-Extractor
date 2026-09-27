@@ -53,7 +53,9 @@ public enum ErrorCode {
     /** ParamDialogController:373 确定删除配置确认框（占位符 {name} = 配置名） */
     CONFIG_DELETE_CONFIRM,
     /** ParamDialogController:382 删除配置失败 */
-    CONFIG_DELETE_FAILED;
+    CONFIG_DELETE_FAILED,
+    /** ImageBatchProcessor:450 高速内存模式下预加载的 MHT 文件无法提供（占位符 {reason} = 原始失败原因） */
+    LOAD_MHT_FAILED;
 
     /** bundle 键：{@code error.<CODE>}。 */
     public String key() {

@@ -135,11 +135,10 @@ public abstract class BatchProcessor {
         public void incrementWarn() { warnCount++; }
 
         public String getSummaryLine() {
-            return String.format(
-                    "处理完成 - 总计：%d, 成功：%d, 失败：%d, 跳过：%d, 出现警告：%d, 耗时：%.2f 秒",
-                    totalFiles, successCount, failCount, skipCount, warnCount,
-                    (endTime - startTime) / 1000.0
-            );
+            return I18n.get("extract.summary",
+                    "total", totalFiles, "success", successCount, "failed", failCount,
+                    "skipped", skipCount, "warned", warnCount,
+                    "elapsed", String.format("%.2f", (endTime - startTime) / 1000.0));
         }
 
         @Override
@@ -190,7 +189,7 @@ public abstract class BatchProcessor {
                     .toLocalDateTime();
             return new MhtFileInfo(f.getAbsolutePath(), f.getName(), mtime);
         } catch (Exception e) {
-            log.warn("无法读取文件修改时间，回退当前时间：{}", f.getName(), e);
+            log.warn(I18n.msg("log.batchprocessor.01", f.getName()), e);
             return new MhtFileInfo(f.getAbsolutePath(), f.getName(), LocalDateTime.now());
         }
     }
@@ -232,7 +231,7 @@ public abstract class BatchProcessor {
             try {
                 progressCallback.onProgress(current, total, fileName, subProgress);
             } catch (Exception e) {
-                log.warn("进度回调异常：{}", e.getMessage(), e);
+                log.warn(I18n.msg("log.batchprocessor.02", e.getMessage()), e);
             }
         }
     }

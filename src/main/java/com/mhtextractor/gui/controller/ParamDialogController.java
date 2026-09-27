@@ -3,6 +3,7 @@ package com.mhtextractor.gui.controller;
 import atlantafx.base.controls.ToggleSwitch;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.config.ConfigManager;
+import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.i18n.ErrorCode;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.ParamScope;
@@ -12,19 +13,19 @@ import javafx.fxml.FXMLLoader;
 import javafx.geometry.HorizontalDirection;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
-import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.TitledPane;
 import javafx.scene.control.Tooltip;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import lombok.extern.slf4j.Slf4j;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 
 import java.io.IOException;
 import java.util.List;
@@ -141,7 +142,11 @@ public class ParamDialogController {
 
         Stage stage = new Stage();
         stage.setTitle(I18n.get("dialog.title"));
-        stage.setScene(new Scene(root));
+        // 会话 19：本窗口也要装卸载点 —— 提醒必须落在自己窗口里，不能跑到主窗口后面
+        StackPane shell = new StackPane(root);
+        Scene scene = new Scene(shell);
+        NotificationHost.install(scene, shell);
+        stage.setScene(scene);
         stage.setWidth(640);
         stage.setHeight(620);
         stage.setMinWidth(520);
@@ -331,10 +336,10 @@ public class ParamDialogController {
                 configManager.saveConfig(name, getResult());
                 refreshConfigList();
                 configComboBox.getSelectionModel().select(name);
-                log.info("配置已保存：{}", name);
+                log.info(I18n.msg("log.paramdialogcontroller.01", name));
             } catch (Exception e) {
-                log.error("保存配置失败", e);
-                showAlert(Alert.AlertType.ERROR, ErrorCode.CONFIG_SAVE_FAILED.message());
+                log.error(I18n.msg("log.paramdialogcontroller.02"), e);
+                NotificationHost.error(configComboBox, ErrorCode.CONFIG_SAVE_FAILED.message(), FontAwesomeSolid.SAVE);
             }
         });
     }
@@ -343,7 +348,7 @@ public class ParamDialogController {
     private void onLoadConfig() {
         String selected = configComboBox.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, ErrorCode.CONFIG_SELECT_TO_LOAD.message());
+            NotificationHost.toastWarning(configComboBox, ErrorCode.CONFIG_SELECT_TO_LOAD.message(), FontAwesomeSolid.HAND_POINTER);
             return;
         }
         try {
@@ -360,10 +365,10 @@ public class ParamDialogController {
                 toggleTitleSettings();
                 updateTitleExtractTooltip();
             }
-            log.info("配置已加载（需点击\"确定\"生效）：{}", selected);
+            log.info(I18n.msg("log.paramdialogcontroller.03", selected));
         } catch (Exception e) {
-            log.error("加载配置失败", e);
-            showAlert(Alert.AlertType.ERROR, ErrorCode.CONFIG_LOAD_FAILED.message());
+            log.error(I18n.msg("log.paramdialogcontroller.04"), e);
+            NotificationHost.error(configComboBox, ErrorCode.CONFIG_LOAD_FAILED.message(), FontAwesomeSolid.FILE_DOWNLOAD);
         }
     }
 
@@ -371,23 +376,23 @@ public class ParamDialogController {
     private void onDeleteConfig() {
         String selected = configComboBox.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, ErrorCode.CONFIG_SELECT_TO_DELETE.message());
+            NotificationHost.toastWarning(configComboBox, ErrorCode.CONFIG_SELECT_TO_DELETE.message(), FontAwesomeSolid.HAND_POINTER);
             return;
         }
-        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
-                ErrorCode.CONFIG_DELETE_CONFIRM.message("name", selected));
-        confirm.showAndWait().ifPresent(response -> {
-            if (response == ButtonType.OK) {
-                try {
-                    configManager.deleteConfig(selected);
-                    refreshConfigList();
-                    log.info("配置已删除：{}", selected);
-                } catch (Exception e) {
-                    log.error("删除配置失败", e);
-                    showAlert(Alert.AlertType.ERROR, ErrorCode.CONFIG_DELETE_FAILED.message());
-                }
-            }
-        });
+        NotificationHost.confirm(configComboBox,
+                ErrorCode.CONFIG_DELETE_CONFIRM.message("name", selected), FontAwesomeSolid.TRASH_ALT, ok -> {
+                    if (!ok) {
+                        return;
+                    }
+                    try {
+                        configManager.deleteConfig(selected);
+                        refreshConfigList();
+                        log.info(I18n.msg("log.paramdialogcontroller.05", selected));
+                    } catch (Exception e) {
+                        log.error(I18n.msg("log.paramdialogcontroller.06"), e);
+                        NotificationHost.error(configComboBox, ErrorCode.CONFIG_DELETE_FAILED.message(), FontAwesomeSolid.TRASH_ALT);
+                    }
+                });
     }
 
     private void refreshConfigList() {
@@ -472,15 +477,13 @@ public class ParamDialogController {
         }
     }
 
-    /** 高速内存模式确认弹窗 */
+    /** 高速内存模式确认（会话 19：本窗口内居中确认卡片，取代嵌套模态 Alert） */
     private void onHighSpeedMemoryChanged() {
         if (highSpeedMemoryCheck.isSelected()) {
-            Alert alert = new Alert(Alert.AlertType.WARNING);
-            alert.setTitle(I18n.get("dialog.highSpeedMemory"));
-            alert.setHeaderText(I18n.get("dialog.highSpeedConfirmTitle"));
-            alert.setContentText(I18n.get("dialog.highSpeedConfirmMsg"));
-            alert.showAndWait().ifPresent(response -> {
-                if (response != ButtonType.OK) {
+            String msg = I18n.get("dialog.highSpeedConfirmTitle") + "\n"
+                    + I18n.get("dialog.highSpeedConfirmMsg");
+            NotificationHost.confirm(highSpeedMemoryCheck, msg, FontAwesomeSolid.MEMORY, ok -> {
+                if (!ok) {
                     highSpeedMemoryCheck.setSelected(false);
                 }
             });
@@ -503,12 +506,5 @@ public class ParamDialogController {
 
         startTemplateField.setOnKeyPressed(enterHandler);
         endTemplateField.setOnKeyPressed(enterHandler);
-    }
-
-    // ==================== 辅助 ====================
-
-    private void showAlert(Alert.AlertType type, String message) {
-        Alert alert = new Alert(type, message, ButtonType.OK);
-        alert.showAndWait();
     }
 }

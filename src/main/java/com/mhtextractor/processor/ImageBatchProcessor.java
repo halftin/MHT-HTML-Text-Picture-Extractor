@@ -81,14 +81,14 @@ public class ImageBatchProcessor extends BatchProcessor {
         stats.setStartTime(System.currentTimeMillis());
 
         log.info("========================================");
-        log.info("MHT 批量图片处理开始");
-        log.info("输入文件夹：{}", config.getInputFolder());
-        log.info("输出文件夹：{}", outputFolder);
+        log.info(I18n.msg("log.imagebatchprocessor.01"));
+        log.info(I18n.msg("log.imagebatchprocessor.02", config.getInputFolder()));
+        log.info(I18n.msg("log.imagebatchprocessor.03", outputFolder));
         logImageConfigInfo();
         log.info("========================================");
 
         if (!FileUtils.ensureDirectory(outputFolder)) {
-            log.error("无法创建输出目录：{}", outputFolder);
+            log.error(I18n.msg("log.imagebatchprocessor.04", outputFolder));
             stats.setEndTime(System.currentTimeMillis());
             return stats;
         }
@@ -96,12 +96,12 @@ public class ImageBatchProcessor extends BatchProcessor {
         stats.setTotalFiles(orderedFiles.size());
 
         if (orderedFiles.isEmpty()) {
-            log.warn("[警告] 未找到任何 MHT 文件");
+            log.warn(I18n.msg("log.imagebatchprocessor.05"));
             stats.setEndTime(System.currentTimeMillis());
             return stats;
         }
 
-        log.info("找到 {} 个 MHT 文件", orderedFiles.size());
+        log.info(I18n.msg("log.imagebatchprocessor.06", orderedFiles.size()));
         log.info("========================================");
 
         MimeParser mimeParser = new MimeParser();
@@ -118,14 +118,14 @@ public class ImageBatchProcessor extends BatchProcessor {
     private ProcessStats processWithPreload(List<MhtFileInfo> mhtFiles, String outputFolder,
                                              String mergedOutputName, MimeParser mimeParser,
                                              ProcessStats stats) {
-        log.info("高速内存模式：正在预加载所有 MHT 文件到内存...");
+        log.info(I18n.msg("log.imagebatchprocessor.07"));
 
         PreloadResult preload = preloadAll(mhtFiles, mimeParser);
         if (preload.parsedList().isEmpty()) {
-            log.warn("无法从任何 MHT 文件中提取内容（各文件结果见下方处理明细）");
+            log.warn(I18n.msg("log.imagebatchprocessor.08"));
         }
 
-        log.info("所有文件已加载到内存（{} 个文件），开始处理...", preload.parsedList().size());
+        log.info(I18n.msg("log.imagebatchprocessor.09", preload.parsedList().size()));
         log.info("========================================");
 
         ParsedMhtProvider provider = new PreloadedProvider(preload.parsedList(), preload.loadFailures());
@@ -155,11 +155,11 @@ public class ImageBatchProcessor extends BatchProcessor {
         for (int i = 0; i < mhtFiles.size(); i++) {
             MhtFileInfo fileInfo = mhtFiles.get(i);
             if (isCancelled()) {
-                log.info("用户取消处理，已加载 {} / {} 个文件", i, mhtFiles.size());
+                log.info(I18n.msg("log.imagebatchprocessor.10", i, mhtFiles.size()));
                 break;
             }
             try {
-                log.info("[解析] {}", fileInfo.getName());
+                log.info(I18n.msg("log.imagebatchprocessor.11", fileInfo.getName()));
                 final int idx = i + 1;
                 final String name = fileInfo.getName();
                 fireProgress(idx, mhtFiles.size(), name, 0.05);
@@ -170,13 +170,13 @@ public class ImageBatchProcessor extends BatchProcessor {
                     fireProgress(idx, mhtFiles.size(), name, 0.35);
                     parsedList.add(new ParsedFileEntry(parsed, i));
                     fireProgress(idx, mhtFiles.size(), name, 0.5);
-                    log.info("已加载：{}", name);
+                    log.info(I18n.msg("log.imagebatchprocessor.12", name));
                 } else {
                     // 不在此记录结果：统一由 processUnified 记录（GUI 按路径取最后一条，双记录会互相覆盖）
-                    log.warn("文件 {} 无法解析，跳过", name);
+                    log.warn(I18n.msg("log.imagebatchprocessor.13", name));
                 }
             } catch (Exception e) {
-                log.error("加载 MHT 文件 {} 失败: {}", fileInfo.getName(), e.getMessage(), e);
+                log.error(I18n.msg("log.imagebatchprocessor.14", fileInfo.getName(), e.getMessage()), e);
                 loadFailures.put(i, e.getMessage() == null ? I18n.get("extract.unknownError") : e.getMessage());
             } finally {
                 fireProgress(i + 1, mhtFiles.size(), fileInfo.getName(), 1.0);
@@ -196,7 +196,7 @@ public class ImageBatchProcessor extends BatchProcessor {
             try {
                 firstParsed = mimeParser.parse(mhtFiles.getFirst().getPath(), recursionContinueCallback, null, null);
             } catch (Exception e) {
-                log.warn("预解析第一个文件失败: {}", e.getMessage(), e);
+                log.warn(I18n.msg("log.imagebatchprocessor.15", e.getMessage()), e);
             }
 
             var handler = new MergedOutputHandler();
@@ -206,7 +206,7 @@ public class ImageBatchProcessor extends BatchProcessor {
             return processUnified(mhtFiles, outputFolder, provider, handler, stats, 0.35, 0.25,
                     mergedNameWarning);
         } else {
-            log.info("流式单独输出模式：共 {} 个文件待处理", mhtFiles.size());
+            log.info(I18n.msg("log.imagebatchprocessor.16", mhtFiles.size()));
             log.info("========================================");
             var handler = new SeparateOutputHandler(outputFolder);
             var provider = new StreamingProvider(mimeParser, mhtFiles, null);
@@ -237,7 +237,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                     stats.incrementWarn();
                     stats.addWarnDetail(I18n.get("extract.fileWarned",
                             "file", mhtFiles.getFirst().getName(), "message", nameWarning));
-                    log.warn("[警告] 未从第一个文件提取到标题，使用默认名称：{}", folderName);
+                    log.warn(I18n.msg("log.imagebatchprocessor.17", folderName));
                 }
             }
         }
@@ -245,8 +245,8 @@ public class ImageBatchProcessor extends BatchProcessor {
         FileUtils.ensureDirectory(mergedDir);
         handler.init(mergedDir, folderName);
 
-        log.info("合并输出模式：所有图片合并到目录: {}", mergedDir);
-        log.info("共 {} 个文件待处理", mhtFiles.size());
+        log.info(I18n.msg("log.imagebatchprocessor.18", mergedDir));
+        log.info(I18n.msg("log.imagebatchprocessor.19", mhtFiles.size()));
         log.info("========================================");
         return nameWarning;
     }
@@ -263,7 +263,7 @@ public class ImageBatchProcessor extends BatchProcessor {
         for (int i = 0; i < total; i++) {
             MhtFileInfo fileInfo = mhtFiles.get(i);
             if (isCancelled()) {
-                log.info("用户取消处理，已处理 {} / {} 个文件", i, total);
+                log.info(I18n.msg("log.imagebatchprocessor.20", i, total));
                 break;
             }
 
@@ -272,7 +272,7 @@ public class ImageBatchProcessor extends BatchProcessor {
 
             try {
                 log.info("----------------------------------------");
-                log.info("[处理] [{}/{}] {}", idx, total, name);
+                log.info(I18n.msg("log.imagebatchprocessor.21", idx, total, name));
 
                 // —— 会话 10：逐文件查预览缓存（P3 按文件、非按输出单元）。
                 // 命中 → 跳过解析与图片提取，直接以 DirectoryImageSource 产出；
@@ -297,8 +297,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                 List<String> fileWarnings;
 
                 if (hit != null) {
-                    log.info("[缓存命中] {}（跳过解析与图片提取，复用 {} 张）",
-                            name, hit.meta().images().size());
+                    log.info(I18n.msg("log.imagebatchprocessor.22", name, hit.meta().images().size()));
                     fireProgress(idx, total, name, extractionBaseProgress);
                     imageSource = new DirectoryImageSource(hit.meta(),
                             previewCache.store().dirFor(hit.key()));
@@ -311,7 +310,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                     }
                 } else {
                     if (parsed == null || parsed.getHtmlContent() == null) {
-                        log.warn("文件 {} 无法解析，跳过", name);
+                        log.warn(I18n.msg("log.imagebatchprocessor.13", name));
                         stats.incrementSkip();
                         stats.addSkipDetail(I18n.get("extract.fileSkippedUnparseable", "file", name));
                         recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
@@ -327,7 +326,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                     // 现补上 Data URI 判据，只有三者皆空才真正跳过。
                     if (parsed.getCidMap().isEmpty() && parsed.getLocationDataMap().isEmpty()
                             && !hasDataUriImages(parsed.getHtmlContent())) {
-                        log.info("[跳过] 无图片内容：{}", name);
+                        log.info(I18n.msg("log.imagebatchprocessor.24", name));
                         stats.incrementSkip();
                         stats.addSkipDetail(I18n.get("extract.fileSkippedNoImages", "file", name));
                         recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
@@ -350,7 +349,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                     reportExtractorWarnings(name, imageExtractor, stats);
 
                     if (images.isEmpty()) {
-                        log.info("[跳过] 未提取到图片：{}", name);
+                        log.info(I18n.msg("log.imagebatchprocessor.25", name));
                         stats.incrementSkip();
                         stats.addSkipDetail(I18n.get("extract.fileSkippedNoExtracted", "file", name));
                         recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
@@ -359,7 +358,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                         continue;
                     }
 
-                    log.info("[提取] {} 共 {} 张图片", name, images.size());
+                    log.info(I18n.msg("log.imagebatchprocessor.26", name, images.size()));
 
                     // 提取标题（单独模式需要用于目录命名）
                     if (config.isEnableNameExtraction()) {
@@ -386,14 +385,14 @@ public class ImageBatchProcessor extends BatchProcessor {
                     stats.incrementFail();
                     stats.addFailDetail(I18n.get("extract.fileFailed", "file", name, "reason", failReason));
                     recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, failReason, fileWarnings);
-                    log.error("[失败] {}：{}", name, failReason);
+                    log.error(I18n.msg("log.imagebatchprocessor.27", name, failReason));
                 }
 
             } catch (Exception e) {
                 stats.incrementFail();
                 stats.addFailDetail(I18n.get("extract.fileFailed", "file", name, "reason", e.getMessage()));
                 recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, e.getMessage(), List.of());
-                log.error("[异常] 处理文件失败：{}", name, e);
+                log.error(I18n.msg("log.imagebatchprocessor.28", name), e);
             } finally {
                 fireProgress(idx, total, name, 1.0);
             }
@@ -408,7 +407,7 @@ public class ImageBatchProcessor extends BatchProcessor {
 
         if (config.isSingleOutputMode()) {
             log.info("========================================");
-            log.info("所有文件处理完毕，共提取 {} 张图片", totalImageCount);
+            log.info(I18n.msg("log.imagebatchprocessor.29", totalImageCount));
         }
 
         stats.setEndTime(System.currentTimeMillis());
@@ -448,7 +447,7 @@ public class ImageBatchProcessor extends BatchProcessor {
         public MimeParser.ParsedMht provide(int index) {
             String failure = loadFailures.get(index);
             if (failure != null) {
-                throw new RuntimeException("加载 MHT 文件失败: " + failure);
+                throw new RuntimeException(I18n.get("error.LOAD_MHT_FAILED", "reason", failure));
             }
             return byFileIndex.get(index);
         }
@@ -476,7 +475,7 @@ public class ImageBatchProcessor extends BatchProcessor {
             MhtFileInfo fi = files.get(index);
             final int idx = index + 1;
             final String name = fi.getName();
-            log.info("[解析] {}", name);
+            log.info(I18n.msg("log.imagebatchprocessor.11", name));
             fireProgress(idx, files.size(), name, 0.05);
             return parser.parse(fi.getPath(), recursionContinueCallback,
                     stage -> fireParsingProgress(idx, files.size(), name, stage),
@@ -518,10 +517,9 @@ public class ImageBatchProcessor extends BatchProcessor {
 
             fireProgress(fi + 1, totalFiles, fn, 0.9);
             if (saved > 0) {
-                log.info("[成功] {} → 合并目录 ({} 张，累计 {} 张)",
-                        fn, saved, globalIndex.get() - 1);
+                log.info(I18n.msg("log.imagebatchprocessor.31", fn, saved, globalIndex.get() - 1));
             } else {
-                log.warn("[失败] {} → 合并目录：{} 张图片全部写入失败", fn, imageCount);
+                log.warn(I18n.msg("log.imagebatchprocessor.32", fn, imageCount));
             }
             return saved;
         }
@@ -531,7 +529,7 @@ public class ImageBatchProcessor extends BatchProcessor {
             if (!archiveMergedOutput(mergedDir, folderName, outputFolder)) {
                 stats.incrementFail();
                 stats.addFailDetail(I18n.get("extract.archiveFailedKeep", "dir", mergedDir));
-                log.error("[归档] 合并输出归档失败，图片保留在目录：{}", mergedDir);
+                log.error(I18n.msg("log.imagebatchprocessor.33", mergedDir));
             }
         }
     }
@@ -569,15 +567,15 @@ public class ImageBatchProcessor extends BatchProcessor {
                     });
             fireProgress(idx, totalFiles, name, 0.85);
             if (saved > 0) {
-                log.info("[成功] {} → {} ({} 张)", name, fileOutputDir, saved);
+                log.info(I18n.msg("log.imagebatchprocessor.34", name, fileOutputDir, saved));
             } else {
-                log.warn("[失败] {} → {}：{} 张图片全部写入失败", name, fileOutputDir, imageCount);
+                log.warn(I18n.msg("log.imagebatchprocessor.35", name, fileOutputDir, imageCount));
             }
 
             // 逐文件 ZIP/CBZ 打包（由全局配置决定）；失败则保留源目录并抛异常 → processUnified 记 FAILED
             if (!archiveWithCleanup(fileOutputDir, outputFolder, baseName,
                     idx, totalFiles, name, 0.85, 0.05, 0.05)) {
-                throw new RuntimeException(String.format("图片归档失败，图片保留在目录：%s", fileOutputDir));
+                throw new RuntimeException(I18n.get("extract.fileArchiveFailedKeep", "dir", fileOutputDir));
             }
             fireProgress(idx, totalFiles, name, 0.95);
 
@@ -635,7 +633,7 @@ public class ImageBatchProcessor extends BatchProcessor {
             key = PreviewCacheKey.compute(Path.of(fileInfo.getPath()),
                     config.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
         } catch (IOException e) {
-            log.warn("[缓存] 计算缓存键失败，按未命中处理：{}（{}）", fileInfo.getName(), e.getMessage());
+            log.warn(I18n.msg("log.imagebatchprocessor.36", fileInfo.getName(), e.getMessage()));
             return null;
         }
         try {
@@ -647,13 +645,12 @@ public class ImageBatchProcessor extends BatchProcessor {
             boolean reusable = !m.images().isEmpty()
                     && m.images().stream().anyMatch(e -> e.sourceId() != null && !e.sourceId().isEmpty());
             if (!reusable) {
-                log.info("[缓存] 缓存不含可复现的图片（0 张或全 data URI），按未命中处理：{}",
-                        fileInfo.getName());
+                log.info(I18n.msg("log.imagebatchprocessor.37", fileInfo.getName()));
                 return null;
             }
             return new CacheHit(key, m);
         } catch (IOException e) {
-            log.warn("[缓存] 读取预览缓存失败，按未命中处理：{}（{}）", fileInfo.getName(), e.getMessage());
+            log.warn(I18n.msg("log.imagebatchprocessor.38", fileInfo.getName(), e.getMessage()));
             return null;
         }
     }
@@ -663,26 +660,26 @@ public class ImageBatchProcessor extends BatchProcessor {
 
     private void logImageConfigInfo() {
         if (config.isEnableNameExtraction()) {
-            log.info("图片名称提取：已启用");
-            log.info("  起始标记：{}", config.getImageNameStartMarker());
-            log.info("  结束标记：{}", config.getImageNameEndMarker());
+            log.info(I18n.msg("log.imagebatchprocessor.39"));
+            log.info(I18n.msg("log.imagebatchprocessor.40", config.getImageNameStartMarker()));
+            log.info(I18n.msg("log.imagebatchprocessor.41", config.getImageNameEndMarker()));
         }
         if (config.isEnableRegionExtraction()) {
-            log.info("图片区域限定：已启用");
-            log.info("  起始标记：{}", config.getImageRegionStartMarker());
-            log.info("  结束标记：{}", config.getImageRegionEndMarker());
+            log.info(I18n.msg("log.imagebatchprocessor.42"));
+            log.info(I18n.msg("log.imagebatchprocessor.40", config.getImageRegionStartMarker()));
+            log.info(I18n.msg("log.imagebatchprocessor.41", config.getImageRegionEndMarker()));
         }
         if (config.isEnableBatchRenaming()) {
-            log.info("批量重命名：已启用");
+            log.info(I18n.msg("log.imagebatchprocessor.45"));
         }
         if (config.isEnableZipPackaging()) {
-            log.info("ZIP 打包：已启用");
+            log.info(I18n.msg("log.imagebatchprocessor.46"));
         }
         if (config.isEnableCbzPackaging()) {
-            log.info("CBZ 打包：已启用");
+            log.info(I18n.msg("log.imagebatchprocessor.47"));
         }
         if (config.isHighSpeedMemoryMode()) {
-            log.info("高速内存模式：已启用");
+            log.info(I18n.msg("log.imagebatchprocessor.48"));
         }
     }
 
@@ -703,7 +700,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                 return SanitizeUtils.sanitize(extractedTitle);
             }
         } catch (Exception e) {
-            log.warn("从第一个文件提取标题失败: {}", e.getMessage(), e);
+            log.warn(I18n.msg("log.imagebatchprocessor.49", e.getMessage()), e);
         }
         return null;
     }
@@ -734,7 +731,7 @@ public class ImageBatchProcessor extends BatchProcessor {
         int childCount = children == null ? 0 : children.length;
         if (childCount == 0) {
             FileUtils.deleteDirectory(dir);
-            log.info("归档目录为空，已删除空目录：{}", sourceDir);
+            log.info(I18n.msg("log.imagebatchprocessor.50", sourceDir));
             return true;
         }
         boolean zipOk = true;
@@ -745,7 +742,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                     fireProgress(fileIdx, totalFiles, fileName,
                             zipBase + zipRange * ((double) count / childCount));
                 } else {
-                    log.debug("ZIP 打包进度：{}/{}", count, childCount);
+                    log.debug(I18n.msg("log.imagebatchprocessor.51", count, childCount));
                 }
             });
         }
@@ -755,16 +752,16 @@ public class ImageBatchProcessor extends BatchProcessor {
                     fireProgress(fileIdx, totalFiles, fileName,
                             zipBase + zipRange + cbzRange * ((double) count / childCount));
                 } else {
-                    log.debug("CBZ 打包进度：{}/{}", count, childCount);
+                    log.debug(I18n.msg("log.imagebatchprocessor.52", count, childCount));
                 }
             });
         }
         if (!zipOk || !cbzOk) {
-            log.error("[归档] 归档失败（zip={}, cbz={}），保留源目录不删除：{}", zipOk, cbzOk, sourceDir);
+            log.error(I18n.msg("log.imagebatchprocessor.53", zipOk, cbzOk, sourceDir));
             return false;
         }
         FileUtils.deleteDirectory(dir);
-        log.info("已删除临时文件夹：{}", sourceDir);
+        log.info(I18n.msg("log.imagebatchprocessor.54", sourceDir));
         return true;
     }
 }

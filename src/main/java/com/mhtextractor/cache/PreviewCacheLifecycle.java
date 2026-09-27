@@ -1,5 +1,6 @@
 package com.mhtextractor.cache;
 
+import com.mhtextractor.i18n.I18n;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -113,7 +114,7 @@ public class PreviewCacheLifecycle {
                 }
             }
         } catch (IOException e) {
-            log.warn("扫描缓存键失败（存在 meta 损坏目录时可能发生），本次跳过删除：{}", e.getMessage());
+            log.warn(I18n.msg("log.previewcachelifecycle.01", e.getMessage()));
         }
         logIfDeleted(deleted);
         return deleted;
@@ -127,7 +128,7 @@ public class PreviewCacheLifecycle {
         try {
             store.deleteAll();
         } catch (IOException e) {
-            log.warn("退出清空预览缓存失败：{}", e.getMessage());
+            log.warn(I18n.msg("log.previewcachelifecycle.02", e.getMessage()));
         }
         afterCleared.run();
     }
@@ -137,7 +138,7 @@ public class PreviewCacheLifecycle {
         try {
             return store.cleanupOrphans();
         } catch (IOException e) {
-            log.warn("启动清理预览缓存孤儿失败：{}", e.getMessage());
+            log.warn(I18n.msg("log.previewcachelifecycle.03", e.getMessage()));
             return 0;
         }
     }
@@ -160,7 +161,7 @@ public class PreviewCacheLifecycle {
         try {
             total = store.totalBytes();
         } catch (IOException e) {
-            log.warn("统计预览缓存磁盘占用失败，跳过提醒：{}", e.getMessage());
+            log.warn(I18n.msg("log.previewcachelifecycle.04", e.getMessage()));
             return;
         }
         long currentStep = total / sizeAlertStepBytes;
@@ -176,8 +177,7 @@ public class PreviewCacheLifecycle {
 
     private void fireSizeAlert(int step, long totalBytes) {
         long stepGiB = step * sizeAlertStepBytes / (1024L * 1024 * 1024);
-        log.warn("预览缓存磁盘占用提醒：已超过 {} GiB（当前 {} GiB，{}）。仅提醒、不限制使用；关闭程序将自动清空缓存。",
-                stepGiB, String.format("%.1f", totalBytes / (1024.0 * 1024 * 1024)), store.root());
+        log.warn(I18n.msg("log.previewcachelifecycle.05", stepGiB, String.format("%.1f", totalBytes / (1024.0 * 1024 * 1024)), store.root()));
         IntConsumer hook = sizeAlertHook;
         if (hook != null) {
             hook.accept(step);
@@ -207,14 +207,14 @@ public class PreviewCacheLifecycle {
         try {
             return store.delete(key) ? 1 : 0;
         } catch (IOException e) {
-            log.warn("删除缓存目录失败：{}（{}）", store.dirFor(key), e.getMessage());
+            log.warn(I18n.msg("log.previewcachelifecycle.06", store.dirFor(key), e.getMessage()));
             return 0;
         }
     }
 
     private void logIfDeleted(int deleted) {
         if (deleted > 0) {
-            log.info("预览缓存已删除 {} 个目录（{}）", deleted, store.root());
+            log.info(I18n.msg("log.previewcachelifecycle.07", deleted, store.root()));
         }
     }
 

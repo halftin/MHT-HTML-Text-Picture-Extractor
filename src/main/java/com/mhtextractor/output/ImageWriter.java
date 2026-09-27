@@ -2,6 +2,7 @@ package com.mhtextractor.output;
 
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.ImageSource;
+import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.SanitizeUtils;
 import lombok.extern.slf4j.Slf4j;
 
@@ -46,10 +47,10 @@ public class ImageWriter {
         try {
             dest = writeWithoutOverwrite(dest, imageData.getData(), ext, rename);
             finalFileName = dest.getName();
-            log.debug("[图片] 已保存：{}", finalFileName);
+            log.debug(I18n.msg("log.imagewriter.01", finalFileName));
             return finalFileName;
         } catch (IOException e) {
-            log.error("[图片] 保存失败：{}", finalFileName, e);
+            log.error(I18n.msg("log.imagewriter.02", finalFileName), e);
             return null;
         }
     }

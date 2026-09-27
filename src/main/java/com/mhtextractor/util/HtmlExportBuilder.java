@@ -71,7 +71,7 @@ public final class HtmlExportBuilder {
 
             // 缓存命中：完成标记存在且页面文件在 → 直接复用
             if (Files.exists(dir.resolve(COMPLETE_MARKER)) && Files.exists(htmlFile)) {
-                log.info("浏览器查看页缓存命中：{}", htmlFile);
+                log.info(I18n.msg("log.htmlexportbuilder.01", htmlFile));
                 return new ExportResult(true, htmlFile, countImages(dir), List.of(), null);
             }
 
@@ -87,13 +87,12 @@ public final class HtmlExportBuilder {
 
             Files.writeString(htmlFile, finalHtml, StandardCharsets.UTF_8);
             Files.createFile(dir.resolve(COMPLETE_MARKER));
-            log.info("已生成浏览器查看页：{}（原始 HTML {} 字符，图片 {} 张）",
-                    htmlFile, finalHtml.length(), countImages(dir));
+            log.info(I18n.msg("log.htmlexportbuilder.02", htmlFile, finalHtml.length(), countImages(dir)));
 
             pruneOldDirs(root, dir);
             return new ExportResult(true, htmlFile, countImages(dir), warnings, null);
         } catch (Exception e) {
-            log.error("导出浏览器查看页失败：{}", mhtPath, e);
+            log.error(I18n.msg("log.htmlexportbuilder.03", mhtPath), e);
             return ExportResult.failure(I18n.get("browser.exportFailed", "reason", e.getMessage()));
         }
     }
@@ -286,16 +285,16 @@ public final class HtmlExportBuilder {
                     }
                     try {
                         if (Files.getLastModifiedTime(sibling).toMillis() < cutoff) {
-                            log.debug("清理过期浏览器查看缓存目录：{}", sibling);
+                            log.debug(I18n.msg("log.htmlexportbuilder.04", sibling));
                             FileUtils.deleteDirectory(sibling.toFile());
                         }
                     } catch (Exception e) {
-                        log.debug("清理缓存目录失败（忽略）：{}", sibling, e);
+                        log.debug(I18n.msg("log.htmlexportbuilder.05", sibling), e);
                     }
                 }
             }
         } catch (Exception e) {
-            log.debug("扫描浏览器查看缓存根目录失败（忽略）：{}", root, e);
+            log.debug(I18n.msg("log.htmlexportbuilder.06", root), e);
         }
     }
 }

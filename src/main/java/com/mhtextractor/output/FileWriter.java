@@ -1,5 +1,6 @@
 package com.mhtextractor.output;
 
+import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.FileUtils;
 import lombok.extern.slf4j.Slf4j;
 
@@ -26,7 +27,7 @@ public class FileWriter {
                                            String startTemplate, String endTemplate,
                                            String chapterName) {
         if (text == null || text.trim().isEmpty()) {
-            log.info("[跳过] 内容为空：{}", sourceFileName);
+            log.info(I18n.msg("log.filewriter.01", sourceFileName));
             return false;
         }
 
@@ -47,12 +48,11 @@ public class FileWriter {
             String endContent = processTemplate(endTemplate, sourceFileName, fileTime);
             writer.write(endContent);
 
-            log.info("[成功] 已写入：{}{}", sourceFileName,
-                    chapterName != null ? " (" + chapterName + ")" : "");
+            log.info(I18n.msg("log.filewriter.02", sourceFileName, chapterName != null ? " (" + chapterName + ")" : ""));
             return true;
 
         } catch (IOException e) {
-            log.error("[失败] 写入文件异常：{}", sourceFileName, e);
+            log.error(I18n.msg("log.filewriter.03", sourceFileName), e);
             return false;
         }
     }
@@ -63,7 +63,7 @@ public class FileWriter {
     public static boolean createOrClearFile(String outputPath) {
         boolean ok = FileUtils.createOrClearFile(outputPath);
         if (ok) {
-            log.info("[初始化] 输出文件已创建：{}", outputPath);
+            log.info(I18n.msg("log.filewriter.04", outputPath));
         }
         return ok;
     }

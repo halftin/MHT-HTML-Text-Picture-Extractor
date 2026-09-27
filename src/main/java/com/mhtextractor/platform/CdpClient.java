@@ -1,5 +1,6 @@
 package com.mhtextractor.platform;
 
+import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.ByteArrayOutputStream;
@@ -98,7 +99,7 @@ final class CdpClient {
             }
             return checkTabSlow(viewSourceUrl) == TabState.EXISTS;
         }
-        log.warn("CDP 端点长时间无响应，标签状态无法确认，按已打开处理（避免回退页双窗口）");
+        log.warn(I18n.msg("log.cdpclient.01"));
         return true;
     }
 
@@ -144,9 +145,9 @@ final class CdpClient {
                 return;
             }
             httpRequest("GET", "/json/close/" + list.substring(idStart, idEnd));
-            log.info("已关闭渲染标签页（保留源码标签）");
+            log.info(I18n.msg("log.cdpclient.02"));
         } catch (Exception e) {
-            log.debug("关闭渲染标签页失败（忽略）：{}", e.getMessage());
+            log.debug(I18n.msg("log.cdpclient.03", e.getMessage()));
         }
     }
 
@@ -176,7 +177,7 @@ final class CdpClient {
                 return false;
             }
         }
-        log.warn("CDP 调试端点 {} 未在 15 秒内就绪，回退源码页", CdpClient.CDP_PORT);
+        log.warn(I18n.msg("log.cdpclient.04", CdpClient.CDP_PORT));
         return false;
     }
 
@@ -207,7 +208,7 @@ final class CdpClient {
                     "--no-first-run",
                     initialUrl).start();
         } catch (IOException e) {
-            log.warn("启动 CDP 调试实例失败：{}", e.getMessage());
+            log.warn(I18n.msg("log.cdpclient.05", e.getMessage()));
         }
     }
 
@@ -240,13 +241,13 @@ final class CdpClient {
             }
             String cmd = BrowserDetector.decodeConsole(wp.getInputStream().readAllBytes());
             if (!cmd.contains(profile)) {
-                log.debug("端口 {} 的占用进程非本应用调试实例，不结束", CdpClient.CDP_PORT);
+                log.debug(I18n.msg("log.cdpclient.06", CdpClient.CDP_PORT));
                 return;
             }
-            log.info("结束挂起的 CDP 调试实例（PID {}）以便重启", pid);
+            log.info(I18n.msg("log.cdpclient.07", pid));
             new ProcessBuilder("taskkill", "/PID", pid, "/T", "/F").start();
         } catch (Exception e) {
-            log.debug("结束挂起调试实例失败（忽略）：{}", e.getMessage());
+            log.debug(I18n.msg("log.cdpclient.08", e.getMessage()));
         }
     }
 

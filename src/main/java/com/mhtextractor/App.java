@@ -3,12 +3,15 @@ package com.mhtextractor;
 import atlantafx.base.theme.NordLight;
 import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
+import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.i18n.I18n;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.layout.StackPane;
 import javafx.geometry.Rectangle2D;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
@@ -36,7 +39,7 @@ public class App extends Application {
     public void start(Stage primaryStage) throws IOException {
         // 全局未捕获异常处理器 — 将异常输出到控制台和日志
         Thread.currentThread().setUncaughtExceptionHandler((t, e) -> {
-            log.error("未捕获异常 [{}]: {}", t.getName(), e.getMessage(), e);
+            log.error(I18n.msg("log.app.01", t.getName(), e.getMessage()), e);
             System.err.println("FATAL: " + e.getMessage());
             e.printStackTrace();
         });
@@ -52,7 +55,14 @@ public class App extends Application {
 
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/mhtextractor/gui/view/MainView.fxml"));
         loader.setResources(I18n.bundle());
-        Scene scene = new Scene(loader.load());
+        // 会话 19：场景根外包一层 StackPane，供 NotificationHost 挂"右上角 toast + 居中提醒"两层
+        //（取代模态 Alert；两条图层的 z 序与鼠标穿透见 NotificationHost 的类说明）
+        // ⚠️ 必须先落到 Parent 局部变量再传：直接写 new StackPane(loader.load()) 会被推断成
+        //    StackPane(Node...) 变参重载（load() 推成 Node[]），运行时 ClassCastException（实测踩过）。
+        Parent root = loader.load();
+        StackPane shell = new StackPane(root);
+        Scene scene = new Scene(shell);
+        NotificationHost.install(scene, shell);
         CONTROLLER = loader.getController();
 
         // 引入 AtlantaFX Nord Light 主题
@@ -124,7 +134,7 @@ public class App extends Application {
             c.getMethod(method).invoke(driver);
             return true;
         } catch (Throwable t) {
-            log.error("FeatureExercise.{} 调用失败（测试类不在 classpath 或执行出错）", method, t);
+            log.error(I18n.msg("log.app.02", method), t);
             return false;
         }
     }

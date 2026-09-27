@@ -2,6 +2,7 @@ package com.mhtextractor.extractor;
 
 import com.mhtextractor.core.ContentExtractor;
 import com.mhtextractor.core.MimeParser;
+import com.mhtextractor.i18n.I18n;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,7 +23,7 @@ public class TextExtractor extends BaseExtractor {
     public String extractText(boolean autoFixEncoding,
                               String startMarker, String endMarker, boolean useRegex) {
         if (parsedMht.getHtmlContent() == null) {
-            logger.warn("HTML内容为空，无法提取文本");
+            logger.warn(I18n.msg("log.textextractor.01"));
             return null;
         }
         ContentExtractor contentExtractor = new ContentExtractor();

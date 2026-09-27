@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
@@ -36,7 +37,7 @@ public class ConfigManager {
         try {
             Files.createDirectories(Path.of(CONFIG_DIR));
         } catch (IOException e) {
-            log.warn("创建配置目录失败（{}）：{}，后续保存配置可能失败", CONFIG_DIR, e.getMessage());
+            log.warn(I18n.msg("log.configmanager.01", CONFIG_DIR, e.getMessage()));
         }
     }
 

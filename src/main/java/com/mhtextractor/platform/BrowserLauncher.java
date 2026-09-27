@@ -66,10 +66,10 @@ public final class BrowserLauncher {
         String viewSourceUrl = "view-source:" + renderUrl;
         if (CdpClient.openTabAndVerify(viewSourceUrl)) {
             CdpClient.closeRenderTab(renderUrl);
-            log.info("已通过 CDP 打开原生源码查看器：{}", viewSourceUrl);
+            log.info(I18n.msg("log.browserlauncher.01", viewSourceUrl));
             return true;
         }
-        log.warn("CDP 打开源码查看器失败，回退源码页");
+        log.warn(I18n.msg("log.browserlauncher.02"));
         return false;
     }
 
@@ -97,10 +97,10 @@ public final class BrowserLauncher {
     private static boolean runExe(String exe, String url) {
         try {
             new ProcessBuilder(exe, url).start();
-            log.info("已启动浏览器：{} {}", exe, url);
+            log.info(I18n.msg("log.browserlauncher.03", exe, url));
             return true;
         } catch (IOException e) {
-            log.warn("直接启动浏览器失败：{}", exe, e);
+            log.warn(I18n.msg("log.browserlauncher.04", exe), e);
             return false;
         }
     }
@@ -109,10 +109,10 @@ public final class BrowserLauncher {
     private static boolean cmdStart(String url) {
         try {
             new ProcessBuilder("cmd", "/c", "start \"\" \"" + url + "\"").start();
-            log.info("已通过 cmd start 打开：{}", url);
+            log.info(I18n.msg("log.browserlauncher.05", url));
             return true;
         } catch (IOException e) {
-            log.warn("cmd start 打开失败：{}", url, e);
+            log.warn(I18n.msg("log.browserlauncher.06", url), e);
             return false;
         }
     }
@@ -132,10 +132,10 @@ public final class BrowserLauncher {
     private static boolean shellExecute(String url) {
         try {
             new ProcessBuilder("rundll32", "url.dll,FileProtocolHandler", url).start();
-            log.info("已通过 ShellExecute 打开：{}", url);
+            log.info(I18n.msg("log.browserlauncher.07", url));
             return true;
         } catch (Exception e) {
-            log.warn("ShellExecute 打开失败：{}", url, e);
+            log.warn(I18n.msg("log.browserlauncher.08", url), e);
             return false;
         }
     }

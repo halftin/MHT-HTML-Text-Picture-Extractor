@@ -39,7 +39,51 @@ public final class I18n {
     private static volatile ResourceBundle bundle = load(Locale.getDefault());
     private static volatile Locale current = Locale.getDefault();
 
+    /**
+     * {@link #msg} 的重入护栏。
+     *
+     * <p><b>为什么需要</b>：{@code I18n} 自身的诊断日志（如 {@code log.i18n.01} 缺键）
+     * 也走 {@link #msg}。若该日志键本身缺失，{@code msg → get → log.error → msg} 会无限递归。
+     * 置位期间再次进入直接返回键名，递归被截断为"日志打印键名"这一无害退化。</p>
+     */
+    private static final ThreadLocal<Boolean> IN_MSG = ThreadLocal.withInitial(() -> Boolean.FALSE);
+
     private I18n() {
+    }
+
+    /**
+     * 日志文案入口：占位符为<b>位置索引</b> {@code {0}} {@code {1}} …（{@code log.*} 调用点专用）。
+     *
+     * <p>与 {@link #get(String, Object...)} 的具名占位符同一渲染引擎（{@code \w+} 本就覆盖数字），
+     * 只是把 varargs 由"交替键值对"改写为"按位置取值"，让日志调用点保持
+     * {@code log.info(I18n.msg("log.x", a, b))} 的简短形态。</p>
+     *
+     * @param key  bundle 键（约定前缀 {@code log.}）
+     * @param args 按位置对应 {@code {0}} / {@code {1}} … 的值
+     * @return 替换后的文案；缺键返回 {@code !key!}
+     */
+    public static String msg(String key, Object... args) {
+        if (Boolean.TRUE.equals(IN_MSG.get())) {
+            return key;
+        }
+        IN_MSG.set(Boolean.TRUE);
+        try {
+            if (args.length == 0) {
+                return get(key);
+            }
+            Object[] pairs = new Object[args.length * 2];
+            for (int i = 0; i < args.length; i++) {
+                pairs[i * 2] = String.valueOf(i);
+                // 必须先 String.valueOf：get() 用 "值为 null" 表示"占位符缺参"并保留 {n} 原样，
+                // 而日志实参为 null 是常态（如 config.getInputFolder() 未设置）。
+                // logback 的 {} 遇到 null 打印 "null"，此处保持同一语义 ——
+                // 否则会退化成把模板里的 {0} 原样打进日志。
+                pairs[i * 2 + 1] = String.valueOf(args[i]);
+            }
+            return get(key, pairs);
+        } finally {
+            IN_MSG.set(Boolean.FALSE);
+        }
     }
 
     /**
@@ -54,7 +98,7 @@ public final class I18n {
         try {
             template = bundle.getString(key);
         } catch (MissingResourceException e) {
-            log.error("i18n 缺键：{}", key);
+            log.error(I18n.msg("log.i18n.01", key));
             return "!" + key + "!";
         }
         return render(key, template, args);
@@ -108,7 +152,7 @@ public final class I18n {
         try {
             return ResourceBundle.getBundle(BASE_NAME, locale);
         } catch (MissingResourceException e) {
-            log.warn("i18n bundle 缺失（{}），回退 zh_CN", locale);
+            log.warn(I18n.msg("log.i18n.02", locale));
             return ResourceBundle.getBundle(BASE_NAME, Locale.SIMPLIFIED_CHINESE);
         }
     }
@@ -124,7 +168,7 @@ public final class I18n {
             }
         }
         if ((args.length & 1) == 1) {
-            log.warn("i18n 占位符参数为奇数个，忽略末尾键（键 {}）：{}", key, args[args.length - 1]);
+            log.warn(I18n.msg("log.i18n.03", key, args[args.length - 1]));
         }
         Matcher m = PLACEHOLDER.matcher(template);
         StringBuilder sb = new StringBuilder();
@@ -144,7 +188,7 @@ public final class I18n {
         }
         m.appendTail(sb);
         if (missing != null) {
-            log.warn("i18n 占位符缺参（键 {}，占位符 {}），已保留原样", key, missing);
+            log.warn(I18n.msg("log.i18n.04", key, missing));
         }
         return sb.toString();
     }

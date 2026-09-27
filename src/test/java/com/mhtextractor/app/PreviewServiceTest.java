@@ -89,6 +89,14 @@ class PreviewServiceTest {
             assertFalse(t.coreName() == null || t.coreName().isBlank(), "coreName 不应为空");
         }
 
+        // 预览区「点击查看」的定位口径：store.imageFileFor(meta, i) 必须等于 imagesDir/meta.images[i].file
+        // —— 缩略图正是从后者解码的；点开若指向别处即为串图（GUI 只按下标调用，不认识目录布局）
+        for (int i = 0; i < first.meta().images().size(); i++) {
+            assertEquals(first.imagesDir().resolve(first.meta().images().get(i).file()),
+                    svc.lifecycle().store().imageFileFor(first.meta(), i),
+                    "点击查看定位到的缓存图片必须与缩略图来源一致（下标 " + i + "）");
+        }
+
         // 第二次：命中（不重新解析）—— meta 应与首次一致
         PreviewService.PreviewResult second = svc.ensureCached(mht, params, null);
         assertNotNull(second);

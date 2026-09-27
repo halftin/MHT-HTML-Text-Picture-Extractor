@@ -1,5 +1,6 @@
 package com.mhtextractor.util;
 
+import com.mhtextractor.i18n.I18n;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,13 +26,13 @@ public class FileUtils {
     public static List<File> findMhtFiles(String folderPath) {
         File dir = new File(folderPath);
         if (!dir.exists() || !dir.isDirectory()) {
-            logger.warn("输入目录不存在：{}", folderPath);
+            logger.warn(I18n.msg("log.fileutils.01", folderPath));
             return List.of();
         }
 
         File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".mht") || name.toLowerCase().endsWith(".mhtml"));
         if (files == null || files.length == 0) {
-            logger.warn("目录中未找到 .mht 文件：{}", folderPath);
+            logger.warn(I18n.msg("log.fileutils.02", folderPath));
             return List.of();
         }
 
@@ -56,7 +57,7 @@ public class FileUtils {
             }
             return file.createNewFile();
         } catch (IOException e) {
-            logger.error("创建/清空文件失败：{}", path, e);
+            logger.error(I18n.msg("log.fileutils.03", path), e);
             return false;
         }
     }

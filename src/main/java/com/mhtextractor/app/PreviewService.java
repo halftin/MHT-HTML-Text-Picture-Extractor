@@ -7,6 +7,7 @@ import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.ImageExtractor;
+import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.ThumbnailData;
 import com.mhtextractor.output.ImageWriter;
 import com.mhtextractor.util.SanitizeUtils;
@@ -111,16 +112,16 @@ public final class PreviewService {
         try {
             Optional<PreviewCacheMeta> hit = previewCache.store().load(cacheKey);
             if (hit.isPresent()) {
-                log.info("预览缓存命中：{}", mht.getFileName());
+                log.info(I18n.msg("log.previewservice.01", mht.getFileName()));
                 return hit.get();
             }
         } catch (IOException e) {
             // 有 .complete 但 meta 反序列化失败：删目录重建，否则同 key 下反复报错无法恢复
-            log.warn("预览缓存元数据损坏，删除重建：{}（{}）", cacheKey.toDirName(), e.getMessage());
+            log.warn(I18n.msg("log.previewservice.02", cacheKey.toDirName(), e.getMessage()));
             try {
                 previewCache.store().delete(cacheKey);
             } catch (IOException del) {
-                log.warn("删除损坏缓存失败：{}", del.getMessage());
+                log.warn(I18n.msg("log.previewservice.03", del.getMessage()));
             }
         }
         return rebuild(mht, params, cacheKey, cancelled);
@@ -161,7 +162,7 @@ public final class PreviewService {
                 Files.write(imagesDir.resolve(plainNames.get(i)), images.get(i).getData());
             }
         });
-        log.info("预览图片已落盘缓存：{}（{} 张）", mht.getFileName(), images.size());
+        log.info(I18n.msg("log.previewservice.04", mht.getFileName(), images.size()));
         // 写盘成功后检查磁盘占用台阶（命中路径不触发；检查在每项目写锁内，见 H12 取舍）
         previewCache.checkSizeAlert();
         return meta;

@@ -444,7 +444,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
                     ok = ctl.dropHandled;
                 }
             } catch (Exception ex) {
-                log.warn("拖拽排序失败：{}", ex.getMessage(), ex);
+                log.warn(I18n.msg("log.previewlistcell.01", ex.getMessage()), ex);
             }
             e.setDropCompleted(ok);
             e.consume();

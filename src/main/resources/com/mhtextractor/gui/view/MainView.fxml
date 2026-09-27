@@ -54,9 +54,9 @@
             <!-- 输入/输出目录 -->
             <GridPane hgap="10" vgap="8">
                 <columnConstraints>
-                    <ColumnConstraints minWidth="80" prefWidth="80"/>
+                    <ColumnConstraints minWidth="80"/>
                     <ColumnConstraints hgrow="ALWAYS" minWidth="200"/>
-                    <ColumnConstraints minWidth="100" prefWidth="100"/>
+                    <ColumnConstraints minWidth="100"/>
                 </columnConstraints>
 
                 <Label text="%main.inputDir" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
@@ -107,8 +107,14 @@
                     <Pane fx:id="dragOverlay" mouseTransparent="true"/>
                 </StackPane>
 
-                <!-- 按钮行：撤销 / 合并为组 / 拆分组 / 移除 / 清除参数 / 将参数应用到全局 / 查看HTML源码（顺序固定；合并为组阶段 4、拆分组阶段 6 启用） -->
-                <HBox spacing="10" alignment="CENTER_LEFT">
+                <!-- 按钮行：撤销 / 合并为组 / 拆分组 / 移除 / 清除参数 / 将参数应用到全局 / 查看HTML源码
+                     （顺序固定；合并为组阶段 4、拆分组阶段 6 启用）
+                     ⚠️ 容器必须是可换行的 FlowPane 而不是 HBox：英文文案比中文长得多
+                     （实测 en_US 下 7 个按钮的 pref 宽度合计 1093px，而 #中栏最小可用宽度约 645px），
+                     HBox 只能把各按钮压到 pref 之下 → 文本被省略号截断，且窗口全屏也救不回来
+                     （左右两栏都是 hgrow=ALWAYS，中栏永远拿不到全部富余宽度）。
+                     FlowPane 在宽度不足时换行，按钮始终以 pref 宽度绘制，任何语言/窗口宽度都不截断。 -->
+                <FlowPane hgap="10" vgap="6" alignment="CENTER_LEFT">
                     <padding>
                         <Insets top="4" right="10" bottom="2" left="10"/>
                     </padding>
@@ -147,19 +153,22 @@
                             <FontIcon iconLiteral="fas-code" iconSize="14"/>
                         </graphic>
                     </Button>
-                </HBox>
+                </FlowPane>
             </VBox>
             <VBox spacing="10" HBox.hgrow="ALWAYS" prefWidth="400">
                 <padding>
                     <Insets top="0" right="16" bottom="0" left="0"/>
                 </padding>
 
-                <!-- 模式/文件计数/提取参数设置按钮 -->
+                <!-- 模式/文件计数/提取参数设置按钮
+                     minWidth="-Infinity" = USE_PREF_SIZE：这些文本在英文下明显更长，
+                     不锁住就会被 HBox 压缩到 pref 之下并显示省略号；富余/缺口交给中间的 Region 吸收。 -->
                 <HBox spacing="10" alignment="CENTER_LEFT">
-                    <Label fx:id="modeLabel" text="%main.modeLabel"/>
-                    <Label fx:id="fileCountLabel" text="%main.fileCountZero"/>
+                    <Label fx:id="modeLabel" text="%main.modeLabel" minWidth="-Infinity"/>
+                    <Label fx:id="fileCountLabel" text="%main.fileCountZero" minWidth="-Infinity"/>
                     <Region HBox.hgrow="ALWAYS"/>
-                    <Button fx:id="paramSettingsButton" text="%main.paramSettings" onAction="#onParamSettings">
+                    <Button fx:id="paramSettingsButton" text="%main.paramSettings" onAction="#onParamSettings"
+                            minWidth="-Infinity">
                         <graphic>
                             <FontIcon iconLiteral="fas-sliders-h" iconSize="14"/>
                         </graphic>

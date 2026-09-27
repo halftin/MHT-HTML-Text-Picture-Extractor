@@ -95,7 +95,7 @@ public class ImageExtractor extends BaseExtractor {
         // 有区域限定：解析失败则中止该文件的区域限定提取，不静默放行区域外图片
         if (orderedImageRefs == null) {
             String msg = I18n.get("extract.areaImageRefFailed");
-            logger.warn("[警告] {}", msg);
+            logger.warn(I18n.msg("log.imageextractor.01", msg));
             lastWarnings.add(msg);
             if (progressCallback != null) progressCallback.accept(1.0);
             return Collections.emptyList();
@@ -154,7 +154,7 @@ public class ImageExtractor extends BaseExtractor {
             // 过滤广告图片（null/空标识符保留：无法判定为广告）
             if (isAdImage(cid)) {
                 String msg = I18n.get("extract.adFiltered", "name", cid);
-                logger.warn("[警告] {}", msg);
+                logger.warn(I18n.msg("log.imageextractor.01", msg));
                 lastWarnings.add(msg);
                 continue;
             }
@@ -228,7 +228,7 @@ public class ImageExtractor extends BaseExtractor {
                 }
             }
         } catch (Exception e) {
-            logger.warn("解析HTML图片引用失败：{}", e.getMessage(), e);
+            logger.warn(I18n.msg("log.imageextractor.03", e.getMessage()), e);
             return null;
         }
         return refs;
@@ -295,7 +295,7 @@ public class ImageExtractor extends BaseExtractor {
                 || contentLimitStart.isEmpty() || contentLimitEnd.isEmpty()) return html;
         String result = HtmlUtils.extractRegion(html, contentLimitStart, contentLimitEnd, lastWarnings);
         if (result == null) {
-            logger.warn("[警告] {}", lastWarnings.getLast());
+            logger.warn(I18n.msg("log.imageextractor.01", lastWarnings.getLast()));
         }
         return result;
     }
@@ -341,7 +341,7 @@ public class ImageExtractor extends BaseExtractor {
                 }
             }
         } catch (Exception e) {
-            logger.debug("提取Data URI图片失败：{}", e.getMessage(), e);
+            logger.debug(I18n.msg("log.imageextractor.05", e.getMessage()), e);
         }
     }
 

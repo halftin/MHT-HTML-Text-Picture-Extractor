@@ -2,6 +2,7 @@ package com.mhtextractor.config;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
@@ -36,7 +37,7 @@ public class GuiStateManager {
         try {
             return objectMapper.readValue(file, GuiState.class);
         } catch (IOException e) {
-            log.warn("GUI 状态文件读取失败，按默认状态启动：{}", e.getMessage());
+            log.warn(I18n.msg("log.guistatemanager.01", e.getMessage()));
             return null;
         }
     }
@@ -48,14 +49,14 @@ public class GuiStateManager {
     /** 保存到指定目录（单元测试用） */
     static void save(GuiState state, File dir) {
         if (!dir.exists() && !dir.mkdirs()) {
-            log.warn("无法创建 GUI 状态目录：{}", dir.getAbsolutePath());
+            log.warn(I18n.msg("log.guistatemanager.02", dir.getAbsolutePath()));
             return;
         }
         try {
             objectMapper.writerWithDefaultPrettyPrinter()
                     .writeValue(new File(dir, STATE_FILE), state);
         } catch (IOException e) {
-            log.warn("GUI 状态保存失败：{}", e.getMessage());
+            log.warn(I18n.msg("log.guistatemanager.03", e.getMessage()));
         }
     }
 }

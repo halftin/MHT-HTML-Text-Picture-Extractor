@@ -1,5 +1,6 @@
 package com.mhtextractor.output;
 
+import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.*;
@@ -29,13 +30,13 @@ public class Archiver {
                                          IntConsumer progressCallback) {
         File dir = new File(sourceDir);
         if (!dir.exists() || !dir.isDirectory()) {
-            log.error("[归档] 目录不存在：{}", sourceDir);
+            log.error(I18n.msg("log.archiver.01", sourceDir));
             return false;
         }
 
         File[] files = dir.listFiles();
         if (files == null || files.length == 0) {
-            log.warn("[归档] 目录为空，跳过：{}", sourceDir);
+            log.warn(I18n.msg("log.archiver.02", sourceDir));
             return false;
         }
 
@@ -44,7 +45,7 @@ public class Archiver {
             if (file.isFile()) totalFiles++;
         }
         if (totalFiles == 0) {
-            log.warn("[归档] 目录中没有文件，跳过：{}", sourceDir);
+            log.warn(I18n.msg("log.archiver.03", sourceDir));
             return false;
         }
 
@@ -69,15 +70,15 @@ public class Archiver {
                         progressCallback.accept(processed);
                     }
                 } else {
-                    log.warn("[归档] 跳过子目录：{}", file.getName());
+                    log.warn(I18n.msg("log.archiver.04", file.getName()));
                 }
             }
 
-            log.info("[归档] {} 创建成功：{} ({} 个文件)", format.toUpperCase(), outputPath, totalFiles);
+            log.info(I18n.msg("log.archiver.05", format.toUpperCase(), outputPath, totalFiles));
             return true;
 
         } catch (IOException e) {
-            log.error("[归档] {} 创建失败：{}", format.toUpperCase(), outputPath, e);
+            log.error(I18n.msg("log.archiver.06", format.toUpperCase(), outputPath), e);
             deletePartialArchive(outputPath);
             return false;
         }
@@ -92,10 +93,10 @@ public class Archiver {
             Path path = Paths.get(outputPath);
             if (Files.isRegularFile(path)) {
                 Files.deleteIfExists(path);
-                log.warn("[归档] 已删除不完整的归档文件：{}", outputPath);
+                log.warn(I18n.msg("log.archiver.07", outputPath));
             }
         } catch (IOException e) {
-            log.warn("[归档] 清理不完整归档失败：{}", outputPath, e);
+            log.warn(I18n.msg("log.archiver.08", outputPath), e);
         }
     }
 

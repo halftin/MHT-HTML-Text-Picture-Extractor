@@ -56,6 +56,23 @@ class ChapterGeneratorTest {
         assertEquals("Chapter 6", ChapterGenerator.generateChapterName(5));
     }
 
+    /**
+     * 无对应 bundle 的 locale（ja/ko/fr…）仍必须是 {@code Chapter N}。
+     *
+     * <p><b>为什么单独立断言</b>：{@code ResourceBundle} 在找不到 {@code messages_ja} 时会回退到
+     * <b>JVM 默认语言</b>的 bundle（本机 = zh_CN），于是 {@code I18n.get("core.chapter.prefix")}
+     * 会返回 {@code "第"}。西文策略若借用该键，ja 用户就会拿到 {@code "第3"} ——
+     * 这是 15C 引入策略化以来"非 zh ⇒ Chapter N"契约的静默破功。
+     * 西文前缀因此单列一键（{@code core.chapter.westernPrefix}，两份 bundle 同为 {@code "Chapter "}）。</p>
+     */
+    @Test
+    void localeWithoutBundleStillUsesWesternPrefix() {
+        I18n.setLocale(Locale.JAPANESE);
+        assertEquals("Chapter 3", ChapterGenerator.generateChapterName(2));
+        I18n.setLocale(Locale.FRENCH);
+        assertEquals("Chapter 7", ChapterGenerator.generateChapterName(6));
+    }
+
     @Test
     void negativeIndexThrows() {
         assertThrows(IllegalArgumentException.class, () -> ChapterGenerator.generateChapterName(-1));

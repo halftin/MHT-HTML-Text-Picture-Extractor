@@ -36,8 +36,8 @@ public class TextBatchProcessor extends BatchProcessor {
     public ProcessStats processMerged(List<MhtFileInfo> orderedFiles, String outputTxtPath,
                                       ProgressCallback callback, Map<String, PerFileOverrides> overrides) {
         this.progressCallback = callback;
-        ProcessStats stats = initStats("合并模式", config.getInputFolder());
-        log.info("输出文件：{}", outputTxtPath);
+        ProcessStats stats = initStats(I18n.get("extract.mergedMode"), config.getInputFolder());
+        log.info(I18n.msg("log.textbatchprocessor.01", outputTxtPath));
         logConfigInfo();
         log.info("========================================");
 
@@ -55,14 +55,14 @@ public class TextBatchProcessor extends BatchProcessor {
     public ProcessStats processSeparate(List<MhtFileInfo> orderedFiles, String outputFolder,
                                         ProgressCallback callback, Map<String, PerFileOverrides> overrides) {
         this.progressCallback = callback;
-        ProcessStats stats = initStats("单独输出模式", config.getInputFolder());
-        log.info("输出文件夹：{}", outputFolder);
+        ProcessStats stats = initStats(I18n.get("extract.separateMode"), config.getInputFolder());
+        log.info(I18n.msg("log.textbatchprocessor.02", outputFolder));
         logConfigInfo();
         log.info("========================================");
 
         File outDir = new File(outputFolder);
         if (!outDir.exists() || !outDir.isDirectory()) {
-            log.error("输出文件夹不存在：{}", outputFolder);
+            log.error(I18n.msg("log.textbatchprocessor.03", outputFolder));
             stats.setEndTime(System.currentTimeMillis());
             return stats;
         }
@@ -83,7 +83,7 @@ public class TextBatchProcessor extends BatchProcessor {
                         }
                     }
                 } catch (Exception e) {
-                    log.debug("提取标题失败（文件名回退原名）：{}", e.getMessage(), e);
+                    log.debug(I18n.msg("log.textbatchprocessor.04", e.getMessage()), e);
                 }
             }
             return Paths.get(outputFolder, base + ".txt").toString();
@@ -102,12 +102,12 @@ public class TextBatchProcessor extends BatchProcessor {
         stats.setTotalFiles(mhtFiles.size());
 
         if (mhtFiles.isEmpty()) {
-            log.warn("[警告] 未找到任何 MHT 文件");
+            log.warn(I18n.msg("log.textbatchprocessor.05"));
             stats.setEndTime(System.currentTimeMillis());
             return stats;
         }
 
-        log.info("找到 {} 个 MHT 文件", mhtFiles.size());
+        log.info(I18n.msg("log.textbatchprocessor.06", mhtFiles.size()));
         log.info("========================================");
 
         AtomicInteger chapterIndex = new AtomicInteger(1);
@@ -116,11 +116,11 @@ public class TextBatchProcessor extends BatchProcessor {
         for (int i = 0; i < mhtFiles.size(); i++) {
             MhtFileInfo fileInfo = mhtFiles.get(i);
             if (isCancelled()) {
-                log.info("用户取消处理，已处理 {} / {} 个文件", i, mhtFiles.size());
+                log.info(I18n.msg("log.textbatchprocessor.07", i, mhtFiles.size()));
                 break;
             }
             try {
-                log.info("[解析] {}", fileInfo.getName());
+                log.info(I18n.msg("log.textbatchprocessor.08", fileInfo.getName()));
                 final int idx = i + 1;
                 final String name = fileInfo.getName();
                 fireProgress(idx, mhtFiles.size(), name, 0.05);
@@ -132,7 +132,7 @@ public class TextBatchProcessor extends BatchProcessor {
                     stats.addSkipDetail(I18n.get("extract.fileSkippedUnparseable", "file", fileInfo.getName()));
                     recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
                             I18n.get("extract.reasonUnparseable"), List.of());
-                    log.info("[跳过] 无法解析：{}", fileInfo.getName());
+                    log.info(I18n.msg("log.textbatchprocessor.09", fileInfo.getName()));
                     fireProgress(idx, mhtFiles.size(), fileInfo.getName(), 1.0);
                     continue;
                 }
@@ -150,7 +150,7 @@ public class TextBatchProcessor extends BatchProcessor {
                     stats.addSkipDetail(I18n.get("extract.fileSkippedEmpty", "file", fileInfo.getName()));
                     recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
                             I18n.get("extract.reasonEmpty"), fileWarnings);
-                    log.info("[跳过] 内容为空：{}", fileInfo.getName());
+                    log.info(I18n.msg("log.textbatchprocessor.10", fileInfo.getName()));
                     fireProgress(idx, mhtFiles.size(), fileInfo.getName(), 1.0);
                     continue;
                 }
@@ -192,7 +192,7 @@ public class TextBatchProcessor extends BatchProcessor {
                 stats.addFailDetail(I18n.get("extract.fileFailed", "file", fileInfo.getName(),
                         "reason", e.getMessage()));
                 recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, e.getMessage(), List.of());
-                log.error("[异常] 处理文件失败：{}", fileInfo.getName(), e);
+                log.error(I18n.msg("log.textbatchprocessor.11", fileInfo.getName()), e);
             } finally {
                 fireProgress(i + 1, mhtFiles.size(), fileInfo.getName(), 1.0);
             }
@@ -207,8 +207,8 @@ public class TextBatchProcessor extends BatchProcessor {
         ProcessStats stats = new ProcessStats();
         stats.setStartTime(System.currentTimeMillis());
         log.info("========================================");
-        log.info("MHT 批量文本处理开始（{}）", mode);
-        log.info("输入文件夹：{}", inputFolder);
+        log.info(I18n.msg("log.textbatchprocessor.12", mode));
+        log.info(I18n.msg("log.textbatchprocessor.13", inputFolder));
         return stats;
     }
 
@@ -225,9 +225,9 @@ public class TextBatchProcessor extends BatchProcessor {
                 TextExtractor extractor = new TextExtractor(parsed);
                 extractedTitle = extractor.extractTitle(titleStart, titleEnd, config.isTitleUseRegex());
                 if (extractedTitle != null && !extractedTitle.isEmpty()) {
-                    log.info("[提取标题] {} → {}", fileName, extractedTitle);
+                    log.info(I18n.msg("log.textbatchprocessor.14", fileName, extractedTitle));
                 } else {
-                    log.warn("[警告] {} 未提取到标题（标记: {} ... {}）", fileName, titleStart, titleEnd);
+                    log.warn(I18n.msg("log.textbatchprocessor.15", fileName, titleStart, titleEnd));
                     stats.incrementWarn();
                     stats.addWarnDetail(I18n.get("extract.fileWarnedNoTitle",
                             "file", fileName, "start", titleStart, "end", titleEnd));
@@ -236,7 +236,7 @@ public class TextBatchProcessor extends BatchProcessor {
                     extractedTitle = null;
                 }
             } catch (Exception e) {
-                log.debug("提取标题失败：{}", e.getMessage(), e);
+                log.debug(I18n.msg("log.textbatchprocessor.16", e.getMessage()), e);
             }
         }
 
@@ -255,12 +255,12 @@ public class TextBatchProcessor extends BatchProcessor {
 
     private void logConfigInfo() {
         if (config.isAddChapterNumber()) {
-            log.info("自动章节名：已启用");
+            log.info(I18n.msg("log.textbatchprocessor.17"));
         }
         if (config.isEnableTitleExtraction()) {
-            log.info("隐藏标题提取：已启用");
-            log.info("  起始标记：{}", config.getTitleStartMarker());
-            log.info("  结束标记：{}", config.getTitleEndMarker());
+            log.info(I18n.msg("log.textbatchprocessor.18"));
+            log.info(I18n.msg("log.textbatchprocessor.19", config.getTitleStartMarker()));
+            log.info(I18n.msg("log.textbatchprocessor.20", config.getTitleEndMarker()));
         }
     }
 

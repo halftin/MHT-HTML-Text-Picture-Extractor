@@ -1,5 +1,7 @@
 package com.mhtextractor.util;
 
+import com.mhtextractor.i18n.I18n;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -86,10 +88,11 @@ public final class MhtImportPlanner {
 
         /** "N 个文件 / M 个组，忽略非 MHT X 个…" */
         public String summary() {
-            return String.format("%d 个文件 / %d 个组，忽略非 MHT %d 个，隐藏目录 %d 个，"
-                            + "空目录 %d 个，不可读 %d 个，超深 %d 个",
-                    fileCount(), groupCount(), ignoredNonMht, hiddenDirs,
-                    emptyDirs, unreadable, depthLimited);
+            return I18n.get("import.summaryFiles",
+                    "files", fileCount(), "groups", groupCount(),
+                    "ignored", ignoredNonMht, "hidden", hiddenDirs)
+                    + I18n.get("import.summaryDirs",
+                    "empty", emptyDirs, "unreadable", unreadable, "tooDeep", depthLimited);
         }
     }
 

@@ -1,5 +1,6 @@
 package com.mhtextractor.app;
 
+import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
@@ -257,7 +258,7 @@ public final class WorkspaceModel {
                     int i = topLevel.indexOf(pg);
                     topLevel.remove(pg);
                     if (i >= 0 && i < insertIdx) insertIdx--;
-                    log.info("组 {} 已无有效成员，自动销毁", pg.getName());
+                    log.info(I18n.msg("log.workspacemodel.01", pg.getName()));
                 }
             } else {
                 int i = topLevel.indexOf(t);
@@ -390,7 +391,7 @@ public final class WorkspaceModel {
                     destroyed.add(g);
                     destroyedIdx.add(i);
                     topLevel.remove(i);
-                    log.info("组 {} 已无有效成员，自动销毁", g.getName());
+                    log.info(I18n.msg("log.workspacemodel.01", g.getName()));
                 }
             }
         }
@@ -562,9 +563,9 @@ public final class WorkspaceModel {
 
     // ==================== 内部工具 ====================
 
-    /** 默认组名前缀（"组"，与 zh bundle 的 core.groupDefault 一致；en 为 "Group"） */
+    /** 默认组名前缀（zh "组" / en "Group"；产物命名属"产物本地化"，由 bundle 决定） */
     private String defaultGroupName() {
-        return "组";
+        return I18n.get("core.groupDefault");
     }
 
     /**

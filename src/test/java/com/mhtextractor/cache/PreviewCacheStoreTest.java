@@ -15,6 +15,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -299,6 +300,32 @@ class PreviewCacheStoreTest {
         assertTrue(Files.isRegularFile(dir.resolve("meta.json")));
         assertTrue(Files.isDirectory(dir.resolve("images")));
         assertArrayEquals(d1, Files.readAllBytes(dir.resolve("images/0001.png")));
+    }
+
+    // ---------- imageFileFor：预览区「点击查看」定位缓存图片（下标语义 + 越界安全） ----------
+
+    @Test
+    void imageFileForResolvesEachCachedImage() throws IOException {
+        PreviewCacheStore store = store();
+        Path file = mhtFile();
+        PreviewCacheKey key = keyFor(file);
+        byte[] d1 = "first".getBytes(StandardCharsets.UTF_8);
+        byte[] d2 = "second".getBytes(StandardCharsets.UTF_8);
+        Path dir = store.write(key, metaFor(key, List.of(
+                new PreviewCacheMeta.ImageEntry("images/0001.png", "cid:x", "a.png", "png", List.of()),
+                new PreviewCacheMeta.ImageEntry("images/0002.png", "cid:y", "b.png", "png", List.of()))),
+                imagesWriter(d1, d2));
+        PreviewCacheMeta meta = store.load(key).orElseThrow();
+
+        // 与写盘位置一致：key 由 meta 反推，调用方无需了解目录布局
+        assertEquals(dir.resolve("images/0001.png"), store.imageFileFor(meta, 0));
+        assertEquals(dir.resolve("images/0002.png"), store.imageFileFor(meta, 1));
+        assertArrayEquals(d2, Files.readAllBytes(store.imageFileFor(meta, 1)));
+
+        // 越界 / meta 为 null → null（调用方据此放弃，不抛异常）
+        assertNull(store.imageFileFor(meta, -1));
+        assertNull(store.imageFileFor(meta, 2));
+        assertNull(store.imageFileFor(null, 0));
     }
 
     // ---------- 并发：写入过程中删除（手工删缓存目录场景） ----------

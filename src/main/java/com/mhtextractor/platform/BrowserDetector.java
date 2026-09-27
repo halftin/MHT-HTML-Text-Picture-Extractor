@@ -1,5 +1,6 @@
 package com.mhtextractor.platform;
 
+import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;
@@ -66,7 +67,7 @@ final class BrowserDetector {
                 return Optional.of(found);
             }
         }
-        log.warn("未探测到系统默认浏览器 exe");
+        log.warn(I18n.msg("log.browserdetector.01"));
         return Optional.empty();
     }
 
@@ -94,7 +95,7 @@ final class BrowserDetector {
                 }
             }
         } catch (Exception e) {
-            log.debug("读取注册表失败：{}", "HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice", e);
+            log.debug(I18n.msg("log.browserdetector.02", "HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice"), e);
         }
         return null;
     }
@@ -125,7 +126,7 @@ final class BrowserDetector {
                 }
             }
         } catch (Exception e) {
-            log.debug("读取注册表默认命令失败：{}", key, e);
+            log.debug(I18n.msg("log.browserdetector.03", key), e);
         }
         return null;
     }
@@ -174,7 +175,7 @@ final class BrowserDetector {
             String first = out.lines().findFirst().orElse("").trim();
             return (!first.isEmpty() && Files.isRegularFile(Path.of(first))) ? first : null;
         } catch (Exception e) {
-            log.debug("where.exe 查询失败：{}", name, e);
+            log.debug(I18n.msg("log.browserdetector.04", name), e);
             return null;
         }
     }

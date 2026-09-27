@@ -27,7 +27,7 @@
                             <ToggleSwitch fx:id="enableTitleExtractCheck" text="%param.text.extractTitle"/>
                             <GridPane hgap="8" vgap="4">
                                 <columnConstraints>
-                                    <ColumnConstraints minWidth="100" prefWidth="100"/>
+                                    <ColumnConstraints minWidth="100"/>
                                     <ColumnConstraints hgrow="ALWAYS"/>
                                 </columnConstraints>
                                 <Label text="%param.text.titleStartMarker" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
@@ -45,7 +45,7 @@
                             <ToggleSwitch fx:id="enableLimitCheck" text="%param.text.areaEnable"/>
                             <GridPane hgap="8" vgap="4">
                                 <columnConstraints>
-                                    <ColumnConstraints minWidth="100" prefWidth="100"/>
+                                    <ColumnConstraints minWidth="100"/>
                                     <ColumnConstraints hgrow="ALWAYS"/>
                                 </columnConstraints>
                                 <Label text="%param.text.areaStartMarker" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
@@ -63,7 +63,7 @@
                             <ToggleSwitch fx:id="enableTemplateCheck" text="%param.text.templateEnable"/>
                             <GridPane hgap="8" vgap="4">
                                 <columnConstraints>
-                                    <ColumnConstraints minWidth="100" prefWidth="100"/>
+                                    <ColumnConstraints minWidth="100"/>
                                     <ColumnConstraints hgrow="ALWAYS"/>
                                 </columnConstraints>
                                 <Label text="%param.text.templateStart" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
@@ -71,7 +71,7 @@
                                 <Label text="%param.text.templateEnd" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
                                 <TextField fx:id="endTemplateField" promptText="&#10; ========== END ==========&#10; " GridPane.rowIndex="1" GridPane.columnIndex="1"/>
                             </GridPane>
-                            <Label text="%param.text.templateVars" styleClass="text-muted"/>
+                            <Label text="%param.text.templateVars" styleClass="text-muted" wrapText="true"/>
                         </VBox>
                     </TitledPane>
 
@@ -93,7 +93,7 @@
                             <ToggleSwitch fx:id="imageNameExtractCheck" text="%param.image.extractTitle"/>
                             <GridPane hgap="8" vgap="4">
                                 <columnConstraints>
-                                    <ColumnConstraints minWidth="100" prefWidth="100"/>
+                                    <ColumnConstraints minWidth="100"/>
                                     <ColumnConstraints hgrow="ALWAYS"/>
                                 </columnConstraints>
                                 <Label text="%param.image.titleStartMarker" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
@@ -110,7 +110,7 @@
                             <ToggleSwitch fx:id="imageRegionExtractCheck" text="%param.image.areaEnable"/>
                             <GridPane hgap="8" vgap="4">
                                 <columnConstraints>
-                                    <ColumnConstraints minWidth="100" prefWidth="100"/>
+                                    <ColumnConstraints minWidth="100"/>
                                     <ColumnConstraints hgrow="ALWAYS"/>
                                 </columnConstraints>
                                 <Label text="%param.image.areaStartMarker" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
@@ -157,7 +157,7 @@
 
             <HBox spacing="10" alignment="CENTER_LEFT">
                 <Label text="%param.config.label"/>
-                <ComboBox fx:id="configComboBox" prefWidth="180" promptText="%param.config.select"/>
+                <ComboBox fx:id="configComboBox" prefWidth="200" promptText="%param.config.select"/>
                 <Button text="%param.config.load" onAction="#onLoadConfig">
                     <tooltip>
                         <Tooltip text="%param.config.loadNote"/>

@@ -45,7 +45,7 @@ public class DirectoryImageSource implements ImageSource {
             // filename=原始文件名（提示名，非最终名，P13）、contentId=来源标识（cid/location/…）
             return new ImageExtractor.ImageData(entry.originalName(), entry.sourceId(), data);
         } catch (IOException e) {
-            throw new UncheckedIOException("读取缓存图片失败：" + cacheDir.resolve(entry.file()), e);
+            throw new UncheckedIOException("Failed to read cached image: " + cacheDir.resolve(entry.file()), e);
         }
     }
 
