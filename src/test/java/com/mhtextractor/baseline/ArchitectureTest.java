@@ -115,16 +115,19 @@ class ArchitectureTest {
      *       访问器）：4443</b>（+8，**不是新增职责**）。该批改动在提交前已于工作区完成，并通过
      *       GUI 自动化 zh 30/0 与 395/396 单测；其 +8 全部来自该批改动**自己引入**的 5 行 Lombok
      *       {@code @Getter/@Setter} 注解与 2 行 import（另 1 行为方法签名调整），
-     *       同期它还删除了 {@code showAlertNonModal} 等真死代码。此处同步到实测值以保证构建可
-     *       复现，**并在本任务的阶段 4 随 workspace 状态外迁一并收紧到远低于 4435**。
-     *       这是"只减不增"的**临时**让步，不是新的允许水位。</li>
+     *       同期它还删除了 {@code showAlertNonModal} 等真死代码。当时为让构建可复现而把上限同步到
+     *       实测值，并在 javadoc 中显式标注为**临时**让步。</li>
+     *   <li><b>同日晚，「WorkspaceModel 接入生产」阶段 1b/2 的减行把它收了回来：4396 → 上限回到
+     *       4435</b>。即那次临时让步只在"清理提交"这一个提交内存在，随后被真实的结构性减行
+     *      （模型共享数据序后删除重复的只读遍历、移除路径与拆分组逻辑）抵消并留出余量，
+     *      因此**上限已恢复到清理前的 4435，不再是 4443**。</li>
      * </ul>
      *
      * <p><b>⚠️ 口径陷阱（会话 18 实测）</b>：同一文件用不同工具数出的行数<b>不一致</b> ——
      * PowerShell {@code (Get-Content f).Count} 与 Java {@code Files.readAllLines} 会给出不同结果
      * （本文件为纯 {@code LF} 换行）。**因此本常量只能与 {@code Files.readAllLines} 口径比较**。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 4443;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 4435;
 
     /**
      * E0.6 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限。
