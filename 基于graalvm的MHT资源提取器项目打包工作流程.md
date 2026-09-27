@@ -3,7 +3,7 @@
 > **目标**: 将 JavaFX 25 + Maven 项目编译为 GraalVM Native Image 绿色免安装 Windows EXE。
 > **适用场景**: 从 Git 拉取代码后，在任何 Windows 设备上完成打包。
 > **最后更新**: 2026-09-26 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
-> **项目版本**: 以 `pom.xml` 的 `<version>` 为**唯一来源**（当前 `2.6-beta`）。所有构建脚本（`build-native.cmd` / `.ps1` / `.sh` / `run-native-image.bat`）均从 pom 动态读取，**禁止**在脚本里硬编码 jar 名（历史问题：曾写死 `mhtExtractor-2.3.1.jar` / `-2.2-SNAPSHOT.jar`，与 pom 不一致导致打包找不到 jar）。
+> **项目版本**: 以 `pom.xml` 的 `<version>` 为**唯一来源**（当前 `3.0.0`）。所有构建脚本（`build-native.cmd` / `.ps1` / `.sh` / `run-native-image.bat`）均从 pom 动态读取，**禁止**在脚本里硬编码 jar 名（历史问题：曾写死 `mhtExtractor-2.3.1.jar` / `-2.2-SNAPSHOT.jar`，与 pom 不一致导致打包找不到 jar）。
 
 > ## 📌 状态更新（2026-09-27 实测）—— **以脚本与 CLAUDE.md 为准**
 >
@@ -1550,9 +1550,9 @@ VERSION=$(grep -oP '<version>\K[^<]+' pom.xml | head -1 | sed 's/-SNAPSHOT//')
 echo "项目版本: $VERSION"
 ```
 
-输出示例: `2.6-beta`
+输出示例: `3.0.0`
 
-> **注意**: 上面用于**发行版目录/文件名**时才会剥离 `-SNAPSHOT`；用于定位 Maven 产物 jar 时必须保留原始版本（产物名为 `target/mhtExtractor-<version>.jar`，例如 `mhtExtractor-2.6-beta.jar`）。
+> **注意**: 上面用于**发行版目录/文件名**时才会剥离 `-SNAPSHOT`；用于定位 Maven 产物 jar 时必须保留原始版本（产物名为 `target/mhtExtractor-<version>.jar`，例如 `mhtExtractor-3.0.0.jar`）。
 
 ### 7.2 打包命令
 
