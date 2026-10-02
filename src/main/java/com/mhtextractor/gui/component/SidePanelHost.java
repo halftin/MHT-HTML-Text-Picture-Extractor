@@ -23,13 +23,23 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * 覆盖式侧边栏宿主（Q6a 的 R1 + R3 容器）：从主界面<b>右边框滑出</b>、只占主区宽度 50%、
- * 覆盖而非挤压主界面，因此主界面布局代码零改动（R1.1）。
+ * 覆盖式侧边栏宿主（Q6a 的 R1 + R3 容器；Q8b/R2 起支持<b>左</b>侧）：
+ * 从主界面左边框或右边框滑出、只占主区宽度 50%、覆盖而非挤压主界面，
+ * 因此主界面布局代码零改动（R1.1）。
+ *
+ * <h2>两侧是<b>两个独立面板节点</b>（Q8b / R3.1）</h2>
+ * <p>{@link #showRight} 与 {@link #showLeft} 各自拥有一个 {@link BorderPane}（各自的标题栏、
+ * 收起按钮、动画与逻辑开合状态），因此<b>可以同时展开</b>、各占 50%，
+ * 且各自的内容互不顶替（R3.1 的"并存"要求）。两者合起来会覆盖整个主界面 ——
+ * 那是需求组合的必然结果（R2.1 与 R1.1 都要 50%），已确认可接受。</p>
+ * <p>🚩 <b>不得</b>用一个"全尺寸透明容器"承载侧边栏（R3.3）：每个面板节点自身尺寸就是
+ * 主区 × 50%，靠 {@link StackPane#setAlignment} 贴到左边或右边；不展开时整节点不可见，
+ * 空区域不参与命中测试。</p>
  *
  * <h2>它不改变主界面布局，也不被主界面布局改变</h2>
  * <p>主界面根（{@code MainView.fxml} 的 {@code BorderPane}）被<b>原样</b>放进一个覆盖层
- * {@code StackPane}，侧边栏只是这个覆盖层的第二个子节点，靠 {@link StackPane#setAlignment}
- * 定位到右侧（R3.3）。主界面自己的 {@code top/center/bottom/left} 一个都没动，
+ * {@code StackPane}，侧边栏只是这个覆盖层的后续子节点，靠 {@link StackPane#setAlignment}
+ * 定位（R3.3）。主界面自己的 {@code top/center/bottom/left} 一个都没动，
  * 所以"覆盖式 ⇒ 布局代码零改动"是可核对的：{@code MainView.fxml} 与 {@code MainController}
  * 的布局代码都不参与侧边栏的布局。</p>
  *
@@ -38,25 +48,27 @@ import java.util.WeakHashMap;
  * 是把 toast 层与 {@code ModalPane} <b>追加</b>到 {@code shell} 的子节点末尾的
  * （后加入的兄弟节点盖住先加入的），所以任何"在 install 之后加进 shell"的节点都会盖住提醒层。
  * 这里的做法是：{@link #install(Parent)} 把主界面包进覆盖层并<b>返回</b>该覆盖层，
- * 由 {@code App.start()} 再把它包成 {@code shell} —— 于是侧边栏是覆盖层的<b>后代</b>，
+ * 由 {@code App.start()} 再把它包成 {@code shell} —— 于是两侧面板都是覆盖层的<b>后代</b>，
  * 而覆盖层是 {@code shell} 的<b>第一个</b>子节点，提醒两层永远在它之后。
  * 相对关系由父子结构决定，<b>后人往 shell 里追加层也不会破坏它</b>，也不需要（更不许）用
  * {@code toFront()} 去提权 —— 那正好会把侧边栏提到提醒层之上。</p>
  *
  * <h2>动画与裁剪（R3.4）</h2>
- * <p>滑出/滑入用 {@code translateX}（200ms）。节点越出父容器边界时 JavaFX 默认<b>不</b>裁剪，
+ * <p>滑出/滑入用 {@code translateX}（200ms）：右侧面板从 {@code +宽度} 滑到 0，
+ * 左侧面板从 {@code -宽度} 滑到 0。节点越出父容器边界时 JavaFX 默认<b>不</b>裁剪，
  * 所以覆盖层挂了随其尺寸绑定的 {@link Rectangle} clip：越出主区的部分不画出来。
- * 收起是"先播完动画再 {@code setVisible(false)}"，{@link #isRightShowing()} 返回的是
- * <b>逻辑</b>开合状态（与动画帧无关），供守卫与断言使用。</p>
+ * 收起是"先播完动画再 {@code setVisible(false)}"，{@link #isRightShowing()} /
+ * {@link #isLeftShowing()} 返回的是<b>逻辑</b>开合状态（与动画帧无关），供守卫与断言使用。</p>
  *
  * <h2>开合状态不持久化（R3.5）</h2>
- * <p>启动默认全部折叠：{@link #install(Parent)} 里侧边栏一上来就是不可见，不碰
+ * <p>启动默认全部折叠：{@link #install(Parent)} 里两侧面板一上来就是不可见，不碰
  * {@code GuiState} / {@code logs/gui-state.json}。</p>
  *
- * <h2>只有两个收起入口（R1.3）</h2>
- * <p>标题栏的线条图标按钮（R1.2）+ 面板内容里的「确认」按钮（由内容自己调
- * {@link #hideRight()}）。本类<b>不</b>给覆盖层挂"点击外部关闭"，所以点击主界面其它区域
- * 不会收起 —— 那正是 Q6b 的 R1.6/R1.7/R1.8 要处理的事（切换目标确认卡 / dirty 禁用开始 /
+ * <h2>收起入口（R1.3）</h2>
+ * <p>标题栏的线条图标按钮（R1.2；左侧为 {@code ANGLE_DOUBLE_LEFT}，R2.1）+
+ * 面板内容里的出口按钮（由内容自己调 {@link #hideRight()} / {@link #hideLeft()}）。
+ * 本类<b>不</b>给覆盖层挂"点击外部关闭"，所以点击主界面其它区域不会收起 ——
+ * 那正是 Q6b 的 R1.6/R1.7/R1.8 要处理的事（切换目标确认卡 / dirty 禁用开始 /
  * 收起前提示），接缝见 {@link #showRight(Node, String, Runnable)} 的 {@code onCollapse}。</p>
  */
 public final class SidePanelHost {
@@ -69,36 +81,81 @@ public final class SidePanelHost {
     private static final Map<Parent, SidePanelHost> HOSTS = new WeakHashMap<>();
 
     private final StackPane overlay;
-    private final BorderPane panel = new BorderPane();
-    private final Label titleLabel = new Label();
-    private final Button collapseButton = new Button();
+    /** 右侧面板（Q6a 的参数侧边栏；节点 id 保持 {@code sidePanel} 不变）。 */
+    private final Side right = new Side("sidePanel", "sidePanelCollapse",
+            Pos.CENTER_RIGHT, FontAwesomeSolid.ANGLE_DOUBLE_RIGHT, +1);
+    /** 左侧面板（Q8b 的 HTML 源码查看器，R2.1）。与右侧是两个独立节点（R3.1）。 */
+    private final Side left = new Side("sourceViewerPanel", "sourceViewerCollapse",
+            Pos.CENTER_LEFT, FontAwesomeSolid.ANGLE_DOUBLE_LEFT, -1);
 
-    private TranslateTransition slide;
-    /** 标题栏「收起」按钮的动作（null = 直接 {@link #hideRight()}）。 */
-    private Runnable onCollapse;
-    private boolean rightShowing;
+    private Duration slideDuration = SLIDE_DURATION;
+
+    /**
+     * 一侧面板的全部可变态。
+     *
+     * <p>{@code slideSign} 是这一侧"滑出方向"的符号：右侧面板在右侧，收起位置是
+     * {@code +translateX}；左侧面板在左侧，收起位置是 {@code -translateX}（R3.4）。</p>
+     */
+    private static final class Side {
+        private final String panelId;
+        private final String collapseId;
+        private final Pos alignment;
+        private final FontAwesomeSolid icon;
+        private final double slideSign;
+
+        private final BorderPane panel = new BorderPane();
+        private final Label titleLabel = new Label();
+        private final Button collapseButton = new Button();
+
+        private TranslateTransition slide;
+        /** 标题栏「收起」按钮的动作（null = 直接隐藏本侧）。 */
+        private Runnable onCollapse;
+        private boolean showing;
+
+        Side(String panelId, String collapseId, Pos alignment, FontAwesomeSolid icon, double slideSign) {
+            this.panelId = panelId;
+            this.collapseId = collapseId;
+            this.alignment = alignment;
+            this.icon = icon;
+            this.slideSign = slideSign;
+        }
+    }
 
     private SidePanelHost(StackPane overlay) {
         this.overlay = overlay;
+        initSide(right, false);
+        initSide(left, true);
+    }
 
-        panel.getStyleClass().add("side-panel");
+    /**
+     * 建一侧面板的标题栏与收起按钮。
+     *
+     * <p>收起按钮在<b>标题栏内侧</b>（两侧都是）：右侧面板的按钮贴右边缘（R1.2 的原样），
+     * 左侧面板的按钮也贴右边缘、图标朝左（R2.1）—— 视觉上"往面板贴着的那条边收回去"。</p>
+     */
+    private void initSide(Side side, boolean isLeft) {
+        side.panel.getStyleClass().add("side-panel");
         // 探针/自动化靠 id 找节点，不靠内部结构（见 tools/probes/SidePanelProbe.java）
-        panel.setId("sidePanel");
-        titleLabel.getStyleClass().add("title-3");
+        side.panel.setId(side.panelId);
+        side.titleLabel.getStyleClass().add("title-3");
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        collapseButton.setId("sidePanelCollapse");
-        collapseButton.getStyleClass().add("side-panel-collapse");
-        collapseButton.setGraphic(new FontIcon(FontAwesomeSolid.ANGLE_DOUBLE_RIGHT));
-        collapseButton.setTooltip(new Tooltip(I18n.get("sidepanel.collapse")));
-        collapseButton.setOnAction(e -> collapseRequested());
+        side.collapseButton.setId(side.collapseId);
+        side.collapseButton.getStyleClass().add("side-panel-collapse");
+        side.collapseButton.setGraphic(new FontIcon(side.icon));
+        side.collapseButton.setTooltip(new Tooltip(I18n.get("sidepanel.collapse")));
+        side.collapseButton.setOnAction(e -> collapseRequested(side));
 
-        HBox header = new HBox(8, titleLabel, spacer, collapseButton);
+        HBox header = new HBox(8, side.titleLabel, spacer, side.collapseButton);
         header.setAlignment(Pos.CENTER_LEFT);
         header.setPadding(new Insets(10, 12, 10, 12));
         header.getStyleClass().add("side-panel-header");
-        panel.setTop(header);
+        side.panel.setTop(header);
+        if (isLeft) {
+            // 左侧面板的投影与分隔线要镜像（css 里的 .side-panel 是按右侧写的）
+            side.panel.getStyleClass().add("side-panel-left");
+        }
     }
 
     // ==================== 接线 ====================
@@ -112,11 +169,11 @@ public final class SidePanelHost {
      * 层序推理才有一处唯一的真相。</p>
      *
      * @param mainRoot 主界面根节点（{@code MainView.fxml} 的 {@code BorderPane}）
-     * @return 覆盖层（内含 mainRoot，侧边栏之后加入其中）
+     * @return 覆盖层（内含 mainRoot，左/右两侧面板之后加入其中）
      */
     public static StackPane install(Parent mainRoot) {
         StackPane overlay = new StackPane(mainRoot);
-        // 空区域不拦鼠标（R3.3）：只有侧边栏节点自己覆盖右侧 50%，左侧照常命中主界面
+        // 空区域不拦鼠标（R3.3）：只有侧边栏节点自己覆盖它那一侧 50%，别处照常命中主界面
         overlay.setPickOnBounds(false);
         // clip（R3.4）：translateX 会让侧边栏越出主区边界，越出的部分不得画出来
         Rectangle clip = new Rectangle();
@@ -125,14 +182,16 @@ public final class SidePanelHost {
         overlay.setClip(clip);
 
         SidePanelHost host = new SidePanelHost(overlay);
-        StackPane.setAlignment(host.panel, Pos.CENTER_RIGHT);
-        // 宽度 = 主区 × 50%（R1.1）。pref 与 max 都要绑：StackPane 会把子节点拉到 max，
-        // 只绑 pref 的话面板会被拉满整宽（实测：面板盖住整个主界面）。
-        host.panel.prefWidthProperty().bind(overlay.widthProperty().multiply(WIDTH_RATIO));
-        host.panel.maxWidthProperty().bind(overlay.widthProperty().multiply(WIDTH_RATIO));
-        // R3.5：启动默认折叠
-        host.panel.setVisible(false);
-        overlay.getChildren().add(host.panel);
+        for (Side side : new Side[]{host.right, host.left}) {
+            StackPane.setAlignment(side.panel, side.alignment);
+            // 宽度 = 主区 × 50%（R1.1）。pref 与 max 都要绑：StackPane 会把子节点拉到 max，
+            // 只绑 pref 的话面板会被拉满整宽（实测：面板盖住整个主界面）。
+            side.panel.prefWidthProperty().bind(overlay.widthProperty().multiply(WIDTH_RATIO));
+            side.panel.maxWidthProperty().bind(overlay.widthProperty().multiply(WIDTH_RATIO));
+            // R3.5：启动默认折叠
+            side.panel.setVisible(false);
+            overlay.getChildren().add(side.panel);
+        }
 
         HOSTS.put(overlay, host);
         return overlay;
@@ -149,7 +208,7 @@ public final class SidePanelHost {
         return null;
     }
 
-    // ==================== 开合 ====================
+    // ==================== 开合：右侧（R1.1，Q6a 原样） ====================
 
     /**
      * 右侧滑出（R1.1 / R3.4）。同一节点重复传入不会重新挂载（幂等）。
@@ -161,38 +220,25 @@ public final class SidePanelHost {
      *                   点「收起」时先弹提示卡、用户确认后再调 {@link #hideRight()}。
      */
     public void showRight(Node content, String title, Runnable onCollapse) {
-        this.onCollapse = onCollapse;
-        titleLabel.setText(title == null ? "" : title);
-        if (content != null && panel.getCenter() != content) {
-            panel.setCenter(content);
-        }
-        panel.setVisible(true);
-        rightShowing = true;
-        // 先摆到主区右侧之外再滑到 0。首次显示时面板还没被布局过、宽度是 0，
-        // 所以先强制一次布局拿到真实宽度，否则第一次打开不会有滑出动画。
-        overlay.applyCss();
-        overlay.layout();
-        panel.setTranslateX(panel.getWidth());
-        slideTo(0, false);
+        show(right, content, title, onCollapse);
     }
 
     /** 右侧滑入并隐藏；动画播完才置不可见（R3.4）。 */
     public void hideRight() {
-        rightShowing = false;
-        slideTo(Math.max(panel.getWidth(), 0), true);
+        hide(right);
     }
 
     /**
-     * 当前逻辑开合状态（与动画帧无关；动画播完与否都返回同一值，便于守卫与断言）。
+     * 当前右侧<b>逻辑</b>开合状态（与动画帧无关；动画播完与否都返回同一值，便于守卫与断言）。
      *
      * <p>Q6b 的 R1.7（dirty 时禁用开始提取）与 R1.8（收起前提示）都要先问"侧边栏是不是开着"。</p>
      */
     public boolean isRightShowing() {
-        return rightShowing;
+        return right.showing;
     }
 
     /**
-     * 标题栏「收起」按钮节点（R1.2 的那个入口）。
+     * 右侧标题栏「收起」按钮节点（R1.2 的那个入口）。
      *
      * <p>暴露它是为了让探针 / 自动化能驱动"两个收起入口之一"而<b>不必靠节点结构猜</b>
      * （{@code tools/probes/SidePanelProbe} 会核对它与 {@code #sidePanelCollapse} 是同一个节点）；
@@ -200,30 +246,124 @@ public final class SidePanelHost {
      * 若要给按钮加状态，也从这里拿。</p>
      */
     public Button collapseButton() {
-        return collapseButton;
+        return right.collapseButton;
+    }
+
+    // ==================== 开合：左侧（Q8b / R2.1） ====================
+
+    /**
+     * 左侧滑出（R2.1）：与右侧完全对称 —— 挂的是另一个独立面板节点，
+     * 所以两侧<b>可以同时展开</b>（R3.1），互不顶替、互不隐藏。
+     *
+     * @param content    面板内容（如 {@code HtmlSourceViewer} 的查看器节点）
+     * @param title      标题栏文本
+     * @param onCollapse 标题栏「收起」按钮的动作（{@code null} = 直接 {@link #hideLeft()}）
+     */
+    public void showLeft(Node content, String title, Runnable onCollapse) {
+        show(left, content, title, onCollapse);
+    }
+
+    /** 左侧滑入并隐藏（R2.9：无草稿语义，收起即隐藏）。 */
+    public void hideLeft() {
+        hide(left);
+    }
+
+    /** 当前左侧逻辑开合状态（语义同 {@link #isRightShowing()}）。 */
+    public boolean isLeftShowing() {
+        return left.showing;
+    }
+
+    /** 左侧标题栏「收起」按钮节点（R2.1：线条图标 {@code ANGLE_DOUBLE_LEFT}）。 */
+    public Button leftCollapseButton() {
+        return left.collapseButton;
+    }
+
+    /** 左侧面板节点（供探针核对几何；未展开时也不可见，但节点恒存在）。 */
+    public Node leftPanelNode() {
+        return left.panel;
+    }
+
+    /** 右侧面板节点（同上；Q6a 起探针是靠 {@code #sidePanel} 找的，这里给一个类型化入口）。 */
+    public Node rightPanelNode() {
+        return right.panel;
     }
 
     // ==================== 内部 ====================
 
-    private void collapseRequested() {
-        if (onCollapse != null) {
-            onCollapse.run();
+    /**
+     * 滑出时长的覆盖点（**只为探针**）。
+     *
+     * <p>🚩 存在的理由：收起是"先播完动画再 {@code setVisible(false)}"，动画是 200ms 的真实时钟；
+     * 而探针在 FX 线程上做测量时会把脉冲一起挡住（本项目栽过同类坑：等待卡片只显示几毫秒），
+     * 于是"面板到底停在哪"变成时序问题。传 0 让滑出/滑入变成<b>同步落位</b>：
+     * 直接设 {@code translateX} 到终点、立刻置可见性 —— 几何与命中测试都是确定性的。
+     * 生产代码从不调它（默认恒为 200ms，由 {@code SidePanelProbe} 的动画断言钉住）。</p>
+     *
+     * <p>⚠️ 为什么不能只把时长设成 0 了事：实测（{@code XAnimProbe}）{@code TranslateTransition}
+     * 在 0ms 下<b>只触发 onFinished、不写属性值</b>，面板会永远停在
+     * {@code translateX = ±宽度}（屏幕外），命中测试于是全部落在旧几何上 ——
+     * 探针会看到一串与实现无关的假失败。所以这里显式落位，不走动画。</p>
+     */
+    public void setSlideMillisForProbe(long millis) {
+        this.slideDuration = Duration.millis(millis);
+    }
+
+    /** 当前滑出时长（毫秒）。生产恒为 {@link #SLIDE_DURATION}；探针用它证明"动画默认没被关掉"。 */
+    public long slideMillis() {
+        return (long) slideDuration.toMillis();
+    }
+
+    private void show(Side side, Node content, String title, Runnable onCollapse) {
+        side.onCollapse = onCollapse;
+        side.titleLabel.setText(title == null ? "" : title);
+        if (content != null && side.panel.getCenter() != content) {
+            side.panel.setCenter(content);
+        }
+        side.panel.setVisible(true);
+        side.showing = true;
+        // 先摆到主区之外再滑到 0。首次显示时面板还没被布局过、宽度是 0，
+        // 所以先强制一次布局拿到真实宽度，否则第一次打开不会有滑出动画。
+        overlay.applyCss();
+        overlay.layout();
+        side.panel.setTranslateX(side.slideSign * side.panel.getWidth());
+        slideTo(side, 0, false);
+    }
+
+    private void hide(Side side) {
+        side.showing = false;
+        slideTo(side, side.slideSign * Math.max(side.panel.getWidth(), 0), true);
+    }
+
+    private void collapseRequested(Side side) {
+        if (side.onCollapse != null) {
+            side.onCollapse.run();
         } else {
-            hideRight();
+            hide(side);
         }
     }
 
-    private void slideTo(double toX, boolean hideWhenFinished) {
-        if (slide != null) {
-            slide.stop();
+    private void slideTo(Side side, double toX, boolean hideWhenFinished) {
+        if (side.slide != null) {
+            side.slide.stop();
+            side.slide = null;
         }
-        slide = new TranslateTransition(SLIDE_DURATION, panel);
-        slide.setToX(toX);
-        slide.setOnFinished(e -> {
+        if (slideDuration.toMillis() <= 0 || slideDuration.isIndefinite()) {
+            // 0ms = 探针要的"同步落位"（见 setSlideMillisForProbe：0ms 的 TranslateTransition
+            // 只触发 onFinished、不写属性值，靠它落位会留下一块屏幕外的面板）
+            side.panel.setTranslateX(toX);
             if (hideWhenFinished) {
-                panel.setVisible(false);
+                side.panel.setVisible(false);
+            }
+            return;
+        }
+        side.slide = new TranslateTransition(slideDuration, side.panel);
+        side.slide.setToX(toX);
+        side.slide.setOnFinished(e -> {
+            side.slide = null;
+            if (hideWhenFinished) {
+                side.panel.setVisible(false);
             }
         });
-        slide.playFromStart();
+        side.slide.playFromStart();
     }
 }

@@ -34,6 +34,13 @@ public final class BrowserLauncher {
      * 源码视图：优先经 CDP 调试端口的内部导航打开 Edge/Chrome 原生源码查看器
      * （命令行传入的 view-source: URL 会被 Chromium 拦截重定向，内部导航不会——2026-09-24 实测）；
      * 任一环节失败则回退到自产源码页（行号 + 高亮 + 链接下划线）按渲染视图方式打开。
+     *
+     * <p>⚠️ <b>Q8b/R2 起生产路径不再调用本方法</b>：「查看源码」改成应用内左侧覆盖式查看器
+     * （{@code gui.component.HtmlSourceViewer}，禁用 WebView 的 R2.6 红线），于是这里<b>零调用点</b>。
+     * <b>刻意保留</b>，理由有两条：① 它是既有能力（CDP 原生源码查看器 + 自产源码页回退），
+     * 删掉等于替用户做了一个需求决定；② Q8a 的<b>逐字节</b>判据要靠 {@link SourceViewPage}
+     * 可达（装置在 {@code .claude-work/sourceview-*}，63 个用例）。若将来想在查看器里加
+     * 「在浏览器中打开」，接回这里即可。</p>
      */
     public static boolean openViewSource(Path htmlFile) {
         if (openViewSourceNative(htmlFile)) {

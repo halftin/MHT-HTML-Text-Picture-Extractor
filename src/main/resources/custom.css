@@ -498,3 +498,55 @@
     -fx-background-color: #e8e8e8;
     -fx-background-radius: 4px;
 }
+
+/* 左侧侧边栏（Q8b / R2.1：HTML 源码查看器）：把 .side-panel 的分隔线与投影镜像过来。
+   规则必须写在 .side-panel 之后（同优先级，后写的赢），否则会被上面那条覆盖。 */
+.side-panel-left {
+    -fx-border-width: 0 1 0 0;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.18), 18, 0, 4, 0);
+}
+
+/* ===== 应用内 HTML 源码查看器（Q8b / R2.7 + R2.8） =====
+   逐行虚拟化的 ListView 放在横向 ScrollPane 里：行内容本身不软换行，
+   靠把 ListView 的宽度撑到"最长行"来触发横向滚动（见 HtmlSourceViewer 的类注释）。 */
+.html-source-viewer {
+    -fx-background-color: white;
+}
+
+.html-source-viewer .list-view,
+.html-source-viewer .list-view .virtual-flow,
+.html-source-viewer .list-view .clipped-container,
+.html-source-viewer .list-view .sheet,
+.html-source-viewer .scroll-pane,
+.html-source-viewer .scroll-pane > .viewport {
+    -fx-background-color: white;
+}
+
+.html-source-viewer .list-view .list-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.html-source-viewer .list-view .list-cell:filled:selected {
+    -fx-background-color: #e8f0fe;
+}
+
+/* 行号栏：右对齐 + 灰色（与 SourceViewPage 的 .ln 同一观感；颜色常量在 HtmlSyntaxPalette） */
+.html-source-gutter {
+    -fx-background-color: #f7f7f7;
+    -fx-border-color: #e5e5e5;
+    -fx-border-width: 0 1 0 0;
+    -fx-padding: 0 8px 0 4px;
+}
+
+/* 命中高亮：命中样式的唯一定义处（HtmlSourceViewer 的 hitNode 挂这个 class） */
+.html-source-hit {
+    -fx-background-color: #ffe680;
+}
+
+/* 底部查找栏（R5.1） */
+.html-source-findbar {
+    -fx-background-color: #f7f7f7;
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 1 0 0 0;
+}

@@ -55,9 +55,7 @@ final class SourceViewPage {
                     + ".ln{float:left;text-align:right;color:#9e9e9e;background:#f7f7f7;"
                     + "border-right:1px solid #e5e5e5;padding-right:8px;margin-right:10px;user-select:none;}"
                     + ".lc{display:block;white-space:pre-wrap;min-height:1.5em;color:#000;}"
-                    + ".hl-tag{color:#0000ff;}.hl-attr{color:#a31515;}.hl-val{color:#008000;}"
-                    + ".hl-cm{color:#808080;font-style:italic;}.hl-dt{color:#808080;}"
-                    + ".hl-link{color:#0000ee;text-decoration:underline;}"
+                    + HtmlSyntaxPalette.styleBlock()
                     + "</style></head><body>"
                     + buildSourceViewBody(html)
                     + "</body></html>";

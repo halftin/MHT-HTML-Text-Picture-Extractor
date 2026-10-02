@@ -15,6 +15,7 @@ import com.mhtextractor.config.GuiStateManager;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.TextExtractor;
+import com.mhtextractor.gui.component.HtmlSourceViewer;
 import com.mhtextractor.gui.component.LogTextArea;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.WorkspaceFxAdapter;
@@ -1403,9 +1404,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 log.info(I18n.msg("log.maincontroller.24", r.htmlFile(), r.imageCount(), r.warnings().size()));
                 // 浏览器启动可能耗时（注册表探测 / CDP 端点等待最长约 15 秒），独立后台线程避免冻结界面
                 Thread launcher = new Thread(() -> {
-                    boolean ok = sourceMode
-                            ? BrowserLauncher.openViewSource(r.htmlFile())
-                            : BrowserLauncher.openHtml(r.htmlFile());
+                    if (sourceMode) {
+                        // R2：源码不再交给外部浏览器，改为应用内左侧覆盖式查看器（禁用 WebView，R2.6）。
+                        HtmlSourceViewer.showFile(statusLabel, I18n.get("browser.viewerTitle"), r.htmlFile());
+                        return;
+                    }
+                    boolean ok = BrowserLauncher.openHtml(r.htmlFile());
                     if (!ok) {
                         log.warn(I18n.msg("log.maincontroller.25", r.htmlFile()));
                         Platform.runLater(() -> NotificationHost.toastWarning(statusLabel,
