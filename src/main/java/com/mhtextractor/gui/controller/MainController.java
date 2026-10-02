@@ -17,6 +17,7 @@ import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.TextExtractor;
 import com.mhtextractor.gui.component.LogTextArea;
 import com.mhtextractor.gui.component.NotificationHost;
+import com.mhtextractor.gui.WorkspaceFxAdapter;
 import com.mhtextractor.platform.BrowserLauncher;
 import com.mhtextractor.platform.FileOpener;
 import com.mhtextractor.gui.util.JavaFxUtil;
@@ -46,8 +47,6 @@ import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
 import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
-import javafx.collections.FXCollections;
-import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
@@ -295,15 +294,16 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     @FXML private ToggleSwitch openFolderAfterCompleteCheck;
 
     // ===== 状态 =====
-    /** 数据序：顶层混合列表（PreviewItem | GroupItem），组内成员存于 GroupItem.members */
-    /* test-support */ final ObservableList<Object> items = FXCollections.observableArrayList();
-    /** 显示序：ListView 直接渲染的展平列表，按数据序实时重建（F5 显示序/数据序分离） */
-    private final ObservableList<Object> displayItems = FXCollections.observableArrayList();
-
     // 撤销栈（F4）：唯一栈由 app.WorkspaceModel 独占；结构类由模型 undo() 应用，参数 / 拖拽类由本类 popRecord() 后自行应用
-    // 数据序共享：模型直接在本类的 items 上操作（注入为 java.util.List，模型字节码因此仍零 javafx）。
-    // 这样"模型拥有的结构"与"GUI 渲染的数据序"是同一份存储，迁移期间不存在两套状态分叉。
-    /* test-support */ final WorkspaceModel ws = new WorkspaceModel(items);
+    /** 工作区模型（Q4/P3）：**业务数据序的唯一所有者** —— 不再与 GUI 共享可变列表；成功命令会发布 WorkspaceChange */
+    /* test-support */ final WorkspaceModel ws = new WorkspaceModel();
+    /** 模型 → JavaFX 的投影层（Q4/P3）：显示序（ListView 绑定）由它独占维护，数据序只读投影由它提供。
+     *  投影<b>时机</b>仍由本类显式给出；"为何不在每次变更上自动投影"见 {@link WorkspaceFxAdapter} 的类 javadoc。 */
+    private final WorkspaceFxAdapter adapter = new WorkspaceFxAdapter(ws);
+    /** 数据序只读投影：保留同名入口给 FeatureExercise（P7 才改造）；唯一写操作 clear() 转发为模型命令 */
+    /* test-support */ final List<Object> items = adapter.dataOrder();
+    /** 显示序：ListView 直接渲染的展平列表，按数据序实时重建（F5 显示序/数据序分离）—— adapter.displayItems() 的只读别名 */
+    private final ObservableList<Object> displayItems = adapter.displayItems();
 
     /** 两套已确认提取参数缓存：null 表示该模式尚未确认过参数 */
     /* test-support */ AppConfig textParamsCache;
@@ -469,7 +469,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
         // 1. 列表：单元格工厂、选择联动、逐文件章节勾选、拖拽动画滚动联动
         fileListView.setCellFactory(_ -> createPreviewCell());
-        fileListView.setItems(displayItems);
+        adapter.bindListView(fileListView);
         setupExternalImportDnD();
 
         // 空白/非预期区域松手：不处理 drop（无蓝条、无吸附），走取消路径瞬时恢复原位不消失
@@ -486,16 +486,15 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 onGroupNameFocusLost();
             }
         });
-        items.addListener((ListChangeListener<Object>) change -> {
-            while (change.next()) {
-                if (change.wasAdded()) {
-                    for (Object o : change.getAddedSubList()) {
-                        if (o instanceof PreviewItem it && selectionListened.add(it)) {
-                            // 会话 18 · E1.3a：原 it.selected.addListener((obs2,a,b) -> ...)
-                            // 改为等价的自研 ChangeListener（同步回调；仅值变化时触发）
-                            it.addSelectedChangeListener(this::onSelectionChanged);
-                        }
-                    }
+        // 新条目自动挂勾选监听（F1）：数据序所有权移交模型后，挂接面从"列表被 add"改为"模型发布了变更"。
+        // 载荷里的条目（ITEMS_ADDED / GROUPED / UNGROUPED / UNDO_APPLIED）逐个挂接；selectionListened 按身份
+        // 去重，故"同一对象重复挂接"是 no-op —— 这比迁移前的 ObservableList 监听面只多不少，不产生第二份状态。
+        ws.addListener(change -> {
+            for (PreviewItem it : change.affected()) {
+                if (selectionListened.add(it)) {
+                    // 会话 18 · E1.3a：原 it.selected.addListener((obs2,a,b) -> ...)
+                    // 改为等价的自研 ChangeListener（同步回调；仅值变化时触发）
+                    it.addSelectedChangeListener(this::onSelectionChanged);
                 }
             }
         });
@@ -2116,7 +2115,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             return;
         }
 
-        displayItems.remove(draggedObject);
+        adapter.hideRow(draggedObject);
         cells.forEach(c -> c.setVisible(false));
 
         liftCells = cells;
@@ -2248,11 +2247,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (!isTextMode() && sel instanceof PreviewItem it && it.cachedThumbs != null) {
             renderThumbnails(it);
         }
-    }
-
-    /** 空组销毁判定谓词（拖拽致空组销毁与移除一致，R4） */
-    private boolean isRemovedObject(Object o) {
-        return o instanceof PreviewItem it && it.removed;
     }
 
     /** 顶层组列表（按数据序；供 agent 演练使用）—— 委托模型 */
@@ -2474,7 +2468,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             finishExpandAnim();
         }
         rebuildParentPointers();
-        displayItems.setAll(GroupStructure.flatten(items, this::isRemovedObject));
+        adapter.project();
     }
 
     /** 组内有效成员数（removed == false） */
@@ -2546,14 +2540,18 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         startButton.setDisable(!anyMode || visibleCount() == 0 || isImporting());
     }
 
-    /** 列表结构变化（移除/撤销/导入/建组）后的统一刷新：显示序重建、计数、按钮、序号/徽标、进度、信息区 */
+    /**
+     * 列表结构变化（移除/撤销/导入/建组）后的统一刷新，按指南拆成两段：
+     * ① <b>刷新模型投影</b> —— {@code adapter.refresh()}（全量投影 + 按对象钉住选中，
+     *    即原 {@code rebuildDisplay()} 加"仍在显示序则重选"那三行，规则逐字未改）；
+     * ② <b>更新计数/按钮/选择等 UI 派生状态</b> —— 下面这些自己读模型/控件的派生刷新。
+     */
     /* test-support */ void refreshAfterListChange() {
-        Object sel = fileListView.getSelectionModel().getSelectedItem();
-        rebuildDisplay();
-        // 显示序重建时选择模型按索引保留选中项，需按对象重新钉住
-        if (sel != null && displayItems.contains(sel)) {
-            fileListView.getSelectionModel().select(sel);
+        if (listAnimating && !suppressAnimRebuild) {
+            finishExpandAnim();
         }
+        rebuildParentPointers();
+        adapter.refresh();
         updateFileCount();
         updateListButtons();
         updateStartButtonState();

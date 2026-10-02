@@ -9,27 +9,31 @@ import com.mhtextractor.util.UndoManager;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
  * 无头工作区模型（会话 18 · E4-4）—— 验收 V2「桩 UI 跑通**工作区**功能」的载体。
  *
- * <p><b>与 {@code MainController} 的关系</b>：GUI 的条目列表是 {@code ObservableList} 且被
- * {@code ListView} 直接绑定、{@code initialize} 还对其注册了 {@code ListChangeListener}
- * （见 {@code docs/handoff/H17.md} §六之九）。在剩余预算内把它整体迁出风险过高，
- * 因此本类**不是** GUI 状态的替代品，而是：</p>
+ * <p><b>与 {@code MainController} 的关系（Q4 / P3 起为"所有者—投影"）</b>：本类是工作区业务数据的
+ * <b>唯一所有者</b>（{@code topLevel} 为私有存储）；GUI 的列表是它的<b>投影</b>：</p>
  * <ul>
- *   <li>一个<b>可独立运行、可单测</b>的工作区语义实现（分组/拆分/移除/撤销/参数作用域），
- *       供无头调用方与"桩 UI"使用（这正是 V2 要证明的能力）；</li>
- *   <li>未来 GUI 若愿意，可订阅本模型的变更事件并把自己变成纯视图 ——
- *       这条路径**不需要**改本类，属可选的后续演进。</li>
+ *   <li>GUI 的显示序由 {@code gui.WorkspaceFxAdapter} 经 {@link #displayOrder()} 投影而来；</li>
+ *   <li>GUI 侧保留的同名 {@code items} 入口是 {@link #topLevelView()} 的只读包装
+ *       （写操作会抛 {@code UnsupportedOperationException}；唯一例外见该类注释），
+ *       于是"数据序被谁写"这件事在类型层面就已定死；</li>
+ *   <li>每条<b>成功</b>命令经 {@link #addListener} 发布一次 {@link WorkspaceChange}
+ *       （失败 / no-op 命令不发布）。</li>
  * </ul>
+ *
+ * <p><b>本类仍是一个可独立运行、可单测的工作区语义实现</b>（分组/拆分/移除/撤销/参数作用域），
+ * 供无头调用方与"桩 UI"使用（V2 的能力证明）；所有 UI 交互（确认框、动画、选中管理）都不在本类。</p>
  *
  * <p><b>零 JavaFX</b>：仅依赖 {@code model} 与 {@code util}（两者均已零 JavaFX，由
  * {@code ArchitectureTest} 强制）。</p>
@@ -43,8 +47,21 @@ import java.util.function.Predicate;
 @Slf4j
 public final class WorkspaceModel {
 
-    /** 顶层顺序（含组条目）；被移除的条目仍留在其组/顶层中，由谓词过滤 */
-    private final List<Object> topLevel;
+    /** 顶层顺序（含组条目）；被移除的条目仍留在其组/顶层中，由谓词过滤 —— <b>本类私有存储</b>（Q4/P3） */
+    private final List<Object> topLevel = new ArrayList<>();
+
+    /**
+     * {@link #topLevel} 的**只读实时视图**（零拷贝，缓存包装器）。
+     *
+     * <p><b>与 {@link #topLevel()}（不可变快照）的分工</b>：快照给"取一份就固定"的调用方；
+     * 本视图给"每次读都必须看到当前数据序、且绝不许写"的投影层（GUI 的 {@code items} 入口）——
+     * 用快照替代会让 GUI 在同一条命令的前后混读时读到<b>陈旧结构</b>，
+     * 而用可变列表替代就等于把写入权交回 GUI（那正是 Q4/P3 要拆掉的东西）。</p>
+     */
+    private final List<Object> topLevelView = Collections.unmodifiableList(topLevel);
+
+    /** 变更订阅者（无事件总线 / 无 DI 容器：一个列表足够，见执行约束第 4 条） */
+    private final List<Consumer<WorkspaceChange>> listeners = new ArrayList<>();
 
     private final UndoManager<PreviewItem> undoManager = new UndoManager<>();
 
@@ -55,51 +72,84 @@ public final class WorkspaceModel {
 
     private static final Predicate<Object> REMOVED = o -> o instanceof PreviewItem it && it.removed;
 
-    // ==================== 构造 ====================
+    // ==================== 构造 / 订阅 ====================
 
-    /** 无头构造：自持数据序列表（单测与桩 UI 使用）。 */
+    /**
+     * 唯一构造：模型**自持**数据序存储。
+     *
+     * <p><b>为什么删掉了 {@code WorkspaceModel(List<Object> sharedTopLevel)}</b>（Q4 / P3 的核心动作）：
+     * 共享构造让"模型拥有的结构"与"GUI 渲染的列表"是同一个可变对象，于是 GUI 里任何一处
+     * {@code items.add(...)} 都会绕过撤销记录与结构维护 —— 不报错、只<b>静默分叉</b>。
+     * 需要"带初始内容的模型"的调用方改用复制型命令 {@link #importAll(List)}。</p>
+     */
     public WorkspaceModel() {
-        this(new ArrayList<>());
     }
 
     /**
-     * 共享构造：由调用方提供数据序列表，本模型**在它上面直接操作**。
+     * 订阅模型变更（每个成功命令回调一次）。
      *
-     * <p><b>为什么这样设计</b>：GUI 的数据序是 {@code ObservableList}（被 {@code ListView} 的变更监听
-     * 依赖），而本类不得触碰任何 UI 框架类型。把列表**作为 {@code java.util.List} 注入**，
-     * 既让两侧共享同一份存储（不存在"两套状态"与投影时滞），又让本类字节码保持零 javafx ——
-     * 这正是 {@code ArchitectureTest.businessPackagesHaveNoUiFrameworkDependency} 允许的形态
-     * （它扫的是常量池，而 {@code List} 不是 UI 类型）。</p>
-     *
-     * <p><b>由此消除的风险</b>：接入生产时若采用"模型持一份、GUI 持一份 + 单向投影"，
-     * 迁移期间任何未迁移的直写都会造成分叉。共享存储下，GUI 的直写与模型的写是同一份数据，
-     * 因此可以逐操作迁移、每一步都自洽。</p>
-     *
-     * @param sharedTopLevel 由调用方持有的数据序列表（不得为 null）
+     * <p>回调在<b>命令调用线程</b>上同步执行（生产路径即 FX 线程）；允许在回调里再读写模型
+     * —— 遍历用的是 {@code List.copyOf} 的订阅者副本，回调内增删订阅者不会抛
+     * {@code ConcurrentModificationException}。</p>
      */
-    public WorkspaceModel(List<Object> sharedTopLevel) {
-        this.topLevel = Objects.requireNonNull(sharedTopLevel, "sharedTopLevel");
+    public void addListener(Consumer<WorkspaceChange> listener) {
+        if (listener != null && !listeners.contains(listener)) {
+            listeners.add(listener);
+        }
+    }
+
+    /** 退订（与 {@link #addListener} 配对；未订阅过是 no-op） */
+    public void removeListener(Consumer<WorkspaceChange> listener) {
+        listeners.remove(listener);
+    }
+
+    /** 发布一次变更（只在命令**确实改变了状态**之后调用；订阅者异常向上传播，不静默吞掉） */
+    private void publish(WorkspaceChange.Kind kind, List<PreviewItem> affected) {
+        if (listeners.isEmpty()) {
+            return;
+        }
+        WorkspaceChange change = new WorkspaceChange(kind, affected);
+        for (Consumer<WorkspaceChange> listener : List.copyOf(listeners)) {
+            listener.accept(change);
+        }
     }
 
     // ==================== 查询 ====================
 
-    /** 显示序（展开的组后跟随其可见成员；已移除项被过滤）—— 委托 {@link GroupStructure#flatten} */
+    /**
+     * 显示序（展开的组后跟随其可见成员；已移除项被过滤）—— 委托 {@link GroupStructure#flatten}。
+     *
+     * <p>返回<b>不可变快照</b>（Q4/P3 起：{@code GroupStructure.flatten} 本身给的是新建可变列表，
+     * 这里再包一层不可变，使"查询只返回不可变快照"对三个查询
+     * ——{@link #topLevel()} / {@link #allItems()} / {@link #displayOrder()}—— 口径一致）。</p>
+     */
     public List<Object> displayOrder() {
-        return GroupStructure.flatten(topLevel, REMOVED);
+        return List.copyOf(GroupStructure.flatten(topLevel, REMOVED));
     }
 
-    /** 顶层条目（含组），数据序 */
+    /** 顶层条目（含组），数据序 —— <b>不可变快照</b>（调用方改动它不影响模型） */
     public List<Object> topLevel() {
         return List.copyOf(topLevel);
     }
 
-    /** 全部条目（含组内成员、含已移除），数据序 */
+    /**
+     * 顶层条目的**只读实时视图**（零拷贝）：读操作直达内部存储；任何写操作抛
+     * {@code UnsupportedOperationException}（{@code Collections.unmodifiableList} 保证）。
+     *
+     * <p>用途只有一个：GUI 侧的 {@code items} 入口（{@code WorkspaceFxAdapter.dataOrder()}）需要
+     * "每次读都是当前数据序"，否则同一条命令前后的混读会看到陈旧结构。见字段 javadoc 的分工说明。</p>
+     */
+    public List<Object> topLevelView() {
+        return topLevelView;
+    }
+
+    /** 全部条目（含组内成员、含已移除），数据序 —— <b>不可变快照</b> */
     public List<PreviewItem> allItems() {
         List<PreviewItem> out = new ArrayList<>();
         for (Object o : topLevel) {
             addItemsOf(o, out);
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /** 可见（未被移除）条目数 */
@@ -107,7 +157,7 @@ public final class WorkspaceModel {
         return (int) allItems().stream().filter(i -> !i.removed).count();
     }
 
-    /** 顶层组 */
+    /** 顶层组 —— <b>不可变快照</b> */
     public List<GroupItem<PreviewItem>> groups() {
         List<GroupItem<PreviewItem>> out = new ArrayList<>();
         for (Object o : topLevel) {
@@ -116,7 +166,7 @@ public final class WorkspaceModel {
                 out.add(gg);
             }
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /** 撤销栈深度 */
@@ -173,25 +223,64 @@ public final class WorkspaceModel {
     /**
      * 追加条目到顶层末尾（对应 GUI 的导入追加）。
      *
+     * <p>成功（{@code added > 0}）时发布一次 {@link WorkspaceChange.Kind#ITEMS_ADDED}，
+     * 载荷是<b>实际新增</b>的条目（不是入参整批 —— 入参里被身份跳过的那些没有进入数据序）；
+     * 全部被跳过时既不留撤销记录、也不发布变更。</p>
+     *
      * @return 实际新增的条目数（已存在同一对象则跳过）
      */
     public int addItems(List<PreviewItem> items) {
         if (items == null || items.isEmpty()) {
             return 0;
         }
-        int added = 0;
+        List<PreviewItem> addedItems = new ArrayList<>();
         for (PreviewItem it : items) {
             if (it != null && !containsIdentity(it)) {
                 topLevel.add(it);
-                added++;
+                addedItems.add(it);
             }
         }
-        if (added > 0) {
+        if (!addedItems.isEmpty()) {
             // 一次导入压一条 IMPORT 撤销记录（与 GUI 一致：批量导入=单次撤销）
             undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.IMPORT,
                     new ArrayList<>(items)));
+            publish(WorkspaceChange.Kind.ITEMS_ADDED, addedItems);
         }
-        return added;
+        return addedItems.size();
+    }
+
+    /**
+     * 复制型初始导入：把给定顶层条目**逐个接进本模型自己的存储**（不与调用方共享列表实例）。
+     *
+     * <p>存在的理由只有一个：它取代了 Q4/P3 删掉的
+     * {@code WorkspaceModel(List<Object> sharedTopLevel)} —— 需要"构造后带初始内容"的调用方
+     * 必须走这条<b>复制</b>路径，共享实例这条路已在类型层面关闭。</p>
+     *
+     * <p>语义与 {@link #appendItems} / {@link #appendGroup} 一致（不去重、不压撤销记录），
+     * 只是按元素类型分派；末尾发布<b>一次</b> {@link WorkspaceChange.Kind#ITEMS_ADDED}
+     * （载荷 = 新增的 {@link PreviewItem}；{@code GroupItem} 不是条目，只随 {@code topLevel} 进入数据序）。</p>
+     */
+    public void importAll(List<Object> initialItems) {
+        if (initialItems == null || initialItems.isEmpty()) {
+            return;
+        }
+        List<PreviewItem> added = new ArrayList<>();
+        for (Object o : initialItems) {
+            if (o instanceof PreviewItem it) {
+                if (!containsIdentity(it)) {
+                    topLevel.add(it);
+                    added.add(it);
+                }
+            } else if (o instanceof GroupItem<?> raw) {
+                GroupItem<PreviewItem> g = asPreviewGroup(raw);
+                if (!topLevel.contains(g)) {
+                    topLevel.add(g);
+                }
+            }
+        }
+        if (!added.isEmpty()) {
+            publish(WorkspaceChange.Kind.ITEMS_ADDED, added);
+        }
     }
 
     private boolean containsIdentity(PreviewItem item) {
@@ -289,6 +378,7 @@ public final class WorkspaceModel {
 
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.GROUP,
                 targets, g, at, List.of(), List.of(), snapshot));
+        publish(WorkspaceChange.Kind.GROUPED, targets);
         return g;
     }
 
@@ -309,6 +399,10 @@ public final class WorkspaceModel {
      *
      * <p><b>不产生撤销记录</b>：导入的撤销记录由调用方按"整批一次"的粒度压入
      * （一次导入可能跨多个批次，逐批压栈会破坏"一次撤销撤整批"的既有语义）。</p>
+     *
+     * <p>确实追加时发布一次 {@link WorkspaceChange.Kind#GROUPED}（语义即"数据序里多了一个组"），
+     * 载荷是该组<b>操作时已有的</b>成员 —— 自动建组的新成员只存在于组内、从不出现在数据序顶层，
+     * 这正是 GUI 侧"条目进了数据序顶层才挂勾选监听"的既有语义。</p>
      */
     public void appendGroup(GroupItem<PreviewItem> group) {
         if (group == null) {
@@ -318,6 +412,13 @@ public final class WorkspaceModel {
             if (o == group) return;
         }
         topLevel.add(group);
+        List<PreviewItem> members = new ArrayList<>();
+        for (Object m : group.getMembers()) {
+            if (m instanceof PreviewItem it) {
+                members.add(it);
+            }
+        }
+        publish(WorkspaceChange.Kind.GROUPED, members);
     }
 
     /**
@@ -337,19 +438,25 @@ public final class WorkspaceModel {
         if (items == null) {
             return;
         }
+        List<PreviewItem> added = new ArrayList<>();
         for (PreviewItem it : items) {
             if (it != null) {
                 topLevel.add(it);
+                added.add(it);
             }
+        }
+        if (!added.isEmpty()) {
+            publish(WorkspaceChange.Kind.ITEMS_ADDED, added);
         }
     }
 
     /**
      * 拆分组（F6）：组从顶层移除，成员按原组内顺序插回原位置。
      *
-     * <p>与 GUI 对齐：拆分时把组参数**复制为成员条目级参数**（GUI 语义），并压一条 UNGROUP 记录。</p>
+     * <p>与 GUI 对齐：拆分时把组参数**复制为成员条目级参数**（GUI 语义），并压一条 UNGROUP 记录。
+     * 成功拆出时发布一次 {@link WorkspaceChange.Kind#UNGROUPED}（载荷 = 拆出的成员，它们回到了数据序顶层）。</p>
      *
-     * @return 拆出的成员列表；组不在顶层时返回空列表且不产生变更
+     * @return 拆出的成员列表；组不在顶层时返回空列表且不产生变更（也不发布）
      */
     public List<PreviewItem> ungroup(GroupItem<PreviewItem> group) {
         if (group == null) return List.of();
@@ -367,6 +474,7 @@ public final class WorkspaceModel {
 
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.UNGROUP,
                 members, group, idx, List.of(), List.of(), snapshot));
+        publish(WorkspaceChange.Kind.UNGROUPED, members);
         return members;
     }
 
@@ -403,6 +511,7 @@ public final class WorkspaceModel {
         }
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.REMOVE,
                 targets, null, -1, destroyed, destroyedIdx, snapshot));
+        publish(WorkspaceChange.Kind.ITEMS_REMOVED, targets);
         return targets.size();
     }
 
@@ -433,6 +542,7 @@ public final class WorkspaceModel {
         topLevel.remove(group);
         undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.REMOVE_GROUP,
                 members, group, idx, List.of(group), List.of(idx), snapshot));
+        publish(WorkspaceChange.Kind.GROUP_REMOVED, members);
         return members.size();
     }
 
@@ -541,6 +651,7 @@ public final class WorkspaceModel {
                                         : List.of(),
                         null, -1, List.of(), List.of(), before));
             }
+            publish(merge ? WorkspaceChange.Kind.MERGED : WorkspaceChange.Kind.REORDERED, affected);
         }
         return new DropResult(changed, affected, type, prevParents,
                 merged, mergedMembers, mergedIdx, mergeTarget);
@@ -657,7 +768,24 @@ public final class WorkspaceModel {
                 return false;
             }
         }
+        publish(WorkspaceChange.Kind.UNDO_APPLIED, undoAffectedOf(record));
         return true;
+    }
+
+    /**
+     * 本次撤销"恢复进数据序"的条目（{@link WorkspaceChange#affected()} 的口径，见其 javadoc）。
+     *
+     * @param record 刚刚成功应用的那条记录（非 null）
+     */
+    private List<PreviewItem> undoAffectedOf(UndoManager.Record<PreviewItem> record) {
+        return switch (record.type()) {
+            // 拖拽类：与 applyUndoAffected() 同源（undoRestructure 刚写入 lastUndoAffected）
+            case REORDER, MERGE_GROUPS -> lastUndoAffected == null ? List.of() : lastUndoAffected;
+            // 撤销导入是把条目**移出**数据序，没有"恢复进数据序"的条目
+            case IMPORT -> List.of();
+            // REMOVE / REMOVE_GROUP / GROUP / UNGROUP：记录里的条目回到数据序
+            default -> record.items() == null ? List.of() : record.items();
+        };
     }
 
     /**
@@ -680,7 +808,7 @@ public final class WorkspaceModel {
                 out.add(it);
             }
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /** 拖拽类撤销：按操作前快照恢复顶层顺序与各组成员（组对象复用），并重建父组指针 */
@@ -758,11 +886,26 @@ public final class WorkspaceModel {
         }
     }
 
-    /** 清空全部状态（供测试与"新建会话"用） */
+    /** 清空全部状态（供测试与"新建会话"用）：数据序 + 撤销栈 + 组号计数器，并发布一次 {@link WorkspaceChange.Kind#CLEARED} */
     public void clear() {
         topLevel.clear();
         undoManager.clear();
         lastGroupNo = 0;
+        publish(WorkspaceChange.Kind.CLEARED, List.of());
+    }
+
+    /**
+     * 只清空**数据序结构**（不动撤销栈、不动组号计数器），并发布一次
+     * {@link WorkspaceChange.Kind#CLEARED}。
+     *
+     * <p>这是 GUI 侧 {@code items.clear()} 入口（{@code WorkspaceFxAdapter.dataOrder()}
+     * 所包装的那一个）的转发目标 —— 它的语义必须与"清场只清列表"的既有实现逐字一致：
+     * 调用方随后自行 {@link #clearUndoStack()}（{@code FeatureExercise} 就是这么写的），
+     * 组号计数器则<b>不得</b>被重置（重置会让清场后的首个自动建组改名，属用户可见的变化）。</p>
+     */
+    public void clearItems() {
+        topLevel.clear();
+        publish(WorkspaceChange.Kind.CLEARED, List.of());
     }
 
     // ==================== 内部工具 ====================

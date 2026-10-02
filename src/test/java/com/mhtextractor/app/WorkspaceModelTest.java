@@ -13,6 +13,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -30,38 +31,191 @@ class WorkspaceModelTest {
         return new PreviewItem("C:/x/" + name, name, LocalDateTime.now(), "C:/x");
     }
 
-    // ==================== 构造 / 共享存储 ====================
+    // ==================== 构造 / 自持存储 / 查询快照 ====================
 
     /**
-     * 共享构造：模型必须在调用方提供的列表上**直接**操作 —— 这是"模型与 GUI 共享数据序、
-     * 迁移期间不会分叉"的全部依据。用「外部直写 → 模型可见」与「模型写 → 外部可见」
-     * 双向断言锁住，防止日后有人改成防御性拷贝而悄悄恢复成两套状态。
+     * 模型<b>自持</b>存储：两个独立构造的模型互不影响，且"外部拿到的初始列表"不再是模型的存储。
+     *
+     * <p><b>本测试取代了旧的 {@code sharedConstructorOperatesOnTheCallerProvidedList}</b>
+     * （Q4/P3 指南第 1 条：删除"外部列表直写后模型可见"的共享构造测试）。旧测试锁的是
+     * "模型与 GUI 共用同一个可变对象"，而那份共享正是本步要拆掉的东西 ——
+     * 它让 GUI 的任何直写绕过撤销记录与结构维护而静默分叉。</p>
      */
     @Test
-    void sharedConstructorOperatesOnTheCallerProvidedList() {
-        List<Object> shared = new ArrayList<>();
-        WorkspaceModel m = new WorkspaceModel(shared);
-
-        // ① 外部直写 → 模型可见（迁移期间尚未迁移的 GUI 直写必须被模型看到）
+    void modelsOwnTheirOwnStorageAndDoNotShareTheCallerList() {
+        List<Object> caller = new ArrayList<>();
         PreviewItem a = item("a.mht");
-        shared.add(a);
-        assertEquals(1, m.allItems().size());
-        assertEquals(1, m.visibleCount());
+        caller.add(a);
 
-        // ② 模型写 → 外部可见（模型成为唯一写入口后 GUI 仍能渲染到）
-        PreviewItem b = item("b.mht");
-        m.addItems(List.of(b));
-        assertTrue(shared.contains(b), "模型的新增必须落到调用方列表上（不得拷贝）");
-        assertEquals(2, shared.size());
+        WorkspaceModel m1 = new WorkspaceModel();
+        // 复制型初始导入：进的是模型自己的存储，调用方列表随后怎么改都与模型无关
+        m1.importAll(caller);
+        assertEquals(1, m1.allItems().size());
 
-        // ③ 移除是同一份存储：隐藏式移除不改动列表长度
-        m.removeItems(List.of(a));
-        assertTrue(a.removed);
-        assertEquals(2, shared.size());
+        caller.add(item("b.mht"));
+        caller.clear();
+        assertTrue(caller.isEmpty());
+        assertEquals(1, m1.allItems().size(), "调用方列表的后续改动不得影响模型（已不共享存储）");
+        assertSame(a, m1.allItems().get(0));
 
-        // ④ clear 同样作用于调用方的列表
+        // 两个独立模型互不影响
+        WorkspaceModel m2 = new WorkspaceModel();
+        m2.addItems(List.of(item("c.mht")));
+        assertEquals(1, m1.allItems().size(), "第二个模型的新增不得出现在第一个模型里");
+        assertEquals(1, m2.allItems().size());
+        assertNotSame(m1.topLevel().get(0), m2.topLevel().get(0));
+    }
+
+    /**
+     * 三个查询都只返回<b>不可变快照</b>：{@code add} / {@code clear} 抛
+     * {@code UnsupportedOperationException}，且不影响模型内部状态（指南 §3.4-2）。
+     */
+    @Test
+    void queryResultsAreImmutableSnapshots() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht");
+        m.addItems(List.of(a, b));
+        assertNotNull(m.group(List.of(a)));
+
+        List<List<?>> snapshots = List.of(
+                m.topLevel(), m.allItems(), m.displayOrder(), m.groups(), m.applyUndoAffected());
+        for (List<?> snapshot : snapshots) {
+            assertThrows(UnsupportedOperationException.class, snapshot::clear,
+                    "查询结果必须不可变（不可 clear）：" + snapshot);
+            assertThrows(UnsupportedOperationException.class, () -> snapshot.add(null),
+                    "查询结果必须不可变（不可 add）：" + snapshot);
+        }
+
+        // 不可变之外还得是"快照"：先前取到的那一份不随后续变更而变
+        List<Object> top = m.topLevel();
+        List<PreviewItem> all = m.allItems();
+        List<Object> display = m.displayOrder();
+        PreviewItem c = item("c.mht");
+        m.addItems(List.of(c));
+        assertFalse(top.contains(c), "topLevel() 应是快照");
+        assertFalse(all.contains(c), "allItems() 应是快照");
+        assertFalse(display.contains(c), "displayOrder() 应是快照");
+        assertTrue(m.topLevel().contains(c), "模型自身仍应看到新条目");
+    }
+
+    /** {@code topLevelView()} 是"不可写"的<b>实时视图</b>：写抛异常，读永远是最新结构。 */
+    @Test
+    void topLevelViewIsLiveButUnwritable() {
+        WorkspaceModel m = new WorkspaceModel();
+        List<Object> view = m.topLevelView();
+
+        assertTrue(view.isEmpty());
+        PreviewItem a = item("a.mht");
+        m.addItems(List.of(a));
+        assertEquals(List.of(a), view, "视图必须实时反映数据序（这正是 GUI items 入口需要它的原因）");
+
+        assertThrows(UnsupportedOperationException.class, () -> view.add(item("b.mht")),
+                "topLevelView() 必须是只读视图");
+        assertThrows(UnsupportedOperationException.class, view::clear);
+        assertEquals(1, m.topLevel().size(), "只读视图上的写尝试不得影响模型");
+    }
+
+    // ==================== 变更发布 ====================
+
+    /** 每条成功命令发布<b>恰好一次</b>变更，载荷是本次命令直接作用/直接产出的条目。 */
+    @Test
+    void eachCommandPublishesExactlyOnceWithCorrectPayload() {
+        WorkspaceModel m = new WorkspaceModel();
+        List<WorkspaceChange> seen = new ArrayList<>();
+        m.addListener(seen::add);
+
+        PreviewItem a = item("a.mht"), b = item("b.mht"), c = item("c.mht");
+        m.addItems(List.of(a, b));
+        assertEquals(1, seen.size());
+        assertEquals(WorkspaceChange.Kind.ITEMS_ADDED, seen.get(0).kind());
+        assertEquals(List.of(a, b), seen.get(0).affected());
+
+        seen.clear();
+        m.appendItems(List.of(c));
+        assertEquals(1, seen.size());
+        assertEquals(WorkspaceChange.Kind.ITEMS_ADDED, seen.get(0).kind());
+        assertEquals(List.of(c), seen.get(0).affected(), "结构原语也只发布一次");
+
+        seen.clear();
+        GroupItem<PreviewItem> g = m.group(List.of(a, b));
+        assertEquals(1, seen.size(), "建组只发布一次");
+        assertEquals(WorkspaceChange.Kind.GROUPED, seen.get(0).kind());
+        assertEquals(List.of(a, b), seen.get(0).affected());
+
+        seen.clear();
+        m.removeItems(List.of(c));
+        assertEquals(1, seen.size());
+        assertEquals(WorkspaceChange.Kind.ITEMS_REMOVED, seen.get(0).kind());
+        assertEquals(List.of(c), seen.get(0).affected());
+
+        seen.clear();
+        List<PreviewItem> members = m.ungroup(g);
+        assertEquals(1, seen.size());
+        assertEquals(WorkspaceChange.Kind.UNGROUPED, seen.get(0).kind());
+        assertEquals(members, seen.get(0).affected());
+
+        seen.clear();
+        assertTrue(m.undo());
+        assertEquals(1, seen.size(), "撤销一步只发布一次");
+        assertEquals(WorkspaceChange.Kind.UNDO_APPLIED, seen.get(0).kind());
+
+        seen.clear();
+        GroupItem<PreviewItem> g2 = m.group(List.of(a, b));
+        assertNotNull(g2);
+        seen.clear();
+        m.removeGroup(g2);
+        assertEquals(1, seen.size());
+        assertEquals(WorkspaceChange.Kind.GROUP_REMOVED, seen.get(0).kind());
+
+        seen.clear();
         m.clear();
-        assertTrue(shared.isEmpty());
+        assertEquals(1, seen.size());
+        assertEquals(WorkspaceChange.Kind.CLEARED, seen.get(0).kind());
+    }
+
+    /**
+     * 失败 / no-op 命令<b>不</b>发布变更 —— "收到变更"因此蕴含"状态真的变了"，
+     * 订阅方不需要自己去比对状态。
+     */
+    @Test
+    void failedOrNoOpCommandsPublishNothing() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht");
+        m.addItems(List.of(a));
+        List<WorkspaceChange> seen = new ArrayList<>();
+        m.addListener(seen::add);
+
+        assertEquals(0, m.addItems(List.of(a)), "同一对象重复添加被身份跳过");
+        assertNull(m.group(List.of()), "空目标建组是 no-op");
+        assertTrue(m.ungroup(new GroupItem<>(99, "不在顶层")).isEmpty(), "组不在顶层 → no-op");
+        assertEquals(0, m.removeItems(List.of()), "空移除是 no-op");
+        assertEquals(0, m.removeGroup(new GroupItem<>(98, "不在顶层")));
+        assertFalse(m.applyResolvedDrop(null).changed(), "空操作拖放是 no-op");
+        m.pushUnsupportedForTest();
+        assertFalse(m.undo(), "不支持的撤销类型：弹出后原样压回");
+
+        assertTrue(seen.isEmpty(), "失败 / no-op 命令不得发布变更，实际发布了：" + seen);
+
+        // 原位拖放（changed == false）同样不发布：结构没变就不该有变更事件
+        WorkspaceModel.DropResult drop = m.applyResolvedDrop(new DropResolver.InsertTop(a, 1));
+        assertFalse(drop.changed(), "前置条件：原位拖放不得报告结构变化");
+        assertTrue(seen.isEmpty(), "原位拖放不得发布变更");
+    }
+
+    /** 退订后不再收到变更；重复订阅同一个回调只算一次。 */
+    @Test
+    void listenerCanBeRemovedAndIsDeduplicated() {
+        WorkspaceModel m = new WorkspaceModel();
+        List<WorkspaceChange> seen = new ArrayList<>();
+        java.util.function.Consumer<WorkspaceChange> listener = seen::add;
+        m.addListener(listener);
+        m.addListener(listener);
+        m.addItems(List.of(item("a.mht")));
+        assertEquals(1, seen.size(), "同一订阅者只回调一次");
+
+        m.removeListener(listener);
+        m.addItems(List.of(item("b.mht")));
+        assertEquals(1, seen.size(), "退订后不得再收到变更");
     }
 
     // ==================== 导入 / 添加 ====================

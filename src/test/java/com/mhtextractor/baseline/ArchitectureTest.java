@@ -716,7 +716,7 @@ class ArchitectureTest {
     /**
      * 「WorkspaceModel 接入生产」的**固化断言**：GUI 不得直接改动 workspace 数据序。
      *
-     * <p><b>为什么必须有它</b>：数据序列表是 GUI 与 {@code WorkspaceModel} <b>共享的同一个对象</b>
+     * <p><b>为什么必须有它</b>：迁移初期数据序列表是 GUI 与 {@code WorkspaceModel} <b>共享的同一个对象</b>
      * （见 {@code docs/handoff/H33.md} §二）。因此 GUI 里任何一处 {@code items.add(...)} 都会绕过
      * 模型的撤销记录与结构维护 —— 不会报错，只会**静默分叉**。收口工作把 GUI 的写入点降到了
      * <b>0</b>；本断言把那次的成果变成持续约束，防止日后有人图快又写回去。</p>
@@ -724,9 +724,9 @@ class ArchitectureTest {
      * <p><b>允许的形态</b>：读（{@code for (Object o : items)} / {@code items.indexOf(x)}）与
      * 模型转发（{@code ws.xxx(...)}）。禁止的是在数据序上做增删改调用。</p>
      *
-     * <p><b>⚠️ 本断言的边界（诚实标注）</b>：它只保证"GUI 里没有<b>直接</b>写数据序"，
-     * <b>不</b>保证"没有<b>间接</b>写"。因此本方法同时把"把 {@code items} 交给 {@code util} 层
-     * 方法去写"的处数打印出来，作为<b>第二道度量</b>（历史见下）。</p>
+     * <p><b>⚠️ 本断言的边界</b>：它只保证"GUI 里没有<b>直接</b>写数据序"。因此本方法还有<b>第二段
+     * 断言</b>：GUI 不得把模型的数据序交给 {@code DropResolver} / {@code GroupStructure} 去改
+     * （"间接写"）。</p>
      *
      * <p><b>间接写的历史（逐条记录）</b>：</p>
      * <ul>
@@ -745,11 +745,22 @@ class ArchitectureTest {
      *       重建父组指针，受影响条目经 {@code applyUndoAffected()} 取）。
      *       {@code DropResolver.apply} 的签名与语义<b>未变</b>（{@code DropResolverTest} 的 35 条断言依赖它），
      *       它只是不再被 GUI 直接调用。</li>
+     *   <li><b>Q4/P3 把第二段从"度量 + 打印"升级为硬断言（2026-10-02）</b>。理由：那一轮把
+     *       "模型与 GUI 共享同一个可变列表"改成了"模型唯一拥有业务数据、JavaFX 列表是它的投影"
+     *       （{@code WorkspaceModel} 删掉共享构造、改为私有存储；GUI 侧显示序由
+     *       {@code gui.WorkspaceFxAdapter} 独占维护，数据序入口 {@code items} 变成
+     *       {@code WorkspaceModel.topLevelView()} 的<b>只读</b>包装，唯一写操作 {@code clear()}
+     *       转发为模型命令）。共享对象既然不存在了，"把数据序交给 util 层去改"这条路必须被
+     *       <b>持续挡住</b>而不是只被打印出来 —— 度量在 0 处时升级为断言零成本，
+     *       而一旦有人写回第 1 处，打印是拦不住的。口径同时扩展：除 {@code items} 外，
+     *       也覆盖"取模型集合再转手"的常见写法（{@code topLevelView()} / {@code topLevel()} /
+     *       {@code allItems()} / {@code displayOrder()} 作为这些 util 调用的第一个实参）。</li>
      * </ul>
      *
      * <p><b>口径说明</b>：只认小写 {@code items.} 且要求前一个字符不是标识符字符 ——
-     * 否则 {@code displayItems.setAll(...)}（显示序，GUI 本来就该自己维护）与
-     * {@code topItems.add(...)} 会被误判。</p>
+     * 否则 {@code displayItems.setAll(...)}（显示序，由 {@code WorkspaceFxAdapter} 维护）与
+     * {@code topItems.add(...)} 会被误判。间接写只认"把数据序集合<b>作为第一个实参</b>传给
+     * {@code DropResolver.apply} / {@code GroupStructure.restoreStructure|restoreGroup|dissolveGroup}"。</p>
      */
     @Test
     void guiDoesNotMutateDataOrderDirectly() throws IOException {
@@ -777,30 +788,42 @@ class ArchitectureTest {
         assertTrue(offenders.isEmpty(),
                 "GUI 层不得直接改动 workspace 数据序（须经 com.mhtextractor.app.WorkspaceModel）：\n  "
                         + String.join("\n  ", offenders)
-                        + "\n数据序是与模型共享的同一个列表，直写会绕过撤销记录与结构维护而静默分叉。");
+                        + "\n数据序由模型独占（Q4/P3 起不再共享同一个可变列表），直写会绕过撤销记录与结构维护而静默分叉。");
 
-        // 边界可视化：把"间接写"（把 items 交给 util 层方法去写）的数量与位置打印出来。
-        // 当前应为 0 处：Q0/P0 已把拖拽正向与拖拽撤销两条路径收进 WorkspaceModel
-        // （见本方法 javadoc 的"间接写的历史"）。此处仍是"度量 + 打印"，未升级为硬断言，
-        // 以免把这条边界度量与上面的直写断言混成一条（口径不同，失败信息也不同）。
-        List<String> passthrough = new ArrayList<>();
+        // 第二段（Q4/P3 起为硬断言）：禁止"把模型的数据序交给 util 层去改"（间接写）。
+        // 当前应为 0 处：Q0/P0 已把拖拽正向与拖拽撤销两条路径收进 WorkspaceModel，
+        // Q4/P3 又把数据序入口变成只读投影（见本方法 javadoc 的"间接写的历史"）。
         List<String> passthroughApis = List.of(
-                "DropResolver.apply(items", "GroupStructure.restoreStructure(items",
-                "GroupStructure.restoreGroup(items", "GroupStructure.dissolveGroup(items");
+                "DropResolver.apply(", "GroupStructure.restoreStructure(",
+                "GroupStructure.restoreGroup(", "GroupStructure.dissolveGroup(");
+        List<String> dataOrderSources = List.of(
+                "items", "topLevelView()", "topLevel()", "allItems()", "displayOrder()");
+        List<String> passthrough = new ArrayList<>();
         try (Stream<Path> walk = Files.walk(guiPkg)) {
             for (Path p : walk.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
                 String rel = guiPkg.relativize(p).toString().replace('\\', '/');
                 for (String line : Files.readAllLines(p, StandardCharsets.UTF_8)) {
                     String code = line.split("//")[0];
                     for (String api : passthroughApis) {
-                        if (code.contains(api)) {
-                            passthrough.add(rel + " -> " + api + "…)");
+                        int at = code.indexOf(api);
+                        if (at < 0) continue;
+                        String arg = code.substring(at + api.length()).stripLeading();
+                        for (String src : dataOrderSources) {
+                            if (arg.startsWith(src)) {
+                                passthrough.add(rel + " -> " + api + src + "…）");
+                            }
                         }
                     }
                 }
             }
         }
-        System.out.println("[arch] GUI 未直接改动数据序；间接写（Q0/P0 已归零，拖拽正向与拖拽撤销均经 WorkspaceModel）"
+
+        assertTrue(passthrough.isEmpty(),
+                "GUI 层不得把模型的数据序交给 util 层方法改写（间接写与直写同样绕过模型）：\n  "
+                        + String.join("\n  ", passthrough)
+                        + "\n正解：走 WorkspaceModel 的语义命令（applyResolvedDrop / applyUndo 等），"
+                        + "它们内部完成快照、结构修改、父组指针重建与撤销记录。");
+        System.out.println("[arch] GUI 未直接改动数据序；间接写（Q4/P3 起为断言）"
                 + passthrough.size() + " 处：" + passthrough);
     }
 
