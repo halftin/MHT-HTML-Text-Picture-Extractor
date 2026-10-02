@@ -336,6 +336,13 @@ public class MainController {
      */
     private final com.mhtextractor.app.PreviewService previewService =
             new com.mhtextractor.app.PreviewService(previewCacheLifecycle);
+    /**
+     * 生效参数服务（R8-①）：把「生效参数是什么」「一组目标是否统一 / 是否混合」「是否存在独立参数」
+     * 收敛为唯一实现点，本控制器与 {@code PreviewListCell} 只调用。服务本身无状态，模式与两个全局
+     * 参数缓存每次经 {@link #effectiveContext()} 传入（缓存可被确认/应用到全局/撤销整体替换）。
+     */
+    private final com.mhtextractor.app.EffectiveParamsService effectiveParamsService =
+            new com.mhtextractor.app.EffectiveParamsService();
     /** 在途预览加载线程（规则 d 退出清空时等待其结束用；仅 FX 线程写） */
     private volatile Thread previewLoadThread = null;
     /** 退出清空已完成：二次 close 放行（规则 d） */
@@ -879,8 +886,8 @@ public class MainController {
         if (base.isEmpty()) {
             base = I18n.get("core.groupDefault") + groupNo;
         }
-        // ③ 唯一化：复用既有实现（F7）
-        String name = GroupStructure.uniqueGroupName(base, allGroupNames());
+        // ③ 唯一化：复用既有实现（F7）；组名集合的唯一来源在模型（R8-① 收口）
+        String name = GroupStructure.uniqueGroupName(base, ws.groupNames());
         if (!name.equals(base)) {
             log.info(I18n.msg("log.maincontroller.09", base, name));
         }
@@ -900,11 +907,6 @@ public class MainController {
         // 会话 18 · E1.1：GroupItem 已去 JavaFX 依赖，原 nameProperty().addListener(...)
         // 改为等价的自研 ChangeListener（同步回调，语义一致）
         group.addNameChangeListener(fileListView::refresh);
-    }
-
-    /** 全部组名集合（供自动建组唯一化使用）—— 委托模型（顶层组由 WorkspaceModel 持有） */
-    private List<String> allGroupNames() {
-        return ws.groups().stream().map(GroupItem::getName).toList();
     }
 
     /** 后台线程：轮扫描 + 询问 FX 确认；不经手 GUI 控件 */
@@ -1063,20 +1065,26 @@ public class MainController {
     }
 
     /** 当前模式下某条目的生效参数（三层覆盖，条目独立参数需求拍板）：组参数 > 条目级参数 > 全局；均未确认 → null。
-     *  图片模式经 ParamScope.effectiveImageParams 唯一入口解析（会话 7 收敛，与提取路径一致） */
+     *  解析唯一实现在 {@code app.EffectiveParamsService}（图片模式仍经 ParamScope.effectiveImageParams，与提取路径一致）
+     *  上下文为快照：模式 + 两个全局已确认参数缓存（缓存可被确认/应用到全局/撤销整体替换） */
     /* test-support */ AppConfig effectiveForObject(Object o) {
-        GroupItem<?> parent = o instanceof PreviewItem it ? it.parentGroup
-                : (o instanceof GroupItem<?> g ? g : null);
-        AppConfig itemText = o instanceof PreviewItem it ? it.textItemParams : null;
-        AppConfig itemImage = o instanceof PreviewItem it ? it.imageItemParams : null;
-        return imageModeToggle.isSelected()
-                ? ParamScope.effectiveImageParams(parent, itemImage, imageParamsCache)
-                : ParamScope.effectiveParams(parent, itemText, itemImage, false, textParamsCache, imageParamsCache);
+        return effectiveParamsService.effectiveFor(o, effectiveContext());
     }
 
-    /** 任一有效项目存在生效参数（组参数或全局参数已确认） */
+    /** 生效参数来源三态（NONE/GLOBAL/GROUP）—— 视图层画背景色与白字判定共用同一份来源判定（唯一实现在服务，R8-①） */
+    ParamScope.Status effectiveStatus(Object target) {
+        return effectiveParamsService.effectiveSourceOf(target, effectiveContext());
+    }
+
+    /** 生效参数判定的解析上下文（唯一构造点）：当前模式 + 两个全局已确认参数缓存 */
+    private com.mhtextractor.app.EffectiveParamsService.Context effectiveContext() {
+        return new com.mhtextractor.app.EffectiveParamsService.Context(
+                imageModeToggle.isSelected(), textParamsCache, imageParamsCache);
+    }
+
+    /** 任一有效项目存在生效参数（组参数或全局参数已确认）—— 判定收口到服务（R8-①） */
     private boolean anyVisibleItemHasEffectiveParams() {
-        return allVisibleItems().stream().anyMatch(i -> effectiveForObject(i) != null);
+        return effectiveParamsService.anyHasEffectiveParams(allVisibleItems(), effectiveContext());
     }
 
     private Object currentSelection() {
@@ -1573,18 +1581,9 @@ public class MainController {
 
     // ==================== 应用到全局（条目独立参数需求） ====================
 
-    /** 目标生效参数来源是否为独立参数（条目级或组参数；拍板：仅此状态"应用到全局"可用） */
+    /** 目标生效参数来源是否为独立参数（条目级或组参数；拍板：仅此状态"应用到全局"可用）—— 判定收口到服务（R8-①） */
     private boolean hasIndependentParams(Object target) {
-        if (target instanceof GroupItem<?> g) {
-            return imageModeToggle.isSelected()
-                    ? g.getImageParamsCache() != null : g.getTextParamsCache() != null;
-        }
-        if (target instanceof PreviewItem it) {
-            return ParamScope.backgroundStatus(it.parentGroup,
-                    it.textItemParams, it.imageItemParams, imageModeToggle.isSelected(),
-                    textParamsCache, imageParamsCache) == ParamScope.Status.GROUP;
-        }
-        return false;
+        return effectiveParamsService.hasIndependentParams(target, effectiveContext());
     }
 
     /** 右键菜单"应用到全局"：目标 = 右键点击的条目 */

@@ -277,7 +277,7 @@ public final class WorkspaceModel {
         }
 
         int groupNo = nextGroupNo();
-        String name = GroupStructure.uniqueGroupName(defaultNamePrefix + groupNo, allGroupNames());
+        String name = GroupStructure.uniqueGroupName(defaultNamePrefix + groupNo, groupNames());
         GroupItem<PreviewItem> g = new GroupItem<>(groupNo, name);
         g.getMembers().addAll(targets);
         for (PreviewItem t : targets) {
@@ -842,7 +842,18 @@ public final class WorkspaceModel {
         return (GroupItem<PreviewItem>) g;
     }
 
-    private Set<String> allGroupNames() {
+    /**
+     * 全部顶层组名（去重、保持顶层顺序）。
+     *
+     * <p><b>为什么公开</b>：这是「现有组名集合」的<b>唯一来源</b>。手工建组（{@link #group}）与
+     * 导入自动建组（{@code MainController.createGroupForImport}）都必须用同一份集合做组名唯一化
+     * （{@link GroupStructure#uniqueGroupName}），否则两条路径会各自维护一份而可能生成重名组。
+     * 控制器侧的私有副本已删除，改为直接调用本方法（R8-① 收口）。</p>
+     *
+     * <p>顺序取顶层顺序（而非模型内部任何散列结构），保证"组1 → 组1(2) → 组1(3)"的既有唯一化结果
+     * 与迁移前<b>逐字一致</b>。</p>
+     */
+    public Set<String> groupNames() {
         Set<String> names = new LinkedHashSet<>();
         for (Object o : topLevel) {
             if (o instanceof GroupItem<?> g) {

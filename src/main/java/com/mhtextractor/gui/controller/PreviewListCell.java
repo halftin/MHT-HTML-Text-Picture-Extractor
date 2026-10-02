@@ -327,9 +327,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
                 || it.extractOutcome == ExtractOutcome.SUCCESS_WARNED)
                 || (it.extractOutcome == ExtractOutcome.NONE
                         && it.status != PreviewItem.Status.FAILED
-                        && ParamScope.backgroundStatus(it.parentGroup,
-                                it.textItemParams, it.imageItemParams, ctl.imageModeToggle.isSelected(),
-                                ctl.textParamsCache, ctl.imageParamsCache) == ParamScope.Status.GLOBAL);
+                        && ctl.effectiveStatus(it) == ParamScope.Status.GLOBAL);
         nameLabel.setStyle((inGroup ? "-fx-font-size: 12px; -fx-font-weight: bold;" : "")
                 + (whiteText ? " -fx-text-fill: #ffffff;" : ""));
         posLabel.setStyle(whiteText ? "-fx-text-fill: #ffffff;" : "");
@@ -337,11 +335,10 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
     }
 
     /** 8.5 条目背景色（拍板 2026-09-22 选中态切换，组行同机制）：无生效参数 = 现状色（选中用主题默认高亮）；
-     *  全局参数 = 深蓝；组/条目级独立参数 = 浅蓝；选中时切换到混合灰的变体色 */
+     *  全局参数 = 深蓝；组/条目级独立参数 = 浅蓝；选中时切换到混合灰的变体色。
+     *  来源三态判定经 {@code ctl.effectiveStatus} → {@code app.EffectiveParamsService}（唯一实现点，R8-①） */
     private String itemParamStyle(PreviewItem it, boolean selected) {
-        String paint = switch (ParamScope.backgroundStatus(it.parentGroup,
-                it.textItemParams, it.imageItemParams, ctl.imageModeToggle.isSelected(),
-                ctl.textParamsCache, ctl.imageParamsCache)) {
+        String paint = switch (ctl.effectiveStatus(it)) {
             case GLOBAL -> selected ? GLOBAL_PARAM_SELECTED_PAINT : GLOBAL_PARAM_PAINT;
             case GROUP -> selected ? GROUP_PARAM_SELECTED_PAINT : GROUP_PARAM_PAINT;
             case NONE -> null;
