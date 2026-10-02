@@ -150,14 +150,20 @@
         </ScrollPane>
     </center>
 
-    <!-- 底部固定两行（不参与滚动）：倒数第二行=配置管理，最后一行=取消/确定 -->
+    <!-- 底部固定两行（不参与滚动）：倒数第二行=配置管理，最后一行=取消/确定。
+         Q6a：这两行从 HBox 改成 FlowPane —— 面板不再只有"模态窗口的固定 640px 宽"，
+         它同时要装进占主界面 50% 的覆盖式侧边栏（900px 窗口时只有 ~442px）。
+         HBox 会把子控件压到 pref 之下（按钮文字被省略号截断），FlowPane 宽度不足即换行、
+         按钮恒以 pref 绘制 —— 与本项目「多按钮行一律用 FlowPane」的布局规则一致。
+         单行放得下时两者的渲染结果一致（模态窗口不变，UiProbe -Dialog 截断数仍为 0）。
+         本改动不涉及任何 fx:id / 类型注入 ⇒ 无 native 元数据影响。 -->
     <bottom>
         <VBox spacing="10">
             <padding>
                 <Insets top="10" right="12" bottom="12" left="12"/>
             </padding>
 
-            <HBox spacing="10" alignment="CENTER_LEFT">
+            <FlowPane hgap="10" vgap="6" alignment="CENTER_LEFT">
                 <Label text="%param.config.label"/>
                 <ComboBox fx:id="configComboBox" prefWidth="200" promptText="%param.config.select"/>
                 <Button text="%param.config.load" onAction="#onLoadConfig">
@@ -167,13 +173,12 @@
                 </Button>
                 <Button text="%param.config.save" onAction="#onSaveConfig"/>
                 <Button text="%param.config.delete" onAction="#onDeleteConfig"/>
-                <Region HBox.hgrow="ALWAYS"/>
-            </HBox>
+            </FlowPane>
 
-            <HBox spacing="10" alignment="CENTER_RIGHT">
+            <FlowPane hgap="10" vgap="6" alignment="CENTER_RIGHT">
                 <Button fx:id="cancelButton" text="%param.cancel" onAction="#onCancel"/>
                 <Button fx:id="confirmButton" text="%param.ok" onAction="#onConfirm" styleClass="action-button" defaultButton="true"/>
-            </HBox>
+            </FlowPane>
         </VBox>
     </bottom>
 </fx:root>

@@ -1070,24 +1070,24 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         openParamDialog(target);
     }
 
-    /** 打开参数设置弹窗并应用确认结果（按钮行与右键菜单共用；空白区域菜单项强制传全局目标） */
+    /** 打开参数设置侧边栏并应用确认结果（按钮行与右键菜单共用；空白区域菜单项强制传全局目标） */
     @SuppressWarnings("unchecked")
     private void openParamDialog(ParamScope.Target target) {
         boolean imageMode = imageModeToggle.isSelected();
         try {
-            ParamDialogController ctrl = ParamDialogController.openAndWait(
-                    inputFolderField.getScene().getWindow(), imageMode,
-                    textParamsCache, imageParamsCache, target);
-            if (ctrl.isConfirmed()) {
-                if (target instanceof ParamScope.GroupTarget(GroupItem<?> group)) {
-                    applyGroupParams((GroupItem<PreviewItem>) group, imageMode, ctrl.getResult());
-                } else if (target instanceof ParamScope.ItemTarget<?> it) {
-                    applyItemParams((PreviewItem) it.item(), imageMode, ctrl.getResult());
-                } else {
-                    applyConfirmedParams(imageMode, ctrl.getResult());
-                    log.info(I18n.msg("log.maincontroller.15", modeWord(imageMode)));
-                }
-            }
+            // Q6a：非模态覆盖式侧边栏取代模态窗口。面板按窗口缓存（ParamSidePanel.of），
+            // 复用同一个 ParamFormPane 实例 ⇒ "收起再展开同一目标"保留草稿（R1.5）。
+            ParamSidePanel.of(statusLabel).show(target, imageMode, textParamsCache, imageParamsCache,
+                    params -> {
+                        if (target instanceof ParamScope.GroupTarget(GroupItem<?> group)) {
+                            applyGroupParams((GroupItem<PreviewItem>) group, imageMode, params);
+                        } else if (target instanceof ParamScope.ItemTarget<?> it) {
+                            applyItemParams((PreviewItem) it.item(), imageMode, params);
+                        } else {
+                            applyConfirmedParams(imageMode, params);
+                            log.info(I18n.msg("log.maincontroller.15", modeWord(imageMode)));
+                        }
+                    });
         } catch (Exception e) {
             log.error(I18n.msg("log.maincontroller.16"), e);
             NotificationHost.error(statusLabel, ErrorCode.PARAM_DIALOG_OPEN_FAILED.message(), FontAwesomeSolid.SLIDERS_H);

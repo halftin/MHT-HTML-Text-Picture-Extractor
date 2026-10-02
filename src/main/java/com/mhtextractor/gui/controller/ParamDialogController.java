@@ -1,19 +1,15 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.config.AppConfig;
-import com.mhtextractor.config.ConfigManager;
 import com.mhtextractor.gui.component.NotificationHost;
-import com.mhtextractor.i18n.ErrorCode;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.ParamScope;
 import javafx.scene.Scene;
-import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import lombok.extern.slf4j.Slf4j;
-import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 
 import java.io.IOException;
 
@@ -32,13 +28,17 @@ import java.io.IOException;
  * 弹窗本身就是那个面板节点；{@code @FXML} 字段声明在父类，{@code ParamDialog.fxml} 用
  * {@code fx:root} 把本实例同时作为根与控制器（见 {@link ParamFormPane} 的类注释）。</p>
  *
- * <p>入口：真实用户流程 {@link #openAndWait(Window, boolean, AppConfig, AppConfig, ParamScope.Target)}（模态）；
- * agent 演练/自动化测试 {@link #showDirect(Window, boolean, AppConfig, AppConfig, ParamScope.Target)}（非模态）。</p>
+ * <p><b>Q6a 起本类的角色</b>：真实用户路径已改为非模态右侧侧边栏
+ * （{@link ParamSidePanel} + {@code SidePanelHost}，同一份 {@link ParamFormPane}，
+ * 命名配置等宿主动作共用 {@link ParamPanelActions}）。本类<b>保留且不被删除</b> ——
+ * {@link #showDirect(Window, boolean, AppConfig, AppConfig, ParamScope.Target)} 仍是
+ * agent 演练 / GUI 自动化（{@code FeatureExercise}，约 35 个控件字段直驱）的入口；
+ * {@link #openAndWait(Window, boolean, AppConfig, AppConfig, ParamScope.Target)} 仍可用，
+ * 但<b>生产路径已不再调用它</b>（保留模态能力，避免"为了统一"把这条壳与它的窗口级行为删掉）。</p>
  */
 @Slf4j
 public class ParamDialogController extends ParamFormPane {
 
-    private final ConfigManager configManager = new ConfigManager();
     private Stage stage;
     private boolean confirmed = false;
 
@@ -104,23 +104,17 @@ public class ParamDialogController extends ParamFormPane {
     // ==================== 宿主接线（窗口关闭 / 命名配置 / 提醒） ====================
 
     /**
-     * 把"宿主职责"接到表单面板上：确定/取消出口、命名配置三动作、高速内存模式提醒、配置列表刷新。
-     * <b>调用时机与拆分前一致</b>：在窗体建好之后、{@link #configure} 载入初值之前
-     * （拆分前这些监听与刷新都在 {@code initialize()} 里，同样早于初值载入）。
+     * 把"宿主职责"接到表单面板上：确定/取消出口 + 命名配置与提醒（共用件
+     * {@link ParamPanelActions}，模态窗口与非模态侧边栏<b>同一份实现</b>，
+     * 因此那 6 条 {@code log.paramdialogcontroller.*} 日志键的调用点没有翻倍）。
+     * <b>调用时机与拆分前一致</b>：在窗体建好之后、{@link #configure} 载入初值之前。
      */
     private void installHostActions() {
         setCloseHandler(ok -> {
             confirmed = ok;
             stage.close();
         });
-        setNamedConfigActions(this::saveNamedConfig, this::loadNamedConfig, this::deleteNamedConfig);
-        // 高速内存模式警告（ToggleSwitch 不支持 onAction，改用属性监听）
-        highSpeedMemoryCheck.selectedProperty().addListener((obs, old, newVal) -> {
-            if (newVal) {
-                onHighSpeedMemoryChanged();
-            }
-        });
-        refreshConfigList();
+        new ParamPanelActions(this).install();
     }
 
     private void configure(boolean imageMode, AppConfig textCache, AppConfig imageCache,
@@ -143,81 +137,5 @@ public class ParamDialogController extends ParamFormPane {
     /** 以两组控件当前值构建参数快照（仅参数，不含目录/模式/GUI 状态）；= 表单面板的 {@link #collect()} */
     public AppConfig getResult() {
         return collect();
-    }
-
-    // ==================== 配置管理（加载只填充当前模式参数组） ====================
-
-    private void saveNamedConfig() {
-        TextInputDialog dialog = new TextInputDialog("my_config");
-        dialog.setTitle(I18n.get("dialog.saveConfig"));
-        dialog.setHeaderText(I18n.get("dialog.inputConfigName"));
-        dialog.setContentText(I18n.get("dialog.saveConfigNote"));
-        dialog.showAndWait().ifPresent(name -> {
-            try {
-                configManager.saveConfig(name, getResult());
-                refreshConfigList();
-                configComboBox.getSelectionModel().select(name);
-                log.info(I18n.msg("log.paramdialogcontroller.01", name));
-            } catch (Exception e) {
-                log.error(I18n.msg("log.paramdialogcontroller.02"), e);
-                NotificationHost.error(configComboBox, ErrorCode.CONFIG_SAVE_FAILED.message(), FontAwesomeSolid.SAVE);
-            }
-        });
-    }
-
-    private void loadNamedConfig() {
-        String selected = configComboBox.getSelectionModel().getSelectedItem();
-        if (selected == null) {
-            NotificationHost.toastWarning(configComboBox, ErrorCode.CONFIG_SELECT_TO_LOAD.message(), FontAwesomeSolid.HAND_POINTER);
-            return;
-        }
-        try {
-            AppConfig config = configManager.loadConfig(selected);
-            // 只填充当前模式参数组，另一组保持隔离（确定后才生效）
-            applyLoadedConfig(config);
-            log.info(I18n.msg("log.paramdialogcontroller.03", selected));
-        } catch (Exception e) {
-            log.error(I18n.msg("log.paramdialogcontroller.04"), e);
-            NotificationHost.error(configComboBox, ErrorCode.CONFIG_LOAD_FAILED.message(), FontAwesomeSolid.FILE_DOWNLOAD);
-        }
-    }
-
-    private void deleteNamedConfig() {
-        String selected = configComboBox.getSelectionModel().getSelectedItem();
-        if (selected == null) {
-            NotificationHost.toastWarning(configComboBox, ErrorCode.CONFIG_SELECT_TO_DELETE.message(), FontAwesomeSolid.HAND_POINTER);
-            return;
-        }
-        NotificationHost.confirm(configComboBox,
-                ErrorCode.CONFIG_DELETE_CONFIRM.message("name", selected), FontAwesomeSolid.TRASH_ALT, ok -> {
-                    if (!ok) {
-                        return;
-                    }
-                    try {
-                        configManager.deleteConfig(selected);
-                        refreshConfigList();
-                        log.info(I18n.msg("log.paramdialogcontroller.05", selected));
-                    } catch (Exception e) {
-                        log.error(I18n.msg("log.paramdialogcontroller.06"), e);
-                        NotificationHost.error(configComboBox, ErrorCode.CONFIG_DELETE_FAILED.message(), FontAwesomeSolid.TRASH_ALT);
-                    }
-                });
-    }
-
-    private void refreshConfigList() {
-        setConfigNames(configManager.getConfigNames());
-    }
-
-    /** 高速内存模式确认（会话 19：本窗口内居中确认卡片，取代嵌套模态 Alert） */
-    private void onHighSpeedMemoryChanged() {
-        if (highSpeedMemoryCheck.isSelected()) {
-            String msg = I18n.get("dialog.highSpeedConfirmTitle") + "\n"
-                    + I18n.get("dialog.highSpeedConfirmMsg");
-            NotificationHost.confirm(highSpeedMemoryCheck, msg, FontAwesomeSolid.MEMORY, ok -> {
-                if (!ok) {
-                    highSpeedMemoryCheck.setSelected(false);
-                }
-            });
-        }
     }
 }

@@ -465,3 +465,36 @@
     -fx-border-style: segments(6, 4) line-cap round;
     -fx-background-color: #eff6ff;
 }
+
+/* ===== 覆盖式侧边栏（Q6a / R1.1）：不透明白底 + 左侧分隔线 + 左向投影 =====
+   面板是"覆盖"在主界面之上的，所以必须有实底：透明面板会让主界面文字透上来叠字。
+   投影朝左（-4）表示"这块盖在上面"，与右侧滑出方向一致。 */
+.side-panel {
+    -fx-background-color: white;
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 0 0 0 1;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.18), 18, 0, -4, 0);
+}
+
+/* 侧边栏标题栏（R1.2 的标题 + 线条图标的收起按钮） */
+.side-panel-header {
+    -fx-background-color: #f7f7f7;
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 0 0 1 0;
+}
+
+.side-panel-header .label {
+    -fx-text-fill: #333333;
+}
+
+/* 收起按钮：无边框的线条图标按钮，悬停才给底色 */
+.side-panel-collapse {
+    -fx-background-color: transparent;
+    -fx-padding: 4 8 4 8;
+    -fx-cursor: hand;
+}
+
+.side-panel-collapse:hover {
+    -fx-background-color: #e8e8e8;
+    -fx-background-radius: 4px;
+}

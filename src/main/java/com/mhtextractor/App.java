@@ -4,6 +4,7 @@ import atlantafx.base.theme.NordLight;
 import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
 import com.mhtextractor.gui.component.NotificationHost;
+import com.mhtextractor.gui.component.SidePanelHost;
 import com.mhtextractor.i18n.I18n;
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -60,7 +61,12 @@ public class App extends Application {
         // ⚠️ 必须先落到 Parent 局部变量再传：直接写 new StackPane(loader.load()) 会被推断成
         //    StackPane(Node...) 变参重载（load() 推成 Node[]），运行时 ClassCastException（实测踩过）。
         Parent root = loader.load();
-        StackPane shell = new StackPane(root);
+        // Q6a（R3.2 层序）：主界面外包一层"覆盖层"，右侧参数侧边栏是它的第二个子节点 ——
+        // 覆盖层再被包成 shell，而 NotificationHost.install 把 toast/模态两层【追加】到 shell 末尾，
+        // 于是"主界面 → 侧边栏 → 提醒层"由父子结构唯一决定，不依赖 shell 的子节点顺序，
+        // 也不需要用（更不许用）toFront 去提权。详见 SidePanelHost 的类注释。
+        StackPane overlay = SidePanelHost.install(root);
+        StackPane shell = new StackPane(overlay);
         Scene scene = new Scene(shell);
         NotificationHost.install(scene, shell);
         CONTROLLER = loader.getController();
