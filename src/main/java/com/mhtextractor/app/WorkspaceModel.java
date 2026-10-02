@@ -2,14 +2,17 @@ package com.mhtextractor.app;
 
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.UndoManager;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -46,6 +49,9 @@ public final class WorkspaceModel {
     private final UndoManager<PreviewItem> undoManager = new UndoManager<>();
 
     private int lastGroupNo = 0;
+
+    /** 上一次 {@link #applyUndo} 中受影响的条目（供 {@link #applyUndoAffected} 查询；见其 javadoc 的状态契约） */
+    private List<PreviewItem> lastUndoAffected = List.of();
 
     private static final Predicate<Object> REMOVED = o -> o instanceof PreviewItem it && it.removed;
 
@@ -430,6 +436,161 @@ public final class WorkspaceModel {
         return members.size();
     }
 
+    // ==================== 变更：拖拽落点（REORDER / MERGE_GROUPS） ====================
+
+    /**
+     * 一次拖放执行的结构结果。
+     *
+     * <p><b>为什么是"结构结果"而不是"日志载荷"</b>：{@code app} 层不产出面向用户的文案
+     * （见类 javadoc 的取舍；{@code businessLayerI18nUsageDoesNotGrow} 也只约束非日志引用）。
+     * 因此这里只回传<b>模型侧事实</b>——谁变了、压的是哪类记录、合并涉及哪个组——由调用方
+     * （GUI）决定怎么记日志、怎么清缓存、怎么重解析。</p>
+     *
+     * <p><b>字段顺序即调用顺序</b>：{@code affectedBefore} 的父组指针必须在
+     * {@code DropResolver.apply} <b>之前</b>采集，故由本记录一并带出，调用方不得自行重采。</p>
+     *
+     * <p><b>不含"哪些组被拖拽致空销毁"</b>：那是 {@code DropResolver} 内部（R4）的结构效果，
+     * 且原实现与新实现下都<b>不打日志</b>；本记录若再回传一份，就成了对同一语义的第二处（事后反推的）
+     * 实现 —— 违反"同一语义全仓库只有一个实现点"。</p>
+     *
+     * @param changed        数据序是否真的发生了结构变化（原位 no-op 为 false，此时<b>不</b>压撤销记录）
+     * @param affected       拖拽中父组可能变化的条目（原 {@code MainController.parentChangeTargets(op)} 的语义）
+     * @param type           {@link UndoManager.RecordType#REORDER} 或 {@link UndoManager.RecordType#MERGE_GROUPS}
+     * @param affectedBefore 与 {@code affected} 逐一对应的<b>操作前</b>父组指针（同一份 IdentityHashMap 语义）
+     * @param merged        合并语义下被拖（销毁）的组；非合并为 {@code null}
+     * @param mergedMembers 合并语义下被拖组的成员副本（操作前的组内顺序）；非合并为空列表
+     * @param mergedIndex   合并语义下被拖组操作前的顶层索引；非合并为 -1
+     * @param mergeTarget   合并语义下的目标组；非合并为 {@code null}（仅用于调用方产
+     *                      {@code log.maincontroller.42} 的本地化文案）
+     */
+    public record DropResult(boolean changed,
+                             List<PreviewItem> affected,
+                             UndoManager.RecordType type,
+                             Map<PreviewItem, GroupItem<PreviewItem>> affectedBefore,
+                             GroupItem<PreviewItem> merged,
+                             List<PreviewItem> mergedMembers,
+                             int mergedIndex,
+                             GroupItem<PreviewItem> mergeTarget) {
+    }
+
+    /**
+     * 执行一次**已解析**的拖放操作（{@link DropResolver.Operation}）：整包收进模型，
+     * 内部完成"快照 → 应用 → 重建父组指针 → 压撤销记录"。
+     *
+     * <p><b>为什么必须收进来</b>：{@code DropResolver.apply(topLevel, ...)} 是**间接写** ——
+     * 它与 GUI 的直写一样绕过模型的撤销记录与结构维护，不报错、只静默分叉。
+     * 本方法把"共享数据序的唯一写入者"这一性质补全到拖拽路径
+     * （{@code ArchitectureTest.guiDoesNotMutateDataOrderDirectly} 的间接写处数因此归零）。</p>
+     *
+     * <p><b>采集顺序即语义（本方法最容易写错的地方）</b>：结构快照、受影响条目、各条目<b>操作前</b>的
+     * 父组指针、以及合并载荷（被拖组 / 其顶层索引 / 其成员副本）—— 五者都必须在
+     * {@link DropResolver#apply} <b>之前</b>采集。顺序错了不会报错，只会把<b>操作后</b>的状态
+     * 记成"操作前"，使撤销一步之后回到错误的结构。</p>
+     *
+     * <p><b>落点解析不在本类</b>：{@link DropResolver#resolve} 依赖"目标行在显示序中的位置"等
+     * GUI 概念，仍留在调用方；本类只负责"把已解析的操作落到数据序上"。
+     * {@link DropResolver#apply} 的签名与语义<b>不变</b>（{@code DropResolverTest} 的 35 条断言依赖它）。</p>
+     *
+     * @param op 已解析的落点操作（{@code null} 时返回"未变更"的空结果，不触碰任何状态）
+     * @return 结构结果；{@code changed == false} 时数据序与撤销栈均未被改动
+     */
+    @SuppressWarnings("unchecked")
+    public DropResult applyResolvedDrop(DropResolver.Operation op) {
+        if (op == null) {
+            return new DropResult(false, List.of(), UndoManager.RecordType.REORDER,
+                    Map.of(), null, List.of(), -1, null);
+        }
+        // ① 快照与合并载荷须在数据序修改前采集
+        List<Object> before = GroupStructure.snapshotStructure(topLevel);
+        List<PreviewItem> affected = collectAffected(op);
+        Map<PreviewItem, GroupItem<PreviewItem>> prevParents = new IdentityHashMap<>();
+        for (PreviewItem it : affected) {
+            prevParents.put(it, it.parentGroup);
+        }
+        boolean merge = op instanceof DropResolver.MergeInto;
+        UndoManager.RecordType type = merge
+                ? UndoManager.RecordType.MERGE_GROUPS : UndoManager.RecordType.REORDER;
+        GroupItem<PreviewItem> merged = null;
+        GroupItem<PreviewItem> mergeTarget = null;
+        int mergedIdx = -1;
+        List<PreviewItem> mergedMembers = List.of();
+        if (merge) {
+            merged = (GroupItem<PreviewItem>) ((DropResolver.MergeInto) op).dragged();
+            mergeTarget = (GroupItem<PreviewItem>) ((DropResolver.MergeInto) op).target();
+            mergedIdx = topLevel.indexOf(merged);
+            mergedMembers = new ArrayList<>(merged.getMembers());
+        }
+        // ② 落点生效
+        boolean changed = DropResolver.apply(topLevel, op, REMOVED);
+        // ③ 父组指针以数据序为准统一重建（撤销恢复也走这里，不留第二份实现）
+        rebuildParentPointers();
+        // ④ 一次拖放会话 = 一条撤销记录（载荷与迁移前逐字段一致）
+        //    ⚠️ 拖拽致空组（R4）的销毁由 DropResolver.apply 内部完成，且在原实现与新实现下都是
+        //    **静默**的（只改结构、不打日志）—— 因此本方法不回传"哪些组被销毁"，调用方也无日志可打。
+        //    log.workspacemodel.01 只属于 group(...) / removeItems(...) 两条路径，本步未触碰。
+        if (changed) {
+            if (merge) {
+                undoManager.push(new UndoManager.Record<>(type, mergedMembers, merged,
+                        mergedIdx, List.of(), List.of(), before));
+            } else {
+                undoManager.push(new UndoManager.Record<>(type,
+                        op instanceof DropResolver.InsertTop it && it.item() instanceof PreviewItem p
+                                ? List.of(p)
+                                : op instanceof DropResolver.InsertInto ii && ii.item() instanceof PreviewItem p2
+                                        ? List.of(p2)
+                                        : List.of(),
+                        null, -1, List.of(), List.of(), before));
+            }
+        }
+        return new DropResult(changed, affected, type, prevParents,
+                merged, mergedMembers, mergedIdx, mergeTarget);
+    }
+
+    /**
+     * 拖拽中父组可能变化的条目（原 {@code MainController.parentChangeTargets} 语义，逐字迁移）：
+     * 入组/出组的条目自身；组合并时为<b>被拖组的全部成员</b>（它们的生效参数随父组切换）。
+     */
+    private List<PreviewItem> collectAffected(DropResolver.Operation op) {
+        if (op instanceof DropResolver.InsertTop it && it.item() instanceof PreviewItem p) {
+            return List.of(p);
+        }
+        if (op instanceof DropResolver.InsertInto ii && ii.item() instanceof PreviewItem p) {
+            return List.of(p);
+        }
+        if (op instanceof DropResolver.MergeInto mi && mi.dragged() instanceof GroupItem<?> g) {
+            List<PreviewItem> out = new ArrayList<>();
+            for (Object m : g.getMembers()) {
+                if (m instanceof PreviewItem p) {
+                    out.add(p);
+                }
+            }
+            return out;
+        }
+        return List.of();
+    }
+
+    /**
+     * 重建父组指针：以数据序为准统一维护 {@link PreviewItem#parentGroup}。
+     *
+     * <p>模型内部在 {@link #applyResolvedDrop} 与 {@link #applyUndo} 后调用；
+     * GUI 的显示序重建（{@code rebuildDisplay}）也委托本方法 —— <b>只保留这一份实现</b>，
+     * 避免"同一语义两处各写一遍"（那正是本次收口要消灭的形态）。</p>
+     */
+    public void rebuildParentPointers() {
+        for (Object o : topLevel) {
+            if (o instanceof GroupItem<?> raw) {
+                GroupItem<PreviewItem> g = asPreviewGroup(raw);
+                for (Object m : g.getMembers()) {
+                    if (m instanceof PreviewItem it) {
+                        it.parentGroup = g;
+                    }
+                }
+            } else if (o instanceof PreviewItem it) {
+                it.parentGroup = null;
+            }
+        }
+    }
+
     // ==================== 变更：撤销 ====================
 
     /**
@@ -438,9 +599,10 @@ public final class WorkspaceModel {
      * <p><b>范围说明（诚实标注）</b>：本类实现与"列表结构"相关的撤销类型
      * （{@code IMPORT / GROUP / UNGROUP / REMOVE / REMOVE_GROUP}），
      * 覆盖了"桩 UI 跑通工作区功能"与生产 GUI 的结构类撤销所需。
-     * 参数类撤销（{@code PARAM_SET / CLEAR_PARAMS / APPLY_GLOBAL}）与
-     * {@code REORDER / MERGE_GROUPS} 尚未纳入 —— 它们需要参数快照与落点解析，
-     * 属后续步骤（见 {@code docs/handoff/H17.md}）。</p>
+     * 参数类撤销（{@code PARAM_SET / CLEAR_PARAMS / APPLY_GLOBAL}）<b>仍</b>未纳入 ——
+     * 它们需要参数快照与作用域寻址，属后续步骤（见 {@code docs/handoff/H17.md}）。
+     * 原本文中列为"尚未纳入"的 {@code REORDER / MERGE_GROUPS} 已于 Q0/P0 纳入本类
+     * （见 {@link #applyUndo}：恢复方式是结构快照，不需要落点解析）。</p>
      *
      * @return true = 确实撤销了一步；false = 栈空或该类型尚未支持（不产生任何变更）
      */
@@ -466,13 +628,22 @@ public final class WorkspaceModel {
      * 但"结构如何恢复"这份实现必须只有一处。本方法即那唯一一处 ——
      * {@link #undo()} 与 GUI 都经它，从而消除"栈统一了、应用仍有两份"的重复。</p>
      *
-     * <p>支持类型：{@code REMOVE / REMOVE_GROUP / GROUP / UNGROUP / IMPORT}。
-     * 其余（参数类与 {@code REORDER / MERGE_GROUPS}）返回 {@code false} 且
-     * <b>不改变任何状态</b>，由调用方自行应用。</p>
+     * <p><b>支持类型</b>：{@code REMOVE / REMOVE_GROUP / GROUP / UNGROUP / IMPORT / REORDER / MERGE_GROUPS}。
+     * 其余（参数类）返回 {@code false} 且<b>不改变任何状态</b>，由调用方自行应用。</p>
+     *
+     * <p>拖拽类（{@code REORDER / MERGE_GROUPS}）自 Q0/P0 起纳入：它们此前落在 {@code default} 分支，
+     * 是最后两处"GUI 把共享数据序交给 util 层改写"的间接写。恢复方式与
+     * {@code GROUP} 同构 —— {@link GroupStructure#restoreStructure} 按操作前快照重建顶层顺序与
+     * 各组成员（组对象复用，故组名/组参数保留），随后重建父组指针。</p>
+     *
+     * <p><b>受影响条目怎么拿</b>：用 {@link #applyUndoAffected} —— 它按"上一次
+     * {@code applyUndo} 的记录"作答，因为布尔返回值必须保持既有语义
+     * （5 个既有类型的调用点依赖它，不能为了多回传一个列表就改签名）。</p>
      *
      * @return true = 本类应用了该记录；false = 该类型本类尚未支持（未做任何变更）
      */
     public boolean applyUndo(UndoManager.Record<PreviewItem> record) {
+        lastUndoAffected = List.of();
         if (record == null) {
             return false;
         }
@@ -481,11 +652,44 @@ public final class WorkspaceModel {
             case GROUP -> undoGroup(record);
             case UNGROUP -> undoUngroup(record);
             case IMPORT -> undoImport(record);
+            case REORDER, MERGE_GROUPS -> undoRestructure(record);
             default -> {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * 上一次 {@link #applyUndo} 中<b>受影响</b>的条目（已过滤掉 {@code removed} 项）。
+     *
+     * <p><b>为什么是"配套查询"而不是改返回值</b>：{@code applyUndo} 的布尔语义已有 5 个类型的调用点
+     * 依赖，升级为 record 会波及它们全部；而本方法只有拖拽类撤销一个调用点。代价是<b>有状态</b> ——
+     * 故契约写死：<b>只能紧跟在一次成功的 {@link #applyUndo} 之后调用</b>，
+     * 它描述的是那一次撤销的结果，不描述当前工作区状态。</p>
+     *
+     * <p>返回内容：{@code REORDER / MERGE_GROUPS} 记录里 {@code !removed} 的条目
+     * （{@code REORDER} 为被拖项目、组移动时为空；{@code MERGE_GROUPS} 为被拖组成员副本）；
+     * 其余类型（含未支持类型与 {@code record == null}）返回空列表。
+     * GUI 据此做缓存失效（规则 (c) 的邻近语义）与重新预解析。</p>
+     */
+    public List<PreviewItem> applyUndoAffected() {
+        List<PreviewItem> out = new ArrayList<>();
+        for (PreviewItem it : lastUndoAffected) {
+            if (!it.removed) {
+                out.add(it);
+            }
+        }
+        return out;
+    }
+
+    /** 拖拽类撤销：按操作前快照恢复顶层顺序与各组成员（组对象复用），并重建父组指针 */
+    private void undoRestructure(UndoManager.Record<PreviewItem> record) {
+        if (record.structureBefore() != null) {
+            GroupStructure.restoreStructure(topLevel, record.structureBefore());
+        }
+        rebuildParentPointers();
+        lastUndoAffected = record.items() == null ? List.of() : record.items();
     }
 
     private void undoRemove(UndoManager.Record<PreviewItem> record) {
@@ -619,6 +823,23 @@ public final class WorkspaceModel {
                 g.getMembers().remove(t);
             }
         }
+    }
+
+    /**
+     * 把 {@code GroupItem<?>} 收敛为 {@code GroupItem<PreviewItem>}（与 GUI 侧同名方法同一套保护）。
+     *
+     * <p>先验证全部成员确为 {@code PreviewItem}：验证通过则转换必然安全（本工作区只会产生
+     * {@code GroupItem<PreviewItem>}）；验证失败立即抛异常，避免堆污染导致的
+     * {@code ClassCastException} 在远离根因处爆发。</p>
+     */
+    @SuppressWarnings("unchecked")
+    private static GroupItem<PreviewItem> asPreviewGroup(GroupItem<?> g) {
+        for (Object m : g.getMembers()) {
+            if (!(m instanceof PreviewItem)) {
+                throw new IllegalStateException("Non-PreviewItem member in group " + g.getName() + ": " + m);
+            }
+        }
+        return (GroupItem<PreviewItem>) g;
     }
 
     private Set<String> allGroupNames() {

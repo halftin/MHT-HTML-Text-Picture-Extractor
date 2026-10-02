@@ -1,6 +1,7 @@
 package com.mhtextractor.app;
 
 import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.UndoManager;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -419,8 +421,13 @@ class WorkspaceModelTest {
     }
 
     /**
-     * 未支持的类型（参数类 / 拖拽类）必须返回 false 且**不改变任何状态**；
+     * 未支持的类型（参数类）必须返回 false 且**不改变任何状态**；
      * 且 {@code applyUndo} **不触碰撤销栈**（它只应用一条已弹出的记录）。
+     *
+     * <p><b>口径修订（Q0/P0，2026-10-02）</b>：本测试原以 {@code REORDER} 作为"未支持类型"的代表，
+     * 但拖拽类（{@code REORDER / MERGE_GROUPS}）自 Q0/P0 起已纳入模型（见
+     * {@link WorkspaceModel#applyUndo}），故改用仍未被模型支持的<b>参数类</b>
+     * （{@code PARAM_SET / CLEAR_PARAMS}）作为代表 —— 断言意图（未支持 = false + 零副作用 + 不动栈）不变。</p>
      */
     @Test
     void applyUndoRejectsUnsupportedTypesWithoutTouchingStackOrStructure() {
@@ -430,13 +437,219 @@ class WorkspaceModelTest {
         int depth = m.undoDepth();
 
         assertFalse(m.applyUndo(null), "null 记录应返回 false");
-        assertFalse(m.applyUndo(new UndoManager.Record<>(UndoManager.RecordType.REORDER, List.of())),
-                "拖拽排序尚未支持，应返回 false");
         assertFalse(m.applyUndo(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of())),
-                "参数类尚未支持，应返回 false");
+                "参数类（条目/组/全局）由 GUI 应用，模型应返回 false");
+        assertFalse(m.applyUndo(new UndoManager.Record<>(UndoManager.RecordType.CLEAR_PARAMS, List.of())),
+                "参数类（清除参数）由 GUI 应用，模型应返回 false");
+        assertFalse(m.applyUndo(new UndoManager.Record<>(UndoManager.RecordType.APPLY_GLOBAL, List.of())),
+                "参数类（应用到全局）由 GUI 应用，模型应返回 false");
 
         assertEquals(before, m.topLevel(), "未支持类型不得改变结构");
         assertEquals(depth, m.undoDepth(), "applyUndo 不得改动撤销栈");
+        assertTrue(m.applyUndoAffected().isEmpty(), "未支持类型不得报告受影响条目");
+    }
+
+    // ==================== 拖拽落点（REORDER / MERGE_GROUPS，Q0/P0） ====================
+
+    /**
+     * REORDER 正向（顶层重排）：{@code applyResolvedDrop(InsertTop)} 后数据序正确、
+     * {@code changed == true}、撤销栈深度 +1、{@code affected} 为被拖条目；
+     * 再 {@code applyUndo} 后数据序**逐元素回到原样**。
+     */
+    @Test
+    void applyResolvedDropReordersTopLevelAndUndoRestoresElementByElement() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht"), c = item("c.mht");
+        m.addItems(List.of(a, b, c));
+        List<Object> beforeOrder = m.topLevel();
+        int depthBefore = m.undoDepth();
+
+        // 把 a 移到索引 2 之后（InsertTop 的 index 是"插入前的顶层索引"，apply 自行修正移除偏移）
+        WorkspaceModel.DropResult drop = m.applyResolvedDrop(new DropResolver.InsertTop(a, 3));
+
+        assertTrue(drop.changed(), "顶层重排应报告结构已变化");
+        assertEquals(UndoManager.RecordType.REORDER, drop.type());
+        assertEquals(List.of(b, c, a), m.topLevel(), "数据序应为 b, c, a");
+        assertEquals(List.of(a), drop.affected(), "受影响条目应为被拖条目自身");
+        assertNull(a.parentGroup, "顶层条目不得持有父组指针");
+        assertEquals(depthBefore + 1, m.undoDepth(), "一次拖放只压一条撤销记录");
+
+        UndoManager.Record<PreviewItem> record = m.popRecord();
+        assertNotNull(record);
+        assertTrue(m.applyUndo(record), "REORDER 自 Q0/P0 起由模型应用");
+        assertEquals(beforeOrder, m.topLevel(), "撤销后数据序应逐元素回到原样");
+        assertEquals(List.of(a), m.applyUndoAffected(), "REORDER 的受影响条目 = 被拖条目");
+    }
+
+    /**
+     * REORDER 正向（整组移动 {@code MoveGroup}）：{@code affected} 为空（成员父组没变）、
+     * 撤销载荷不携带条目，撤销后组间顺序回原样。
+     */
+    @Test
+    void applyResolvedDropMovesWholeGroupWithoutAffectedItemsAndUndoRestoresOrder() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht");
+        m.addItems(List.of(a, b));
+        GroupItem<PreviewItem> g1 = m.group(List.of(a));
+        GroupItem<PreviewItem> g2 = m.group(List.of(b));
+        assertNotNull(g1);
+        assertNotNull(g2);
+        List<Object> beforeOrder = m.topLevel();
+        assertEquals(List.of(g1, g2), beforeOrder, "前置：g1 在 g2 之前");
+
+        WorkspaceModel.DropResult drop = m.applyResolvedDrop(new DropResolver.MoveGroup(g1, 2));
+
+        assertTrue(drop.changed());
+        assertEquals(List.of(g2, g1), m.topLevel(), "整组移动应只改顶层组间顺序");
+        assertTrue(drop.affected().isEmpty(), "整组移动不改变任何成员的父组 → affected 为空");
+        assertEquals(g1, a.parentGroup, "成员父组指针应仍指向 g1");
+        assertSame(g1, a.parentGroup);
+
+        UndoManager.Record<PreviewItem> record = m.popRecord();
+        assertNotNull(record);
+        assertTrue(m.applyUndo(record));
+        assertEquals(beforeOrder, m.topLevel(), "撤销后组间顺序应回原样");
+    }
+
+    /**
+     * MERGE_GROUPS 正向 + 撤销：两组合并后，撤销能把**被拖组**（含其成员副本）按原索引放回、
+     * 目标组成员也回原样，且组对象**复用**（组名/组参数保留，不是新对象）。
+     */
+    @Test
+    void applyResolvedDropMergesGroupsAndUndoRestoresDraggedGroupObjectAtOriginalIndex() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht"), c = item("c.mht");
+        m.addItems(List.of(a, b, c));
+        GroupItem<PreviewItem> g1 = m.group(List.of(a, b));
+        GroupItem<PreviewItem> g2 = m.group(List.of(c));
+        assertNotNull(g1);
+        assertNotNull(g2);
+        var g1Params = new com.mhtextractor.config.AppConfig();
+        g1.setTextParamsCache(g1Params);
+        List<Object> beforeOrder = m.topLevel();
+        int g1Index = beforeOrder.indexOf(g1);
+        int g2Index = beforeOrder.indexOf(g2);
+
+        // 把 g1 整组并入 g2（合并语义：g1 销毁，其成员整体插到目标组 memberIndex 处）
+        WorkspaceModel.DropResult drop = m.applyResolvedDrop(new DropResolver.MergeInto(g1, g2, 1));
+
+        assertTrue(drop.changed());
+        assertEquals(UndoManager.RecordType.MERGE_GROUPS, drop.type());
+        assertSame(g1, drop.merged(), "合并载荷应带回被拖组对象");
+        assertSame(g2, drop.mergeTarget());
+        assertEquals(g1Index, drop.mergedIndex(), "被拖组的原顶层索引应在改结构之前采集");
+        assertEquals(List.of(a, b), drop.mergedMembers(), "被拖组成员副本按原组内顺序");
+        assertEquals(List.of(a, b), drop.affected(), "合并的受影响条目 = 被拖组全部成员");
+        assertFalse(m.topLevel().contains(g1), "被拖组应从顶层摘除");
+        // memberIndex == 1 → 被拖组的成员整体插在目标组原有成员 c 之前（DropResolver 的既有语义，未改）
+        assertEquals(List.of(c, a, b), g2.getMembers(), "被拖组成员应插到目标组的 memberIndex 处");
+        assertSame(g2, a.parentGroup, "合并后成员父组指针应指向目标组");
+
+        UndoManager.Record<PreviewItem> record = m.popRecord();
+        assertNotNull(record);
+        assertEquals(UndoManager.RecordType.MERGE_GROUPS, record.type());
+        assertSame(g1, record.group(), "撤销记录必须携带被拖组对象（组名/参数随之保留）");
+        assertEquals(List.of(a, b), record.items());
+        assertEquals(g1Index, record.groupIndex());
+        // 撤销记录必须携带"操作前"结构快照 —— 它决定撤销能否回到原结构
+        assertEquals(beforeOrder.size(), record.structureBefore().size());
+
+        assertTrue(m.applyUndo(record), "MERGE_GROUPS 自 Q0/P0 起由模型应用");
+
+        assertEquals(beforeOrder, m.topLevel(), "撤销后顶层应逐元素回到原样");
+        assertSame(g1, m.topLevel().get(g1Index), "被拖组应复用原对象并回到原顶层索引");
+        assertSame(g2, m.topLevel().get(g2Index));
+        assertEquals(List.of(a, b), g1.getMembers(), "被拖组成员应回到原组");
+        assertEquals(List.of(c), g2.getMembers(), "目标组成员应回原样");
+        assertSame(g1, a.parentGroup, "撤销后父组指针应重建为 g1");
+        assertSame(g1, b.parentGroup);
+        assertSame(g2, c.parentGroup);
+        assertSame(g1Params, g1.getTextParamsCache(), "组参数随组对象保留（未被销毁）");
+        assertEquals(List.of(a, b), m.applyUndoAffected(), "受影响条目 = 被拖组中 !removed 的成员");
+    }
+
+    /**
+     * 拖拽把组内最后一个成员拖出顶层 → 原组按 R4 **自动销毁**（{@code DropResolver} 内部行为，
+     * 只改结构、**不打日志**：{@code log.workspacemodel.01} 只属于 {@code group(...)} / {@code removeItems(...)}）。
+     *
+     * <p>本测试只断言**结构事实**，且断言撤销能把该组按原索引整组恢复 —— 那正是"销毁发生在 apply 内部"
+     * 这一点的可观测后果。</p>
+     */
+    @Test
+    void applyResolvedDropDestroysEmptiedSourceGroupAndUndoRestoresIt() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht");
+        m.addItems(List.of(a, b));
+        GroupItem<PreviewItem> g = m.group(List.of(a));
+        assertNotNull(g);
+        var gParams = new com.mhtextractor.config.AppConfig();
+        g.setTextParamsCache(gParams);
+        List<Object> beforeOrder = m.topLevel();
+        int gIndex = beforeOrder.indexOf(g);
+
+        // 把组内唯一成员拖到顶层末尾 → 源组致空 → 自动销毁
+        WorkspaceModel.DropResult drop = m.applyResolvedDrop(new DropResolver.InsertTop(a, 2));
+
+        assertTrue(drop.changed());
+        assertFalse(m.topLevel().contains(g), "拖出最后一个成员后原组应自动销毁（R4，静默）");
+        assertNull(a.parentGroup, "被拖出的条目父组指针应清空");
+        assertEquals(List.of(a), drop.affected(), "受影响条目 = 被拖出小组的那一项");
+
+        // 撤销：结构快照里仍持有被销毁的组 → 整组按原索引放回，组参数随对象保留
+        UndoManager.Record<PreviewItem> record = m.popRecord();
+        assertNotNull(record);
+        assertTrue(m.applyUndo(record));
+        assertEquals(beforeOrder, m.topLevel(), "撤销后顶层应逐元素回到原样");
+        assertSame(g, m.topLevel().get(gIndex), "被自动销毁的组应复用原对象并回到原顶层索引");
+        assertEquals(List.of(a), g.getMembers(), "成员应回到原组");
+        assertSame(g, a.parentGroup, "撤销后父组指针应重建为原组");
+        assertSame(gParams, g.getTextParamsCache(), "组参数随组对象保留");
+    }
+
+    /** 原位 no-op：{@code DropResolver.apply} 返回 false 时不得压撤销记录。 */
+    @Test
+    void applyResolvedDropNoOpDoesNotPushUndoRecord() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht");
+        m.addItems(List.of(a, b));
+        List<Object> beforeOrder = m.topLevel();
+        int depthBefore = m.undoDepth();
+
+        // 顶层条目的"插入自身前/后"等价于不动（DropResolver 的原位判定）
+        WorkspaceModel.DropResult drop = m.applyResolvedDrop(new DropResolver.InsertTop(a, 1));
+
+        assertFalse(drop.changed(), "原位拖放不得报告结构变化");
+        assertEquals(beforeOrder, m.topLevel(), "原位拖放不得改变数据序");
+        assertEquals(depthBefore, m.undoDepth(), "无结构变化就不应压撤销记录");
+    }
+
+    /** {@code applyResolvedDrop(null)} 是安全 no-op（调用方解析失败时不应改任何状态）。 */
+    @Test
+    void applyResolvedDropWithNullOperationIsSafeNoOp() {
+        WorkspaceModel m = new WorkspaceModel();
+        m.addItems(List.of(item("a.mht")));
+        int depth = m.undoDepth();
+
+        WorkspaceModel.DropResult drop = m.applyResolvedDrop(null);
+
+        assertFalse(drop.changed());
+        assertTrue(drop.affected().isEmpty());
+        assertEquals(1, m.topLevel().size());
+        assertEquals(depth, m.undoDepth());
+    }
+
+    /** {@code topLevel()} 必须返回不可变副本：外部改动不得影响数据序（防"投影"式分叉）。 */
+    @Test
+    void topLevelReturnsImmutableCopy() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht");
+        m.addItems(List.of(a));
+
+        List<Object> view = m.topLevel();
+        assertEquals(List.of(a), view);
+        assertThrows(UnsupportedOperationException.class, () -> view.add(item("b.mht")),
+                "topLevel() 应返回不可变副本（List.copyOf）");
+        assertEquals(1, m.topLevel().size(), "外部对返回值的改动不得影响数据序");
     }
 
     // ==================== 显示序 ====================

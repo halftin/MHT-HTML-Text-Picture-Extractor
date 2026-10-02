@@ -725,13 +725,27 @@ class ArchitectureTest {
      * 模型转发（{@code ws.xxx(...)}）。禁止的是在数据序上做增删改调用。</p>
      *
      * <p><b>⚠️ 本断言的边界（诚实标注）</b>：它只保证"GUI 里没有<b>直接</b>写数据序"，
-     * <b>不</b>保证"没有<b>间接</b>写"。实测另有两处把 {@code items} 交给 {@code util} 层方法去写，
-     * 都在**有意不迁移**的拖拽路径（REORDER / MERGE_GROUPS）上：
-     * {@code DropResolver.apply(items, ...)}（正向改结构，见 MainController:2222）与
-     * {@code GroupStructure.restoreStructure(items, ...)}（拖拽类撤销，见 MainController:2975）。
-     * 它们是"结构操作"、与模型写法同构，且拖拽记录本就由 GUI 自己压自己用，故一致；
-     * 本断言把这两处的数量打印出来，以便日后新增时能被看见
-     * （决策依据见 {@code docs/handoff/H33.md} §六.2）。</p>
+     * <b>不</b>保证"没有<b>间接</b>写"。因此本方法同时把"把 {@code items} 交给 {@code util} 层
+     * 方法去写"的处数打印出来，作为<b>第二道度量</b>（历史见下）。</p>
+     *
+     * <p><b>间接写的历史（逐条记录）</b>：</p>
+     * <ul>
+     *   <li><b>接入生产时实测 2 处</b>，都在<b>有意不迁移</b>的拖拽路径（REORDER / MERGE_GROUPS）上：
+     *       {@code DropResolver.apply(items, ...)}（正向改结构）与
+     *       {@code GroupStructure.restoreStructure(items, ...)}（拖拽类撤销）。
+     *       当时的理由是"它们是结构操作、与模型写法同构，且拖拽记录本就由 GUI 自己压自己用"，
+     *       并把这个数字打印出来以便日后新增时能被看见（决策依据见 {@code docs/handoff/H33.md} §六.2）。</li>
+     *   <li><b>Q0/P0 归零（2026-10-02）：2 处 → 0 处。</b>理由是该边界并不成立 ——
+     *       间接写与直写一样绕过模型的撤销记录与结构维护，<b>不报错、只静默分叉</b>；
+     *       且 {@code mainControllerIsShrinking} 只剩 9 行余量，后续任何"先加壳"的提交都会立刻打红。
+     *       修法：正向走 {@code WorkspaceModel.applyResolvedDrop(op)}（内部完成
+     *       快照 → {@code DropResolver.apply} → 重建父组指针 → 压记录，并把"受影响条目 + 其操作前父组"
+     *       与合并载荷回传），撤销走 {@code WorkspaceModel.applyUndo(record)} 新增的
+     *       {@code REORDER / MERGE_GROUPS} 分支（{@code GroupStructure.restoreStructure} +
+     *       重建父组指针，受影响条目经 {@code applyUndoAffected()} 取）。
+     *       {@code DropResolver.apply} 的签名与语义<b>未变</b>（{@code DropResolverTest} 的 35 条断言依赖它），
+     *       它只是不再被 GUI 直接调用。</li>
+     * </ul>
      *
      * <p><b>口径说明</b>：只认小写 {@code items.} 且要求前一个字符不是标识符字符 ——
      * 否则 {@code displayItems.setAll(...)}（显示序，GUI 本来就该自己维护）与
@@ -766,7 +780,9 @@ class ArchitectureTest {
                         + "\n数据序是与模型共享的同一个列表，直写会绕过撤销记录与结构维护而静默分叉。");
 
         // 边界可视化：把"间接写"（把 items 交给 util 层方法去写）的数量与位置打印出来。
-        // 当前应为 2 处，都在有意不迁移的拖拽路径上（见本方法 javadoc 与 H33 §六.2）。
+        // 当前应为 0 处：Q0/P0 已把拖拽正向与拖拽撤销两条路径收进 WorkspaceModel
+        // （见本方法 javadoc 的"间接写的历史"）。此处仍是"度量 + 打印"，未升级为硬断言，
+        // 以免把这条边界度量与上面的直写断言混成一条（口径不同，失败信息也不同）。
         List<String> passthrough = new ArrayList<>();
         List<String> passthroughApis = List.of(
                 "DropResolver.apply(items", "GroupStructure.restoreStructure(items",
@@ -784,7 +800,7 @@ class ArchitectureTest {
                 }
             }
         }
-        System.out.println("[arch] GUI 未直接改动数据序；间接写（拖拽路径，有意保留）"
+        System.out.println("[arch] GUI 未直接改动数据序；间接写（Q0/P0 已归零，拖拽正向与拖拽撤销均经 WorkspaceModel）"
                 + passthrough.size() + " 处：" + passthrough);
     }
 

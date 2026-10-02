@@ -2207,44 +2207,18 @@ public class MainController {
         return performResolvedDrop(dragged, op, gapTopY, cell);
     }
 
-    /** 已解析操作的执行核心：快照 → apply → 撤销记录 → 动画/瞬时重建 → 父组变化重解析 */
-    @SuppressWarnings("unchecked")
+    /** 已解析操作的执行核心：快照 → apply → 撤销记录（均由模型负责）→ 动画/瞬时重建 → 父组变化重解析 */
     private boolean performResolvedDrop(Object dragged, DropResolver.Operation op,
                                         double gapTopY, PreviewListCell cell) {
-        // 快照与合并载荷须在数据序修改前采集
-        List<Object> before = GroupStructure.snapshotStructure(items);
-        List<PreviewItem> affected = parentChangeTargets(op);
-        Map<PreviewItem, GroupItem<PreviewItem>> prevParents = new IdentityHashMap<>();
-        for (PreviewItem it : affected) {
-            prevParents.put(it, it.parentGroup);
-        }
-        UndoManager.RecordType type = op instanceof DropResolver.MergeInto
-                ? UndoManager.RecordType.MERGE_GROUPS : UndoManager.RecordType.REORDER;
-        GroupItem<PreviewItem> merged = null;
-        int mergedIdx = -1;
-        List<PreviewItem> mergedMembers = List.of();
-        if (type == UndoManager.RecordType.MERGE_GROUPS) {
-            merged = (GroupItem<PreviewItem>) ((DropResolver.MergeInto) op).dragged();
-            mergedIdx = items.indexOf(merged);
-            mergedMembers = new ArrayList<>(merged.getMembers());
-        }
-        boolean changed = DropResolver.apply(items, op, this::isRemovedObject);
-        rebuildParentPointers();
-        if (changed) {
-            // 一次拖放会话 = 一条撤销记录（REORDER 存拖拽前结构快照；MERGE_GROUPS 另存被拖组及其成员副本）
-            if (type == UndoManager.RecordType.MERGE_GROUPS) {
-                ws.push(new UndoManager.Record<>(type, mergedMembers, merged,
-                        mergedIdx, List.of(), List.of(), before));
-                log.info(I18n.msg("log.maincontroller.42", merged.getName(), ((DropResolver.MergeInto) op).target().getName(), mergedMembers.size(), merged.getName()));
-            } else {
-                ws.push(new UndoManager.Record<>(type,
-                        op instanceof DropResolver.InsertTop it && it.item() instanceof PreviewItem p
-                                ? List.of(p)
-                                : op instanceof DropResolver.InsertInto ii && ii.item() instanceof PreviewItem p2
-                                        ? List.of(p2)
-                                        : List.of(),
-                        null, -1, List.of(), List.of(), before));
-            }
+        // 快照、受影响条目、各自操作前的父组指针、合并载荷与撤销记录的压栈全在模型内完成 ——
+        // 采集顺序必须早于数据序修改，那个约束现在由 WorkspaceModel.applyResolvedDrop 独占保证。
+        WorkspaceModel.DropResult drop = ws.applyResolvedDrop(op);
+        // 注意：DropResolver 拖拽致空组（R4）在原实现与新实现下都**只改结构、不打日志**；
+        // log.workspacemodel.01 只属于 WorkspaceModel.group(...) 与 removeItems(...) 两条路径，本步未触碰。
+        // 合并语义的打点（log.maincontroller.42）文案、实参、调用次数与位置一律保持原样。
+        if (drop.changed() && drop.type() == UndoManager.RecordType.MERGE_GROUPS) {
+            log.info(I18n.msg("log.maincontroller.42", drop.merged().getName(),
+                    drop.mergeTarget().getName(), drop.mergedMembers().size(), drop.merged().getName()));
         }
         if (cell != null) {
             animateReleaseInsert(dragged, gapTopY);
@@ -2255,8 +2229,8 @@ public class MainController {
         }
         // 项目入组/出组/组合并 → 生效参数切换：受影响项目清缓存重新预解析（阶段 5 机制）
         List<PreviewItem> reparse = new ArrayList<>();
-        for (PreviewItem it : affected) {
-            if (!it.removed && prevParents.get(it) != it.parentGroup) {
+        for (PreviewItem it : drop.affected()) {
+            if (!it.removed && drop.affectedBefore().get(it) != it.parentGroup) {
                 // 条目独立参数生命周期拍板：入组即清除条目级参数（组内成员只认组参数）
                 if (it.parentGroup != null) {
                     it.textItemParams = null;
@@ -2465,26 +2439,6 @@ public class MainController {
         if (!isTextMode() && sel instanceof PreviewItem it && it.cachedThumbs != null) {
             renderThumbnails(it);
         }
-    }
-
-    /** 拖拽中父组将发生变化的项目：入组/出组项目自身；组合并为被拖组全部成员 */
-    private List<PreviewItem> parentChangeTargets(DropResolver.Operation op) {
-        if (op instanceof DropResolver.InsertTop it && it.item() instanceof PreviewItem p) {
-            return List.of(p);
-        }
-        if (op instanceof DropResolver.InsertInto ii && ii.item() instanceof PreviewItem p) {
-            return List.of(p);
-        }
-        if (op instanceof DropResolver.MergeInto mi && mi.dragged() instanceof GroupItem<?> g) {
-            List<PreviewItem> out = new ArrayList<>();
-            for (Object m : g.getMembers()) {
-                if (m instanceof PreviewItem p) {
-                    out.add(p);
-                }
-            }
-            return out;
-        }
-        return List.of();
     }
 
     /** 空组销毁判定谓词（拖拽致空组销毁与移除一致，R4） */
@@ -2700,20 +2654,9 @@ public class MainController {
         return ws.allItems().stream().filter(i -> !i.removed).toList();
     }
 
-    /** 重建父组指针：以数据序为准统一维护 PreviewItem.parentGroup（显示序重建时同步调用） */
+    /** 重建父组指针（显示序重建时同步调用）—— 委托模型，本类不再留第二份实现 */
     private void rebuildParentPointers() {
-        for (Object o : items) {
-            if (o instanceof GroupItem<?> raw) {
-                GroupItem<PreviewItem> g = asPreviewGroup(raw);
-                for (Object m : g.getMembers()) {
-                    if (m instanceof PreviewItem it) {
-                        it.parentGroup = g;
-                    }
-                }
-            } else if (o instanceof PreviewItem it) {
-                it.parentGroup = null;
-            }
-        }
+        ws.rebuildParentPointers();
     }
 
     /** 按数据序重建显示序（ListView 渲染展平列表）。动画期间的外部重建（换目录/模式切换等）先快进完成动画 */
@@ -2978,16 +2921,13 @@ public class MainController {
                     log.info(I18n.msg("log.maincontroller.50", record.group().getName()));
                 }
                 case REORDER, MERGE_GROUPS -> {
-                    // 拖拽类：模型尚未支持（需落点解析），仍由本类恢复。
-                    // 注意：不能与 GROUP 合并成一个分支——GROUP 已交给模型，合并会导致恢复两次。
-                    // 撤销恢复拖拽前结构（顶层顺序、组位置、各组内顺序），组对象复用（组名/参数保留）
-                    GroupStructure.restoreStructure(items, record.structureBefore());
+                    // 拖拽类：结构恢复（顶层顺序 / 组位置 / 组内顺序，组对象复用）自 Q0/P0 起由模型负责；
+                    // 本类只做缓存失效与重解析收尾（缓存规则不得由 GUI 直调，见不变式）。
+                    ws.applyUndo(record);
                     reparseAfter = new ArrayList<>();
-                    for (PreviewItem it : record.items()) {
-                        if (!it.removed) {
-                            clearPreviewCache(it);
-                            reparseAfter.add(it);
-                        }
+                    for (PreviewItem it : ws.applyUndoAffected()) {
+                        clearPreviewCache(it);
+                        reparseAfter.add(it);
                     }
                     log.info(I18n.msg("log.maincontroller.51", I18n.get(record.type() == UndoManager.RecordType.REORDER
                         ? "reorder.dragSort" : "reorder.groupMerge")));
