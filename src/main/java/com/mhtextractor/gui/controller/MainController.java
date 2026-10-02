@@ -2,6 +2,7 @@ package com.mhtextractor.gui.controller;
 
 import atlantafx.base.controls.ToggleSwitch;
 import com.mhtextractor.app.ExtractionPreconditions;
+import com.mhtextractor.app.WorkspaceImportService;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.cache.PreviewCacheKey;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
@@ -34,7 +35,6 @@ import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.HtmlExportBuilder;
-import com.mhtextractor.util.IncrementalImport;
 import com.mhtextractor.util.MhtImportPlanner;
 import com.mhtextractor.util.OutputUnitPlanner;
 import com.mhtextractor.util.ParamScope;
@@ -124,6 +124,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * 主界面逻辑控制器：预览工作台常驻主窗口，参数设置弹窗化。
@@ -134,7 +135,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * GUI 状态（模式/目录/完成后打开输出文件夹）持久化于 logs/gui-state.json。</p>
  */
 @Slf4j
-public class MainController {
+public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 超大文件完整解析确认阈值（字节） */
     private static final long LARGE_FILE_THRESHOLD = 50L * 1024 * 1024;
@@ -384,28 +385,23 @@ public class MainController {
     // ==================== 统一导入会话 ====================
     /** 当前导入会话：非 null = 导入进行中（用于禁用开始提取 + 恢复判定） */
     /* test-support */ ImportSession importPending = null;
-    /** 本次导入累计新增的项目（收尾统一预解析，避免 O(n²)） */
-    private final List<PreviewItem> importAccumulated = new ArrayList<>();
     /** 外部导入拖拽进行中（与内部排序通道互斥；hasFiles() 判定） */
     private boolean importDragOver = false;
     /** 拖拽目标嵌套深度计数（DRAG_ENTERED_TARGET/DRAG_EXITED_TARGET 成对计数） */
     /* test-support */ int importDragDepth = 0;
     /** 外部导入拖拽的列表高亮样式类 */
     private static final String STYLE_LIST_IMPORT_HOVER = "list-import-hover";
-    /** 每轮配额（与 MhtImportPlanner 常量一致） */
-    private static final int IMPORT_QUOTA_GROUPS = MhtImportPlanner.DEFAULT_MAX_GROUPS;
-    private static final int IMPORT_QUOTA_FILES  = MhtImportPlanner.DEFAULT_MAX_FILES;
-    /** 本次导入累计自动创建的组数（配额确认框/收尾汇总用） */
-    private int importGroupCount = 0;
-    /** 本次导入扫描计数器（applyImportPlan 每轮同步；Plan 的计数为扫描器累计值） */
-    private int importIgnoredNonMht = 0;
-    private int importHiddenDirs = 0;
-    private int importEmptyDirs = 0;
-    private int importUnreadable = 0;
-    private int importDepthLimited = 0;
 
     /** 导入会话（不可变） */
     /* test-support */ record ImportSession(List<String> addresses, String sourceDesc, boolean fromDrag) {}
+
+    /**
+     * 导入会话协调器（Q2/P1）：后台线程生命周期、轮次派发、配额确认等待、模型命令、列表刷新与唯一收尾都在它里面。
+     * 导入的<b>规则</b>（地址规范化、轮次去重、组名计算、累计计数）在无头
+     * {@link com.mhtextractor.app.WorkspaceImportService} —— 原先散在本类的 7 个累计字段
+     * （{@code importAccumulated} / {@code importGroupCount} 与 5 个扫描计数器）随规则一起搬进该服务的会话对象。
+     */
+    private final ImportSessionCoordinator importSessions = new ImportSessionCoordinator(ws, this);
 
     // ===== 右键菜单（右键菜单功能需求：13 项 = 9 动作 + 4 分隔线） =====
     /** 菜单实例（项禁用状态在弹出前按右键目标类型刷新） */
@@ -725,6 +721,9 @@ public class MainController {
     /**
      * 统一导入入口：来源只接受地址字段。
      * 拖拽路径（fromDrag=true）在盘符根目录时弹确认框（BC-8）；浏览路径不弹。
+     *
+     * <p>本方法只留"拦截 + 确认展示 + 日志产出"；规范化/去重/建组/累计的规则在
+     * {@link com.mhtextractor.app.WorkspaceImportService}，会话生命周期在 {@link ImportSessionCoordinator}。</p>
      */
     /* test-support */ void importByPaths(List<String> addresses, String sourceDesc, boolean fromDrag) {
         if (addresses == null || addresses.isEmpty()) {
@@ -735,21 +734,30 @@ public class MainController {
             return;
         }
         // 地址规范化（RISK-6）：祖先/后代包含关系合并为祖先，防重复扫描与重复批次
-        List<String> normalized = normalizeAddresses(addresses);
-        if (normalized.isEmpty()) {
+        WorkspaceImportService.NormalizeResult normalized = importSessions.normalize(addresses);
+        // 规范化日志（.06 重复 / .07 被祖先覆盖）：规则在 app 层回传有序事件，文案留在 GUI 层。
+        // ★ 必须在 .04 之前逐条产出 —— 原实现是"规范化过程中打日志，返回后才打 .04"。
+        for (WorkspaceImportService.DroppedAddress dropped : normalized.dropped()) {
+            if (dropped.ancestor() == null) {
+                log.info(I18n.msg("log.maincontroller.06", dropped.address()));
+            } else {
+                log.info(I18n.msg("log.maincontroller.07", dropped.address(), dropped.ancestor()));
+            }
+        }
+        if (normalized.kept().isEmpty()) {
             return;
         }
-        log.info(I18n.msg("log.maincontroller.04", sourceDesc, normalized.size()));
+        log.info(I18n.msg("log.maincontroller.04", sourceDesc, normalized.kept().size()));
 
         // BC-8：仅拖拽来源 + 盘符根目录 → 确认（会话 19：窗口内居中确认卡片，回调式取代 showAndWait）
         if (fromDrag) {
-            List<String> roots = MhtImportPlanner.findDriveRoots(normalized);
+            List<String> roots = MhtImportPlanner.findDriveRoots(normalized.kept());
             if (!roots.isEmpty()) {
                 String msg = I18n.get("import.rootDirConfirmMsg") + String.join("\n", roots)
                         + I18n.get("import.rootDirConfirmNote");
                 NotificationHost.confirm(statusLabel, msg, FontAwesomeSolid.HDD, ok -> {
                     if (ok) {
-                        startImportSession(normalized, sourceDesc, fromDrag);
+                        importSessions.start(normalized.kept(), sourceDesc, fromDrag);
                     } else {
                         log.info(I18n.msg("log.maincontroller.05", roots));
                     }
@@ -758,148 +766,76 @@ public class MainController {
             }
         }
 
-        startImportSession(normalized, sourceDesc, fromDrag);
-    }
-
-    /** 导入会话启动（原盘符根目录确认框之后的同步段；确认走回调后再进这里） */
-    private void startImportSession(List<String> normalized, String sourceDesc, boolean fromDrag) {
-        ImportSession session = new ImportSession(normalized, sourceDesc, fromDrag);
-        importPending = session;
-        importAccumulated.clear();
-        importGroupCount = 0;
-        importIgnoredNonMht = 0;
-        importHiddenDirs = 0;
-        importEmptyDirs = 0;
-        importUnreadable = 0;
-        importDepthLimited = 0;
-        updateStartButtonState();                 // C-1：禁用开始提取
-
-        Thread t = new Thread(() -> runImportRounds(session), "mht-import-scan");
-        t.setDaemon(true);
-        t.start();
+        importSessions.start(normalized.kept(), sourceDesc, fromDrag);
     }
 
     /**
-     * 地址规范化：重复地址合并；祖先/后代包含关系合并为祖先（丢弃后代）并 info 日志说明。
-     * 无效路径格式原样保留（扫描器按"不存在"计 unreadable）。
-     */
-    private List<String> normalizeAddresses(List<String> addresses) {
-        List<String> kept = new ArrayList<>();
-        for (String a : addresses) {
-            if (a == null || a.isBlank()) {
-                continue;
-            }
-            if (kept.stream().anyMatch(a::equals)) {
-                log.info(I18n.msg("log.maincontroller.06", a));
-                continue;
-            }
-            String ancestor = kept.stream().filter(k -> isDescendantOf(a, k)).findFirst().orElse(null);
-            if (ancestor != null) {
-                log.info(I18n.msg("log.maincontroller.07", a, ancestor));
-                continue;
-            }
-            kept.removeIf(k -> isDescendantOf(k, a));
-            kept.add(a);
-        }
-        return kept;
-    }
-
-    private static boolean isDescendantOf(String child, String ancestor) {
-        try {
-            Path cp = Path.of(child);
-            Path ap = Path.of(ancestor);
-            return !cp.equals(ap) && cp.startsWith(ap);
-        } catch (RuntimeException e) {
-            return false;
-        }
-    }
-
-    /**
-     * 应用一个计划（一批或一轮）；FX 线程；生产与自动化测试共用。
-     * 撤销与预解析职责在本层上移：一次导入累计压一条 IMPORT 记录（BC-5），
-     * 预解析由 finishImport 统一执行（RISK-7）。
+     * 应用一个计划（一批或一轮）；FX 线程；生产与自动化测试共用（<b>签名与语义一字不变</b>：
+     * GUI 自动化 {@code FeatureExercise} 用它程序化驱动一整轮导入）。
+     * 规则（去重/条目构造/累计/组名）在 {@link com.mhtextractor.app.WorkspaceImportService}，
+     * 模型命令与刷新在 {@link ImportSessionCoordinator}。
      */
     /* test-support */ void applyImportPlan(MhtImportPlanner.Plan plan) {
-        // 计数器为扫描器累计值：即使本轮无批次也同步（finishImport 汇总用）
-        importIgnoredNonMht = plan.ignoredNonMht();
-        importHiddenDirs = plan.hiddenDirs();
-        importEmptyDirs = plan.emptyDirs();
-        importUnreadable = plan.unreadable();
-        importDepthLimited = plan.depthLimited();
-
-        List<GroupItem<PreviewItem>> createdGroups = new ArrayList<>();
-
-        for (MhtImportPlanner.Batch batch : plan.batches()) {
-            // 去重：与列表可见项比对（复用 F4）——已移除项仍在数据序中，不得视为"已导入"而整批跳过
-            List<File> fresh = IncrementalImport.findNewFiles(
-                    batch.files(), allVisibleItems().stream().map(i -> i.path).toList());
-            if (fresh.isEmpty()) {
-                // RISK-1 硬约束：无新文件则该批次不建组
-                log.debug(I18n.msg("log.maincontroller.08", batch.dirPath()));
-                continue;
-            }
-
-            boolean wasEmpty = visibleCount() == 0;
-            List<PreviewItem> added = new ArrayList<>();
-            for (File f : fresh) {
-                BatchProcessor.MhtFileInfo info = BatchProcessor.toMhtFileInfo(f);
-                added.add(new PreviewItem(info.getPath(), info.getName(),
-                        info.getModifiedTime(), f.getParent()));
-            }
-
-            if (batch instanceof MhtImportPlanner.GroupBatch gb) {
-                // 组成员只入组、不入顶层（数据模型：组成员仅存于 GroupItem.members；
-                // 若同时入顶层，visibleCount/显示序/输出单元都会双计——§5.6 断言口径为单重表示）
-                GroupItem<PreviewItem> group = createGroupForImport(added, gb.folderName());
-                createdGroups.add(group);
-            } else {
-                ws.appendItems(added);            // TopLevelBatch：平铺（数据序写入统一经模型）
-            }
-            importAccumulated.addAll(added);
-
-            if (wasEmpty) {
-                fileListView.getSelectionModel().selectFirst();
-            }
-        }
-        importGroupCount += createdGroups.size();
-
-        // 撤销栈：一次导入 = 一条记录（BC-5；多轮导入时每轮记录均携带全量累计，一次撤销撤整批）
-        if (!importAccumulated.isEmpty()) {
-            ws.push(new UndoManager.Record<>(
-                    UndoManager.RecordType.IMPORT, new ArrayList<>(importAccumulated),
-                    new ArrayList<>(createdGroups)));
-        }
-
-        refreshAfterListChange();                 // 每轮一次（RISK-8，不是每批一次）
+        importSessions.applyPlan(plan);
     }
 
-    /**
-     * 建组：组名 sanitize → 唯一化 → 注册名字刷新监听 → 追加顶层（BC-4 默认展开）。
-     * 注意：不清 members 的条目级参数——成员均为本次新导入项，本就没有条目级参数；
-     * 不要照抄 onGroupClicked 的条目参数清除（那会清掉既有条目的参数，RISK-1）。
-     */
-    private GroupItem<PreviewItem> createGroupForImport(List<PreviewItem> members, String folderName) {
-        // ① 组号：全局唯一来源在模型（与手工建组共用同一计数器，避免两条路径各自 +1 产生重号）
-        int groupNo = ws.nextGroupNo();
-        // ② 组名：sanitize（保证"列表显示名 == 输出名"，F10/BC-6）；空名退化为"默认前缀 + 组号"
-        String base = SanitizeUtils.sanitize(folderName);
-        if (base.isEmpty()) {
-            base = I18n.get("core.groupDefault") + groupNo;
-        }
-        // ③ 唯一化：复用既有实现（F7）；组名集合的唯一来源在模型（R8-① 收口）
-        String name = GroupStructure.uniqueGroupName(base, ws.groupNames());
-        if (!name.equals(base)) {
-            log.info(I18n.msg("log.maincontroller.09", base, name));
-        }
-        // ④ 建组 + 注册名字刷新监听（F8——漏了会导致改名后列表不刷新）
-        GroupItem<PreviewItem> group = new GroupItem<>(groupNo, name);
+    // ==================== 导入协调器的 GUI 回调（ImportSessionCoordinator.ImportUi） ====================
+
+    /** 会话开始：置位"导入中"并刷新开始按钮（C-1：禁用开始提取） */
+    @Override
+    public void onImportStarted(List<String> addresses, String sourceDesc, boolean fromDrag) {
+        importPending = new ImportSession(addresses, sourceDesc, fromDrag);
+        updateStartButtonState();
+    }
+
+    /** 会话收尾：清位并刷新开始按钮（★ 必须走派生更新，不裸 setDisable） */
+    @Override
+    public void onImportFinished() {
+        importPending = null;
+        updateStartButtonState();
+    }
+
+    /** 列表可见项快照：路径（导入去重口径 = 可见项，<b>不得</b>含已移除项）+ 数量 */
+    @Override
+    public VisibleSnapshot visibleSnapshot() {
+        List<PreviewItem> visible = allVisibleItems();
+        return new VisibleSnapshot(visible.stream().map(i -> i.path).toList(), visible.size());
+    }
+
+    @Override
+    public boolean hasConfirmedParams() {
+        return currentModeConfirmed();
+    }
+
+    /** 收尾统一预解析（RISK-7：导入期间抑制，收尾跑一次，避免 O(n²)） */
+    @Override
+    public void startPreParse(List<PreviewItem> items) {
+        startPreParseFor(items);
+    }
+
+    @Override
+    public void refreshList() {
+        refreshAfterListChange();
+    }
+
+    @Override
+    public void attachGroupNameRefresh(GroupItem<PreviewItem> group) {
         registerGroupNameRefresh(group);
-        group.setExpanded(true);                  // BC-4：默认展开
-        // ⑤ 成员入组
-        group.getMembers().addAll(members);
-        // ⑥ 追加顶层末尾（导入一律追加到末尾，不与落点/既有项目交互）—— 数据序写入统一经模型
-        ws.appendGroup(group);
-        return group;
+    }
+
+    @Override
+    public void selectFirstRow() {
+        fileListView.getSelectionModel().selectFirst();
+    }
+
+    @Override
+    public void confirmQuotaReached(String message, Consumer<Boolean> answer) {
+        NotificationHost.confirm(statusLabel, message, FontAwesomeSolid.CLIPBOARD_LIST, answer);
+    }
+
+    @Override
+    public void showImportFailed() {
+        NotificationHost.error(statusLabel, ErrorCode.IMPORT_FAILED.message(), FontAwesomeSolid.FILE_IMPORT);
     }
 
     /** 组名刷新监听注册（手动/自动建组共用；F8/RISK-11） */
@@ -907,63 +843,6 @@ public class MainController {
         // 会话 18 · E1.1：GroupItem 已去 JavaFX 依赖，原 nameProperty().addListener(...)
         // 改为等价的自研 ChangeListener（同步回调，语义一致）
         group.addNameChangeListener(fileListView::refresh);
-    }
-
-    /** 后台线程：轮扫描 + 询问 FX 确认；不经手 GUI 控件 */
-    private void runImportRounds(ImportSession session) {
-        MhtImportPlanner.Scanner scanner = MhtImportPlanner.scanner(
-                session.addresses(), MhtImportPlanner.DEFAULT_MAX_DEPTH,
-                IMPORT_QUOTA_GROUPS, IMPORT_QUOTA_FILES);
-        try {
-            while (true) {
-                MhtImportPlanner.Plan round = scanner.nextRound();
-                Platform.runLater(() -> applyImportPlan(round));
-                if (!round.hasMore()) {
-                    break;
-                }
-                if (!round.quotaHit()) {
-                    continue;                     // 防御：无配额命中却还有剩余
-                }
-                log.info(I18n.msg("log.maincontroller.10", IMPORT_QUOTA_GROUPS, IMPORT_QUOTA_FILES));
-                boolean go = awaitQuotaConfirm();
-                if (!go) {
-                    log.info(I18n.msg("log.maincontroller.11"));
-                    break;
-                }
-            }
-        } catch (Exception ex) {
-            log.error(I18n.msg("log.maincontroller.12"), ex);
-            Platform.runLater(() -> NotificationHost.error(statusLabel, ErrorCode.IMPORT_FAILED.message(), FontAwesomeSolid.FILE_IMPORT));
-        } finally {
-            Platform.runLater(this::finishImport);   // 唯一恢复点
-        }
-    }
-
-    /** 后台线程阻塞等待 FX 线程上的配额确认（会话 19：窗口内居中确认卡片；等待方是导入后台线程，不冻结界面） */
-    private boolean awaitQuotaConfirm() {
-        CompletableFuture<Boolean> future = new CompletableFuture<>();
-        String msg = I18n.get("import.quotaReached",
-                        "groups", IMPORT_QUOTA_GROUPS, "files", IMPORT_QUOTA_FILES)
-                + I18n.get("import.quotaContinue")
-                + I18n.get("import.quotaStop",
-                        "files", importAccumulated.size(), "groups", importGroupCount);
-        Platform.runLater(() -> NotificationHost.confirm(statusLabel, msg, FontAwesomeSolid.CLIPBOARD_LIST, future::complete));
-        return future.join();
-    }
-
-    /** 收尾：唯一恢复点 + 统一预解析 + 汇总日志 */
-    private void finishImport() {
-        try {
-            // 预解析在导入期间抑制，收尾统一跑一次（RISK-7，避免 O(n²)）
-            if (!importAccumulated.isEmpty() && currentModeConfirmed()) {
-                startPreParseFor(new ArrayList<>(importAccumulated));
-            }
-            log.info(I18n.msg("log.maincontroller.13", importAccumulated.size(), importGroupCount, importIgnoredNonMht, importHiddenDirs, importEmptyDirs, importUnreadable, importDepthLimited));
-        } finally {
-            importPending = null;
-            importAccumulated.clear();
-            updateStartButtonState();             // ★ 必须走派生更新，不裸 setDisable
-        }
     }
 
     /** 外部导入拖拽落点高亮（去抖：状态未变化不重复操作样式类） */
