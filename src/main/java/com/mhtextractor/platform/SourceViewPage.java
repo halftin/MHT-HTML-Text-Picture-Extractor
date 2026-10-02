@@ -7,8 +7,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.List;
 
 /**
  * 源码视图页生成（步骤 5b 从 {@code BrowserLauncher} 拆出的第 1 个职责）。
@@ -21,6 +20,11 @@ import java.util.regex.Pattern;
  * <p><b>为什么独立成类</b>：它是纯字符串/IO 处理，<b>不依赖</b>浏览器探测、进程启动或 CDP 协议，
  * 是原 866 行类里边界最清晰的一块（约 250 行）。拆出后 {@code BrowserLauncher} 只保留
  * "打开浏览器"的编排。</p>
+ *
+ * <p><b>Q8a / R8-② 起的分工</b>：高亮内核已抽到 {@link HtmlSyntaxTokens}（产出 token），
+ * 本类只剩"token → 给外部浏览器看的 HTML 字符串"的渲染。这样将来应用内查看器（{@code gui} 层）
+ * 可以直接消费同一份 token，不必再写第二份扫描实现 —— 两条渲染路径不会分叉。
+ * <b>本类的对外行为、{@code <style>}、文件名、日志键、可见性均未变</b>。</p>
  */
 
 @Slf4j
@@ -31,9 +35,6 @@ final class SourceViewPage {
 
     /** 源码视图页文件名（行号 + 高亮 + 链接下划线的源码页，CDP 原生方案的回退） */
     public static final String SOURCE_VIEW_NAME = "source-view.html";
-
-    /** 源码中的 URL（文本段与属性值内加下划线链接样式） */
-    private static final Pattern URL_PATTERN = Pattern.compile("https?://[^\\s\"'<>]+");
 
     /**
      * 源码视图页：逐行渲染（行号栏 + 语法高亮 + 链接下划线），观感贴近 Edge/Chromium
@@ -71,191 +72,56 @@ final class SourceViewPage {
     }
 
     /**
-     * 生成源码视图主体：整篇一次扫描（跨行标签/注释着色不断），遇 \n 提交一行；
-     * 行边界处闭合未完成的着色 span，下一行重开，保证行结构完好且换行信息零丢失。
+     * 生成源码视图主体：{@link HtmlSyntaxTokens#tokenize(String)} 逐行 token → 逐行渲染。
+     *
+     * <p>跨行的着色段（跨行注释/标签）在行边界处<b>先闭合、下一行重开</b>，
+     * 保证行结构完好且换行信息零丢失 —— 与迁移前逐字节相同的行模板。
      */
     static String buildSourceViewBody(String html) {
-        String normalized = html.replace("\r\n", "\n").replace('\r', '\n');
-        int totalLines = 1 + (int) normalized.chars().filter(ch -> ch == '\n').count();
-        LineWriter w = new LineWriter(totalLines);
-        int i = 0;
-        int n = normalized.length();
-        while (i < n) {
-            char c = normalized.charAt(i);
-            if (c == '<') {
-                if (normalized.startsWith("<!--", i)) {
-                    int end = normalized.indexOf("-->", i + 4);
-                    if (end < 0) {
-                        w.write(normalized.substring(i), "hl-cm");
-                        break;
-                    }
-                    w.write(normalized.substring(i, end + 3), "hl-cm");
-                    i = end + 3;
-                    continue;
-                }
-                if (normalized.regionMatches(true, i, "<!doctype", 0, 9)) {
-                    int end = normalized.indexOf('>', i);
-                    if (end < 0) {
-                        w.write(normalized.substring(i), "hl-dt");
-                        break;
-                    }
-                    w.write(normalized.substring(i, end + 1), "hl-dt");
-                    i = end + 1;
-                    continue;
-                }
-                // 找标签结束 >（属性值引号内的 > 不视为结束）
-                int j = i + 1;
-                char quote = 0;
-                while (j < n) {
-                    char d = normalized.charAt(j);
-                    if (quote != 0) {
-                        if (d == quote) {
-                            quote = 0;
-                        }
-                    } else if (d == '"' || d == '\'') {
-                        quote = d;
-                    } else if (d == '>') {
-                        break;
-                    }
-                    j++;
-                }
-                if (j >= n) {
-                    w.write(normalized.substring(i), "hl-tag");
-                    break;
-                }
-                writeTag(w, normalized.substring(i, j + 1));
-                i = j + 1;
-            } else {
-                int next = normalized.indexOf('<', i);
-                if (next < 0) {
-                    w.writeText(normalized.substring(i));
-                    break;
-                }
-                w.writeText(normalized.substring(i, next));
-                i = next;
+        List<HtmlSyntaxTokens.Line> lines = HtmlSyntaxTokens.tokenize(html);
+        LineRenderer r = new LineRenderer(lines.size());
+        for (HtmlSyntaxTokens.Line line : lines) {
+            for (HtmlSyntaxTokens.Token t : line.tokens()) {
+                r.writeToken(t.kind(), t.text());
             }
+            r.endLine();
         }
-        return w.finish();
-    }
-
-    /** 高亮单个标签：< / 标签名与间隙用 tag 色；属性名与 = 用 attr 色；属性值用 val 色（URL 值叠加下划线） */
-    static void writeTag(LineWriter w, String tag) {
-        int i = 1;
-        if (i < tag.length() && tag.charAt(i) == '/') {
-            i++;
-        }
-        int nameEnd = i;
-        while (nameEnd < tag.length() && isNameChar(tag.charAt(nameEnd))) {
-            nameEnd++;
-        }
-        w.write(tag.substring(0, nameEnd), "hl-tag");
-        while (nameEnd < tag.length()) {
-            char c = tag.charAt(nameEnd);
-            if (Character.isWhitespace(c) || c == '>' || c == '/') {
-                int runStart = nameEnd;
-                while (nameEnd < tag.length()) {
-                    char d = tag.charAt(nameEnd);
-                    if (Character.isWhitespace(d) || d == '>' || d == '/') {
-                        nameEnd++;
-                    } else {
-                        break;
-                    }
-                }
-                w.write(tag.substring(runStart, nameEnd), "hl-tag");
-                continue;
-            }
-            int attrStart = nameEnd;
-            while (nameEnd < tag.length() && isNameChar(tag.charAt(nameEnd))) {
-                nameEnd++;
-            }
-            if (nameEnd == attrStart) {
-                w.write(String.valueOf(c), "hl-tag");
-                nameEnd++;
-                continue;
-            }
-            w.write(tag.substring(attrStart, nameEnd), "hl-attr");
-            int wsStart = nameEnd;
-            while (nameEnd < tag.length() && Character.isWhitespace(tag.charAt(nameEnd))) {
-                nameEnd++;
-            }
-            w.write(tag.substring(wsStart, nameEnd), "hl-attr");
-            if (nameEnd < tag.length() && tag.charAt(nameEnd) == '=') {
-                w.write("=", "hl-attr");
-                nameEnd++;
-                int ws2 = nameEnd;
-                while (nameEnd < tag.length() && Character.isWhitespace(tag.charAt(nameEnd))) {
-                    nameEnd++;
-                }
-                w.write(tag.substring(ws2, nameEnd), "hl-attr");
-                // 属性值（带引号或不带引号）
-                if (nameEnd < tag.length() && (tag.charAt(nameEnd) == '"' || tag.charAt(nameEnd) == '\'')) {
-                    char q = tag.charAt(nameEnd);
-                    int valStart = nameEnd;
-                    do {
-                        nameEnd++;
-                    } while (nameEnd < tag.length() && tag.charAt(nameEnd) != q);
-                    if (nameEnd < tag.length()) {
-                        nameEnd++;
-                    }
-                    w.write(tag.substring(valStart, nameEnd), valueClass(tag.substring(valStart, nameEnd)));
-                } else {
-                    int valStart = nameEnd;
-                    while (nameEnd < tag.length() && !Character.isWhitespace(tag.charAt(nameEnd))
-                            && tag.charAt(nameEnd) != '>') {
-                        nameEnd++;
-                    }
-                    w.write(tag.substring(valStart, nameEnd), valueClass(tag.substring(valStart, nameEnd)));
-                }
-            }
-        }
-    }
-
-    /** 属性值是 URL 时叠加下划线链接样式 */
-    static String valueClass(String rawValue) {
-        String inner = rawValue;
-        if (inner.length() >= 2 && ((inner.startsWith("\"") && inner.endsWith("\""))
-                || (inner.startsWith("'") && inner.endsWith("'")))) {
-            inner = inner.substring(1, inner.length() - 1);
-        }
-        return URL_PATTERN.matcher(trimUrl(inner)).matches() ? "hl-val hl-link" : "hl-val";
-    }
-
-    /** 标签名/属性名字符：字母数字与 - : _ */
-    static boolean isNameChar(char c) {
-        return Character.isLetterOrDigit(c) || c == '-' || c == ':' || c == '_';
-    }
-
-    /** 去掉 URL 尾部标点（句读号在正文里不属于链接） */
-    static String trimUrl(String url) {
-        String t = url;
-        while (!t.isEmpty() && ".,;:!?)]}>".indexOf(t.charAt(t.length() - 1)) >= 0) {
-            t = t.substring(0, t.length() - 1);
-        }
-        return t;
+        return r.finish();
     }
 
     /**
-     * 行输出器：高亮段不嵌套（单层 span 跟踪即可），遇 \n 提交当前行；
-     * 行提交时若有未闭合 span（跨行标签/注释），先闭合、下一行内容起始处重开。
+     * 行渲染器：把 token 渲染成 {@code .row} 行；遇行尾提交当前行。
+     * 行提交时若有未闭合 span（跨行标签/注释），先闭合、下一行内容起始处重开
+     * —— 与迁移前 {@code LineWriter} 的行模板逐字节一致。
      */
-    static final class LineWriter {
+    static final class LineRenderer {
         private final StringBuilder out = new StringBuilder();
         private final StringBuilder line = new StringBuilder();
         private final int gutterDigits;
         private int lineNo = 1;
-        /** 当前行内未闭合的着色 span 类；null = 无 */
-        private String openSpan = null;
+        /** 上一行结尾仍处于"已开未闭"状态的着色类；null = 无 */
+        private String openSpanAtLineStart = null;
+        /** 本 token 的着色类；null = 纯文本（不包 span） */
+        private String currentSpan = null;
 
-        LineWriter(int totalLines) {
+        LineRenderer(int totalLines) {
             this.gutterDigits = String.valueOf(totalLines).length();
         }
 
-        /** 写入一段（转义后按 \n 切行提交）；cls 非 null 时包着色 span */
-        void write(String s, String cls) {
-            String esc = escape(s);
-            if (cls != null) {
-                line.append("<span class=\"").append(cls).append("\">");
-                openSpan = cls;
+        /** 渲染一段 token（转义后按 {@code \n} 切行提交）；{@code kind} 无 CSS 类时不包 span */
+        void writeToken(HtmlSyntaxTokens.Kind kind, String text) {
+            String cssClass = kind.cssClass();
+            if (text.isEmpty()) {
+                // 零长切片：迁移前照样写一对空 span，且不碰行缓冲（不能触发 flush）
+                if (cssClass != null) {
+                    line.append("<span class=\"").append(cssClass).append("\"></span>");
+                }
+                return;
+            }
+            String esc = HtmlSyntaxTokens.escapeHtml(text);
+            if (cssClass != null) {
+                line.append("<span class=\"").append(cssClass).append("\">");
+                currentSpan = cssClass;
             }
             int start = 0;
             for (int k = 0; k < esc.length(); k++) {
@@ -266,32 +132,24 @@ final class SourceViewPage {
                 }
             }
             line.append(esc, start, esc.length());
-            if (cls != null) {
+            if (cssClass != null) {
                 line.append("</span>");
-                openSpan = null;
+                currentSpan = null;
             }
         }
 
-        /** 纯文本段：内嵌 http(s) URL 加下划线链接样式（尾随标点不入链接） */
-        void writeText(String s) {
-            Matcher m = URL_PATTERN.matcher(s);
-            int last = 0;
-            while (m.find()) {
-                String url = trimUrl(m.group());
-                write(s.substring(last, m.start()), null);
-                write(url, "hl-link");
-                last = m.start() + url.length();
-            }
-            write(s.substring(last), null);
+        /** 一行 token 结束：提交该行 */
+        void endLine() {
+            flush();
         }
 
         String finish() {
-            flush();
             return out.toString();
         }
 
         private void flush() {
-            if (openSpan != null) {
+            openSpanAtLineStart = currentSpan;
+            if (openSpanAtLineStart != null) {
                 line.append("</span>");
             }
             out.append("<div class=\"row\"><span class=\"ln\" style=\"width:")
@@ -299,16 +157,9 @@ final class SourceViewPage {
                     .append("</span><span class=\"lc\">").append(line).append("</span></div>");
             line.setLength(0);
             lineNo++;
-            if (openSpan != null) {
-                line.append("<span class=\"").append(openSpan).append("\">");
+            if (openSpanAtLineStart != null) {
+                line.append("<span class=\"").append(openSpanAtLineStart).append("\">");
             }
-        }
-
-        /** 转义（& < > "） */
-        private static String escape(String s) {
-            return s.replace("&", "&amp;").replace("<", "&lt;")
-                    .replace(">", "&gt;").replace("\"", "&quot;");
         }
     }
 }
-
