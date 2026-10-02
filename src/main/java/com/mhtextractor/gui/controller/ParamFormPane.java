@@ -17,6 +17,8 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TitledPane;
 import javafx.scene.control.Tooltip;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 
@@ -56,9 +58,13 @@ import java.util.function.Consumer;
  * {@code textProperty()/selectedProperty()} 上意味着"每敲一个字符就重建一份参数快照 + 算一次签名"，
  * 而本步<b>没有任何消费方需要实时值</b>（模态窗口只在确认时关心是否提交过）。故取按需计算：
  * 只有真正问"脏不脏"时才 {@code collect()} + 比较，一次查询的代价与一次"确认"同级。</p>
- * <p><b>Q6a 若要"按钮实时禁用"</b>：不要在面板内部加全局监听，由宿主在接线处（
- * {@code setCloseHandler} 那一层）挂自己关心的那几个控件的监听，回调里查 {@code pane.isDirty()}
- * 再 {@code setDisable(...)} —— 判定仍只有一份，监听的范围由宿主按需决定。</p>
+ * <p><b>Q6b 接上了"按钮实时禁用"</b>：判定仍然是按需计算，改动的只是<b>什么时候去问一次</b> ——
+ * {@link #setDraftStateListener(Runnable)} 收到的回调<b>不携带任何状态</b>，收方自己再查一次
+ * {@link #isDirty()}。触发点是三个点（不是 39 个控件监听）：
+ * {@link #load} 重记基线后、{@link #commitDraft()} 提交后、以及面板上冒泡到本节点的
+ * {@code MOUSE_CLICKED} / {@code KEY_RELEASED}（用户确实改动了控件值的两个最小事件）。
+ * 于是"改完立刻就问一次"，而不是"每敲一个字符就重算一次签名"：一次编辑最多多算一次签名，
+ * 且不监听 {@code textProperty()}（那才是 Q5b 明确拒绝的每击键重算）。</p>
  *
  * <p><b>已知的宿主职责</b>（有意留在宿主，不搬进来）：</p>
  * <ul>
@@ -126,6 +132,14 @@ public class ParamFormPane extends BorderPane {
     private Runnable loadConfigAction;
     private Runnable deleteConfigAction;
 
+    /**
+     * 「草稿状态可能变了」的窄通知（宿主注入，见类注释的 Q6b 一节）。
+     *
+     * <p>它<b>不携带</b>dirty 值，只是"此刻该重新问一次 {@link #isDirty()} 了"的信号 ——
+     * 这样脏判定的真值仍只有 {@link ParamDraft} 一处，本类不会另存一个 dirty 布尔。</p>
+     */
+    private Runnable draftStateListener;
+
     private boolean imageMode;
 
     /** 参数草稿状态机（R1.5）：基线 / 脏判定 / 提交；纯逻辑在 {@code app.ParamDraft}。 */
@@ -140,6 +154,11 @@ public class ParamFormPane extends BorderPane {
         loadFxml();
         // 信息栏挂在 top（标题栏下方固定一行）：FXML 未改，节点是纯代码加的
         setTop(targetBar);
+        // 用户编辑的触发点：面板级两个冒泡事件（见类注释的 Q6b 一节）。
+        // 只挂本节点、不挂 39 个控件，子控件的值变更会冒泡到这里，而用户的一次编辑
+        // 至多产生一次"该重问 dirty 了"的回调。
+        addEventHandler(MouseEvent.MOUSE_CLICKED, e -> notifyDraftStateChanged());
+        addEventHandler(KeyEvent.KEY_RELEASED, e -> notifyDraftStateChanged());
     }
 
     private void loadFxml() {
@@ -166,6 +185,16 @@ public class ParamFormPane extends BorderPane {
         this.saveConfigAction = save;
         this.loadConfigAction = load;
         this.deleteConfigAction = delete;
+    }
+
+    /**
+     * 注入「草稿状态可能变了」的窄通知（Q6b）：在 {@link #load} 重记基线后、
+     * {@link #commitDraft()} 提交后、以及用户在面板里点选 / 按键后各触发一次。
+     *
+     * <p>回调里<b>不要</b>假定脏或干净，自己查 {@link #isDirty()}；本类不会记住上一次是什么值。</p>
+     */
+    public void setDraftStateListener(Runnable listener) {
+        this.draftStateListener = listener;
     }
 
     // ==================== 表单 API ====================
@@ -198,6 +227,8 @@ public class ParamFormPane extends BorderPane {
         // R1.5：基线取"初值写进控件之后"的当前值 —— 于是"刚打开、什么都没动"必不脏
         //（含 load 期间联动回填的默认模板文本，它们不是用户改动）。
         draft.baseline(collect());
+        // Q6b：重记基线 = 草稿状态变了（切换目标丢弃草稿 / 重新载入初值），让宿主重算按钮态
+        notifyDraftStateChanged();
         // R1.4：刷新目标信息栏（组内混合提示的上下文就是本次载入用的全局参数缓存）
         targetBar.show(target, null,
                 ParamTargetText.isGroupMixed(target,
@@ -222,6 +253,8 @@ public class ParamFormPane extends BorderPane {
      */
     public void commitDraft() {
         draft.commit(collect());
+        // Q6b：提交 = 草稿状态变了（脏 → 干净），让宿主重算按钮态
+        notifyDraftStateChanged();
     }
 
     /** 以两组控件当前值构建参数快照（仅参数，不含目录/模式/GUI 状态）；字段映射与拆分前逐条一致。 */
@@ -498,5 +531,17 @@ public class ParamFormPane extends BorderPane {
 
         startTemplateField.setOnKeyPressed(enterHandler);
         endTemplateField.setOnKeyPressed(enterHandler);
+    }
+
+    // ==================== Q6b：草稿变更通知 ====================
+
+    /**
+     * 通知宿主"草稿状态可能变了"。<b>不带状态值</b>：宿主收到后自己查 {@link #isDirty()}，
+     * 于是"脏不脏"只有 {@link ParamDraft} 一个判定点（不在这里另存布尔）。
+     */
+    private void notifyDraftStateChanged() {
+        if (draftStateListener != null) {
+            draftStateListener.run();
+        }
     }
 }

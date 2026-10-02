@@ -1077,7 +1077,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         try {
             // Q6a：非模态覆盖式侧边栏取代模态窗口。面板按窗口缓存（ParamSidePanel.of），
             // 复用同一个 ParamFormPane 实例 ⇒ "收起再展开同一目标"保留草稿（R1.5）。
-            ParamSidePanel.of(statusLabel).show(target, imageMode, textParamsCache, imageParamsCache,
+            ParamSidePanel panel = ParamSidePanel.of(statusLabel);
+            // Q6b/R1.7：草稿变了（改字段 / 提交 / 切目标丢弃）就重算开始按钮 —— 判定仍只有
+            // ParamFormPane.isDirty() 一处，这里只接线（每次 show 都重设，幂等）。
+            panel.setDirtyListener(this::updateStartButtonState);
+            panel.show(target, imageMode, textParamsCache, imageParamsCache,
                     params -> {
                         if (target instanceof ParamScope.GroupTarget(GroupItem<?> group)) {
                             applyGroupParams((GroupItem<PreviewItem>) group, imageMode, params);
@@ -1088,6 +1092,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                             log.info(I18n.msg("log.maincontroller.15", modeWord(imageMode)));
                         }
                     });
+            updateStartButtonState();   // 本次 show 可能什么都没变（同目标重开 / 取消切换）⇒ 兜底重算
         } catch (Exception e) {
             log.error(I18n.msg("log.maincontroller.16"), e);
             NotificationHost.error(statusLabel, ErrorCode.PARAM_DIALOG_OPEN_FAILED.message(), FontAwesomeSolid.SLIDERS_H);
@@ -2537,7 +2542,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 开始按钮可用性的唯一派生函数 —— 所有禁用/恢复都必须经由此函数 */
     /* test-support */ void updateStartButtonState() {
         boolean anyMode = textModeToggle.isSelected() || imageModeToggle.isSelected();
-        startButton.setDisable(!anyMode || visibleCount() == 0 || isImporting());
+        // R1.7：有未提交的参数草稿时不许开始提取（判定唯一来源是 ParamFormPane.isDirty()，
+        // 由 ParamSidePanel.setDirtyListener 在编辑/提交/切目标时把本方法叫回来）。
+        startButton.setDisable(!anyMode || visibleCount() == 0 || isImporting()
+                || ParamSidePanel.isDirty(statusLabel));
     }
 
     /**
