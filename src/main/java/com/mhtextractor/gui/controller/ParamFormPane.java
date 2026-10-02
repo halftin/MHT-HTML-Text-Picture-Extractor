@@ -1,7 +1,11 @@
 package com.mhtextractor.gui.controller;
 
 import atlantafx.base.controls.ToggleSwitch;
+import com.mhtextractor.app.EffectiveParamsService;
+import com.mhtextractor.app.ParamDraft;
 import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.gui.component.ParamTargetBar;
+import com.mhtextractor.gui.component.ParamTargetText;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.ParamScope;
 import javafx.collections.FXCollections;
@@ -35,6 +39,26 @@ import java.util.function.Consumer;
  * 构造时由本类把 {@code this} 同时交给 {@code setRoot} / {@code setController}，
  * 于是 {@code @FXML} 字段（及其子类继承到的同一批字段）注入到同一个对象上。
  * {@code %key} 文案仍由 {@code loader.setResources(I18n.bundle())} 解析，与拆分前逐字一致。</p>
+ *
+ * <h2>本类新增的两件事（Q5b：R1.4 / R1.5）</h2>
+ * <ul>
+ *   <li><b>目标信息栏</b>（R1.4）：{@link ParamTargetBar} 挂在 {@code BorderPane} 的 <b>top</b> ——
+ *       即窗口标题栏正下方那<b>固定一行</b>，它不随参数区的滚动条跑掉。纯代码构建，{@code ParamDialog.fxml}
+ *       一个字未改（因此也没有 native 元数据增补）。文案由 {@link ParamTargetText} 拼（纯静态、可无头单测），
+ *       组内混合提示的判定复用 {@code app.EffectiveParamsService.hasMixedEffectiveParams}。</li>
+ *   <li><b>草稿状态机</b>（R1.5）：{@link ParamDraft}（{@code app} 包，纯逻辑、零 JavaFX）。
+ *       {@link #load} 把初值写进控件<b>之后</b>记基线，于是"刚打开 = 不脏"；{@link #isDirty()} 按需计算；
+ *       {@link #commitDraft()} 才是提交（只由确认路径调用）。</li>
+ * </ul>
+ *
+ * <h2>{@link #isDirty()} 为什么是"按需计算"而不是"事件驱动"</h2>
+ * <p>{@code collect()} 要读 39 个控件并构建 {@code AppConfig}，挂在每个控件的
+ * {@code textProperty()/selectedProperty()} 上意味着"每敲一个字符就重建一份参数快照 + 算一次签名"，
+ * 而本步<b>没有任何消费方需要实时值</b>（模态窗口只在确认时关心是否提交过）。故取按需计算：
+ * 只有真正问"脏不脏"时才 {@code collect()} + 比较，一次查询的代价与一次"确认"同级。</p>
+ * <p><b>Q6a 若要"按钮实时禁用"</b>：不要在面板内部加全局监听，由宿主在接线处（
+ * {@code setCloseHandler} 那一层）挂自己关心的那几个控件的监听，回调里查 {@code pane.isDirty()}
+ * 再 {@code setDisable(...)} —— 判定仍只有一份，监听的范围由宿主按需决定。</p>
  *
  * <p><b>已知的宿主职责</b>（有意留在宿主，不搬进来）：</p>
  * <ul>
@@ -104,9 +128,18 @@ public class ParamFormPane extends BorderPane {
 
     private boolean imageMode;
 
+    /** 参数草稿状态机（R1.5）：基线 / 脏判定 / 提交；纯逻辑在 {@code app.ParamDraft}。 */
+    private final ParamDraft draft = new ParamDraft();
+    /** 「组内参数是否混合」的判定入口（R1.4 增强项）；服务本身无状态，仅此一处持有。 */
+    private final EffectiveParamsService effectiveParams = new EffectiveParamsService();
+    /** 目标信息栏（R1.4）：固定挂在 top，见类注释。 */
+    private final ParamTargetBar targetBar = new ParamTargetBar();
+
     /** 独立构造：载入 {@value #FXML_PATH} 并把本对象同时作为根与控制器（{@code fx:root} 用法）。 */
     public ParamFormPane() {
         loadFxml();
+        // 信息栏挂在 top（标题栏下方固定一行）：FXML 未改，节点是纯代码加的
+        setTop(targetBar);
     }
 
     private void loadFxml() {
@@ -162,6 +195,33 @@ public class ParamFormPane extends BorderPane {
         toggleImageRegionSettings();
         updateTitleExtractTooltip();
         setImageMode(imageMode);
+        // R1.5：基线取"初值写进控件之后"的当前值 —— 于是"刚打开、什么都没动"必不脏
+        //（含 load 期间联动回填的默认模板文本，它们不是用户改动）。
+        draft.baseline(collect());
+        // R1.4：刷新目标信息栏（组内混合提示的上下文就是本次载入用的全局参数缓存）
+        targetBar.show(target, null,
+                ParamTargetText.isGroupMixed(target,
+                        new EffectiveParamsService.Context(imageMode, textCache, imageCache)));
+    }
+
+    /**
+     * 是否有未提交改动（R1.5）：把当前控件值收成参数快照，交给 {@link ParamDraft} 按值比较。
+     *
+     * <p><b>按需计算</b>（不是事件驱动），理由与 Q6a 的接法见类注释。每次调用都会
+     * {@code collect()}，故不要把它放进每帧/每按键的路径。</p>
+     */
+    public boolean isDirty() {
+        return draft.isDirty(collect());
+    }
+
+    /**
+     * 提交草稿（R1.9：仅「确认」提交）：把当前值记为新的基线，脏标记清零。
+     *
+     * <p>只应由确认路径调用（本类的 {@code onConfirm}）。取消 / 折叠 / 切换目标都不该调 ——
+     * 那会把"未确认的编辑"就地升级成基线，折叠丢草稿的缺陷就是这么来的。</p>
+     */
+    public void commitDraft() {
+        draft.commit(collect());
     }
 
     /** 以两组控件当前值构建参数快照（仅参数，不含目录/模式/GUI 状态）；字段映射与拆分前逐条一致。 */
@@ -272,6 +332,9 @@ public class ParamFormPane extends BorderPane {
 
     @FXML
     private void onConfirm() {
+        // R1.9「仅确认提交」：先把当前值提交成新基线（清脏），再把出口交给宿主。
+        // 出口的签名与调用次数都未变（仍是 closeHandler.accept(TRUE) 一次）。
+        commitDraft();
         if (closeHandler != null) {
             closeHandler.accept(Boolean.TRUE);
         }
