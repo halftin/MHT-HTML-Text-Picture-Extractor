@@ -49,7 +49,6 @@ import javafx.animation.ParallelTransition;
 import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
-import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.geometry.BoundingBox;
 import javafx.geometry.Bounds;
@@ -61,7 +60,6 @@ import javafx.scene.Cursor;
 import javafx.scene.SnapshotParameters;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
-import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -69,7 +67,6 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollBar;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
@@ -79,10 +76,8 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
-import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.input.DragEvent;
 import javafx.scene.input.MouseButton;
-import javafx.scene.input.MouseEvent;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
@@ -413,31 +408,13 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      */
     private final ImportSessionCoordinator importSessions = new ImportSessionCoordinator(ws, this);
 
-    // ===== 右键菜单（右键菜单功能需求：13 项 = 9 动作 + 4 分隔线） =====
-    /** 菜单实例（项禁用状态在弹出前按右键目标类型刷新） */
-    private ContextMenu contextMenu;
-    /** 右键目标条目（PreviewItem/GroupItem）；null = 空白区域 */
-    private Object contextTarget = null;
-    private MenuItem ctxSelect;
-    private MenuItem ctxSelectAll;
-    private MenuItem ctxOpenFolder;
-    private MenuItem ctxOpenInBrowser;
-    private MenuItem ctxViewSource;
+    // ===== 右键菜单（13 项 = 9 动作 + 4 分隔线；Q9a 已整体外迁到 FileListContextMenu） =====
+    /** 右键菜单：菜单项所有权 / 启用规则 / 动作转发 / 显示生命周期都在新类；本类只提供回调面 */
+    private FileListContextMenu contextMenu;
     /** 浏览器查看页生成并发闸（防重复点击并发导出） */
     private final AtomicBoolean browserExporting = new AtomicBoolean(false);
-    private MenuItem ctxParams;
+    /** Q9a：FeatureExercise 按<b>字段访问</b>读它的 isDisable()，故保留同名字段指向新类里那一个 */
     /* test-support */ MenuItem ctxClearParams;
-    private MenuItem ctxGroup;
-    private MenuItem ctxUngroup;
-    private MenuItem ctxRemove;
-    private MenuItem ctxRemoveGroup;
-    private MenuItem ctxApplyGlobal;
-    /** 菜单显示期间的主窗口按压过滤：点击菜单外任意处即关闭（JavaFX autoHide 在本应用窗口组合下不可靠，手动兜底） */
-    private final EventHandler<MouseEvent> contextClickAway = _ -> {
-        if (contextMenu.isShowing()) {
-            contextMenu.hide();
-        }
-    };
 
     // ===== 折叠/展开动画状态（方案 B 抽屉式，快照平移手法与拖拽一致） =====
     /** 动画全局锁：动画期间列表项目不可交互（按钮可点但无效果），快速连点折叠箭头直接忽略 */
@@ -475,9 +452,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
         // 空白/非预期区域松手：不处理 drop（无蓝条、无吸附），走取消路径瞬时恢复原位不消失
 
-        // 右键菜单（右键菜单功能需求）：ListView 级弹出（命中 cell = 条目目标；未命中 = 空白区域）
-        buildContextMenu();
-        fileListView.setOnContextMenuRequested(this::onContextMenuRequested);
+        // 右键菜单（右键菜单功能需求）：ListView 级弹出（命中 cell = 条目目标；未命中 = 空白区域）。
+        // Q9a：菜单项 / 启用规则 / "点击菜单外即关闭"的显示生命周期已整体搬进 FileListContextMenu，
+        // 这里只装配 + 接线回调面，并把 test-support 字段指向新类里那一个菜单项。
+        contextMenu = new FileListContextMenu(contextActions());
+        contextMenu.install(fileListView);
+        ctxClearParams = contextMenu.clearParamsItem();
 
         // 列头全选 CheckBox 三态联动（F1）：单项勾选变化实时刷新列头与组复选框，新导入项目自动挂监听
         selectAllCheck.setOnAction(_ -> onSelectAllToggled());
@@ -1167,133 +1147,73 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         updateExtractBanner(currentSelection());
     }
 
-    // ==================== 右键菜单（右键菜单功能需求） ====================
-
-    /** 构建右键菜单（拍板 Q1 命名统一"移除"；Q5 一律禁用制：菜单恒 16 项同序；浏览器查看HTML需求后移除"打开"） */
-    private void buildContextMenu() {
-        ctxSelect = new MenuItem(I18n.get("list.menuSelect"));
-        ctxSelectAll = new MenuItem(I18n.get("list.menuSelectAll"));
-        ctxOpenFolder = new MenuItem(I18n.get("list.menuOpenFolder"));
-        ctxOpenInBrowser = new MenuItem(I18n.get("browser.menuOpen"));
-        ctxViewSource = new MenuItem(I18n.get("browser.menuViewSource"));
-        ctxParams = new MenuItem(I18n.get("params.menuSet"));
-        ctxClearParams = new MenuItem(I18n.get("params.menuClear"));
-        ctxApplyGlobal = new MenuItem(I18n.get("params.menuApplyGlobal"));
-        ctxGroup = new MenuItem(I18n.get("group.menuMerge"));
-        ctxUngroup = new MenuItem(I18n.get("group.menuUngroup"));
-        ctxRemove = new MenuItem(I18n.get("list.menuRemove"));
-        ctxRemoveGroup = new MenuItem(I18n.get("group.menuRemove"));
-
-        ctxSelect.setOnAction(_ -> onContextSelect());
-        ctxSelectAll.setOnAction(_ -> onContextSelectAll());
-        ctxOpenFolder.setOnAction(_ -> onContextOpenFolder());
-        ctxOpenInBrowser.setOnAction(_ -> onContextOpenInBrowser());
-        ctxViewSource.setOnAction(_ -> onContextViewSource());
-        ctxParams.setOnAction(_ -> onContextParams());
-        ctxClearParams.setOnAction(_ -> onContextClearParams());
-        ctxApplyGlobal.setOnAction(_ -> onContextApplyGlobal());
-        ctxGroup.setOnAction(_ -> onGroupClicked());
-        ctxUngroup.setOnAction(_ -> onUngroupClicked());
-        ctxRemove.setOnAction(_ -> onRemoveClicked());
-        ctxRemoveGroup.setOnAction(_ -> onContextRemoveGroup());
-
-        contextMenu = new ContextMenu(
-                ctxSelect, ctxSelectAll,
-                new SeparatorMenuItem(),
-                ctxOpenInBrowser, ctxOpenFolder, ctxViewSource,
-                new SeparatorMenuItem(),
-                ctxParams, ctxClearParams, ctxApplyGlobal,
-                new SeparatorMenuItem(),
-                ctxGroup, ctxUngroup,
-                new SeparatorMenuItem(),
-                ctxRemove, ctxRemoveGroup);
-
-        // 菜单显示期间挂主窗口按压过滤（点击菜单外即关闭），隐藏时移除
-        contextMenu.setOnShown(_ -> {
-            if (fileListView.getScene() != null) {
-                fileListView.getScene().getWindow()
-                        .addEventFilter(MouseEvent.MOUSE_PRESSED, contextClickAway);
-            }
-        });
-        contextMenu.setOnHidden(_ -> {
-            if (fileListView.getScene() != null) {
-                fileListView.getScene().getWindow()
-                        .removeEventFilter(MouseEvent.MOUSE_PRESSED, contextClickAway);
-            }
-        });
-    }
+    // ==================== 右键菜单（右键菜单功能需求；Q9a 外迁后只剩回调面） ====================
 
     /**
-     * 右键菜单弹出（拍板 Q7/Q8/Q16）：定位目标 → 选中该行（不改勾选、不动 Shift 锚点）→
-     * 按目标类型刷新禁用状态 → 显示。拖拽中不弹菜单；列表完全为空不出菜单；
-     * 动画锁定期间照常弹出，动作由按钮逻辑的既有 listAnimating 守卫拦截。
+     * 右键菜单的宿主回调面（Q9a）：5 个查询 + 12 个动作转发。
+     *
+     * <p><b>动作实现刻意不搬</b>：建组 / 拆组 / 移除 / 清参数 / 应用全局 / 打开目录 / 查看源码都要动模型、
+     * 缓存与 UI 状态，实现留在本类，{@link FileListContextMenu} 只转发"点了哪一项、目标是哪个对象"。</p>
+     *
+     * <p><b>模型类型判定留在本类</b>：{@code targetType} / {@code isLiveTarget} 是搬前
+     * {@code updateContextMenuState} 头四行与 {@code pickItemAt} 里那一句 {@code it.removed} 的逐字搬移，
+     * 于是菜单类零模型依赖（只认 {@link FileListContextMenu.TargetType} 这个四布尔快照）。
+     * 四布尔而非枚举是<b>有意</b>的：原实现允许"非空但既不是条目也不是组"的目标（四标记全 false），
+     * 那与空白区域并不等价。</p>
+     *
+     * <p>{@code visibleCount} 与 {@code hasIndependentParams} 经 {@code MainController.this} 限定，
+     * 否则会递归到匿名类自己的同名方法。</p>
      */
-    private void onContextMenuRequested(ContextMenuEvent e) {
-        if (dragActive) {
-            return;
-        }
-        contextTarget = pickItemAt(e);
-        if (contextTarget == null && visibleCount() == 0) {
-            return;
-        }
-        if (contextTarget != null) {
-            fileListView.getSelectionModel().select(contextTarget);
-        }
-        updateContextMenuState(contextTarget);
-        contextMenu.show(fileListView, e.getScreenX(), e.getScreenY());
-        e.consume();
+    private FileListContextMenu.Actions contextActions() {
+        return new FileListContextMenu.Actions() {
+            @Override public boolean isDragActive() { return dragActive; }
+            @Override public long visibleCount() { return MainController.this.visibleCount(); }
+            @Override public void selectRow(Object target) { fileListView.getSelectionModel().select(target); }
+            @Override public FileListContextMenu.TargetType targetType(Object target) {
+                return switch (target) {
+                    case null -> FileListContextMenu.TargetType.BLANK;
+                    case GroupItem<?> g -> FileListContextMenu.TargetType.GROUP;
+                    case PreviewItem it when it.parentGroup != null -> FileListContextMenu.TargetType.MEMBER;
+                    case PreviewItem it -> FileListContextMenu.TargetType.TOP_ITEM;
+                    default -> new FileListContextMenu.TargetType(false, false, false, false);
+                };
+            }
+            @Override public boolean isLiveTarget(Object item) {
+                return !(item instanceof PreviewItem it && it.removed);
+            }
+            @Override public boolean hasIndependentParams(Object target) {
+                return MainController.this.hasIndependentParams(target);
+            }
+            @Override public void select(Object target) { onContextSelect(target); }
+            @Override public void selectAll(Object target) { onContextSelectAll(target); }
+            @Override public void openFolder(Object target) { onContextOpenFolder(target); }
+            @Override public void openInBrowser(Object target) { onContextOpenInBrowser(target); }
+            @Override public void viewSource(Object target) { onContextViewSource(target); }
+            @Override public void params(Object target) { onContextParams(target); }
+            @Override public void clearParams(Object target) { onContextClearParams(target); }
+            @Override public void applyGlobal(Object target) { onContextApplyGlobal(target); }
+            @Override public void group() { onGroupClicked(); }
+            @Override public void ungroup() { onUngroupClicked(); }
+            @Override public void remove() { onRemoveClicked(); }
+            @Override public void removeGroup(Object target) { onContextRemoveGroup(target); }
+        };
     }
 
-    /** 右键位置拾取列表条目：命中节点向上找单元格；未命中 cell = 空白区域（Q7） */
-    private Object pickItemAt(ContextMenuEvent e) {
-        javafx.scene.Node node = e.getPickResult().getIntersectedNode();
-        while (node != null) {
-            if (node instanceof ScrollBar) {
-                return null;    // 滚动条右键不视为列表区域
-            }
-            if (node instanceof PreviewListCell c) {
-                Object item = c.getItem();
-                return (item instanceof PreviewItem it && it.removed) ? null : item;
-            }
-            node = node.getParent();
-        }
-        return null;
-    }
-
-    /** 菜单项禁用状态按右键目标类型刷新（拍板 Q4/Q5/Q7 + 条目独立参数需求：恒 16 项同序） */
+    /** 菜单项禁用状态按右键目标类型刷新（Q9a：规则本体已搬到 {@link FileListContextMenu#updateState}） */
     /* test-support */ void updateContextMenuState(Object target) {
-        boolean blank = target == null;
-        boolean topItem = target instanceof PreviewItem it && it.parentGroup == null;
-        boolean member = target instanceof PreviewItem it && it.parentGroup != null;
-        boolean group = target instanceof GroupItem<?>;
-
-        ctxSelect.setDisable(blank);                  // 项目条目勾选自身；组条目整组勾选
-        ctxSelectAll.setDisable(false);               // 恒可用：成员/组 → 该组；顶层/空白 → 全列表
-        ctxOpenFolder.setDisable(!(topItem || member));
-        ctxOpenInBrowser.setDisable(!(topItem || member));
-        ctxViewSource.setDisable(!(topItem || member));
-        // 条目独立参数需求拍板：空白区域为全局参数入口，文本与独立参数设置区分
-        ctxParams.setText(blank ? I18n.get("params.menuSetGlobal") : I18n.get("params.menuSet"));
-        ctxParams.setDisable(false);                  // 恒可用
-        // 清除参数拍板：启用看右键目标（空白/无参数 → 禁用），动作走勾选优先（与"移除"菜单既有模式一致）
-        ctxClearParams.setDisable(!hasIndependentParams(target));
-        ctxApplyGlobal.setDisable(!hasIndependentParams(target)); // 仅目标有独立参数时可用
-        ctxGroup.setDisable(!(topItem || member));    // 仅项目条目
-        ctxUngroup.setDisable(!group);                // 仅组条目
-        ctxRemove.setDisable(!(topItem || member));   // 仅项目条目；组条目走"移除组"
-        ctxRemoveGroup.setDisable(!(member || group)); // 组内成员/组条目
+        contextMenu.updateState(target);
     }
 
-    /** 选中（拍板 Q4）：项目条目勾选自身；组条目整组勾选（强制 true，不做 toggle） */
-    private void onContextSelect() {
-        if (listAnimating || contextTarget == null) {
+    /** 选中（拍板 Q4）：项目条目勾选自身；组条目整组勾选（强制 true，不做 toggle）。目标 = 右键那一项 */
+    private void onContextSelect(Object target) {
+        if (listAnimating || target == null) {
             return;
         }
         updatingSelection = true;
         try {
-            if (contextTarget instanceof PreviewItem it && !it.removed) {
+            if (target instanceof PreviewItem it && !it.removed) {
                 it.setSelected(true);
-            } else if (contextTarget instanceof GroupItem<?> g) {
+            } else if (target instanceof GroupItem<?> g) {
                 for (Object m : g.getMembers()) {
                     if (m instanceof PreviewItem pi && !pi.removed) {
                         pi.setSelected(true);
@@ -1308,14 +1228,14 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 全选（拍板 Q4/Q14 强制全选不回退）：组内成员/组条目 → 该组全部成员；顶层项目/空白 → 整个列表（含折叠组成员） */
-    private void onContextSelectAll() {
+    private void onContextSelectAll(Object target) {
         if (listAnimating) {
             return;
         }
         List<PreviewItem> targets;
-        if (contextTarget instanceof GroupItem<?> g) {
+        if (target instanceof GroupItem<?> g) {
             targets = visibleMembersOf(g);
-        } else if (contextTarget instanceof PreviewItem it && it.parentGroup != null) {
+        } else if (target instanceof PreviewItem it && it.parentGroup != null) {
             targets = visibleMembersOf(it.parentGroup);
         } else {
             targets = allVisibleItems();
@@ -1333,8 +1253,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 打开所在文件夹（全新能力 5.2）：explorer /select 定位；Q15 拍板——文件缺失时不定位直接打开所在目录 */
-    private void onContextOpenFolder() {
-        if (contextTarget instanceof PreviewItem it && !it.removed) {
+    private void onContextOpenFolder(Object target) {
+        if (target instanceof PreviewItem it && !it.removed) {
             openContainingFolder(it);
         }
     }
@@ -1365,15 +1285,15 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 在浏览器中查看（浏览器查看HTML需求）：导出 MHT 内嵌 HTML 后用系统默认浏览器打开渲染视图 */
-    private void onContextOpenInBrowser() {
-        if (contextTarget instanceof PreviewItem it && !it.removed) {
+    private void onContextOpenInBrowser(Object target) {
+        if (target instanceof PreviewItem it && !it.removed) {
             openHtmlInBrowser(it, false);
         }
     }
 
     /** 在浏览器中查看源码（浏览器查看HTML需求）：用 view-source: 打开导出页面的源码视图 */
-    private void onContextViewSource() {
-        if (contextTarget instanceof PreviewItem it && !it.removed) {
+    private void onContextViewSource(Object target) {
+        if (target instanceof PreviewItem it && !it.removed) {
             openHtmlInBrowser(it, true);
         }
     }
@@ -1431,11 +1351,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 设置提取参数（拍板 Q7/G6）：空白区域 → 强制全局参数；其余复用选中项路由（Q8 已选中该行） */
-    private void onContextParams() {
+    private void onContextParams(Object target) {
         if (listAnimating) {
             return;
         }
-        if (contextTarget == null) {
+        if (target == null) {
             openParamDialog(ParamScope.GLOBAL);
         } else {
             onParamSettings();
@@ -1443,14 +1363,14 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 移除组（Q3 拍板：每次必弹确认；与按钮行整组移除共用同一路径，G2 统一） */
-    private void onContextRemoveGroup() {
+    private void onContextRemoveGroup(Object target) {
         if (listAnimating) {
             return;
         }
         GroupItem<PreviewItem> group = null;
-        if (contextTarget instanceof GroupItem<?> g) {
+        if (target instanceof GroupItem<?> g) {
             group = asPreviewGroup(g);
-        } else if (contextTarget instanceof PreviewItem it && it.parentGroup != null) {
+        } else if (target instanceof PreviewItem it && it.parentGroup != null) {
             group = it.parentGroup;
         }
         if (group != null) {
@@ -1483,11 +1403,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 右键菜单"应用到全局"：目标 = 右键点击的条目 */
-    private void onContextApplyGlobal() {
-        if (listAnimating || !hasIndependentParams(contextTarget)) {
+    private void onContextApplyGlobal(Object target) {
+        if (listAnimating || !hasIndependentParams(target)) {
             return;
         }
-        applyGlobalParamsTo(contextTarget);
+        applyGlobalParamsTo(target);
     }
 
     /** 按钮行"应用到全局"：目标 = 当前选中条目 */
@@ -1569,11 +1489,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 右键菜单"清除参数"：动作逻辑与按钮一致（勾选优先 → 右键目标；启用看右键目标） */
-    private void onContextClearParams() {
+    private void onContextClearParams(Object target) {
         if (listAnimating) {
             return;
         }
-        clearParamsForTargets(resolveClearTargets(contextTarget));
+        clearParamsForTargets(resolveClearTargets(target));
     }
 
     /** 勾选集合优先 → 回退对象（与"移除"的勾选优先拍板一致） */
