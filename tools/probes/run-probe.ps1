@@ -114,7 +114,15 @@ if ($LASTEXITCODE -ne 0) { Write-Output "[ERROR] compile failed, exit=$LASTEXITC
 
 $parts = $Locale.Split('_')
 Write-Output "[java] $Probe  locale=$Locale  out=$outDir"
+# -Dprobe.locale is the property the probes ACTUALLY read (every probe does
+#   System.getProperty("probe.locale", <its own default>)
+# ). Passing only -Duser.language / -Duser.country is silently ignored by them - and because
+# UiProbe defaults to en_US while the others default to zh_CN, an "en" run and a "zh" run both
+# come out ENGLISH for UiProbe without any error. Measured 2026-10-02: UiProbe -Locale zh_CN
+# printed "locale=en_US". Keep both forms: -Duser.* still drives ResourceBundle.getBundle
+# defaults for code that reads Locale.getDefault().
 & $java --module-path $modulePath --add-modules javafx.controls,javafx.fxml `
+    "-Dprobe.locale=$Locale" `
     "-Duser.language=$($parts[0])" "-Duser.country=$($parts[1])" `
     "-Dprobe.png=$outDir\probe.png" `
     -cp "$classDir;$repo\target\classes;$deps" $Probe
