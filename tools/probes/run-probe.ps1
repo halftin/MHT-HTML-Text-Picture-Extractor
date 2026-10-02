@@ -24,7 +24,11 @@ param(
     [switch]$List,
     [switch]$Rebuild,
     [string]$Locale = 'zh_CN',
-    [string]$OutDir
+    [string]$OutDir,
+    # Forwarded as -Dprobe.dialog=true. UiProbe only opens the "extraction parameters" window and
+    # screenshots it when this is set, so without it a UI probe run silently covers the MAIN window
+    # only - and a change to the parameter form would look like "0 changed pixels".
+    [switch]$Dialog
 )
 
 $ErrorActionPreference = 'Stop'
@@ -113,7 +117,7 @@ Write-Output "[javac] $Probe"
 if ($LASTEXITCODE -ne 0) { Write-Output "[ERROR] compile failed, exit=$LASTEXITCODE"; exit $LASTEXITCODE }
 
 $parts = $Locale.Split('_')
-Write-Output "[java] $Probe  locale=$Locale  out=$outDir"
+Write-Output "[java] $Probe  locale=$Locale  out=$outDir  dialog=$Dialog"
 # -Dprobe.locale is the property the probes ACTUALLY read (every probe does
 #   System.getProperty("probe.locale", <its own default>)
 # ). Passing only -Duser.language / -Duser.country is silently ignored by them - and because
@@ -121,10 +125,13 @@ Write-Output "[java] $Probe  locale=$Locale  out=$outDir"
 # come out ENGLISH for UiProbe without any error. Measured 2026-10-02: UiProbe -Locale zh_CN
 # printed "locale=en_US". Keep both forms: -Duser.* still drives ResourceBundle.getBundle
 # defaults for code that reads Locale.getDefault().
+$extra = @()
+if ($Dialog) { $extra += '-Dprobe.dialog=true' }
 & $java --module-path $modulePath --add-modules javafx.controls,javafx.fxml `
     "-Dprobe.locale=$Locale" `
     "-Duser.language=$($parts[0])" "-Duser.country=$($parts[1])" `
     "-Dprobe.png=$outDir\probe.png" `
+    @extra `
     -cp "$classDir;$repo\target\classes;$deps" $Probe
 $rc = $LASTEXITCODE
 Write-Output "[probe] exit=$rc   snapshots/logs -> $outDir"
