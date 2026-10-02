@@ -1082,17 +1082,17 @@ public boolean runAutomatedTests() {
                 throw new IllegalStateException("全部无参数时进度条应隐藏");
             }
             // 相邻修复：提取运行期间进度条/状态栏归提取任务独占，解析回调不得覆盖
-            mc.running.set(true);
+            mc.running().set(true);
             progressBar().setVisible(true);
             progressBar().setProgress(0.5);
             String labelBefore = statusLabel().getText();
             mc.updateProgressStatus(mc.parseToken);
             if (Math.abs(progressBar().getProgress() - 0.5) > 0.001
                     || !statusLabel().getText().equals(labelBefore)) {
-                mc.running.set(false);
+                mc.running().set(false);
                 throw new IllegalStateException("提取期间解析回调不应覆盖进度条/状态栏");
             }
-            mc.running.set(false);
+            mc.running().set(false);
             // 恢复全局参数并重解析
             mc.textParamsCache = savedGlobal;
             mc.refreshAfterParamsChanged();
@@ -1192,10 +1192,10 @@ public boolean runAutomatedTests() {
             // 提取回调（onSucceeded 等）在 FX 线程事件队列中，须嵌套泵排空后再断言
             long deadline = System.currentTimeMillis() + 20000;
             while (System.currentTimeMillis() < deadline
-                    && (mc.lastExtractStats.get() == null || startButton().isDisabled())) {
+                    && (mc.extractStats().get() == null || startButton().isDisabled())) {
                 pumpFxEvents();
             }
-            BatchProcessor.ProcessStats merged = mc.lastExtractStats.get();
+            BatchProcessor.ProcessStats merged = mc.extractStats().get();
             if (merged == null || merged.getFileResults().size() != mc.visibleCount()
                     || !merged.getFileResults().stream()
                             .allMatch(r -> r.outcome() == ExtractOutcome.SUCCESS)) {
@@ -1255,10 +1255,10 @@ public boolean runAutomatedTests() {
             startButton().fire();
             long deadline = System.currentTimeMillis() + 20000;
             while (System.currentTimeMillis() < deadline
-                    && (mc.lastExtractStats.get() == null || startButton().isDisabled())) {
+                    && (mc.extractStats().get() == null || startButton().isDisabled())) {
                 pumpFxEvents();
             }
-            if (mc.lastExtractStats.get() == null) {
+            if (mc.extractStats().get() == null) {
                 throw new IllegalStateException("图片提取未在时限内完成");
             }
             if (!progressBar().isVisible() || Math.abs(progressBar().getProgress() - 1.0) > 0.001

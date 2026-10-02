@@ -2,6 +2,7 @@ package com.mhtextractor.gui.controller;
 
 import atlantafx.base.controls.ToggleSwitch;
 import com.mhtextractor.app.ExtractionPreconditions;
+import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.app.WorkspaceImportService;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.cache.PreviewCacheKey;
@@ -29,7 +30,6 @@ import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.FileResult;
 import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.processor.PerFileOverrides;
-import com.mhtextractor.processor.TextBatchProcessor;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
@@ -42,7 +42,6 @@ import com.mhtextractor.util.SanitizeUtils;
 import com.mhtextractor.util.SelectionState;
 import com.mhtextractor.util.ThumbnailPixels;
 import com.mhtextractor.util.UndoManager;
-import com.mhtextractor.util.UnitProgressAggregator;
 import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
 import javafx.animation.TranslateTransition;
@@ -50,7 +49,6 @@ import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
-import javafx.concurrent.Task;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.geometry.BoundingBox;
@@ -301,15 +299,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /* test-support */ final ObservableList<Object> items = FXCollections.observableArrayList();
     /** 显示序：ListView 直接渲染的展平列表，按数据序实时重建（F5 显示序/数据序分离） */
     private final ObservableList<Object> displayItems = FXCollections.observableArrayList();
-    /* test-support */ final AtomicBoolean running = new AtomicBoolean(false);
-    /** 最近一次提取的 partial/完整统计（提取结果状态需求）：Task 取消时 getValue() 不可用，回写经此 holder */
-    /* test-support */ final AtomicReference<BatchProcessor.ProcessStats> lastExtractStats = new AtomicReference<>();
 
     // 撤销栈（F4）：唯一栈由 app.WorkspaceModel 独占；结构类由模型 undo() 应用，参数 / 拖拽类由本类 popRecord() 后自行应用
     // 数据序共享：模型直接在本类的 items 上操作（注入为 java.util.List，模型字节码因此仍零 javafx）。
     // 这样"模型拥有的结构"与"GUI 渲染的数据序"是同一份存储，迁移期间不存在两套状态分叉。
     /* test-support */ final WorkspaceModel ws = new WorkspaceModel(items);
-    private volatile Task<BatchProcessor.ProcessStats> currentTask;
 
     /** 两套已确认提取参数缓存：null 表示该模式尚未确认过参数 */
     /* test-support */ AppConfig textParamsCache;
@@ -344,6 +338,21 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      */
     private final com.mhtextractor.app.EffectiveParamsService effectiveParamsService =
             new com.mhtextractor.app.EffectiveParamsService();
+    /**
+     * 提取业务服务（Q3 / P2）：逐单元调用 processor、跨单元进度聚合、统计累计、取消传播、
+     * 单元失败不中断整批 —— 全部搬进无头应用层（{@code com.mhtextractor.app.WorkspaceExtractionService}）。
+     */
+    private final WorkspaceExtractionService extractionService =
+            new WorkspaceExtractionService(previewCacheLifecycle);
+    /**
+     * 提取任务协调器（Q3 / P2）：JavaFX {@code Task} 生命周期与 UI 回调的宿主。
+     * <b>partial 统计（原 {@code lastExtractStats}）、运行标记（原 {@code running}）与在途任务
+     * （原 {@code currentTask}）三个提取状态字段都已归它持有</b>——本类不再有第二份可变 holder：
+     * 写入只发生在协调器一处（服务返回值落一次），取消回调只读它。测试支撑访问经
+     * {@link #extractStats()} 与 {@link #running()}。
+     */
+    private final ExtractionTaskCoordinator extractionCoordinator =
+            new ExtractionTaskCoordinator(extractionService);
     /** 在途预览加载线程（规则 d 退出清空时等待其结束用；仅 FX 线程写） */
     private volatile Thread previewLoadThread = null;
     /** 退出清空已完成：二次 close 放行（规则 d） */
@@ -1874,176 +1883,98 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                         "count", u.fileCount())).toList()));
         Map<String, PerFileOverrides> overrides = overrides();
 
-        running.set(true);
-        startButton.setDisable(true);
-        stopButton.setDisable(false);
-        progressBar.setVisible(true);
-        progressBar.setProgress(0);
-        setProgressBarActivity(STYLE_PROGRESS_EXTRACT_SUCCESS);   // 提取中 = 开始提取按钮绿
-
-        Task<BatchProcessor.ProcessStats> task = new Task<>() {
-            @Override
-            protected BatchProcessor.ProcessStats call() {
-                try {
-                    UnitProgressAggregator progress = new UnitProgressAggregator(
-                            units.stream().map(OutputUnitPlanner.OutputUnit::fileCount).toList());
-                    BatchProcessor.ProcessStats total = new BatchProcessor.ProcessStats();
-                    total.setStartTime(System.currentTimeMillis());
-                    total.setTotalFiles(progress.totalFiles());
-
-                    // 递归深度超限回调：窗口内居中确认（会话 19；等待方是提取后台线程，不冻结界面）
-                    java.util.function.Supplier<Boolean> recursionCallback = () -> {
-                        CompletableFuture<Boolean> future = new CompletableFuture<>();
-                        String msg = I18n.get("alert.recursionDepthHeader") + "\n"
-                                + I18n.get("alert.recursionDepthContent")
-                                + I18n.get("alert.recursionDepthContinue")
-                                + I18n.get("alert.recursionDepthSkip");
-                        Platform.runLater(() -> NotificationHost.confirm(statusLabel, msg, FontAwesomeSolid.SITEMAP, future::complete));
-                        return future.join();
-                    };
-
-                    for (int i = 0; i < units.size(); i++) {
-                        if (isCancelled()) {
-                            log.info(I18n.msg("log.maincontroller.34", units.size() - i));
-                            break;
-                        }
-                        OutputUnitPlanner.OutputUnit unit = units.get(i);
-                        log.info(I18n.msg("log.maincontroller.35", unit.label(), unit.fileCount(), unit.getOutputPath()));
-                        final int unitIndex = i;
-                        BatchProcessor.ProgressCallback progressCallback =
-                                (current, _, _, subProgress) ->
-                                        updateProgress(progress.overall(unitIndex, current, subProgress), 1.0);
-                        try {
-                            BatchProcessor.ProcessStats unitStats = processUnit(unit, sessionOutputFolder,
-                                    overrides, this::isCancelled, recursionCallback, progressCallback);
-                            total.setSuccessCount(total.getSuccessCount() + unitStats.getSuccessCount());
-                            total.setFailCount(total.getFailCount() + unitStats.getFailCount());
-                            total.setSkipCount(total.getSkipCount() + unitStats.getSkipCount());
-                            total.setWarnCount(total.getWarnCount() + unitStats.getWarnCount());
-                            total.getFailDetails().addAll(unitStats.getFailDetails());
-                            total.getSkipDetails().addAll(unitStats.getSkipDetails());
-                            total.getWarnDetails().addAll(unitStats.getWarnDetails());
-                            total.addAllFileResults(unitStats.getFileResults());
-                        } catch (Exception e) {
-                            log.error(I18n.msg("log.maincontroller.36", unit.label()), e);
-                            for (int k = 0; k < unit.fileCount(); k++) {
-                                total.incrementFail();
-                            }
-                            total.addFailDetail(I18n.get("extract.unitFailed",
-                                    "unit", unit.label(), "reason", e.getMessage()));
-                        }
-                    }
-                    total.setEndTime(System.currentTimeMillis());
-                    log.info("{}", total);
-                    // 取消路径经 holder 回写（Task 取消时 getValue 不可用）
-                    lastExtractStats.set(total);
-                    return total;
-                } catch (Exception e) {
-                    log.error(I18n.msg("log.maincontroller.37"), e);
-                    throw new RuntimeException(e);
-                }
-            }
-        };
-
-        task.progressProperty().addListener((_, _, newVal) -> progressBar.setProgress(newVal.doubleValue()));
-
-        task.setOnSucceeded(_ -> {
-            running.set(false);
-            currentTask = null;
-            startButton.setDisable(false);
-            stopButton.setDisable(true);
-            progressBar.setProgress(1.0);
-            statusLabel.setText(I18n.get("extract.done"));
-            BatchProcessor.ProcessStats stats = task.getValue();
-            if (stats != null) {
-                statusLabel.setText(stats.getSummaryLine());
-                // 满格条按结果配色（拍板 2026-09-24）：有失败/跳过 → 浅红；有警告 → 黄；否则保持绿
-                setProgressBarActivity(stats.getFailCount() + stats.getSkipCount() > 0
-                        ? STYLE_PROGRESS_EXTRACT_FAILED
-                        : stats.getWarnCount() > 0 ? STYLE_PROGRESS_EXTRACT_WARNED
-                        : STYLE_PROGRESS_EXTRACT_SUCCESS);
-                // 提取结果一次性回写（拍板）：完成后列表条目背景反映本次提取结果
-                applyExtractResults(stats);
-            }
-            // 提取完成后打开会话输出目录
-            if (openFolderAfterCompleteCheck.isSelected()) {
-                File folder = new File(sessionOutputFolder);
-                if (folder.exists()) {
-                    try {
-                        // 步骤 7 同款写法：ProcessBuilder 数组形式（Runtime.exec(String) 自 Java 18 弃用，
-                        // 且按空格切分会拆坏含空格的路径）；native 镜像规避 AWT，不用 Desktop.open
-                        new ProcessBuilder("explorer.exe", folder.getAbsolutePath()).start();
-                    } catch (Exception ex) {
-                        log.error(I18n.msg("log.maincontroller.38"), ex);
-                    }
-                }
-            }
-        });
-
-        task.setOnFailed(_ -> {
-            running.set(false);
-            currentTask = null;
-            startButton.setDisable(false);
-            stopButton.setDisable(true);
-            progressBar.setVisible(false);
-            setProgressBarActivity(null);
-            statusLabel.setText(I18n.get("extract.statusError"));
-            Throwable ex = task.getException();
-            log.error(I18n.msg("log.maincontroller.37"), ex);
-            NotificationHost.error(statusLabel, ErrorCode.PROCESS_FAILED.message(), FontAwesomeSolid.FILE_EXPORT);
-        });
-
-        task.setOnCancelled(_ -> {
-            // 拍板：中途取消回写已处理部分（未处理的保持原样）
-            BatchProcessor.ProcessStats partial = lastExtractStats.get();
-            if (partial != null) {
-                applyExtractResults(partial);
-            }
-        });
-
-        currentTask = task;
-        new Thread(task).start();
+        extractionCoordinator.run(
+                new WorkspaceExtractionService.ExtractionRequest(sessionOutputFolder, units, overrides, imageMode,
+                        recursionDecision()),
+                statusLabel,
+                extractionUi(sessionOutputFolder, openFolderAfterCompleteCheck.isSelected()));
     }
 
-    /** 执行单个输出单元（文本/图片分派；图片合并输出经显式输出名指定组名/来源名） */
-    private BatchProcessor.ProcessStats processUnit(OutputUnitPlanner.OutputUnit unit,
-                                                    String sessionOutputFolder,
-                                                    Map<String, PerFileOverrides> overrides,
-                                                    java.util.function.Supplier<Boolean> cancelSupplier,
-                                                    java.util.function.Supplier<Boolean> recursionCallback,
-                                                    BatchProcessor.ProgressCallback callback) {
-        AppConfig config = unit.getParams();
-        List<BatchProcessor.MhtFileInfo> files = BatchProcessor.buildMhtFileInfoList(unit.getPaths());
-        if (config.isImageModeEnabled()) {
-            // 会话 10：注入预览缓存生命周期 → 提取复用（命中跳过解析与提取）+ 规则 (b) 完成删除
-            ImageBatchProcessor processor = new ImageBatchProcessor(config, previewCacheLifecycle);
-            processor.setCancelSupplier(cancelSupplier);
-            processor.setRecursionContinueCallback(recursionCallback);
-            if (config.isSingleOutputMode()) {
-                return processor.process(files, sessionOutputFolder, unit.getOutputName(), callback);
+    /**
+     * 递归深度超限回调：窗口内居中确认（会话 19）。等待方是提取后台线程，不冻结界面 ——
+     * {@code Platform.runLater} 把确认卡排到 FX 线程，本线程 {@code future.join()} 等结果。
+     */
+    private java.util.function.Supplier<Boolean> recursionDecision() {
+        return () -> {
+            CompletableFuture<Boolean> future = new CompletableFuture<>();
+            String msg = I18n.get("alert.recursionDepthHeader") + "\n"
+                    + I18n.get("alert.recursionDepthContent")
+                    + I18n.get("alert.recursionDepthContinue")
+                    + I18n.get("alert.recursionDepthSkip");
+            Platform.runLater(() -> NotificationHost.confirm(statusLabel, msg, FontAwesomeSolid.SITEMAP, future::complete));
+            return future.join();
+        };
+    }
+
+    /** 提取任务的界面收尾动作（Q3 / P2）：只有控件状态与列表回写，与搬迁前三个回调逐条对应。 */
+    private ExtractionTaskCoordinator.ExtractionUi extractionUi(String sessionOutputFolder,
+                                                               boolean openFolderAfterComplete) {
+        return new ExtractionTaskCoordinator.ExtractionUi() {
+            @Override
+            public File sessionOutputFolder() {
+                return new File(sessionOutputFolder);
             }
-            return processor.process(files, unit.getOutputPath(), callback);
-        } else {
-            TextBatchProcessor processor = new TextBatchProcessor(config);
-            processor.setCancelSupplier(cancelSupplier);
-            processor.setRecursionContinueCallback(recursionCallback);
-            if (config.isSeparateFiles()) {
-                File outDir = new File(unit.getOutputPath());
-                if (!outDir.exists() && !outDir.mkdirs()) {
-                    log.warn(I18n.msg("log.maincontroller.40", unit.getOutputPath()));
-                }
-                return processor.processSeparate(files, unit.getOutputPath(), callback, overrides);
+
+            @Override
+            public boolean openFolderAfterComplete() {
+                return openFolderAfterComplete;
             }
-            return processor.processMerged(files, unit.getOutputPath(), callback, overrides);
-        }
+
+            @Override
+            public void setProgress(double value) {
+                progressBar.setProgress(value);
+            }
+
+            @Override
+            public void setProgressBarOutcome(ExtractionTaskCoordinator.ExtractOutcomeStyle style) {
+                setProgressBarActivity(switch (style) {
+                    case FAILED -> STYLE_PROGRESS_EXTRACT_FAILED;
+                    case WARNED -> STYLE_PROGRESS_EXTRACT_WARNED;
+                    case SUCCESS -> STYLE_PROGRESS_EXTRACT_SUCCESS;
+                });
+            }
+
+            @Override
+            public void extractionStarted() {
+                startButton.setDisable(true);
+                stopButton.setDisable(false);
+                progressBar.setVisible(true);
+                progressBar.setProgress(0);
+                setProgressBarActivity(STYLE_PROGRESS_EXTRACT_SUCCESS);   // 提取中 = 开始提取按钮绿
+            }
+
+            @Override
+            public void applyResults(BatchProcessor.ProcessStats stats) {
+                applyExtractResults(stats);
+            }
+
+            @Override
+            public void setStatusText(String text) {
+                statusLabel.setText(text);
+            }
+        };
+    }
+
+    /**
+     * 单次提取的运行标记（测试支撑）：投影到协调器持有的唯一实例 ——
+     * 解析回调据此让出进度条 / 状态栏，语义与搬迁前 {@code running} 字段一致。
+     */
+    /* test-support */ AtomicBoolean running() {
+        return extractionCoordinator.running;
+    }
+
+    /**
+     * 最近一次提取的 partial/完整统计（测试支撑）：<b>只读</b>投影到协调器持有的唯一 holder ——
+     * 写入只发生在 {@code ExtractionTaskCoordinator.run} 一处（服务返回值落一次）。
+     */
+    /* test-support */ AtomicReference<BatchProcessor.ProcessStats> extractStats() {
+        return extractionCoordinator.lastExtractStats;
     }
 
     @FXML
     private void onStopProcessing() {
-        if (currentTask != null) {
-            currentTask.cancel(true);
-        }
-        running.set(false);
+        extractionCoordinator.cancel();
+        extractionCoordinator.running.set(false);
         startButton.setDisable(false);
         stopButton.setDisable(true);
         progressBar.setVisible(false);
@@ -3893,7 +3824,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         imageHintLabel.setText(I18n.get("preview.imageLoading"));
         previewEffectButton.setDisable(true);
         // 相邻修复：提取运行期间进度条/状态栏归提取任务独占，图片加载不动它们
-        if (!running.get()) {
+        if (!running().get()) {
             progressBar.setVisible(true);
             progressBar.setProgress(-1);
             setProgressBarActivity(null);   // 预览加载 = 默认色（完成后回落预解析显示）
@@ -4013,7 +3944,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             return;
         }
         // 提取运行期间进度条归提取任务独占（相邻修复），预解析照常跑但不动进度条
-        if (!running.get()) {
+        if (!running().get()) {
             progressBar.setVisible(true);
             progressBar.setProgress(0);
             setProgressBarActivity(STYLE_PROGRESS_PREPARSE);
@@ -4121,7 +4052,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         // 相邻修复（拍板 2026-09-24）：提取运行期间进度条/状态栏归提取任务独占，
         // 预解析完成等回调一律不更新（避免覆盖提取进度显示）
-        if (running.get()) {
+        if (running().get()) {
             return;
         }
         if (imageLoadActive) {
