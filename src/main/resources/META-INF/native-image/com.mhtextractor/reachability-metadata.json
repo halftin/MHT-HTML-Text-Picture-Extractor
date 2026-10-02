@@ -880,6 +880,21 @@
     },
     {
      "name": "useRegexCheck"
+    },
+    {
+     "name": "applyGlobalButton"
+    },
+    {
+     "name": "clearParamsButton"
+    },
+    {
+     "name": "extractResultBanner"
+    },
+    {
+     "name": "modeToggleGroup"
+    },
+    {
+     "name": "viewSourceButton"
     }
    ],
    "methods": [
@@ -909,6 +924,18 @@
     },
     {
      "name": "onUngroupClicked",
+     "parameterTypes": []
+    },
+    {
+     "name": "onApplyGlobalClicked",
+     "parameterTypes": []
+    },
+    {
+     "name": "onClearParamsClicked",
+     "parameterTypes": []
+    },
+    {
+     "name": "onStartProcessing",
      "parameterTypes": []
     }
    ],
@@ -2028,6 +2055,10 @@
     {
      "name": "getModule",
      "parameterTypes": []
+    },
+    {
+     "name": "getRecordComponents",
+     "parameterTypes": []
     }
    ],
    "type": "java.lang.Class"
@@ -2601,6 +2632,12 @@
     {
      "name": "<init>",
      "parameterTypes": []
+    },
+    {
+     "name": "setToggleGroup",
+     "parameterTypes": [
+      "javafx.scene.control.ToggleGroup"
+     ]
     }
    ],
    "type": "javafx.scene.control.ToggleButton"
@@ -2699,6 +2736,12 @@
      "name": "setVgap",
      "parameterTypes": [
       "double"
+     ]
+    },
+    {
+     "name": "setAlignment",
+     "parameterTypes": [
+      "javafx.geometry.Pos"
      ]
     }
    ],
@@ -2839,6 +2882,13 @@
     {
      "name": "<init>",
      "parameterTypes": []
+    },
+    {
+     "name": "setAlignment",
+     "parameterTypes": [
+      "javafx.scene.Node",
+      "javafx.geometry.Pos"
+     ]
     }
    ],
    "type": "javafx.scene.layout.StackPane"
@@ -3163,6 +3213,80 @@
   },
   {
    "type": "sun.text.resources.BreakIteratorResources_en_US"
+  },
+  {
+   "type": "com.sun.scenario.effect.impl.prism.ps.PPSBlend_SRC_INPeer",
+   "methods": [
+    {
+     "name": "<init>",
+     "parameterTypes": [
+      "com.sun.scenario.effect.FilterContext",
+      "com.sun.scenario.effect.impl.Renderer",
+      "java.lang.String"
+     ]
+    }
+   ]
+  },
+  {
+   "type": "java.io.Serializable"
+  },
+  {
+   "type": "java.lang.Iterable"
+  },
+  {
+   "type": "java.lang.Object[]"
+  },
+  {
+   "type": "java.lang.Record"
+  },
+  {
+   "type": "java.lang.reflect.RecordComponent",
+   "methods": [
+    {
+     "name": "getName",
+     "parameterTypes": []
+    },
+    {
+     "name": "getType",
+     "parameterTypes": []
+    }
+   ]
+  },
+  {
+   "type": "java.util.AbstractCollection"
+  },
+  {
+   "type": "java.util.Collection"
+  },
+  {
+   "type": "java.util.ImmutableCollections$AbstractImmutableCollection"
+  },
+  {
+   "type": "java.util.ImmutableCollections$AbstractImmutableList"
+  },
+  {
+   "type": "java.util.ImmutableCollections$List12"
+  },
+  {
+   "type": "java.util.ImmutableCollections$ListN"
+  },
+  {
+   "type": "java.util.List"
+  },
+  {
+   "type": "java.util.RandomAccess"
+  },
+  {
+   "type": "javafx.scene.control.ToggleGroup",
+   "methods": [
+    {
+     "name": "<init>",
+     "parameterTypes": []
+    }
+   ]
+  },
+  {
+   "type": "javafx.scene.image.ImageView"
   }
  ],
  "resources": [
@@ -13397,6 +13521,10 @@
   },
   {
    "bundle": "i18n/messages"
+  },
+  {
+   "module": "javafx.graphics",
+   "glob": "com/sun/scenario/effect/impl/hw/d3d/hlsl/Blend_SRC_IN.obj"
   }
  ]
 }

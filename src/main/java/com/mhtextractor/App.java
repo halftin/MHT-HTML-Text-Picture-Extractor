@@ -131,10 +131,16 @@ public class App extends Application {
             // FeatureExercise 用组合持有控制器：构造参数为该包内可见的 MainController 类型
             Class<?> mcType = Class.forName("com.mhtextractor.gui.controller.MainController");
             Object driver = c.getConstructor(mcType).newInstance(CONTROLLER);
-            c.getMethod(method).invoke(driver);
-            return true;
+            Object result = c.getMethod(method).invoke(driver);
+            // exerciseAllFeatures 返回 void（invoke 得 null）：视作成功；
+            // runAutomatedTests 返回 boolean：直接作为成败——防"框架级错误被测试体吞掉、方法正常返回、
+            // 进程仍 exit 0"的假绿（曾实测：结果文件写不出来时 ~2.4 秒静默退出、零产物零堆栈）。
+            return !(result instanceof Boolean) || (Boolean) result;
         } catch (Throwable t) {
             log.error(I18n.msg("log.app.02", method), t);
+            // test/agent 模式专用路径：控制台子系统镜像里 stderr 是最直接的信道，失败不能只进日志文件
+            System.err.println("[test-mode] invokeFeatureExercise(" + method + ") failed: " + t);
+            t.printStackTrace();
             return false;
         }
     }

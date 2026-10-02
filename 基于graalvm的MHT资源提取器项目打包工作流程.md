@@ -2,7 +2,7 @@
 
 > **目标**: 将 JavaFX 25 + Maven 项目编译为 GraalVM Native Image 绿色免安装 Windows EXE。
 > **适用场景**: 从 Git 拉取代码后，在任何 Windows 设备上完成打包。
-> **最后更新**: 2026-09-26 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
+> **最后更新**: 2026-10-02 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
 > **项目版本**: 以 `pom.xml` 的 `<version>` 为**唯一来源**（当前 `3.0.0`）。所有构建脚本（`build-native.cmd` / `.ps1` / `.sh` / `run-native-image.bat`）均从 pom 动态读取，**禁止**在脚本里硬编码 jar 名（历史问题：曾写死 `mhtExtractor-2.3.1.jar` / `-2.2-SNAPSHOT.jar`，与 pom 不一致导致打包找不到 jar）。
 
 > ## 📌 状态更新（2026-09-27 实测）—— **以脚本与 CLAUDE.md 为准**
@@ -12,7 +12,7 @@
 >
 > | 项 | 状态 |
 > |---|---|
-> | **MSVC 工具链** | ⛔ **仍是唯一卡点**。实测钉死：`vswhere.exe` 不在任何标准位置、**C:/D: 全盘（深度 5）无 `cl.exe`/`vswhere.exe`**、无 VS 安装目录、无 Windows SDK 注册表项；最小 HelloWorld 探针 `exit=20`。`native-image` 在 Windows 上**只支持 MSVC**（不支持 MinGW/GCC）。解除见下方命令 |
+> | **MSVC 工具链** | ✅ **已装好并实测打通（2026-10-02）**：VS 2026 Community 装在 `E:\msvc\community`（含 VC.Tools.x86.x64），`vswhere.exe` 在 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\`，Windows SDK 10.0.26100 在 `E:\Windows Kits\10\`（注册表 `KitsRoot10` 指向它）。`check-env.cmd` → **exit=0「全部就绪」**，native EXE 已成功产出并逐字节验证。**下面「仍是唯一卡点」的说法已作废，详情见 §十** |
 > | **独立 GraalVM** | ✅ **不再需要**。NIK 25.0.3 **自带 `native-image 25.0.3`**，脚本已把它作为 native-image 来源 |
 > | ~~`build-native.cmd` 的 4 处 `X:\` 硬编码~~ | ✅ **已全部修掉（2026-09-27）**：脚本改为**自动探测** JDK / native-image / Maven / 输出目录，且四者均可用环境变量覆盖（`BUILD_JAVA_HOME` / `GRAALVM_HOME` / `MAVEN_CMD` / `OUTPUT_DIR`）。**§5.1 与 §六 里"手工改 4 处路径"的说明已作废** |
 > | ~~`-J-Xmx8G`~~ | ✅ 已改为可配置的 `NATIVE_XMX`，**默认 4G**（本机总内存约 15 GB） |
@@ -24,15 +24,11 @@
 > | **构建可观测性** | ✅ **新增（2026-09-27）**：全过程**实时**同时输出到控制台与日志、每步 `[STEP k/n] BEGIN/END` + ISO 时间、结束时产出**机器可读报告**（输入 jar 与产物清单都带 SHA256）。见 §六 的「构建用法」 |
 > | **JavaFX 来源** | ⚠️ **Liberica `Full` JDK 把 JavaFX 25.0.3 内置为 JDK 模块**（7 个：`javafx.base/controls/fxml/graphics/media/swing/web`）。因此 pom 里的 JavaFX 依赖在**编译期**起作用，运行期由 JDK 提供；这会导致"无 JavaFX classpath"类验证在本机物理不可达（详见 `CLAUDE.md`） |
 >
-> **解除 MSVC 的唯一一步**（需管理员；引导器已实测可下载 4.48 MB）：
->
-> ```bat
-> curl -L -o vs_BuildTools.exe https://aka.ms/vs/17/release/vs_BuildTools.exe
-> vs_BuildTools.exe --quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended
-> ```
->
-> 装完 `vswhere.exe` 出现在 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\`，重跑脚本即可。
-> 注：本机 `winget` **源打不开**（`0x8A15000B`），故走引导器直下。
+> **（历史记录）如何解除 MSVC 缺失** —— 本机 2026-10-02 已完成，不再需要执行：
+> 装 Visual Studio **任意版本**的「使用 C++ 的桌面开发」工作负载即可（本机装的是 VS 2026 Community）。
+> 关键点是 `vswhere.exe` 必须出现在 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\` ——
+> 它由 VS Installer 放在那里，**与 VS 本体装在哪块盘无关**（本机 VS 在 `E:\msvc\community` 也能被找到）。
+> 装完先跑 `check-env.cmd` 确认退出码为 0。
 >
 > **另需知**：项目已完成架构重构（新增零 JavaFX 的 `app` 应用层）与全量国际化（276 键 + 20 错误码）。
 > **这带来两类新的 native 元数据需求**：① Jackson 序列化的纯 DTO（如 `PreviewCacheMeta` 及其嵌套 record）
@@ -1263,10 +1259,16 @@ PROJECT_DIR=<项目根目录>
 #                       所以脚本把编译 JDK 与 native-image JDK **分开解析**，后者取 NIK
 #     GRAALVM_HOME    = D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3（NIK 自带 native-image）
 #     MAVEN_CMD       = 自动到 %USERPROFILE%\.m2\wrapper\dists 下递归找 mvn.cmd
-#     OUTPUT_DIR      = <仓库>\dist（默认）
+#     OUTPUT_DIR      = <仓库同级>\<仓库名>-dist（**2026-10-02 起的新默认**，
+#                       例：D:\JAVA\mht-resource-extractor-dist）
+#                       🚨 旧默认是 <仓库>\dist，已改掉：本机实测**项目树内**的 native EXE 会让
+#                          JavaFX 的 Font.loadFont(...) 返回 null，全部 Ikonli 图标变空心方框；
+#                          输出到树外即正常。脚本现在会在输出目录位于树内时明确告警。详见 §十。
 #     NATIVE_XMX      = 4G（默认；原脚本写死 8G，本机总内存约 15 GB）
-#   ⚠️ 本机仍缺 MSVC → native-image 会报 "Failed to find 'vswhere.exe'"（exit=20）。
-#      必须先装 VS 2022 Build Tools 17.6+（勾选「使用 C++ 的桌面开发」）；脚本会在**开跑前**就拦下并提示。
+#     NATIVE_RECIPE   = dynamic（**默认**，≈70 MB，随包 7 个 JavaFX DLL）
+#                       static（≈98 MB，JavaFX 静态链接进 EXE，dist 不含 JavaFX DLL）
+#                       脚本会挑"配方匹配"的 native-image JDK；两种都装时靠它区分。
+#   ✅ MSVC 已于 2026-10-02 装好（E:\msvc\community），native-image 能自己用 vswhere 找到它。
 
 # ========== Step 1: 初始化 MSVC 环境（必须最先执行） ==========
 # 找到 vcvars64.bat 的位置（通常在 VS 安装目录下）
@@ -1285,15 +1287,17 @@ mvn clean package -DskipTests
 APP_VERSION=$(grep -oP '<version>\K[^<]+' "$PROJECT_DIR/pom.xml" | head -1)
 echo "项目版本: $APP_VERSION"
 
-# ========== Step 3: 提取 JavaFX 原生 DLL ==========
+# ========== Step 3: 抽取随包 DLL（**按配方**，2026-10-02 修正）==========
+# 随包内容由**配方**决定（判据见 §十；build-native.cmd 会自动判定并打印）：
+#   dynamic（默认，≈70 MB）：抽 7 个 JavaFX DLL + 5 个 VC++ 运行库 → 必须随包
+#   static （≈98 MB）      ：**只**抽 5 个 VC++ 运行库 → JavaFX 已静态链接进 EXE，
+#                            再放同名 DLL 会双份加载并在 WinApplication._init 段错误
+#                            （ExceptionCode -1073741819，读地址 0x0）
 mkdir -p target/jfx-dlls
 cd target/lib
-# 从 JavaFX Graphics JAR 中提取所有 DLL
-# javafx-graphics-<version>-win.jar 中的 version 可能变化
 JFX_GRAPHICS_JAR=$(ls javafx-graphics-*-win.jar | head -1)
-for dll in glass.dll prism_common.dll prism_d3d.dll prism_sw.dll \
-            decora_sse.dll javafx_font.dll javafx_iio.dll \
-            msvcp140.dll msvcp140_1.dll msvcp140_2.dll \
+JFX_NATIVE_DLLS=$( [ "$RECIPE" = dynamic ] && echo "glass.dll prism_common.dll prism_d3d.dll prism_sw.dll decora_sse.dll javafx_font.dll javafx_iio.dll" )
+for dll in $JFX_NATIVE_DLLS msvcp140.dll msvcp140_1.dll msvcp140_2.dll \
             vcruntime140.dll vcruntime140_1.dll; do
     jar xf "$JFX_GRAPHICS_JAR" "$dll" 2>/dev/null
     mv "$dll" ../jfx-dlls/ 2>/dev/null
@@ -1301,6 +1305,10 @@ done
 cd ../..
 
 # ========== Step 4: Native Image 编译 ==========
+# GRAALVM_HOME 决定配方：
+#   Oracle GraalVM（无 JavaFX 静态库） → dynamic，≈70 MB
+#   NIK Full（自带 JavaFX 静态库）      → static，≈98 MB
+#   用 NATIVE_RECIPE=dynamic|static 可强制；build-native.cmd 会自动挑匹配的那个 JDK。
 export JAVA_HOME=$GRAALVM_HOME
 export PATH=$JAVA_HOME/bin:$PATH
 
@@ -1319,12 +1327,19 @@ native-image.cmd \
   -Djava.library.path="target/jfx-dlls" \
   -J-Xmx4G \
   -Ob
+# ⚠️ 下一行**只在 static 配方**需要（NIK）；dynamic 配方必须留空，否则链接器找不到该 .lib：
+#   -H:NativeLinkerOption="<NIK>\lib\static\windows-amd64\prism_common.lib"
 
 # ========== Step 5: 打包分发 ==========
+# native-image 会把 EXE **以及它动态依赖的 JDK DLL**（awt/fontmanager/freetype/java/
+# javaaccessbridge/javajpeg/jawt/jvm/lcms）一起写进 -H:Path 指定的目录，整目录搬走即可；
+# 再补上 Step 3 抽出来的 5 个 VC++ 运行库 DLL。
+# 🚨 不要把 target/jfx-dlls 里的 JavaFX DLL 放进 dist（见 Step 3 的说明）。
 mkdir -p target/dist
 cp target/native-image/MhtExtractor.exe target/dist/
-cp target/native-image/*.dll target/dist/
-cp target/jfx-dlls/*.dll target/dist/
+cp target/native-image/*.dll target/dist/          # native-image 自动落地的 9 个 JDK DLL
+cp target/jfx-dlls/msvcp140*.dll target/dist/      # 5 个 VC++ 运行库
+cp target/jfx-dlls/vcruntime140*.dll target/dist/
 
 # ========== Step 6: 隐藏控制台窗口 ==========
 # 查找 editbin.exe（在 VS 安装目录下）
@@ -1336,6 +1351,15 @@ else
     echo "WARNING: editbin.exe not found, EXE will show console window"
 fi
 ```
+
+> 🚨 **`-H:NativeLinkerOption=...prism_common.lib` 只在 static 配方（NIK）需要**。
+> 不加会以 `error LNK2001: unresolved external symbol
+> Java_com_sun_glass_ui_Application__1overrideNativeWindowHandle` 结束 —— 原因：`jni-config.json`
+> 给 `com.sun.glass.ui.Application` 开了 `allDeclaredMethods`，native-image 于是为它的 native 方法
+> 生成 JNI 入口调用，而该符号的实现住在 **prism_common.lib**（`dumpbin /EXPORTS` 实测），
+> native-image 自己挑库时却只挑了 glass / prism_d3d / javafx_font / javafx_iio。
+> **dynamic 配方不需要它**：该符号由 `java.library.path` 里的 `prism_common.dll` 提供（link.exe 直接
+> 吃 DLL 的导出表）。`build-native.cmd` 会按配方自动处理（static 找不到 .lib 时打印 `[WARN]`）。
 
 ### 5.2 各参数说明
 
@@ -1710,7 +1734,7 @@ target/dist/
 | `ClassNotFoundException: com.sun.glass.ui.win.WinPlatformFactory` | Glass 工厂类未注册 | 添加到 reflect-config.json |
 | `NoClassDefFoundError: java/lang/Runnable` (via JNI) | 核心 JNI 回调类未注册 | 添加到 jni-config.json |
 | `NoSuchMethodError: com.sun.glass.ui.Screen.<init>(JII...F)V` | Screen 构造器未对 JNI 暴露 | 添加 `allDeclaredConstructors` 到 jni-config |
-| `Graphics Device initialization failed for: d3d, sw` | DLL 不在 EXE 同目录 | 复制所有 DLL 到 EXE 目录 |
+| `Graphics Device initialization failed for: d3d, sw` | **旧配方**（动态 JavaFX / Oracle GraalVM）下 DLL 不在 EXE 同目录 | 仅**旧配方**需要把 JavaFX DLL 放同目录。**NIK Full 下恰恰相反**：JavaFX 已静态链接，再放同名 DLL 会双份加载并段错误（§十） |
 | `InternalError: Error loading stock shader FillPgram_Color` | D3D shader 资源未包含 | 在 resource-config.json 添加 `.*\\.obj$` |
 | `Cannot determine type for property` (FXML) | 属性 getter/setter 未注册 | 注册属性所属的**父类**而非子类 |
 | 构建超过 10 分钟 | 杀毒软件实时扫描 | 排除项目目录 |
@@ -1724,7 +1748,8 @@ target/dist/
 | 浏览按钮无效 | JNI 回调类未注册 | 添加 `java.io.File`/`DirectoryChooser` 到 jni-config |
 | UI 切换后控件状态异常 | JavaFX 属性类未注册 | 添加 `BooleanProperty`/`StringProperty` 等 |
 | 提取处理失败 | 内部类或 Jakarta Mail handler 未注册 | 检查 reflect-config 是否覆盖所有 processor/extractor/util 类 |
-| 图标不显示 | Ikonli 字体/SPI 未注册 | 检查 resource-config 包含 `.ttf` 和 `META-INF/services/` |
+| 图标**全变空心方框** | **EXE 位于项目树内**（本机实测；与构建配方无关） | 先把 EXE 挪到项目树外再跑；再用 §10.5.4 的 `Font.loadFont` 探针确认。本项目已把默认 OUTPUT_DIR 移出树外并在构建时告警 |
+| 图标不显示（少数几个） | Ikonli 字体/SPI 未注册 | 检查 reachability-metadata 的 `resources` 是否含 `META-INF/resources/fontawesome5/**/fa-*.ttf` 与 `META-INF/services/org.kordamp.ikonli.IkonHandler` |
 
 ### 8.4 调试建议
 
@@ -1766,26 +1791,30 @@ target/dist/
 
 **错误**: NIK 25.0.3 native-image 链接失败 `error LNK2001: unresolved external symbol Java_com_sun_glass_ui_Application__1overrideNativeWindowHandle`。
 
-**根因**: NIK 25.0.3 内置 JavaFX 25 的静态链接库 `glass.lib` 与项目当前 JNI 配置（基于 JavaFX 21 生成）不兼容。NIK 使用静态链接，GraalVM 使用动态链接。
+**根因（2026-10-02 纠正）**: **不是** "NIK 静态库与 JavaFX 21 时代的 JNI 配置不兼容"。
+真实原因是：这个符号的实现**在 `prism_common.lib` 里，不在 `glass.lib` 里**（`dumpbin /EXPORTS` 实测），
+而 native-image 自己挑静态库时只挑了 `glass / prism_d3d / javafx_font / javafx_iio`，于是没人提供它。
 
-**解决**:
-- 编译用 NIK 25.0.3，native-image 仍用 GraalVM 25.0.2（动态链接模式）。
-- 或重新用 Tracing Agent 在 NIK 环境下生成全套 native-image 配置文件。
+**解决（一行，已内置到 `build-native.cmd`）**:
+```
+-H:NativeLinkerOption=<NIK>\lib\static\windows-amd64\prism_common.lib
+```
+**不需要**换回 Oracle GraalVM —— 本机已用 NIK 25.0.3 走通全部 6 步并产出可交付的 EXE。
 
 ---
 
 ### 8.6 已知环境陷阱（2026-09 架构重构 + 国际化后新增）
 
 **错误**: `Error: Failed to find 'vswhere.exe' for locating Visual Studio installations.`
-（native-image 退出码 20）
+（native-image 退出码 20）—— ✅ **本机 2026-10-02 已解除**
 
-**根因**: 本机**未安装 MSVC 工具链**。GraalVM native-image 在 Windows 上**只支持 MSVC**
+**根因**: 未安装 MSVC 工具链。GraalVM native-image 在 Windows 上**只支持 MSVC**
 （**不支持 MinGW/GCC**），且 `--no-fallback` 要求走完 C 编译+链接。
 
-**解决**: 安装 **Visual Studio 2022 Build Tools（17.6+）**，勾选「使用 C++ 的桌面开发」+
-「MSVC v143 - VS 2022 C++ x64/x86 生成工具」+「Windows 10/11 SDK」。
-装后 `vswhere.exe` 出现在 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe`。
-> 实测：本机即使是最小 HelloWorld 也无法构建，故此问题**必须先解决才能验证任何 native 改动**。
+**解决**: 装 Visual Studio（任意版本）+「使用 C++ 的桌面开发」工作负载即可；VS 本体可以装在
+**非 C 盘**（本机在 `E:\msvc\community`），只要 `vswhere.exe` 出现在
+`C:\Program Files (x86)\Microsoft Visual Studio\Installer\`。装完 `check-env.cmd` 应报 exit=0。
+> 历史记录：本机曾实测"连 HelloWorld 都 exit=20"，那是装 VS 之前的状态，现已不再适用。
 
 ---
 
@@ -1836,10 +1865,12 @@ target/dist/
 3. **检查配置文件**（第四章），`src/main/resources/META-INF/native-image/com.mhtextractor/` 下的配置文件需存在；
    **但注意**：`reflect-config.json` 已过时且与 `reachability-metadata.json` 不一致（见 §4.9.4），
    统一格式才是权威
-4. **编译用 NIK 25 的 JDK；native-image 可用 NIK 自带的**（若遇 §8.5 的静态链接符号错误，再退回 GraalVM 25.0.2）
+4. **编译用 NIK 25 的 JDK；native-image 用 NIK 自带的**（已实测走通）。若遇 §8.5 的 LNK2001，**不要**换 GraalVM，加 `-H:NativeLinkerOption=...prism_common.lib` 即可
 5. **所有工具路径必须纯 ASCII**，含中文的路径会导致模块加载失败（`Module org.graalvm.nativeimage.builder not found`）
 6. **`--initialize-at-run-time` 参数一个都不能少**，缺失任何一个 JavaFX 子包都会崩溃
-7. **DLL 必须放在 EXE 同目录**，包括 JNI 桥接库 `awt.dll`/`java.dll`/`jvm.dll`
+7. **"DLL 放同目录"这条要分开看**：
+   - native-image **自动落地**的 JDK DLL（`awt`/`fontmanager`/`freetype`/`java`/`javaaccessbridge`/`javajpeg`/`jawt`/`jvm`/`lcms`）+ 5 个 VC++ 运行库 DLL → **必须随包**（本机交付目录就是这 15 个文件）；
+   - JavaFX 的 `glass`/`prism_*`/`javafx_font`/`javafx_iio`/`decora_sse` → **NIK Full 下绝不能放**（会段错误，§十）
 8. **构建后用 `editbin /SUBSYSTEM:WINDOWS`** 隐藏控制台窗口
 9. **遇到 `Failed to delete target\lib`**: 跳过 clean，用 `mvn package` 而非 `mvn clean package`
 10. **本机 `mvn` 不在 PATH**：用 Maven wrapper，并令 `JAVA_HOME` 指向 NIK 25
@@ -1860,3 +1891,388 @@ Claude Code CLI 可以通过以下步骤在新设备上自动完成全部打包�
 7. 如果构建失败，根据错误信息对照第八章排查
 8. **构建成功后务必冒烟验证**：启动 → 导入 → 预览（确认缓存目录生成）→ 提取 →
    切换语言（zh/en 各一次）→ 退出（确认缓存清空）。这些路径正是元数据缺失时才会崩的地方
+---
+
+## 十、2026-10-02 实机打通记录：可复用配方、踩过的坑与验证流程
+
+> **本章是最新事实。与前面任何章节冲突时，一律以本章为准。**
+> 本章所有结论都在本机实测过，并留有可复查的证据（截图 / 构建日志 / SHA-256 / 产物树）。
+
+### 10.1 环境事实（本机，2026-10-02）
+
+| 组件 | 实际位置 | 说明 |
+|------|----------|------|
+| MSVC | `E:\msvc\community` | VS **2026** Community 18.10.3，含 `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`。`cl.exe` 在 `VC\Tools\MSVC\{14.44.35207, 14.51.36231}\bin\Hostx64\x64\` |
+| vswhere | `C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe` | native-image 靠它定位 VS；**VS 本体可以装在非 C 盘**，关键是它在标准位置 |
+| Windows SDK | `E:\Windows Kits\10\Lib\10.0.26100.0` | 注册表 `HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots` 的 `KitsRoot10 = E:\Windows Kits\10\` |
+| 编译 JDK | `D:\install\New Folder`（javac 25.0.2） | **纯 JDK**（无 JavaFX 模块）；JavaFX 类由 Maven 依赖提供；Lombok 正常 |
+| native-image JDK（**默认，dynamic**） | `D:\JAVA\graalvm-jdk-25_windows-x64_bin\graalvm-jdk-25.0.2+10.1` | Oracle GraalVM 25.0.2：**无** JavaFX 静态库 → JavaFX 走随包 DLL，≈70 MB。⚠️ 它是 zip 解压的**两层**结构，脚本已会多探一层 |
+| native-image JDK（可选，**static**） | `D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3`（NIK Full 25.0.3） | 自带 `lib\static\windows-amd64\*.lib` → JavaFX 静态链接进 EXE，≈98 MB，dist 不含 JavaFX DLL。`set NATIVE_RECIPE=static` 即切换 |
+| Maven | 仓库自带 `mvnw.cmd` | 不必预装；脚本会自动找 wrapper 分发或 PATH 上的 `mvn.cmd` |
+
+`check-env.cmd` → **exit=0「全部就绪」**。
+
+### 10.2 一次成功构建的最短路径
+
+```bat
+:: 0) 预检（应 exit=0）
+check-env.cmd
+
+:: 1) 直接跑，什么都不用设（脚本自动探测 JDK / native-image / Maven / MSVC）
+build-native.cmd
+::   默认输出到 <仓库同级>\<仓库名>-dist，例：D:\JAVA\mht-resource-extractor-dist
+::   想放别处（推荐树外）：set OUTPUT_DIR=D:\JAVA\newmht
+
+:: 其他开关
+build-native.cmd --prepare-only     :: 只做 JVM 侧准备（mvn package + 抽 DLL），不调 native-image
+build-native.cmd --skip-package     :: 跳过 mvn package
+build-native.cmd --no-editbin       :: 保留控制台子系统（排启动期崩溃时用）
+```
+
+本机实测耗时：`mvn clean package` 约 1–2 分钟 + `native-image` 约 **1 分 26 秒**。
+
+### 10.3 五个真缺陷（根因 + 修法，别再重踩）
+
+#### 10.3.1 `check-env.cmd` 在第 6/9 步直接崩：`\Microsoft was unexpected at this time`
+
+- **根因**：批处理的 `:say` 子程序写成 `if "%~1"=="" ( echo. ) else ( echo %~1 )`。
+  当传入字符串含 `(x86)` 时（如 `%ProgramFiles(x86)%\Microsoft Visual Studio\...`），那个 `)` 会在
+  **解析期**提前闭合 `else` 块，剩下的 `\Microsoft ...` 变成非法语法 → cmd 中止整批，退出码 255。
+- **定位手法（可复用）**：先把原始输出 `> file 2>&1` 落盘（PowerShell 的 `2>&1 |` 会打乱 stdout/stderr 顺序），
+  再往可疑行前插 `echo MARK-n` 逐行二分。本例 `MARK-115` 之后才报错，直接定位到第 125 行。
+- **修法**：改用延迟展开 —— `set "SAYMSG=%~1"` + `echo !SAYMSG!`（延迟展开发生在解析之后，括号无害）。
+  `build-native.cmd` 的 `:say` 有**同一颗雷**，已一并修掉。
+- **通用教训**：`call :label "含(括号)的值"` 传给"带括号的 if 块"是通用陷阱；传路径给 `:say` 一律走延迟展开。
+
+#### 10.3.2 `editbin` 永远找不到（EXE 停在控制台子系统，双击带黑窗）
+
+- **根因**：脚本用 `dir /b /s "...\VC\Tools\MSVC\*\bin\Hostx64\x64\editbin.exe"`。
+  **`dir /s` 不支持"中间目录"里的通配符**，静默返回空 —— 文件其实在 `14.44.35207\bin\HostX64\x64\`
+  （注意 `HostX64` / `Hostx64` 大小写在不同版本里都不一样，Windows 文件系统不区分大小写，所以 `Hostx64` 能匹配两者）。
+- **修法**：`for /d %%d in ("%VSPATH%\VC\Tools\MSVC\*") do if not defined EDITBIN if exist "%%~d\bin\Hostx64\x64\editbin.exe" set "EDITBIN=..."`
+- **验证**：`check-env.cmd` 的 `[6/9]` 现在打印 `[OK] editbin.exe`；构建第 6 步打印
+  `editbin: GUI 子系统已启用（双击不再弹黑窗）`。
+
+#### 10.3.3 LNK2001：`Java_com_sun_glass_ui_Application__1overrideNativeWindowHandle`
+
+见 §8.5（已就地纠正）。一行修法：
+`-H:NativeLinkerOption=<NIK>\lib\static\windows-amd64\prism_common.lib`。
+`build-native.cmd` 已内置（自动探测 + 找不到时 `[WARN]`）。
+
+#### 10.3.4 JavaFX DLL 能不能随包 —— **取决于配方**
+
+| 配方 | JavaFX 原生库在哪 | dist 里放 JavaFX DLL？ |
+|---|---|---|
+| **dynamic（默认，≈70 MB）** | 在 EXE 外面，运行期 `System.load` | ✅ **必须随包**（glass / prism_common / prism_d3d / prism_sw / decora_sse / javafx_font / javafx_iio 共 7 个） |
+| **static（≈98 MB）** | 已静态链接进 EXE | ❌ **绝不能放** |
+
+- **static 下放了的后果**：EXE 同目录一旦存在 `glass.dll`，就会加载第二份 glass；静态链接那份的
+  全局量从未初始化 → `com.sun.glass.ui.win.WinApplication._init` 解引用空指针。
+- **对照实验（照这个格式做）**：同一份 static EXE，
+  - 同目录放那 7 个 JavaFX DLL → `HasExited=True`，stderr 出现
+    `[ [ SegfaultHandler caught a segfault ] ] ExceptionCode: -1073741819, reading address 0x0`；
+  - 只放 native-image 自动落地的 9 个 JDK DLL + 5 个 VC 运行库 DLL → 正常出窗口。
+- **修法**：`build-native.cmd` 第 4 步按配方决定抽哪些 DLL（并且**先清空** `target\jfx-dlls`，
+  防止上一次另一种配方留下的 DLL 混进来），第 6 步把它们复制进 dist。
+
+#### 10.3.5 元数据缺口：FXML 在第 24 行就崩
+
+- **现象**：native EXE 能启动到 `FXMLLoader.load()`，然后
+  `javafx.fxml.LoadException: /com/mhtextractor/gui/view/MainView.fxml:24`
+  → `NoSuchMethodException: javafx.scene.control.ToggleGroup.<init>()`。
+- **根因**：`MainView.fxml` 用 `<fx:define><ToggleGroup fx:id="modeToggleGroup"/></fx:define>`
+  实例化控件，需要 `ToggleGroup` 的**反射构造器**条目，而当时的 `reachability-metadata.json` 里没有。
+  同一轮 agent 采集还补出了 `com.sun.scenario.effect.impl.prism.ps.PPSBlend_SRC_INPeer` 与资源
+  `.../hlsl/Blend_SRC_IN.obj`（混合效果用得到）。
+- **修法**：跑 tracing agent（§10.6）并按**并集**合并。本次共补 **16 个反射类型 + 1 个资源**，
+  `git diff --numstat` 为 **+128 / −0**（纯增量）。
+- **教训**：**"能编译能链接"不等于"能跑"**。元数据缺口只在运行期炸，且往往炸在 FXML / Jackson / 资源这三处。
+
+### 10.4 交付目录长什么样（两种配方，照抄即可）
+
+**默认 = dynamic（≈70 MB / 22 个文件）** —— Oracle GraalVM，JavaFX 原生库随包：
+
+```
+MhtExtractor.exe        70,033,408 B   ← GUI 子系统（已 editbin）
+glass.dll  prism_common.dll  prism_d3d.dll  prism_sw.dll  decora_sse.dll
+javafx_font.dll  javafx_iio.dll                        ← 7 个 JavaFX DLL（**必须随包**）
+awt.dll  fontmanager.dll  freetype.dll  java.dll  javaaccessbridge.dll
+javajpeg.dll  jawt.dll  jvm.dll  lcms.dll              ← native-image 自动落地的 9 个 JDK DLL
+msvcp140.dll  msvcp140_1.dll  msvcp140_2.dll  vcruntime140.dll  vcruntime140_1.dll
+                                                       ← 5 个 VC++ 运行库
+```
+
+**可选 = static（≈98 MB / 15 个文件）** —— NIK Full，JavaFX 静态链接进 EXE：
+同样这些文件，但 **去掉那 7 个 JavaFX DLL**（放了会段错误，§10.3.4）。
+
+🚨 **dynamic 的 dist 还多两个文件：`启动.cmd` 与 `Launch.cmd`**（各约 2 KB）。**非 ASCII（中文）路径下
+必须双击 `启动.cmd`**，直接双击 exe 会启动失败 —— 原因、对照实验与另外两个补救方案见 §10.8。
+static 配方对路径无要求，直接双击 exe 即可。
+
+两者都：
+- **没有** `logs/`（应用首次运行才创建；打包时不要带）
+- 整个目录**拷走即用**：无需 JDK/JRE，也无需预装 VC 运行库。
+- **产物逐字节等价**：两种配方在 native 下都跑出 **32/0** 的产物黄金基线（§10.5.2），
+  且与 JVM 产物树 288/288 同名同内容。**选配方只影响体积，不影响产物。**
+
+### 10.5 验证配方（**三档，跑完才算验完**）
+
+"能启动"≠"能提取"。本机实测证明必须做完下面三档。
+
+#### 10.5.1 第一档：能启动、图标正常、能关掉
+
+```powershell
+# 拷到项目树外，从无关的工作目录启动（关键：不要从项目树内运行，见 §10.7.1）
+$p = Start-Process 'D:\JAVA\newmht\MhtExtractor.exe' -WorkingDirectory 'C:\Windows' -PassThru
+Start-Sleep 12; $p.Refresh()
+$p.MainWindowTitle          # 期望 "MHT 资源提取器"
+$p.CloseMainWindow()        # 期望 ~2 秒内 HasExited=True 且 ExitCode=0（无残留进程）
+```
+
+- 本机基线：**冷启动到窗口 0.42 s**（JVM 对照 1.93 s）；工作集 234 MB（JVM 300 MB）。
+- `-D` 属性可用：`MhtExtractor.exe -Duser.language=en` → 窗口标题变 `MHT Resource Extractor`。
+
+#### 10.5.2 第二档：跑仓库自己的产物黄金基线（**最强的一档**）
+
+`src/test/java/com/mhtextractor/baseline/BaselineCases.java` 是一个**零 JavaFX、可复用**的无头运行器
+（16 个用例 × zh/en = 32 份基线，每份含**逐产物 SHA-256 + 内容摘要**）。把它包进 native 镜像跑一遍，
+就等于"让 native 二进制去对黄金基线"：
+
+```
+// .claude-work/baseline-probe/NativeBaselineProbe.java（本次新增，可复用）
+// 主循环：for each case, for each loc("zh","en")
+//           BaselineCases.run() 跑两遍（独立目录，确定性自检：两遍摘要必须一致）
+//           再与 src/test/resources/baselines/<case>.<loc>.json 比对
+```
+
+构建要点：主类换成探针，classpath 用
+`<probe classes>;target\classes;target\test-classes;<target\cp.txt 的内容>`，
+其余 native-image 参数与正式构建完全相同（含 `-H:NativeLinkerOption=...prism_common.lib`）；
+**运行时 CWD 必须是仓库根**（`BaselineCases.FIXTURE_DIR` 是相对路径）。
+
+本机结果（`.claude-work/jvm-baseline.log` / `native-baseline.log`）：
+
+```
+[PASS] [text-merged-chapter/zh]  products=1 total=2 success=2 fail=0 skip=0
+[PASS] [text-separate-titled/zh] products=2 total=3 success=2 fail=0 skip=1
+... （共 32 行）
+NATIVE-BASELINE: 32 passed, 0 failed     ← native 二进制
+NATIVE-BASELINE: 32 passed, 0 failed     ← JVM 对照（同一探针）
+```
+
+覆盖到的**参数驱动行为**：章节编号（中文数字/西文）、标题标记提取命名、内容区域限定（字面量+正则）、
+模板变量 `{filename}/{date}/{time}`、边界路径（不可解析/缺 CTE/递归超限）、图片单独/合并、
+批量重命名 + 魔数扩展名纠正、高速内存（预加载）模式、区域+名称提取、ZIP/CBZ 打包、RFC 2047 中文文件名。
+
+#### 10.5.3 第二档的交叉复核（换一种手段再验一遍）
+
+把 `native-baseline-jvm/` 与 `native-baseline-native/` 两棵产物树（各 288 个文件）做逐文件 SHA 比对：
+
+```
+only in JVM: 0        only in native: 0
+content differs: 16   ← 全部是 .zip / .cbz
+```
+
+追到根：**归档唯一差异是 ZIP 条目里的写入时刻（DOS 时间字段）**；
+CRC / 压缩前后大小 / 压缩方式 / 属性 / 文件名 / **解压后条目内容**全部相同。
+仓库基线本来就"只比归档内条目、不比归档字节"（注释写明"归档字节含时间戳"），
+所以 16 个归档按条目比对 **0 处不一致**。
+
+> ⚠️ 别用"JVM 连跑两遍字节相同"当控制组 —— 那个控制组**太弱**（两遍落在同一个 2 秒 DOS 时间桶里）。
+
+#### 10.5.4 诊断图标问题的小探针（遇症状先用它）
+
+```java
+// 在 native 镜像里打印：ServiceLoader 找到几个 IkonHandler / 资源 URL / Font.loadFont 的返回
+InputStream s = new FontAwesomeSolidIkonHandler().getFontResourceAsStream();
+System.out.println("STREAM=" + (s == null ? "null" : s.available()));
+System.out.println("FONT=" + Font.loadFont(s, 12.0));
+```
+
+- 项目树**外**运行：`STREAM=avail=202744` + `FONT=family='Font Awesome 5 Free Solid'` → 图标正常
+- 项目树**内**运行：`STREAM=avail=202744` 但 `FONT=null` → 图标全变空心方框
+
+#### 10.5.5 GUI 自动化（`test.mode`）
+
+```powershell
+# 需要 target\test-classes（FeatureExercise 在测试源码里，生产 jar 不含）
+# classpath = target\classes;target\test-classes;<cp.txt>；JavaFX 走 --module-path
+java --module-path <jfx-win jars> --add-modules javafx.controls,javafx.fxml `
+     -Dtest.mode=true -Duser.language=zh -Duser.country=CN `
+     -cp "..." com.mhtextractor.App
+# 结果落 logs/test-results.txt，末行应为 "=== RESULTS: 31 passed, 0 failed ==="
+```
+
+同一套断言**搬进 native 镜像**也能过（主类仍是 `App`，classpath 多带 test-classes 与一份给
+`FeatureExercise` 开反射的元数据）—— 本机实测 **zh 31/0 + en 31/0**。
+但注意：GUI 断言验的是**控件状态**，**不验落盘产物**，所以它**替代不了** §10.5.2。
+
+> 🚨 踩过的坑：`FeatureExercise.runAutomatedTests()` 里 `new FileWriter("logs/test-results.txt")`
+> 在 `logs\` 不存在时会抛 `FileNotFoundException`，而异常被外层 `catch (Exception)` 吞掉 →
+> 方法"正常"返回 → `System.exit(0)` → 现象是**2.4 秒静默退出、零产物、零堆栈**，极易被误判成"跑过了"。
+> 已修（自建 `logs\` + 结果通道自足 + 退出码诚实）。判据仍然是**核对 `logs/test-results.txt` 的 mtime**。
+
+### 10.6 元数据采集与合并（本次的实际做法）
+
+1. **采集**（NIK 自带 agent，JVM 模式即可）：
+
+   ```bat
+   java -agentlib:native-image-agent=config-output-dir=target\agent-out ^
+        --module-path <jfx-win jars> --add-modules javafx.controls,javafx.fxml ^
+        -Duser.language=zh -Duser.country=CN -Dtest.mode=true ^
+        -cp "target\classes;target\test-classes;<cp.txt>" com.mhtextractor.App
+   ```
+
+   想覆盖更全就跑**两轮**，第二轮用 `config-merge-dir=`（把两轮并集留在同一目录）。
+   若报 `Can't find dependent libraries`，改用全路径 `-agentpath=<NIK>\bin\native-image-agent.dll=...`。
+   > ⚠️ `mvn clean` 会**删掉** `target\agent-out` 与 `target\cp.txt`，采集完要及时合并/备份。
+
+2. **合并**（纯增量，绝不整文件重排）。本次脚本 `.claude-work/merge-agent-metadata.py` 的要点：
+   - 用 **order-preserving** 解析（Python 的 `json.loads` 保留键序）；
+   - 写回前做**字节级 round-trip 自检**：`json.dumps(obj, ensure_ascii=False, indent=1)` 再把 `\n`
+     换成 `\r\n` 并补尾换行，必须与读进来的字节**完全一致**，否则拒绝写入（这条能挡住"重排整文件"）；
+   - 只做"加类型 / 加成员 / 加资源"，同 type 按字段与方法并集合并；
+   - 写回后核对 **`git diff --numstat` 的删除数为 0**。
+
+   本次结果：反射类型 `194 → 210`、资源 `2918 → 2919`，`+128 / −0`。
+
+### 10.7 本机环境陷阱（新增，按"会不会浪费时间"排序）
+
+#### 10.7.1 🚨 项目树内的 native EXE 会让全部 Ikonli 图标变空心方框
+
+- **症状**：图标全是空心方框（字体缺字形），但**文字、布局、字体、功能全部正常**。
+- **实测规则（同一份 EXE 字节，只改文件位置）**：
+
+  | EXE 所在位置 | 图标 |
+  |---|---|
+  | `D:\JAVA\mht-resource-extractor\dist\`（**旧默认输出目录**） | ❌ 全部空心方框 |
+  | `D:\JAVA\mht-resource-extractor\xcheck-plain\` | ❌ |
+  | `D:\JAVA\mht-resource-extractor\.claude-work\...` | ❌ |
+  | `D:\JAVA\newmht\`、`C:\mht-probe-abs\`、`C:\xcheck.dotted\`、75 字符长路径 | ✅ 正常 |
+
+- **已排除**：`-jar` vs `-cp`、`-H:Name`、路径长度、点目录、祖先 `target\` 目录、`-Djava.library.path`、
+  `target\jfx-dlls`、EXE 旁边的 DLL 集合、ServiceLoader 提供者数量、字体资源是否嵌入、加载的原生模块集合、
+  以及**构建配方**（NIK 静态 JavaFX 与 `D:\JAVA\MhtExtractorV2.2` 那种动态 JavaFX 的旧构建，
+  放进项目树内**一样中招**）。
+- **钉到的机制层面**：`Font.loadFont(InputStream, double)` 在树内返回 `null`、树外返回真字体；
+  而 TTF 资源本身两处都可读（202,744 字节）。本机装有文件系统虚拟化过滤栈
+  （`fltmc filters` 可见 `wcifs` / `bindflt` / `bfs`×13）与沙箱服务，**很可能是本机沙箱环境的副作用**。
+  换一台普通机器跑一次"项目树内的 dist"即可反证。
+- **本项目已做的处置**：`build-native.cmd` 的默认 `OUTPUT_DIR` 改为 `<仓库同级>\<仓库名>-dist`（树外），
+  并在输出目录位于树内时打印醒目 `[WARN]`（只告警不阻断）。已测边界：默认 → 不告警；
+  `<仓库>\dist`、`<仓库>` → 告警；同名前缀的兄弟目录（`mht-resource-extractor-dist`）→ 不误报。
+
+#### 10.7.2 PowerShell 会把 `-Dfoo=bar` 参数吃掉
+
+现象：`java ... -Duser.language=zh` 变成 `ClassNotFoundException: /language=zh`；
+或 `-Djava.library.path=...` 被解析成"要写到 `target\.library.path=target` 这个目录"（见 §8.5）。
+
+- **可靠做法**：把带 `-D` 的命令写进一个 `.cmd` / `.ps1` 文件再执行，
+  或用 `Start-Process -ArgumentList '<一整条预引号字符串>'`。本次所有 JVM 侧命令都改成经 `.cmd` 驱动后一次通过。
+- 同理**不要**给 `.ps1` 里的自动变量 `$args` 赋值（会静默毁掉整个脚本作用域，症状是 0 字节输出）。
+
+#### 10.7.3 用脚本改文件时，中文锚点必须按 UTF-8 读，不能按 Latin-1 读
+
+- 为了"保字节"用 Latin-1（byte-preserving）做替换：**匹配 ASCII 锚点没问题，匹配中文一律匹配不到**。
+  正确做法：`path.read_bytes().decode("utf-8")` → 替换 → `.encode("utf-8")` 写回。
+  `.cmd` / `.md` 都是 **UTF-8 无 BOM + CRLF**，写完必须复查 `CRLF / BareLF / BOM` 三项。
+- 另：把含中文路径的辅助脚本用 `Out-File -Encoding ascii` 落盘会把路径写成 `?`（本次真踩到）——
+  辅助脚本一律用 UTF-8 写。
+- 🚨 仍然**禁止**用 PowerShell 的字符串替换改文档（反引号是转义符，会把整篇改坏，见 `CLAUDE.md`）。
+
+#### 10.7.4 截 GUI 窗口的图：不置顶就会截到前台浏览器
+
+`GetWindowRect` + `CopyFromScreen` 截的是"屏幕该矩形区域里**当前可见**的东西"。必须先把目标窗口
+`SetWindowPos(hwnd, HWND_TOPMOST, …, SWP_NOMOVE|SWP_NOSIZE)` 再 `SetForegroundWindow`，
+否则截到的是浏览器（本次第一次截图截到的就是 DSH 界面）。
+
+#### 10.7.5 其它一次性坑
+
+- `mvn clean` 会删掉 `target\cp.txt` 与 `target\agent-out`；依赖 classpath 的脚本要能自己重建
+  （`mvnw.cmd -q dependency:build-classpath -Dmdep.outputFile=target/cp.txt`）。
+- 交付目录里出现 `logs/` 说明有人在那个目录直接跑过应用；打包前清掉。
+- 本机 `git commit` 未配身份 → 需内联 `-c user.name=... -c user.email=...`。
+- 判断"构建是否真跑过"：看 `logs/native-build-<stamp>.report.json` 的 `status/steps` 与
+  `logs/native-build-<stamp>.log` 里的 `[STEP k/n] END … exit=`，不要只看退出码。
+- 统计测试数不要读执行方日志，直接聚合 `target/surefire-reports/*.txt`
+  （本次独立聚合：**420 tests / 0 failures / 36 类** + `headless-layer-b` **53/0**）。
+
+### 10.8 🚨 非 ASCII（中文）路径：dynamic 配方会**启动失败** —— 已随包启动器
+
+**症状**：把 dynamic 产物放进中文目录，双击 exe → **窗口一闪即逝**，stderr 里是：
+
+```
+Graphics Device initialization failed for :  d3d, sw
+Error initializing QuantumRenderer: no suitable pipeline found
+java.lang.UnsatisfiedLinkError: Can't load library: prism_d3d
+   | java.library.path = [C:\中文测试-目录\提取器 V3, C:\windows\system32, ...]
+```
+
+**四格对照实验（同一份 EXE 字节，只改放置位置）** —— 这是定位的关键：
+
+| EXE 位置 | 工作目录 | 结果 |
+|---|---|---|
+| `C:\中文测试-目录\提取器 V3`（含中文**和**空格） | 中文 | ❌ 失败 |
+| `C:\中文测试无空格\提取器V3`（含中文，**无空格**） | ASCII | ❌ 失败 |
+| `C:\mht space test\app`（**纯 ASCII + 空格**） | ASCII | ✅ 正常 |
+| `D:\JAVA\newmht`（纯 ASCII） | 任意 | ✅ 正常 |
+
+⇒ **只看 EXE 自己的路径里有没有非 ASCII；空格无害；工作目录、输入/输出目录是中文都无所谓。**
+
+**根因**：dynamic 配方下 JavaFX 的原生库是**运行期用 `System.loadLibrary` 按名字加载**的，而
+`java.library.path` 的**第一项就是 EXE 所在目录**。GraalVM 的 SubstrateVM 处理不了这个列表里的非 ASCII
+目录（构建期/运行期的路径 → 宽字符转换有缺陷），于是 `prism_d3d` / `prism_sw` 都加载不了 →
+Prism 两条流水线全挂 → 启动即退。**static 配方把 JavaFX 静态链接进 EXE，运行期根本不做这次加载，
+所以完全免疫**（同一份中文目录实测三次全部正常启动）。
+
+**三个补救方案（都实测过）**：
+
+| 方案 | 做法 | 代价 |
+|---|---|---|
+| **① 随包启动器（已内置）** | 双击 **`启动.cmd`**（而不是 exe）。它把 DLL 复制到纯 ASCII 目录 `%ProgramData%\MhtExtractor\native-dlls`（失败则退到 `%PUBLIC%`），再用 `-Djava.library.path=<该目录>` 启动 | dist 多 2 个 2 KB 文件；首次运行向 `%ProgramData%` 写约 4.5 MB（之后 `xcopy /D` 只补新增/变更） |
+| **② 换 static 配方** | `set NATIVE_RECIPE=static` → 98 MB，双击 exe 即可，**对路径无任何要求** | +28 MB |
+| **③ 放进纯 ASCII 路径** | 例如 `D:\MhtExtractor`；不改配方不加文件 | 用户得记住这条规矩 |
+
+**已排除的死路（别再试）**：
+
+- **8.3 短路径**：`%~sI` 对中文目录给出的是 `C:\中文测~1\提取器~1`，**仍然是非 ASCII**。
+- **`-Djava.library.path=.`**：会被规范化回**中文绝对路径**，一样失败。
+- **`subst M: <中文目录>` 再跑 `M:\MhtExtractor.exe`**：实测仍然 EXITED。
+- **`JAVA_TOOL_OPTIONS`**：native image 不认这个变量。
+- **路径含空格**：不是问题（见上表第三行），别在这上面浪费时间。
+
+**构建脚本已内置方案 ①**：`build-native.cmd` 第 6 步在 dynamic 配方下调用
+`tools\launcher\make-launcher.ps1`，生成 `启动.cmd` 与 ASCII 名的孪生 `Launch.cmd`
+（防老解压工具把中文名弄乱）。⚠️ 中文文件名**必须**由 PowerShell 创建 —— `cmd.exe` 会把 `build-native.cmd`
+里的 UTF-8 字节当 ANSI 传给 Win32 API，直接在 `.cmd` 里 `copy` 成中文名会得到**乱码文件名**（实测踩过）。
+static 配方不生成启动器（不需要）。
+
+### 10.9 把活儿分给 Claude Code CLI（本次经验，省 token）
+
+本次有两块**自包含、需要大量迭代**的活儿委派给了 `claude.exe`
+（`--print --verbose --dangerously-skip-permissions --settings <白名单> --max-budget-usd N`），
+提示词走 stdin。适合复制这个模式：
+
+- **委派 1（成功）**：让 native 镜像里的 GUI 自动化真的跑起来。它定位到
+  "`FileNotFoundException` 被吞 → 静默 `exit 0`"，并把结果通道改成自足，最终 zh/en 各 31/0。
+- **委派 2（超预算未完成）**：图标问题的机制定位。它建了一堆探针（ServiceLoader 探针三种类路径顺序、
+  `FontProbe` 两种配方）**并成功证伪了 ServiceLoader 假说**，但 $10 预算耗尽在机制上；
+  真正的答案（运行位置）是用"同一 EXE 换位置"的对照实验拿到的。
+
+**结论**：委派提示词里要写清"现象 + 已排除项 + 可用手段 + 判定纪律（核对 mtime / 带控制组 / 不许假绿）"，
+并**给一个明确预算**；纯机制探索类任务要预期它可能只交付"排除清单"。
+
+### 10.10 本章一页速查
+
+| 要做什么 | 命令 / 判据 |
+|---|---|
+| 预检 | `check-env.cmd` → exit 0 |
+| 构建 | `build-native.cmd`（输出默认在项目树外）→ exit 0 |
+| 选配方 | 默认 `dynamic`（≈70 MB）；`set NATIVE_RECIPE=static` 换 NIK 静态（≈98 MB） |
+| **放在中文目录下** | dynamic：**双击 `启动.cmd`**（直接双击 exe 会失败，§10.8）；static：双击 `MhtExtractor.exe` 就行 |
+| 交付目录 | dynamic：22 个文件 / ~70 MB，**含** 7 个 JavaFX DLL；static：15 个文件 / ~98 MB，**不含**。两者都**不含** `logs/` |
+| 能不能启动 | 从无关 cwd 启动 → 标题 `MHT 资源提取器`；关窗 exit 0 无残留 |
+| 图标对不对 | **必须**从项目树外运行；症状是"全空心方框"（§10.7.1） |
+| 能不能真提取 | native 跑 `BaselineCases` → **32 passed / 0 failed**（§10.5.2） |
+| 元数据够不够 | FXML / Jackson / 资源三处不炸；`git diff --numstat` 纯增量 |
+| 回归门槛 | `mvn test`：**420/0（36 类）+ headless-layer-b 53/0**；GUI 自动化 zh 31/0、en 31/0 |

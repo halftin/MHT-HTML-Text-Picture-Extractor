@@ -77,19 +77,32 @@ if not defined BUILD_JAVA_HOME (
 
 REM ==================== 4. native-image ====================
 call :say ""
-call :say "[4/9] native-image（NIK / GraalVM 自带，编译 JDK 与它是**分开解析**的）"
+call :say "[4/9] native-image（决定**配方**：dynamic≈70MB / static≈98MB，见打包工作流程文档 §十）"
 if defined GRAALVM_HOME if not exist "%GRAALVM_HOME%\bin\native-image.cmd" ( call :say "  [WARN] 环境里的 GRAALVM_HOME 无效，忽略它" & set "GRAALVM_HOME=" )
+if not defined NATIVE_RECIPE set "NATIVE_RECIPE=dynamic"
+REM 先按“想要的配方”扫；扫不到再退让 —— 判定逻辑与 build-native.cmd 完全一致
+if not defined GRAALVM_HOME (
+    set "WANT_RECIPE=%NATIVE_RECIPE%"
+    call :scan_native_image
+)
+if not defined GRAALVM_HOME (
+    set "WANT_RECIPE="
+    call :scan_native_image
+)
 if not defined GRAALVM_HOME if defined BUILD_JAVA_HOME if exist "%BUILD_JAVA_HOME%\bin\native-image.cmd" set "GRAALVM_HOME=%BUILD_JAVA_HOME%"
 if not defined GRAALVM_HOME if defined JAVA_HOME if exist "%JAVA_HOME%\bin\native-image.cmd" set "GRAALVM_HOME=%JAVA_HOME%"
-if not defined GRAALVM_HOME call :detect_nik
 if not defined GRAALVM_HOME (
     call :say "  [FAIL] 找不到 bin\native-image.cmd。"
     call :say "         修复：设 GRAALVM_HOME 指向 NIK / GraalVM 目录。"
     call :say "         注意：普通 JDK 没有 native-image，必须用 NIK 或 GraalVM 发行版。"
     set "CRIT=1"
 ) else (
+    set "RECIPE=dynamic"
+    if exist "!GRAALVM_HOME!\lib\static\windows-amd64\prism_common.lib" set "RECIPE=static"
     call :say "  [OK]   !GRAALVM_HOME!"
     call :say "         !GRAALVM_HOME!\bin\native-image.cmd"
+    if /i "!RECIPE!"=="dynamic" ( call :say "         配方：**dynamic**（dist 随包 7 个 JavaFX DLL，约 70 MB）" ) else ( call :say "         配方：**static**（JavaFX 静态链接进 EXE，dist 不含 JavaFX DLL，约 98 MB）" )
+    if /i not "!RECIPE!"=="!NATIVE_RECIPE!" call :say "  [WARN] NATIVE_RECIPE=!NATIVE_RECIPE! 但该 JDK 只支持 !RECIPE! —— 构建会退让并告警"
 )
 
 REM ==================== 5. Maven ====================
@@ -140,10 +153,14 @@ if not exist "!VCVARS!" (
 call :say "  [OK]   VS: !VSPATH!"
 call :say "  [OK]   vcvars64.bat"
 set "EDITBIN="
-for /f "delims=" %%i in ('dir /b /s "!VSPATH!\VC\Tools\MSVC\*\bin\Hostx64\x64\editbin.exe" 2^>nul') do if not defined EDITBIN set "EDITBIN=%%i"
+for /d %%d in ("!VSPATH!\VC\Tools\MSVC\*") do if not defined EDITBIN if exist "%%~d\bin\Hostx64\x64\editbin.exe" set "EDITBIN=%%~d\bin\Hostx64\x64\editbin.exe"
 if defined EDITBIN ( call :say "  [OK]   editbin.exe —— 构建后会用它把 EXE 切到 GUI 子系统，双击不弹黑窗" ) else ( call :say "  [WARN] 没找到 editbin.exe —— EXE 会保持控制台子系统，双击带黑窗" )
 set "PF86=%ProgramFiles(x86)%"
-if exist "!PF86!\Windows Kits\10\Include" ( call :say "  [OK]   Windows SDK" ) else ( call :say "  [WARN] 没看到 Windows Kits\10\Include —— SDK 通常随 C++ 工作负载一起装" )
+REM SDK 不一定在 C 盘：优先读注册表 KitsRoot10（本机实测装在 E:\Windows Kits\10）
+set "KITS="
+for /f "tokens=2,*" %%a in ('reg query "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots" /v KitsRoot10 2^>nul ^| findstr /i KitsRoot10') do set "KITS=%%b"
+if not defined KITS if exist "!PF86!\Windows Kits\10\Include" set "KITS=!PF86!\Windows Kits\10"
+if defined KITS if exist "!KITS!\Include" ( call :say "  [OK]   Windows SDK: !KITS!" ) else ( call :say "  [WARN] 没找到 Windows Kits\10\Include（注册表 KitsRoot10 与 %ProgramFiles(x86)% 都查过了） —— SDK 通常随 C++ 工作负载一起装" )
 
 :after_msvc
 
@@ -181,7 +198,7 @@ if "%CRIT%"=="1" (
     )
 )
 call :say " 退出码 : !FINAL_RC!   （0=就绪 / 20=缺 MSVC / 1=缺其它关键项）"
-call :say " 下一步 : build-native.cmd                    完整构建，产物在 dist 目录"
+call :say " 下一步 : build-native.cmd                    完整构建，产物在 <仓库同级>\<仓库名>-dist"
 call :say "          build-native.cmd --prepare-only   只验证 JVM 侧，无 MSVC 也能跑"
 call :say "============================================================"
 
@@ -193,7 +210,8 @@ REM  子程序（探测逻辑与 build-native.cmd 保持一致）
 REM ============================================================================
 
 :say
-if "%~1"=="" ( echo. ) else ( echo %~1 )
+set "SAYMSG=%~1"
+if not defined SAYMSG ( echo. ) else ( echo !SAYMSG! )
 goto :eof
 
 :jdk_dir
@@ -207,11 +225,27 @@ for %%r in ("%ProgramFiles%\BellSoft" "%ProgramFiles%\Java" "%ProgramFiles%\Ecli
 )
 goto :eof
 
-:detect_nik
-for %%r in ("%ProgramFiles%\BellSoft" "%LOCALAPPDATA%\Programs\BellSoft" "%USERPROFILE%\jdk" "C:\Java" "D:\Java" "D:\install") do (
+:scan_native_image
+REM 与 build-native.cmd 的扫描逻辑保持一致：会**再深一层**（Oracle GraalVM 的 zip 解压常是
+REM <根>\graalvm-jdk-25_windows-x64_bin\graalvm-jdk-25.0.2+10.1\ 这种两层结构）；
+REM 设了 WANT_RECIPE 时只接受配方匹配的候选。
+REM 🚨 列表里**故意不写 %ProgramFiles(x86)%** —— 它的值含 ')'，放进 for 列表会拆坏解析。
+for %%r in ("%ProgramFiles%\BellSoft" "%ProgramFiles%\Java" "%ProgramFiles%\Eclipse Adoptium" "%ProgramFiles%\Microsoft" "%LOCALAPPDATA%\Programs\BellSoft" "%USERPROFILE%\jdk" "C:\Java" "D:\Java" "D:\install" "C:\graalvm" "D:\graalvm" "%USERPROFILE%\graalvm") do (
     if exist "%%~r" for /d %%d in ("%%~r\*") do (
-        if not defined GRAALVM_HOME if exist "%%~d\bin\native-image.cmd" set "GRAALVM_HOME=%%~d"
+        call :accept_ni "%%~d"
+        for /d %%e in ("%%~d\*") do call :accept_ni "%%~e"
     )
 )
+goto :eof
+
+:accept_ni
+if defined GRAALVM_HOME goto :eof
+if not exist "%~1\bin\native-image.cmd" goto :eof
+if not defined WANT_RECIPE goto :accept_ni_take
+set "CAND_RECIPE=dynamic"
+if exist "%~1\lib\static\windows-amd64\prism_common.lib" set "CAND_RECIPE=static"
+if /i not "!CAND_RECIPE!"=="%WANT_RECIPE%" goto :eof
+:accept_ni_take
+set "GRAALVM_HOME=%~1"
 goto :eof
 

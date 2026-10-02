@@ -3,18 +3,18 @@
 > 本文档面向**打包电脑上的智能体/操作者**：说明**当前代码状态**对 GraalVM native-image 打包的影响、需执行的步骤与验收清单。
 > 打包总体流程以《基于graalvm的MHT资源提取器项目打包工作流程.md》为准，本文只补充**变动相关项**。
 >
-> **最后更新：2026-09-27**（⚠️ **打包脚本与可观测性已大改，请先读 §零**）
+> **最后更新：2026-10-02**（✅ **本机已实机打通并逐字节验证产物** —— 见 §零 与 §五；构建细节与踩坑记录见《基于graalvm的MHT资源提取器项目打包工作流程.md》§十）
 > 本文件是**打包机操作手册**：先跑 `check-env.cmd` 预检 → 再按第三节构建 → 最后按第五节验收。构建可观测性契约见打包工作流程文档 §6.1 与 `CLAUDE.md`。
 
 ---
 
-## 零、先看这个：当前的阻塞与必做项（2026-09-27 复核）
+## 零、先看这个：当前的阻塞与必做项（2026-10-02 复核：**已无阻塞项**）
 
 | 项 | 状态 | 必须做的 |
 |---|---|---|
-| **MSVC 工具链** | ⛔ **仍是唯一卡点** | 安装 **VS 2022 Build Tools 17.6+**（勾「使用 C++ 的桌面开发」+「MSVC v143」+「Windows SDK」）。实测钉死：`vswhere.exe` 不在任何标准位置、**C:/D: 全盘（深度 5）无 `cl.exe`/`vswhere.exe`**；最小 HelloWorld 探针也报 `Failed to find 'vswhere.exe'`（exit=20） |
-| **独立 GraalVM** | ✅ **不需要** | NIK 25.0.3 自带 `native-image 25.0.3`，脚本自动采用 |
-| ~~`build-native.cmd` 的 4 处 `X:\` 硬编码~~ | ✅ **已修掉（2026-09-27）** | **不用再手改路径**：脚本自动探测 JDK / native-image / Maven / 输出目录；要覆盖就用环境变量（`BUILD_JAVA_HOME` / `GRAALVM_HOME` / `MAVEN_CMD` / `OUTPUT_DIR` / `NATIVE_XMX` / `VSWHERE` / `LOG_DIR`） |
+| **MSVC 工具链** | ✅ **已就位（2026-10-02）** | 无需再做任何事。VS **2026** Community 在 `E:\msvc\community`；`vswhere.exe` 在 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\`；Windows SDK 10.0.26100 在 `E:\Windows Kits\10\`。`check-env.cmd` → **exit=0**。⚠️ **VS 装在非 C 盘也能被找到**（关键只是 `vswhere.exe` 在标准位置） |
+| **用哪个 native-image（决定配方）** | ✅ **默认 dynamic** | 默认 `NATIVE_RECIPE=dynamic` → 用 **Oracle GraalVM 25.0.2**（`D:\JAVA\graalvm-jdk-25_windows-x64_bin\graalvm-jdk-25.0.2+10.1`）→ **≈70 MB**，dist 随包 7 个 JavaFX DLL。要 ≈98 MB 的 NIK 静态配方就 `set NATIVE_RECIPE=static`（NIK 自带 `native-image`）。两种 JDK 都装时脚本靠配方挑；`check-env.cmd` 的 `[4/9]` 会打印实际选中哪个与配方 |
+| ~~`build-native.cmd` 的 4 处 `X:\` 硬编码~~ | ✅ **已修掉（2026-09-27）** | **不用再手改路径**：脚本自动探测 JDK / native-image / Maven / 输出目录；要覆盖就用环境变量（`BUILD_JAVA_HOME` / `GRAALVM_HOME` / `MAVEN_CMD` / `OUTPUT_DIR` / **`NATIVE_RECIPE`（`dynamic` 默认 / `static`）** / `NATIVE_XMX` / `VSWHERE` / `LOG_DIR`） |
 | ~~`-J-Xmx8G`~~ | ✅ **已改为 `NATIVE_XMX`，默认 4G** | 机器内存大可用环境变量调高 |
 | **四个脚本的关系** | ✅ **已归一** | `build-native.cmd` 是**唯一实现**；`.ps1` / `.sh` / `run-native-image.bat` 只是委托入口（原先四份各写死自己的路径与 VS 版本号） |
 | **元数据重采** | ⚠️ **仅当元数据相关代码有改动时才做** | 见 §二 |
@@ -23,14 +23,13 @@
 | **打包前第一步** | ✅ **先跑 `check-env.cmd`** | 9 项预检（PowerShell / JDK / native-image / Maven / MSVC / SDK / 内存磁盘 / git / 网络）+ 修复命令。退出码 **0=就绪 / 20=缺 MSVC / 1=缺其它关键项**，与 `build-native.cmd` 对齐。**别等构建跑到一半才发现缺东西** |
 | **排障工具** | ✅ 随仓库分发 | `tools\probes\run-probe.ps1`（UI 探针：布局截断 / 提醒 / 等待卡片 / 关窗残留）、`tools\recovery\*`（文档误改后的恢复）、`tools\diag\tee-probe.cmd`。清单见 `CLAUDE.md` 文末「验证工具」 |
 
-> **一句话**：**先把 MSVC 装上**，其余都不用手工改；装完直接 `build-native.cmd`。
-> 缺 MSVC 时脚本会在**开跑前**就拦下并给出修复指引（`exit 20`），不会跑到一半才失败。
-
-> **解除 MSVC（需管理员；引导器已实测可下载 4.48 MB）**：
-> ```bat
-> curl -L -o vs_BuildTools.exe https://aka.ms/vs/17/release/vs_BuildTools.exe
-> vs_BuildTools.exe --quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended
-> ```
+> **一句话**：本机已无阻塞项 —— `check-env.cmd` 应 exit=0，然后直接 `build-native.cmd`。
+> 唯一要记住的坑是**输出目录不要落在项目树内**（会让全部图标变空心方框，见 §六），
+> 新默认值已经把 dist 放到项目树外了。
+>
+> **（历史记录）当年如何解除 MSVC 缺失**：装 Visual Studio 任意版本 +「使用 C++ 的桌面开发」工作负载即可；
+> 关键是 `vswhere.exe` 必须出现在 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\`（由 VS Installer 放置，
+> 与 VS 本体装在哪块盘无关）。
 
 ---
 
@@ -130,23 +129,28 @@ Maven 会把该目录**全部**内容打进 jar。本项目真发生过
    ```bat
    build-native.cmd --prepare-only
    ```
-   期望：`exit 0`、Maven `BUILD SUCCESS`、`target\jfx-dlls` 下 **12 个 DLL**，
+   期望：`exit 0`、Maven `BUILD SUCCESS`、`target\jfx-dlls` 下 **12 个 DLL**（`dynamic` 配方 = 7 个 JavaFX DLL
+   + 5 个 VC++ 运行库；`static` 配方则只有那 5 个 —— JavaFX 静态链接进 EXE，放出去会段错误，见 §六），
    并在 `logs\` 下产出 `native-build-<stamp>.log` / `.steps.tsv` / `.report.json` 三件套。
 4. **（仅当元数据相关代码有改动时才做）重采并合并**：按 §二.3 执行，先核对 `git diff --numstat` 是纯增量。
 5. **跑 JVM 侧回归**（确认功能没坏，再花时间做 native）：
    ```bash
-   "%MAVEN_HOME%\bin\mvn.cmd" test        # 期望 406/0（默认）+ 53/0（headless-layer-b）
+   "%MAVEN_HOME%\bin\mvn.cmd" test        # 期望 420/0（36 类）+ 53/0（headless-layer-b）
    # GUI 自动化（勿用 mvn javafx:run，-D 会被 Maven 吃掉）
    java --module-path <jfx-win-jars> --add-modules javafx.controls,javafx.fxml \
         -Duser.language=zh -Duser.country=CN -Dtest.mode=true \
         -cp "target/classes;target/test-classes;<cp.txt>" com.mhtextractor.App
-   # 期望 logs/test-results.txt：30 passed / 0 failed（zh；en 同样 30/0）
+   # 期望 logs/test-results.txt：31 passed / 0 failed（zh；en 同样 31/0）
    ```
 6. **完整构建**：
    ```bat
    build-native.cmd
    ```
-   在 `dist\` 产出 `MhtExtractor.exe` + 12 个 DLL（"整个目录拷走即用"）。
+   在输出目录产出 **22 个文件 / 约 70 MB**（dynamic）：`MhtExtractor.exe`（70,033,408 B）+ **7 个 JavaFX DLL**
+   + native-image 自动落地的 9 个 JDK DLL + 5 个 VC++ 运行库 DLL（"整个目录拷走即用"；**不含** `logs/`）。
+   `NATIVE_RECIPE=static` 时是 15 个文件 / 约 98 MB（去掉那 7 个 JavaFX DLL）。
+   dynamic 还会多出 `启动.cmd` 与 `Launch.cmd` 两个启动器 —— **放在中文/非 ASCII 路径下必须用它启动**（见 §六）。
+   默认输出目录 = `<仓库同级>\<仓库名>-dist`（**项目树外**）。
 7. **给智能体的实时跟踪**——构建**进行中**即可读：
    ```powershell
    Get-Content logs\native-build-*.log -Wait -Tail 50
@@ -165,14 +169,28 @@ Maven 会把该目录**全部**内容打进 jar。本项目真发生过
 | 项 | 说明 |
 |---|---|
 | ~~`mvn test` 有 1 个失败~~ | ✅ **已修复（步骤 0，2026-09-26）**。原 `LayerBTest.runsWithoutUiFrameworkOnClasspathWhenHeadlessExecutionIsActive` 失败，根因是 `headless-layer-b` 执行**无法真正剔除 JavaFX**：既需 ① `argLine` 把 boot layer 限定 `java.se`（JDK 模块层），又需 ② `classpathDependencyExcludes` 剔 jar（classpath），**且排除坐标必须带 classifier 与不带 classifier 各写一遍**。现基线 **406/0（默认）+ 53/0（headless）** |
-| **native 构建阻塞** | 缺 MSVC（见 §零）。**脚本侧已全部就绪**——装上 MSVC 即可直接构建 |
+| ~~**native 构建阻塞**~~ | ✅ **已解除（2026-10-02）**：MSVC 就位后 `build-native.cmd` 一次跑通（mvn package 约 1–2 分钟 + native-image **1 分 26 秒**），交付物 15 文件 / 98.2 MB。过程中真实遇到并已修掉的三个坑：**LNK2001**（缺 `prism_common.lib` 链接选项）、**JavaFX DLL 随包段错误**、**元数据缺 `ToggleGroup` 导致 FXML 第 24 行崩** —— 见 §六 |
 | ~~纯 Data URI 的 MHT 提取不到图片~~ | ✅ **已修复（步骤 7a，2026-09-26）**。两个根因：① `ImageExtractor.extractAllImagesInOrder` 在 `imageInfoList` 为空时提前 return，使 Data URI 提取成为**死代码**；② `ImageBatchProcessor` 的"无图片内容"快速检查只看 `cidMap`/`locationDataMap`。`data-uri.mht` 由 `SKIPPED` 变 `SUCCESS`（2 张图），基线已同步 |
 
 ---
 
 ## 五、native EXE 验收清单
 
-> 本次重构/国际化改动的**重点新增项**已标 ⭐。其余为既有功能回归。
+> ✅ **2026-10-02：本清单已在 native EXE 上实跑通过，并留下两层证据。**
+> - **产物层（最强，替代不了）**：把仓库自己的**产物黄金基线**（`BaselineCases`，16 用例 × zh/en = 32 份，
+>   每份含逐产物 SHA-256 + 内容摘要）**包进 native 镜像运行 → 32 passed / 0 failed**（JVM 对照同样 32/0）。
+>   与 JVM 产物树逐文件比对：288 / 288 同名，仅归档容器字节差 ZIP 写入时刻（解压后条目 **0 处**不一致）。
+>   ⇒ §五.B（文本：合并/单独/章节号/标题命名/区域限定 字面+正则/模板变量）与 §五.C（图片：合并/单独/流式/预加载/
+>   名称提取/区域限定/批量重命名/ZIP/CBZ/Data URI/魔数纠正）的**参数语义已在 native 下逐字节对上**。
+> - **控件层**：native 镜像内 GUI 自动化 **zh 31/0 + en 31/0**（含 §五.A 的 i18n、预览缓存、关窗清缓存、`test.mode`）。
+>   ⚠️ 控件层断言**不验落盘产物**，所以它**不能替代**上面那层。
+> - 运行环境：**必须从项目树外启动**（否则图标全变空心方框，见 §六）。
+>
+> 本次重构/国际化改动的**重点新增项**已标 ⭐。其余为既有功能回归（下面保留为人工过一眼的补充清单）。
+
+> 🚨 **跑 `test.mode` 前先删 `logs/test-results.txt`，跑完核对它的 mtime** —— 否则读到的可能是上一次的 31/0。
+> 另：`FeatureExercise.runAutomatedTests()` 里 `new FileWriter("logs/test-results.txt")` 在 `logs\` 不存在时
+> 会抛 `FileNotFoundException` 并被外层 `catch (Exception)` 吞掉 → 表现为 **2.4 秒静默 exit 0、零产物**（已修）。
 
 ### A. ⭐ 本次改动相关（重点）
 
@@ -235,8 +253,12 @@ Maven 会把该目录**全部**内容打进 jar。本项目真发生过
 | 参数窗口打开报 FXML 加载失败 | `resource-config.json` 缺 `ParamDialog.fxml` / `MainView.fxml` |
 | 渲染异常/黑屏：shader 加载失败 | 检查 `reachability-metadata.json` 是否含 `com.sun.prism.shader.*` 与 `.obj$` 资源模式 |
 | 缩略图"无法加载"（非缓存问题） | `org.glavo.webp` 条目缺失（agent 演练应已捕获）；或该图不是 WebP/PNG/JPEG/GIF |
-| `Error: Failed to find 'vswhere.exe'` | **MSVC 未安装**（见 §零） |
-| `error LNK2001: unresolved external symbol Java_com_sun_glass_ui_Application__1overrideNativeWindowHandle` | NIK 静态链接与 JNI 配置不兼容 → native-image 改用 GraalVM 25.0.2，或按 NIK 重采全套元数据 |
+| `Error: Failed to find 'vswhere.exe'` | MSVC 未安装（✅ 本机 2026-10-02 已装）。装 VS 任意版本 + C++ 桌面开发即可；**VS 可装在非 C 盘** |
+| `error LNK2001: unresolved external symbol Java_com_sun_glass_ui_Application__1overrideNativeWindowHandle` | ✅ **已修**：该符号的实现住在 **`prism_common.lib`**（`dumpbin /EXPORTS` 实测），native-image 自己挑库时没挑它 → 加 `-H:NativeLinkerOption=<NIK>\lib\static\windows-amd64\prism_common.lib`（`build-native.cmd` 已内置）。**不需要**换 GraalVM |
+| **中文（非 ASCII）路径下双击 exe → 窗口一闪即逝** | 🚨 **dynamic 配方特有**：SubstrateVM 处理不了 `java.library.path` 里的非 ASCII 目录，而首项就是 EXE 所在目录 → `UnsatisfiedLinkError: Can't load library: prism_d3d` / `Graphics Device initialization failed for : d3d, sw`。**双击 `启动.cmd`**（它把 DLL 暂存到 `%ProgramData%\MhtExtractor\native-dlls` 再指 `-Djava.library.path`）；或 `set NATIVE_RECIPE=static` 换成 98 MB 的静态配方（对路径无要求）；或放进纯 ASCII 路径。<br>⚠️ **空格无害**，工作目录/输入输出目录是中文也不影响；8.3 短路径、`-Djava.library.path=.`、`subst` 盘符都**无效**（实测） |
+| **所有 Ikonli 图标变空心方框**（文字/布局/功能都正常） | 🚨 **EXE 位于项目树内**（本机实测；与构建配方无关）。把 dist 挪到项目树外再跑。判据：native 下 `Font.loadFont(...)` 在树内返回 `null`、树外返回真字体（资源本身两处都可读） |
+| 应用启动即**段错误**（`ExceptionCode -1073741819`，读地址 0） | 🚨 **只在 static 配方会这样**：dist/EXE 同目录里放了 JavaFX 的 DLL（`glass`/`prism_*`/`javafx_font`/`javafx_iio`/`decora_sse`）。NIK Full 已把 JavaFX 静态链接进 EXE，再放同名 DLL 会双份加载 → static 下只保留 9 个 JDK DLL + 5 个 VC++ 运行库。<br>⚠️ **dynamic 配方恰恰相反**：那 7 个 JavaFX DLL **必须**随包，少了会启动失败 |
+| FXML 加载失败：`NoSuchMethodException: javafx.scene.control.ToggleGroup.<init>()`（或其它控件） | 元数据缺口（`<fx:define>` 实例化控件需要其反射构造器）→ 跑 tracing agent 重采并按并集合并（§二.3） |
 | `Module org.graalvm.nativeimage.builder not found` | 工具路径含中文 → 移到纯 ASCII 路径 |
 | 构建产物里多出 `.bak` 等文件 | 临时文件放在 `src/main/resources` 下了 → 移出该目录 |
 | `mvn test` 有 1 个失败 | 见 §四（已知构建配置缺陷，非代码问题） |
@@ -246,15 +268,15 @@ Maven 会把该目录**全部**内容打进 jar。本项目真发生过
 
 ## 七、JVM 侧回归基线（打包前先确认这些是绿的）
 
-| 项 | 基线 |
+| 项 | 基线（2026-10-02 复核实测） |
 |---|---|
-| 单元测试（默认执行） | **406 测试 / 35 类 / 0 失败** |
+| 单元测试（默认执行） | **420 测试 / 36 类 / 0 失败**（独立聚合 `target/surefire-reports/*.txt` 得出） |
 | `headless-layer-b` | **53 / 0** |
-| GUI 自动化（zh / en） | **各 30 passed / 0 failed** |
-| 产物黄金基线 | **32 份**（16 例 × zh/en）全部 SHA-256 一致 |
+| GUI 自动化（zh / en） | **各 31 passed / 0 failed**（JVM 与 **native 镜像内**都是 31/0） |
+| 产物黄金基线 | **32 份**（16 例 × zh/en）全部 SHA-256 一致 —— 且 **native 二进制里也 32/0** |
 | 架构不变式 | **11 条**（业务层零 JavaFX、GUI 不得直写数据序 等） |
-| `MainController` | **4334 行 / 上限 4370**（刻意留 36 行余量） |
-| 业务层 `I18n.` 引用 | **37**（基线 37） |
+| `MainController` | **4361 行 / 上限 4370**（余量 9 行） |
+| 业务层 `I18n.` 引用 | **52**（基线 52，只减不增） |
 
 > **跑 GUI 自动化时注意**（本项目踩过）：**不要**用 `mvn javafx:run -Dtest.mode=true` ——
 > `-D` 会被 Maven 吃掉、不传进子 JVM，测试根本没跑起来。必须直接 `java` 起（见 §三.6）。

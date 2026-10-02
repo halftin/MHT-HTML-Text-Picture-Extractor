@@ -627,14 +627,25 @@ private void waitForImportDone() throws InterruptedException {
     }
 }
 
-/** 自动化测试：依次执行所有功能并记录结果到文件（test.mode=true 触发） */
-public void runAutomatedTests() {
-    String logPath = "logs/test-results.txt";
-    try (java.io.PrintWriter out = new java.io.PrintWriter(new java.io.FileWriter(logPath))) {
+/** 自动化测试：依次执行所有功能并记录结果到文件（test.mode=true 触发）。
+ *  返回 true = 至少 1 项断言执行且 0 失败；false = 框架级错误或存在失败断言（供 App 映射为进程退出码）。
+ *  结果写 logs/test-results.txt：logs 目录由本方法自行创建（不再依赖 logback 启动时创建 logs 的副作用——
+ *  曾实测：logs 建不出来时 FileWriter 抛 FileNotFoundException，被末尾 catch 吞掉后方法"正常"返回，
+ *  App 侧 success=true → exit 0，~2.4 秒静默退出、零产物零堆栈（假绿）。 */
+public boolean runAutomatedTests() {
+    java.io.File resultsFile = new java.io.File("logs", "test-results.txt");
+    try {
+        java.nio.file.Files.createDirectories(resultsFile.getParentFile().toPath());
+    } catch (Exception e) {
+        System.err.println("[test-mode] FATAL: cannot create logs dir: " + e);
+        return false;
+    }
+    System.err.println("[test-mode] runAutomatedTests starting; results -> " + resultsFile.getAbsolutePath());
+    int p = 0, f = 0;
+    try (java.io.PrintWriter out = new java.io.PrintWriter(new java.io.FileWriter(resultsFile))) {
         log.info("=== Starting automated tests ===");
         out.println("=== MHT Extractor Automated Test Results ===");
         out.println("Time: " + java.time.LocalDateTime.now()); out.println();
-        int p = 0, f = 0;
 
         // 清场：移除启动时 GUI 状态恢复导入的既有文件并重置撤销栈（保证断言可预测）
         if (!mc.items.isEmpty()) {
@@ -1347,7 +1358,15 @@ public void runAutomatedTests() {
         out.println(); out.println("=== RESULTS: " + p + " passed, " + f + " failed ===");
         out.flush();
         log.info("Automated tests complete: {} passed, {} failed", p, f);
-    } catch (Exception e) { log.error("Test framework error", e); }
+    } catch (Exception e) {
+        log.error("Test framework error", e);
+        System.err.println("[test-mode] FATAL: test framework error: " + e);
+        e.printStackTrace();
+        return false;
+    }
+    // 退出码口径：断言全绿且至少跑了 1 项（防"什么都没跑"的假绿）
+    System.err.println("=== RESULTS: " + p + " passed, " + f + " failed ===");
+    return f == 0 && p > 0;
 }
 
 /**

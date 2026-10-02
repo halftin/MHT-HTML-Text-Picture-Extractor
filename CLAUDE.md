@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **最后更新：2026-09-27**（架构重构 + 全量国际化 + 预览缓存持久化 + **WorkspaceModel 接入生产：阶段 1b/2/3/4 全部完成** + **预览区"单击缩略图用系统默认图片查看器打开缓存图片"恢复** + **交互提醒从模态 Alert 全量替换为应用内通知** + **修复「移除项目后用同目录无法再加回来」：导入去重口径改为可见项**）
+> **最后更新：2026-10-02**（**GraalVM native 打包首次实机打通并逐字节验证** —— 见文末「native 打包现状」与《基于graalvm的MHT资源提取器项目打包工作流程.md》§十）+ 架构重构 + 全量国际化 + 预览缓存持久化 + **WorkspaceModel 接入生产：阶段 1b/2/3/4 全部完成** + **预览区"单击缩略图用系统默认图片查看器打开缓存图片"恢复** + **交互提醒从模态 Alert 全量替换为应用内通知** + **修复「移除项目后用同目录无法再加回来」：导入去重口径改为可见项**）
 > 文档集**只有三份**：**本文件**（工程约定，改代码前必读）+ **两份 GraalVM 打包文档**（构建 / 打包机操作）。
 > 历史会话交接（H19–H36、架构重构最终报告、任务规划、新会话启动包等 20 份）已从仓库移除 —— 需要追溯时见 git 历史（提交 `386c249` 及更早）。
 
@@ -47,7 +47,7 @@ java --module-path <jfx-win-jars> --add-modules javafx.controls,javafx.fxml \
 并断言日志语言符合预期（例如"英文运行的日志里中文字符数必须为 0"）。
 
 **native EXE**（需要 GraalVM/NIK + **MSVC**）：`build-native.cmd`（另有 `.ps1` / `.sh` / `run-native-image.bat`）。
-> ⚠️ 见文末「native 打包现状」——本机当前**无法**构建 native（缺 MSVC）。
+> ✅ 本机**已能**构建 native（MSVC 就位，2026-10-02 实测打通）。**默认 dynamic 配方**（Oracle GraalVM + JavaFX 随包 DLL）→ 交付物 **22 个文件 / ~70 MB**；`set NATIVE_RECIPE=static` 可换 NIK 静态配方（15 个文件 / ~98 MB）——见文末「native 打包现状」。
 
 ---
 
@@ -335,17 +335,32 @@ java -agentlib:native-image-agent=config-output-dir=target/agent-out -cp ... <�
 
 ---
 
-## 🚨 native 打包现状（截至 2026-09-27）
+## 🚨 native 打包现状（截至 2026-10-02：**已打通并可交付**）
 
 **目标产物**：GraalVM native EXE **绿色免安装版**（`MhtExtractor.exe` + DLL，双击即用、无需装 JDK/JRE）。
 
 | 项 | 状态 |
 |---|---|
 | NIK 自带 native-image | ✅ 可用（`D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3\bin\native-image.cmd`，`native-image 25.0.3`）—— **无需单独安装 GraalVM** |
-| **MSVC 工具链** | ❌ **缺失，且是唯一卡点**。已实测钉死：`vswhere.exe` 不在任何标准位置、**C:/D: 全盘（深度 5）无 `cl.exe`/`vswhere.exe`**、无 VS 安装目录、无 Windows SDK 注册表项。最小 HelloWorld 探针 `exit=20`：`Failed to find 'vswhere.exe' for locating Visual Studio installations.`（`native-image` 在 Windows 上**只支持 MSVC**，不支持 MinGW） |
-| 打包脚本 | ✅ **已修好（2026-09-27）**：四个脚本归一为 `build-native.cmd` **唯一实现**，其余入口委托调用；自动探测 JDK / native-image / Maven / 输出目录；MSVC 缺失时**提前** `exit 20` |
-| JVM 侧链路 | ✅ **已端到端验证**：`build-native.cmd --prepare-only` → `exit 0`、Maven `BUILD SUCCESS`、**12 个 DLL** 正确落到 `target\jfx-dlls`（**含 `msvcp140*.dll` / `vcruntime140*.dll`** —— 证实 VC 运行库确实在 `javafx-graphics-*-win.jar` 内，绿色分发来源成立） |
-| exe 产出与启动 | ❌ **未验证**（受 MSVC 阻塞） |
+| **MSVC 工具链** | ✅ **已就位（2026-10-02）**：VS **2026** Community 在 `E:\msvc\community`；`vswhere.exe` 在 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\`；Windows SDK 10.0.26100 在 `E:\Windows Kits\10\`（注册表 `KitsRoot10`）。`check-env.cmd` → **exit=0「全部就绪」**。⚠️ VS 装在非 C 盘也能被找到 |
+| 打包脚本 | ✅ 四个脚本归一为 `build-native.cmd` **唯一实现**；自动探测 JDK / native-image / Maven / 输出目录；**按配方挑 native-image JDK**（`NATIVE_RECIPE=dynamic`（默认）找无 JavaFX 静态库的 Oracle GraalVM，`static` 找 NIK）；输出目录位于项目树内时**告警**（原因见下） |
+| JVM 侧链路 | ✅ 已端到端验证：`build-native.cmd --prepare-only` → `exit 0`、Maven `BUILD SUCCESS`。**第 4 步按配方抽 DLL**：dynamic 抽 **12 个**（7 个 JavaFX + 5 个 VC++ 运行库）→ 都要随包；static 只抽 **5 个** VC++ 运行库（JavaFX 已在 EXE 里，再放同名 DLL 会段错误） |
+| **exe 产出与启动** | ✅ 两种配方都验过（dynamic EXE 70,033,408 B；static 98,095,104 B）：从无关工作目录启动出窗口、关窗 exit 0 无残留、冷启动 **0.42 s**（JVM 1.93 s）、工作集 234 MB（JVM 300 MB） |
+| **真实提取（产物）** | ✅ **已验证（最强证据），dynamic 与 static 两种配方都 32/0**：把仓库自己的 32 份产物黄金基线（`BaselineCases`，16 用例 × zh/en）包进 native 镜像跑 → **32 passed / 0 failed**，逐产物 SHA-256 与内容摘要全同；与 JVM 产物树逐文件比对 288/288 同名，仅归档容器字节差 ZIP 写入时刻（解压后条目 0 处不一致）。⇒ **换配方只改体积，不改产物** |
+| GUI 自动化 | ✅ native 镜像内 **zh 31/0 + en 31/0**（但 GUI 断言只验控件状态，**不能替代**产物基线） |
+
+### ✅ 本次打通要点（2026-10-02，细节见打包工作流程文档 §十）
+
+| 事项 | 结论 |
+|---|---|
+| **交付目录** | **dynamic（默认）22 个文件 / 约 70 MB**：`MhtExtractor.exe` + 7 个 JavaFX DLL + 9 个 JDK DLL + 5 个 VC++ 运行库 + 2 个启动器；**static 15 个文件 / 约 98 MB**（少那 7 个 JavaFX DLL）。两者都**不含** `logs/` |
+| **默认输出目录** | `<仓库同级>\<仓库名>-dist`（树外）。🚨 **不要放在项目树内**：树内的 native EXE 会让 `Font.loadFont(...)` 返回 `null` → **全部图标变空心方框**（与配方无关）。详见打包文档 §10.7.1 |
+| **必须的链接选项** | `-H:NativeLinkerOption=<NIK>\lib\static\windows-amd64\prism_common.lib`（不加必 LNK2001；`prism_common.lib` 才是 `..._overrideNativeWindowHandle` 的实现所在） |
+| **JavaFX DLL 随不随包 —— 看配方** | `dynamic`：**必须随包**那 7 个。`static`：**绝不能放**（双份加载 → `WinApplication._init` 段错误 `-1073741819`）。第 4 步会先清空 `target\jfx-dlls` 再按配方抽取 |
+| **中文/非 ASCII 路径** | 🚨 **dynamic 配方**：EXE 放在非 ASCII 路径下**启动即退**（`UnsatisfiedLinkError: Can't load library: prism_d3d`）—— SubstrateVM 处理不了 `java.library.path` 里的非 ASCII 目录，而该列表**首项就是 EXE 所在目录**。**空格无害**；工作目录/输入输出目录是中文也无碍；**static 配方免疫**。补救：双击随包的 **`启动.cmd`**（把 DLL 暂存到纯 ASCII 目录再指 `java.library.path`）。死路（别再试）：8.3 短路径、`-Djava.library.path=.`、`subst`、`JAVA_TOOL_OPTIONS`。详见打包文档 §10.8 |
+| **元数据缺口** | 缺 `javafx.scene.control.ToggleGroup` 等 → native 下 FXML 第 24 行就崩。本次 agent 采集补 **16 个反射类型 + 1 个资源**，`+128 / −0` 纯增量 |
+| **体积（实测对照）** | 同一份源码**只换配方**：**dynamic 70.03 MB**（683 个嵌入资源）← 当前默认；**static 98.10 MB**（1597 个）。差 28 MB 是 static 把 JavaFX 的 JDK 模块代码+资源编进镜像；应用自身只占 ~2.3 MB |
+| **验证三档** | ① 启动/图标/关窗 ② **native 跑 `BaselineCases` → 32/0**（两种配方都验过） ③ JVM-vs-native 产物树逐文件 SHA（288/288 同名同内容）。⚠️ "能启动"≠"能提取" |
 
 ### 🚨 顺带实测：**shaded jar 不是可交付产物**（2026-09-27 交付审计）
 
@@ -357,20 +372,18 @@ java -agentlib:native-image-agent=config-output-dir=target/agent-out -cp ... <�
 错误: 缺少 JavaFX 运行时组件, 需要使用该组件来运行此应用程序     (exit=1)
 ```
 
-⇒ **"绿色免安装"交付只有 native EXE 一条路**（当前被 MSVC 阻塞）。若确实要用 jar 交付，两条备选：
+⇒ **"绿色免安装"交付只有 native EXE 一条路**（2026-10-02 已打通，交付物见上）。若确实要用 jar 交付，两条备选：
 ① 补一个**不继承 `Application`** 的 launcher 类并把 shade 的 `Main-Class` 指过去
 （现在是 `com.mhtextractor.App`；`sun.launcher` 见到"主类是 Application 子类"就要求 JavaFX 以**模块**形式存在，
 于是 classpath 里的 JavaFX 一律不算数）；② 随包分发**自带 JavaFX 的运行时**（如 Liberica Full）。
 ⚠️ 改 `Main-Class` 会牵动 native-image 的入口（本机无法验证 native），**动之前先想清楚**。
 
-### 解除方式（需管理员）
+### 解除方式（历史记录 —— 本机 2026-10-02 已完成，无需再执行）
 
-```bat
-curl -L -o vs_BuildTools.exe https://aka.ms/vs/17/release/vs_BuildTools.exe
-vs_BuildTools.exe --quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended
-```
-装完 `vswhere.exe` 出现在 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\`，重跑脚本即可。
-> 本机 `winget` **源打不开**（`0x8A15000B`），故走引导器直下；引导器已实测可下载（4.48 MB）。
+装 Visual Studio **任意版本** +「使用 C++ 的桌面开发」工作负载即可。关键点是 `vswhere.exe` 必须出现在
+`C:\Program Files (x86)\Microsoft Visual Studio\Installer\` —— 它由 VS Installer 放在那里，
+**与 VS 本体装在哪块盘无关**（本机 VS 在 `E:\msvc\community` 也能被 native-image 找到）。
+装完先跑 `check-env.cmd` 确认退出码为 0。
 
 ### 构建用法
 
@@ -380,7 +393,7 @@ build-native.cmd --prepare-only  只做 JVM 侧准备（不调用 native-image�
 build-native.cmd --skip-package  跳过 mvn package
 build-native.cmd --no-editbin    保留控制台子系统（便于看启动期崩溃）
 ```
-环境变量覆盖：`BUILD_JAVA_HOME` / `GRAALVM_HOME` / `MAVEN_CMD` / `OUTPUT_DIR`（默认 `<仓库>\dist`，已在 `.gitignore`）/ `NATIVE_XMX`（默认 4G，原脚本写死 8G，本机总内存约 15 GB）/ `VSWHERE`。
+环境变量覆盖：`BUILD_JAVA_HOME` / `GRAALVM_HOME` / `MAVEN_CMD` / `OUTPUT_DIR`（**2026-10-02 起默认 `<仓库同级>\<仓库名>-dist`**，即项目树外；旧默认 `<仓库>\dist` 会让图标失效，见上）/ **`NATIVE_RECIPE`（`dynamic`（默认，≈70 MB）/ `static`（≈98 MB））** / `NATIVE_XMX`（默认 4G）/ `VSWHERE` / `LOG_DIR`。
 
 ### 📡 构建可观测性契约（打包机上给智能体的实时反馈）
 
@@ -428,11 +441,17 @@ Get-Content logs\native-build-*.log -Wait -Tail 50     # 实时跟踪（构建�
    读取方用 `Get-Content` 或 `FileShare.ReadWrite`。用 `File.ReadAllText` 读正在写的日志会
    报"文件正由另一进程使用" —— 而这正是"实时反馈"要避免的。
 
-### ❓ 仍需实测确认（拿到 MSVC 之后）
+### ✅ 绿色分发已实测确认（2026-10-02）
 
-`-Djava.library.path="target/jfx-dlls"` 会把**相对路径**烘焙进镜像。Windows 加载 DLL 时默认
-先搜 exe 所在目录，故"绿色分发"大概率成立 —— 但**必须实测**：把 `dist` 拷到别处、
-从任意工作目录双击 `MhtExtractor.exe`，确认能启动并完成一次真实提取。
+原疑问"`-Djava.library.path` 把相对路径烘焙进镜像、拷走还能不能用"——**已实测**：
+把整个交付目录拷到 `C:\mht-green-test`，从 `C:\Windows` 当工作目录启动 → 窗口正常、图标正常、
+导入 11 个夹具正常、关窗 exit 0。**前提：不要放在项目树内运行**（见上「本次打通要点」）。
+
+> 🚨 **中文路径下请双击 `启动.cmd`**（dynamic 配方的限制，见上表）。static 配方无此限制。
+>
+> 补充：运行期依赖随配方走 —— **dynamic**：那 7 个 JavaFX DLL **必须**在 EXE 同目录；
+> **static**：JavaFX 已静态链接进 EXE，JavaFX 的 DLL 一个都不要放。两种配方下，
+> native-image 自动落地的 9 个 JDK DLL + 5 个 VC++ 运行库都是必需的。
 
 ### ✅ 无头执行（`headless-layer-b`）——**已修复（步骤 0，2026-09-26）**
 
@@ -466,7 +485,7 @@ Get-Content logs\native-build-*.log -Wait -Tail 50     # 实时跟踪（构建�
 | 业务层仍在产"已解析文案" | `ImageExtractor` 经 `I18n.get` 产 warning 文案 → 写入 `PreviewCacheMeta.warnings` | 缓存内警告语言取决于预览时 locale；彻底修需业务层产码值，会触及缓存 schema |
 | `AD_KEYWORDS` 硬编码 | `ImageExtractor` | 若参数化，**必须同步加入 `imageExtractionFingerprint()`**，否则预览缓存串味 |
 | `BrowserLauncher` 包归属 | ✅ **已修复（步骤 5，2026-09-26）** | 已迁出 `gui.util` 到新建的 `com.mhtextractor.platform`，并按 4 类职责拆分：`BrowserLauncher`（159 行门面）/ `SourceViewPage`（314）/ `CdpClient`（320）/ `BrowserDetector`（197）。`platform` 包已纳入"零 UI 框架"不变式扫描 |
-| `reflect-config.json` 与统一元数据并存 | `src/main/resources/META-INF/native-image/` | 🚨 **不可直接删除**（实测）：旧格式 **291** 个类型、统一格式 **194** 个，其中 **231 个仅存在于旧格式**；native-image 对同 type 取**并集**，删旧文件会丢 231 条。且**本机 native 被 MSVC 阻塞、无法验证**，在无法验证时改元数据风险 > 收益 —— 正解是"并集合并 + 方法/字段级对账（丢失数=0）"。另：该文件里指向 `JavaFxUtil$SmoothProgressProperty` 的条目已**悬空**（该类已被删除） |
+| `reflect-config.json` 与统一元数据并存 | `src/main/resources/META-INF/native-image/` | 🚨 **不可直接删除**（实测）：旧格式 **291** 个类型、统一格式 **210** 个（2026-10-02 合并后），其中相当一部分**仅存在于旧格式**；native-image 对同 type 取**并集**，删旧文件会丢条目 —— 正解是"并集合并 + 方法/字段级对账（丢失数=0）"。⚠️ 原文"本机 native 无法验证"的前提**已不成立**（2026-10-02 已打通），后续若要清理该文件，**必须用 32/0 的产物基线做回归**。另：该文件里指向 `JavaFxUtil$SmoothProgressProperty` 的条目已**悬空**（该类已被删除） |
 | 工作区有 22/105 个 java 文件是 CRLF | 全仓库 | 与 `.gitattributes` 的 `*.java text eol=lf` 不符。因 `eol` 规则在 `git add` 时会规范化为 LF，**仓库内存储不受影响**；但会让 `git status` 反复告警。一次性修法：`git add --renormalize .` |
 | ~~`.claude-work/*.ps1` 的三类脚本隐患~~ | ✅ **已修复（2026-09-27）** | ① **`release=21`**：`run-matrix.ps1` 三处 + **`mutation-workspace-parity.ps1` 四处**（源码已用 Java 22+ 未命名变量 `_`，pom 的 release 是 25）——后者整个变异测试 harness 都会死在编译上；② **换行**：8 个脚本全部 **LF → CRLF**（`.gitattributes` 要求 `*.ps1 eol=crlf`，且 PS 5.1 在 LF-only 的 `.ps1` 里会静默丢键）；③ **编码**：含中文的 4 个脚本加 **UTF-8 BOM**（`inspect-cache.ps1`/`e2e-verify.ps1` 此前因 GBK 误解码**根本无法解析运行**）；④ `drive-claude.ps1` 的 `$args = @(...)`（自动变量陷阱）改名 `$cliArgs`。**验证**：`[Parser]::ParseFile` 8/8 通过、`inspect-cache`/`s0-verify-reports`/`s1-member-usage` 实跑 exit 0、整张矩阵实跑 `MATRIX ALL GREEN`。⚠️ 仍含中文且无 BOM 的**已跟踪**脚本仅 `native-report.ps1`（非 ASCII 只在注释里、解析正常，**未改**） |
 | ~~移除项目后，用同一目录再也加不回来~~ | ✅ **已修复（2026-09-27）** | 根因是**两个特性从第一天起的语义冲突**：F2 移除是**隐藏式**（只置 `PreviewItem.removed`、对象仍留在数据序，为撤销服务），而导入去重（`MainController.applyImportPlan`）把 `allPreviewItems()`（javadoc 明写"含已移除项"）当作"列表中已有项目"——于是被移除文件的**绝对路径仍被视作已导入**，`IncrementalImport.findNewFiles` 返回空 → 整批 `continue`（RISK-1）→ 界面上"新增 0 个项目"。且跳过只打 `log.debug`，root level 是 INFO，**用户完全看不到原因**。受影响：目录本层平铺项、以及"组内个别成员被移除但组还在"（整组移除/致空组销毁后成员不可达，反倒能加回来——两种移除方式表现相反，纯属副作用）。修法：去重口径改为 `allVisibleItems()`（**1 行，`MainController` 行数不变 = 4361**）；契约写进 `IncrementalImport.findNewFiles` javadoc；新增 GUI 断言 `[PASS] Re-import after remove restores items` 守护（zh/en 各 **31/0**）。⚠️ 该缺陷自导入功能落地（`552ae47`）起一直存在：原有断言"重复导入同目录是 no-op"只覆盖**条目仍可见**的情形，恰好排除了触发条件 |
@@ -575,6 +594,7 @@ Get-Content logs\native-build-*.log -Wait -Tail 50     # 实时跟踪（构建�
 | `tools/recovery/recover-doc.js` | 文档被误替换后的恢复：从 DSH transcript **切帧解压**并提取原文 |
 | `tools/recovery/verify-recovery.js` | 恢复的**等价核对**（恢复文本的反引号换成"损坏时那个字母"后应与损坏文件逐字符相同） |
 | `tools/recovery/restore-claude-md.js` | 用恢复出的文本写回 `CLAUDE.md`（剥掉 reminder 尾标记、统一结尾换行） |
+| `tools/launcher/make-launcher.ps1` | 给 dynamic 产物生成启动器 `启动.cmd`/`Launch.cmd`（把 DLL 暂存到纯 ASCII 目录）—— 修"中文路径下启动失败"，第 6 步自动调用。⚠️ 中文文件名只能由 PowerShell 创建 |
 | `tools/diag/tee-probe.cmd` | 「命令行 tee 最小复现」：定位"某步 exit=0 但什么都没执行"这类 `call :label` 落空问题 |
 
 ```powershell
