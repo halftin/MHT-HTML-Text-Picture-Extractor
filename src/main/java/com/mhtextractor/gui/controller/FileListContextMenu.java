@@ -21,35 +21,36 @@ import javafx.scene.input.MouseEvent;
  * 文件列表右键菜单（Q9a / P4b-①）：<b>菜单项的唯一所有者</b> + <b>启用规则</b> + <b>动作转发</b> +
  * <b>显示/隐藏生命周期</b>。
  *
- * <p><b>这里没有业务逻辑</b>：12 个动作的<b>实现</b>（建组 / 拆组 / 移除 / 清参数 / 应用全局 /
- * 打开目录 / 查看源码）仍留在 {@code MainController} —— 它们要动模型、缓存与 UI 状态；本类只负责
- * "点了哪一项、右键目标是谁"，经 {@link Actions} 回调过去。这是"少一次坐标变更"的最小切法。</p>
+ * <p><b>这里没有业务逻辑</b>：14 个动作的<b>实现</b>（建组 / 拆组 / 移除 / 清参数 / 应用全局 /
+ * 复制参数 / 应用到所选 / 打开目录 / 查看源码）仍留在 {@code MainController} —— 它们要动模型、缓存与
+ * UI 状态；本类只负责"点了哪一项、右键目标是谁"，经 {@link Actions} 回调过去。这是"少一次坐标变更"的最小切法。</p>
  *
  * <p><b>依赖面刻意收窄</b>：本类只依赖 JavaFX 控件（{@code ListView} / {@code ContextMenu} /
  * {@code MenuItem} / {@code ScrollBar}）、同包视图类 {@code PreviewListCell}、i18n 与窄接口
- * {@link Actions}；<b>零模型 / 缓存 / 通知类型依赖</b> —— 目标类型判定（含"已移除项不算目标"）
- * 由宿主经 {@link Actions#targetType} / {@link Actions#isLiveTarget} 提供，本类只认
- * {@link TargetType} 这个四布尔快照。</p>
+ * {@link Actions}；<b>零模型 / 缓存 / 通知类型依赖</b> —— 目标类型判定（含"已移除项不算目标"）与
+ * Q10 的"有生效参数 / 参数是否统一 / 是否已复制"都由宿主经 {@link Actions} 提供，本类只认
+ * {@link TargetType} 这个四布尔快照与 {@link ParamsInfo} 这个参数判定快照。</p>
  *
  * <p><b>从 {@code MainController} 整体搬来</b>（搬前行号）：12 个 {@code ctx*} 字段、{@code buildContextMenu}、
  * {@code onContextMenuRequested}、{@code pickItemAt}、{@code updateContextMenuState}，以及
  * "点击菜单外即关闭"的 {@code MOUSE_PRESSED} 按压过滤器。行为逐条保持：文案键、项顺序与分隔符位置、
- * 启用规则、动作语义、菜单项的 {@code setDisable} 集合全部未改。</p>
+ * 启用规则、动作语义、菜单项的 {@code setDisable} 集合全部未改。Q10（R7.1）在此基础上加两项
+ * （{@link Entry#COPY_PARAMS} / {@link Entry#APPLY_TO_SELECTION}）。</p>
  *
- * <p><b>可无头单测的纯逻辑</b>：{@link #LAYOUT}（恒 16 项同序：12 项 + 4 分隔符）、{@link #TEXT_KEYS}
- * （文案键）、{@link #stateFor}（启用规则纯函数）都不构造任何 JavaFX 对象；构造器只建 12 个
+ * <p><b>可无头单测的纯逻辑</b>：{@link #LAYOUT}（恒 18 项同序：14 项 + 4 分隔符）、{@link #TEXT_KEYS}
+ * （文案键）、{@link #stateFor}（启用规则纯函数）都不构造任何 JavaFX 对象；构造器只建 14 个
  * {@code MenuItem}（实测无 toolkit 也可构造），只有 {@link #install} 里的
  * {@code SeparatorMenuItem} / {@code ContextMenu} 需要 toolkit。</p>
  */
 public final class FileListContextMenu {
 
     /**
-     * 宿主回调面（窄接口）：5 个查询 + 12 个动作转发。
+     * 宿主回调面（窄接口）：6 个查询 + 14 个动作转发。
      *
      * <p>刻意<b>不</b>持有 {@code MainController}，也<b>不</b>认模型类型：目标类型判定返回纯快照
      * {@link TargetType}，本类据此算启用状态。</p>
      *
-     * <p>12 个动作一律在<b>点击时</b>取 {@link #target()} 当前值（与搬前读 {@code contextTarget}
+     * <p>14 个动作一律在<b>点击时</b>取 {@link #target()} 当前值（与搬前读 {@code contextTarget}
      * 字段的时机一致）；{@code group / ungroup / remove} 与按钮行共用实现，走宿主的"当前选中/勾选"
      * 口径，故不带目标参数。</p>
      */
@@ -69,8 +70,14 @@ public final class FileListContextMenu {
         /** 命中行是否仍可作为右键目标（搬前 {@code pickItemAt} 的"已移除项返回 null"判定） */
         boolean isLiveTarget(Object item);
 
-        /** 目标生效参数来源是否为独立参数（条目级或组参数）—— 决定"清除参数/应用到全局"是否可用 */
-        boolean hasIndependentParams(Object target);
+        /**
+         * R7.2/R7.3/R7.6：复制/应用两项的<b>参数判定快照</b>（4 个布尔一次给全）：目标是否有独立参数、
+         * 是否有生效参数、生效参数是否统一、是否已复制过。
+         *
+         * <p>四项判定都留在宿主（"有生效参数 / 是否统一"必须走 {@code EffectiveParamsService}，
+         * R7.6 明令不得各写一套），本类只做布尔组合 ⇒ 菜单类依旧零模型 / 零缓存依赖。</p>
+         */
+        ParamsInfo paramsInfo(Object target);
 
         void select(Object target);
 
@@ -87,6 +94,12 @@ public final class FileListContextMenu {
         void clearParams(Object target);
 
         void applyGlobal(Object target);
+
+        /** R7.1：复制右键目标集合的生效参数快照到剪贴板 */
+        void copyParams(Object target);
+
+        /** R7.1：把剪贴板里的参数快照应用到所选（R7.4 复用确认路径的应用函数） */
+        void applyToSelection(Object target);
 
         void group();
 
@@ -122,8 +135,11 @@ public final class FileListContextMenu {
     }
 
     /**
-     * 菜单条目身份。<b>恒 16 项同序</b>：12 个菜单项 + 4 个分隔符；分隔符用 {@link #isSeparator()}
+     * 菜单条目身份。<b>恒 18 项同序</b>：14 个菜单项 + 4 个分隔符；分隔符用 {@link #isSeparator()}
      * 区分，顺序与分组边界由 {@link #LAYOUT} 唯一决定。
+     *
+     * <p>Q10 新增 {@link #COPY_PARAMS} / {@link #APPLY_TO_SELECTION}（R7.1）—— 紧贴既有参数三项收在
+     * <b>同一组</b>（第 3 组），组内顺序 = 设置参数 / 清除参数 / 应用到全局 / 复制参数 / 应用到所选。</p>
      */
     public enum Entry {
         SELECT(false),
@@ -136,6 +152,8 @@ public final class FileListContextMenu {
         PARAMS(false),
         CLEAR_PARAMS(false),
         APPLY_GLOBAL(false),
+        COPY_PARAMS(false),
+        APPLY_TO_SELECTION(false),
         SEPARATOR_3(true),
         GROUP(false),
         UNGROUP(false),
@@ -160,13 +178,16 @@ public final class FileListContextMenu {
      *
      * <p>⚠️ 易错点（搬前 {@code MainController:1200-1209}）：{@code ctxOpenInBrowser} 在
      * {@code ctxOpenFolder} <b>之前</b> —— 不是字段声明顺序。</p>
+     *
+     * <p>Q10：R7.1 的两项并进第 3 组末尾（组内 5 项），故分隔符下标由 2/6/10/13 变为
+     * <b>2/6/12/15</b>；分隔符个数仍为 4，其余三组的成员与相对顺序未动。</p>
      */
     public static final List<Entry> LAYOUT = List.of(
             Entry.SELECT, Entry.SELECT_ALL,
             Entry.SEPARATOR_1,
             Entry.OPEN_IN_BROWSER, Entry.OPEN_FOLDER, Entry.VIEW_SOURCE,
             Entry.SEPARATOR_2,
-            Entry.PARAMS, Entry.CLEAR_PARAMS, Entry.APPLY_GLOBAL,
+            Entry.PARAMS, Entry.CLEAR_PARAMS, Entry.APPLY_GLOBAL, Entry.COPY_PARAMS, Entry.APPLY_TO_SELECTION,
             Entry.SEPARATOR_3,
             Entry.GROUP, Entry.UNGROUP,
             Entry.SEPARATOR_4,
@@ -178,7 +199,16 @@ public final class FileListContextMenu {
     /** "设置提取参数"在空白区域目标下的文案键（全局参数入口） */
     public static final String KEY_PARAMS_GLOBAL = "params.menuSetGlobal";
 
-    /** 12 个菜单项的文案键（逐字照抄搬前 {@code buildContextMenu} 的 {@code I18n.get} 实参） */
+    /** 「复制参数」可用时的文案键（R7.2） */
+    public static final String KEY_COPY_PARAMS = "params.menuCopy";
+
+    /** 「复制参数」禁用时的文案键：右键目标<b>没有生效参数</b>（R7.2 理由一，禁用理由写在选项文本里） */
+    public static final String KEY_COPY_NO_PARAMS = "params.menuCopyNoParams";
+
+    /** 「复制参数」禁用时的文案键：多选目标的生效参数<b>不统一</b>（R7.2 理由二） */
+    public static final String KEY_COPY_MIXED_PARAMS = "params.menuCopyMixedParams";
+
+    /** 14 个菜单项的文案键（逐字照抄搬前 {@code buildContextMenu} 的 {@code I18n.get} 实参） */
     public static final Map<Entry, String> TEXT_KEYS = textKeys();
 
     private static Map<Entry, String> textKeys() {
@@ -191,6 +221,8 @@ public final class FileListContextMenu {
         keys.put(Entry.PARAMS, KEY_PARAMS);
         keys.put(Entry.CLEAR_PARAMS, "params.menuClear");
         keys.put(Entry.APPLY_GLOBAL, "params.menuApplyGlobal");
+        keys.put(Entry.COPY_PARAMS, KEY_COPY_PARAMS);
+        keys.put(Entry.APPLY_TO_SELECTION, "params.menuApplyToSelection");
         keys.put(Entry.GROUP, "group.menuMerge");
         keys.put(Entry.UNGROUP, "group.menuUngroup");
         keys.put(Entry.REMOVE, "list.menuRemove");
@@ -201,7 +233,9 @@ public final class FileListContextMenu {
     /**
      * 启用状态快照（纯数据、零 JavaFX）：{@link #stateFor} 的<b>全部</b>输出。
      *
-     * <p>字段语义是"启用"（与 {@code MenuItem.isDisable()} 相反），字段名即菜单项语义。</p>
+     * <p>字段语义是"启用"（与 {@code MenuItem.isDisable()} 相反），字段名即菜单项语义。
+     * {@code copyParamsTextKey} 是「复制参数」这一项的<b>当前文案键</b>：R7.2 要求禁用理由写在
+     * 选项文本里（不靠 tooltip），故文案键与启用位一起从 {@link #stateFor} 算出。</p>
      */
     public record State(boolean select,
                         boolean selectAll,
@@ -212,6 +246,9 @@ public final class FileListContextMenu {
                         boolean paramsGlobalText,
                         boolean clearParams,
                         boolean applyGlobal,
+                        boolean copyParams,
+                        String copyParamsTextKey,
+                        boolean applyToSelection,
                         boolean group,
                         boolean ungroup,
                         boolean remove,
@@ -219,16 +256,37 @@ public final class FileListContextMenu {
     }
 
     /**
-     * 启用规则（逐条照抄搬前的 {@code updateContextMenuState}）：目标类型 + 是否独立参数 →
-     * 每一项的启用状态。纯函数、无副作用、不碰 JavaFX、不认模型类型。
+     * 复制/应用两项的输入快照（R7.2/R7.3/R7.6）—— 全部由宿主判定后传入，本类只做布尔组合：
      *
-     * @param type                 右键目标类型快照（由宿主判定）
-     * @param hasIndependentParams 目标生效参数来源是否为独立参数（由宿主判定）
+     * @param independent 目标生效参数来源是否为独立参数（既有 13 个启用位用；决定清除参数/应用到全局）
+     * @param hasEffective 目标集合里是否有生效参数（R7.2 理由一的<b>反面</b>）
+     * @param uniform     目标集合的生效参数是否统一（R7.2 理由二的<b>反面</b>）
+     * @param copied      是否已复制过参数（R7.3）
      */
-    public static State stateFor(TargetType type, boolean hasIndependentParams) {
+    public record ParamsInfo(boolean independent, boolean hasEffective, boolean uniform, boolean copied) {
+    }
+
+    /**
+     * 启用规则（逐条照抄搬前的 {@code updateContextMenuState} + Q10 的 R7.2/R7.3）：目标类型 +
+     * 参数判定快照 → 每一项的启用状态。纯函数、无副作用、不碰 JavaFX、不认模型类型。
+     *
+     * <p>Q10 的两个新位：</p>
+     * <ul>
+     *   <li>{@code copyParams}：可用 ⇔ {@code hasEffective && uniform}（"有生效参数"与"是否统一"
+     *       的判定在宿主，必须经 {@code EffectiveParamsService}）；文案键按 R7.2 的二择一给出。</li>
+     *   <li>{@code applyToSelection}：可用 ⇔ {@code copied}（R7.3）。</li>
+     * </ul>
+     *
+     * @param type 右键目标类型快照（由宿主判定）
+     * @param info 参数判定快照（由宿主判定）
+     */
+    public static State stateFor(TargetType type, ParamsInfo info) {
         boolean blank = type.blank();
         boolean group = type.group();
         boolean item = type.item();
+        boolean copy = info.hasEffective() && info.uniform();
+        String copyKey = !info.hasEffective() ? KEY_COPY_NO_PARAMS
+                : (info.uniform() ? KEY_COPY_PARAMS : KEY_COPY_MIXED_PARAMS);
 
         return new State(
                 !blank,                 // 勾选：项目条目勾选自身；组条目整组勾选
@@ -238,8 +296,11 @@ public final class FileListContextMenu {
                 item,                   // 查看源码
                 true,                   // 设置参数：恒可用
                 blank,                  // 参数文案：空白区域是全局参数入口
-                hasIndependentParams,   // 清除参数
-                hasIndependentParams,   // 应用到全局：仅目标有独立参数时可用
+                info.independent(),     // 清除参数
+                info.independent(),     // 应用到全局：仅目标有独立参数时可用
+                copy,                   // 复制参数（R7.2）
+                copyKey,                // 复制参数文案键（R7.2：禁用理由写在文本里）
+                info.copied(),          // 应用到所选（R7.3：未复制过 ⇒ 不可交互）
                 item,                   // 建组：仅项目条目
                 group,                  // 拆分组：仅组条目
                 item,                   // 移除：仅项目条目（组条目走"移除组"）
@@ -272,7 +333,7 @@ public final class FileListContextMenu {
         wireActions();
     }
 
-    /** 12 个菜单项的动作转发（分隔符没有动作） */
+    /** 14 个菜单项的动作转发（分隔符没有动作） */
     private void wireActions() {
         items.get(Entry.SELECT).setOnAction(_ -> actions.select(target));
         items.get(Entry.SELECT_ALL).setOnAction(_ -> actions.selectAll(target));
@@ -282,6 +343,8 @@ public final class FileListContextMenu {
         items.get(Entry.PARAMS).setOnAction(_ -> actions.params(target));
         items.get(Entry.CLEAR_PARAMS).setOnAction(_ -> actions.clearParams(target));
         items.get(Entry.APPLY_GLOBAL).setOnAction(_ -> actions.applyGlobal(target));
+        items.get(Entry.COPY_PARAMS).setOnAction(_ -> actions.copyParams(target));
+        items.get(Entry.APPLY_TO_SELECTION).setOnAction(_ -> actions.applyToSelection(target));
         items.get(Entry.GROUP).setOnAction(_ -> actions.group());
         items.get(Entry.UNGROUP).setOnAction(_ -> actions.ungroup());
         items.get(Entry.REMOVE).setOnAction(_ -> actions.remove());
@@ -371,7 +434,7 @@ public final class FileListContextMenu {
      * 不改 {@link #target} —— 因此本方法可以从演练/测试代码用任意目标调用而不影响下一次真实弹出）。
      */
     public void updateState(Object t) {
-        apply(stateFor(actions.targetType(t), actions.hasIndependentParams(t)));
+        apply(stateFor(actions.targetType(t), actions.paramsInfo(t)));
     }
 
     /** 把启用规则的结果逐项落到菜单项上（字段名与 {@link State} 一一对应） */
@@ -385,6 +448,9 @@ public final class FileListContextMenu {
         items.get(Entry.PARAMS).setText(I18n.get(state.paramsGlobalText() ? KEY_PARAMS_GLOBAL : KEY_PARAMS));
         items.get(Entry.CLEAR_PARAMS).setDisable(!state.clearParams());
         items.get(Entry.APPLY_GLOBAL).setDisable(!state.applyGlobal());
+        items.get(Entry.COPY_PARAMS).setDisable(!state.copyParams());
+        items.get(Entry.COPY_PARAMS).setText(I18n.get(state.copyParamsTextKey()));
+        items.get(Entry.APPLY_TO_SELECTION).setDisable(!state.applyToSelection());
         items.get(Entry.GROUP).setDisable(!state.group());
         items.get(Entry.UNGROUP).setDisable(!state.ungroup());
         items.get(Entry.REMOVE).setDisable(!state.remove());

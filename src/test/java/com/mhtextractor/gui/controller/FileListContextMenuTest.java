@@ -1,22 +1,28 @@
 package com.mhtextractor.gui.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.mhtextractor.app.EffectiveParamsService;
+import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.PreviewItem;
 
 import javafx.scene.control.MenuItem;
 import javafx.scene.layout.Pane;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@link FileListContextMenu} 的纯逻辑测试（Q9a / P4b-①）。
+ * {@link FileListContextMenu} 的纯逻辑测试（Q9a / P4b-①；Q10 增补 R7.1-R7.3/R7.6）。
  *
  * <p><b>为什么全部无头</b>：本类把"启用规则 / 顺序 / 文案键"做成了不依赖 JavaFX 构造的纯数据与纯函数
  * （构造器只建 {@code MenuItem}——实测无 toolkit 也能建），于是这些规则可以被单测直接钉死，
@@ -26,20 +32,21 @@ import org.junit.jupiter.api.Test;
  * {@code new ContextMenu()} 会以 {@code IllegalStateException: Toolkit not initialized} 失败；而
  * {@code WorkspaceFxAdapterTest} 末尾调了 {@code Platform.exit()}，之后的用例 {@code Platform.startup}
  * 必抛 {@code IllegalStateException: Platform.exit has been called} ⇒ "在单测里建真实菜单"会变成
- * <b>顺序依赖式假失败</b>。因此真实 {@code ContextMenu.getItems()} 的顺序由 GUI 探针
- * {@code tools/probes/ContextMenuProbe.java} 独立验证，这里只钉纯数据。</p>
+ * <b>顺序依赖式假失败</b>。因此真实 {@code ContextMenu.getItems()} 的顺序与两项新菜单项的真实文案/禁用
+ * 由 GUI 探针 {@code tools/probes/ContextMenuProbe.java} 独立验证，这里只钉纯数据与纯函数。</p>
  */
 class FileListContextMenuTest {
 
-    // ==================== 1. 恒 16 项同序（12 项 + 4 分隔符） ====================
+    // ==================== 1. 恒 18 项同序（14 项 + 4 分隔符） ====================
 
     /**
      * 顺序与分隔符位置：期望值在这里<b>逐项写死</b>（不复用 {@code LAYOUT}），因此它是一份独立副本 ——
-     * {@code LAYOUT} 被改动时本断言必失败。分隔符位置 = 搬前 {@code MainController:1200-1209} 的
-     * 分组边界；⚠️ {@code OPEN_IN_BROWSER} 必须排在 {@code OPEN_FOLDER} 之前。
+     * {@code LAYOUT} 被改动时本断言必失败。分隔符位置 = 搬前 {@code MainController:1200-1209} 的分组
+     * 边界 + Q10/R7.1 在第 3 组末尾追加的两项（故 10/13 → 12/15）；
+     * ⚠️ {@code OPEN_IN_BROWSER} 必须排在 {@code OPEN_FOLDER} 之前。
      */
     @Test
-    void layoutIsExactlyTheOriginalSixteenEntriesInOrder() {
+    void layoutIsExactlyTheExpectedEighteenEntriesInOrder() {
         List<FileListContextMenu.Entry> expected = List.of(
                 FileListContextMenu.Entry.SELECT,
                 FileListContextMenu.Entry.SELECT_ALL,
@@ -51,6 +58,8 @@ class FileListContextMenuTest {
                 FileListContextMenu.Entry.PARAMS,
                 FileListContextMenu.Entry.CLEAR_PARAMS,
                 FileListContextMenu.Entry.APPLY_GLOBAL,
+                FileListContextMenu.Entry.COPY_PARAMS,
+                FileListContextMenu.Entry.APPLY_TO_SELECTION,
                 FileListContextMenu.Entry.SEPARATOR_3,
                 FileListContextMenu.Entry.GROUP,
                 FileListContextMenu.Entry.UNGROUP,
@@ -58,8 +67,8 @@ class FileListContextMenuTest {
                 FileListContextMenu.Entry.REMOVE,
                 FileListContextMenu.Entry.REMOVE_GROUP);
 
-        assertEquals(16, FileListContextMenu.LAYOUT.size(), "菜单恒 16 项（12 项 + 4 分隔符）");
-        assertEquals(expected, FileListContextMenu.LAYOUT, "菜单项顺序必须与搬前逐项一致");
+        assertEquals(18, FileListContextMenu.LAYOUT.size(), "菜单恒 18 项（14 项 + 4 分隔符）");
+        assertEquals(expected, FileListContextMenu.LAYOUT, "菜单项顺序必须与硬编码期望逐项一致");
 
         int separators = 0;
         for (int i = 0; i < FileListContextMenu.LAYOUT.size(); i++) {
@@ -69,20 +78,25 @@ class FileListContextMenuTest {
                 assertTrue(entry.name().startsWith("SEPARATOR_"), "分隔符条目应命名为 SEPARATOR_*：" + entry);
             }
         }
-        assertEquals(4, separators, "分隔符恒 4 个");
+        assertEquals(4, separators, "分隔符恒 4 个（Q10 不新增分隔符）");
         // 分组边界（0-based 下标）—— 分隔符位置钉死，防"顺序对但分组挪了"
-        assertEquals(List.of(2, 6, 10, 13),
+        assertEquals(List.of(2, 6, 12, 15),
                 List.of(FileListContextMenu.Entry.SEPARATOR_1, FileListContextMenu.Entry.SEPARATOR_2,
                         FileListContextMenu.Entry.SEPARATOR_3, FileListContextMenu.Entry.SEPARATOR_4).stream()
                         .map(FileListContextMenu.LAYOUT::indexOf).toList(),
-                "4 个分隔符的下标必须是 2 / 6 / 10 / 13");
+                "4 个分隔符的下标必须是 2 / 6 / 12 / 15");
+        // R7.1：两项新菜单项紧贴既有参数三项同组（第 3 组 = 下标 7..11）
+        assertEquals(List.of(FileListContextMenu.Entry.PARAMS, FileListContextMenu.Entry.CLEAR_PARAMS,
+                        FileListContextMenu.Entry.APPLY_GLOBAL, FileListContextMenu.Entry.COPY_PARAMS,
+                        FileListContextMenu.Entry.APPLY_TO_SELECTION),
+                FileListContextMenu.LAYOUT.subList(7, 12), "第 3 组 = 参数五项（原三项 + 复制参数 + 应用到所选）");
     }
 
-    // ==================== 2. 文案键逐字不变（本步不新增键） ====================
+    // ==================== 2. 文案键逐字不变（Q10 新增 4 个键） ====================
 
     @Test
-    void textKeysMatchTheOriginalTwelveKeys() {
-        assertEquals(12, FileListContextMenu.TEXT_KEYS.size(), "只有 12 个菜单项有文案键");
+    void textKeysMatchTheExpectedFourteenKeys() {
+        assertEquals(14, FileListContextMenu.TEXT_KEYS.size(), "只有 14 个菜单项有文案键");
         assertEquals("list.menuSelect", FileListContextMenu.TEXT_KEYS.get(FileListContextMenu.Entry.SELECT));
         assertEquals("list.menuSelectAll", FileListContextMenu.TEXT_KEYS.get(FileListContextMenu.Entry.SELECT_ALL));
         assertEquals("list.menuOpenFolder", FileListContextMenu.TEXT_KEYS.get(FileListContextMenu.Entry.OPEN_FOLDER));
@@ -95,6 +109,13 @@ class FileListContextMenuTest {
         assertEquals("group.menuUngroup", FileListContextMenu.TEXT_KEYS.get(FileListContextMenu.Entry.UNGROUP));
         assertEquals("list.menuRemove", FileListContextMenu.TEXT_KEYS.get(FileListContextMenu.Entry.REMOVE));
         assertEquals("group.menuRemove", FileListContextMenu.TEXT_KEYS.get(FileListContextMenu.Entry.REMOVE_GROUP));
+        // R7.1/R7.2：两项新菜单项的键（复制参数按状态在三个键之间切换）
+        assertEquals("params.menuCopy", FileListContextMenu.TEXT_KEYS.get(FileListContextMenu.Entry.COPY_PARAMS));
+        assertEquals("params.menuApplyToSelection",
+                FileListContextMenu.TEXT_KEYS.get(FileListContextMenu.Entry.APPLY_TO_SELECTION));
+        assertEquals("params.menuCopy", FileListContextMenu.KEY_COPY_PARAMS);
+        assertEquals("params.menuCopyNoParams", FileListContextMenu.KEY_COPY_NO_PARAMS);
+        assertEquals("params.menuCopyMixedParams", FileListContextMenu.KEY_COPY_MIXED_PARAMS);
 
         // 动态文案（空白区域 → 全局参数入口）
         assertEquals("params.menuSet", FileListContextMenu.KEY_PARAMS);
@@ -112,6 +133,11 @@ class FileListContextMenuTest {
 
     // ==================== 3. 启用规则（四种目标 × 独立参数两种取值） ====================
 
+    /** 参数判定快照：既有 13 位只看 {@code independent}；R7 两位在本方法里另有专门断言 */
+    private static FileListContextMenu.ParamsInfo info(boolean independent) {
+        return new FileListContextMenu.ParamsInfo(independent, false, true, false);
+    }
+
     /**
      * §1.4 的规则逐条对账。{@code itemScoped} = 「打开所在文件夹 / 在浏览器中查看 / 查看源码 /
      * 建组 / 移除」这五个共用"是项目条目"的条件。
@@ -125,8 +151,8 @@ class FileListContextMenuTest {
                                      boolean remove,
                                      boolean removeGroup) {
         for (boolean independent : new boolean[] {false, true}) {
-            FileListContextMenu.State s = FileListContextMenu.stateFor(kind, independent);
-            String what = kind + "（hasIndependentParams=" + independent + "）";
+            FileListContextMenu.State s = FileListContextMenu.stateFor(kind, info(independent));
+            String what = kind + "（independent=" + independent + "）";
             assertEquals(select, s.select(), what + "：勾选");
             assertTrue(s.selectAll(), what + "：全选恒可用");
             assertEquals(itemScoped, s.openFolder(), what + "：打开所在文件夹");
@@ -140,6 +166,10 @@ class FileListContextMenuTest {
             assertEquals(ungroup, s.ungroup(), what + "：拆分组");
             assertEquals(itemScoped, s.remove(), what + "：移除");
             assertEquals(removeGroup, s.removeGroup(), what + "：移除组");
+            // R7.2/R7.3：本组输入是"无生效参数、未复制过" ⇒ 两项都禁用，复制文案走"无参数"版本
+            assertFalse(s.copyParams(), what + "：无生效参数 ⇒ 复制参数禁用");
+            assertEquals(FileListContextMenu.KEY_COPY_NO_PARAMS, s.copyParamsTextKey(), what + "：复制参数文案");
+            assertFalse(s.applyToSelection(), what + "：未复制过 ⇒ 应用到所选禁用");
         }
     }
 
@@ -163,9 +193,9 @@ class FileListContextMenuTest {
     @Test
     void unknownNonNullTargetIsNotTreatedAsBlank() {
         FileListContextMenu.TargetType unknown = new FileListContextMenu.TargetType(false, false, false, false);
-        FileListContextMenu.State s = FileListContextMenu.stateFor(unknown, false);
+        FileListContextMenu.State s = FileListContextMenu.stateFor(unknown, info(false));
         assertTrue(s.select(), "非空目标：勾选项仍然启用（与空白区域不同）");
-        assertNotEquals(FileListContextMenu.stateFor(FileListContextMenu.TargetType.BLANK, false), s,
+        assertNotEquals(FileListContextMenu.stateFor(FileListContextMenu.TargetType.BLANK, info(false)), s,
                 "未知非空目标不得与空白区域等价");
         assertEquals(false, s.paramsGlobalText(), "非空目标：参数文案不是全局入口");
         assertEquals(false, s.group(), "非空目标：建组禁用");
@@ -174,12 +204,135 @@ class FileListContextMenuTest {
         assertEquals(false, s.removeGroup(), "非空目标：移除组禁用");
     }
 
+    // ==================== 3b. R7.2：两种禁用理由写在选项文本里 ====================
+
+    /**
+     * R7.2：无生效参数 → {@code params.menuCopyNoParams}；参数不统一 → {@code params.menuCopyMixedParams}；
+     * 有生效参数且统一 → {@code params.menuCopy} 且可用。判定全部来自真实 {@link FileListContextMenu#stateFor}。
+     */
+    @Test
+    void copyItemTextSwitchesBetweenTheTwoDisabledReasonsAndTheEnabledText() {
+        FileListContextMenu.TargetType item = FileListContextMenu.TargetType.TOP_ITEM;
+
+        FileListContextMenu.State none = FileListContextMenu.stateFor(item,
+                new FileListContextMenu.ParamsInfo(false, false, true, false));
+        assertFalse(none.copyParams(), "无生效参数 ⇒ 禁用");
+        assertEquals(FileListContextMenu.KEY_COPY_NO_PARAMS, none.copyParamsTextKey(), "理由一：无参数");
+
+        FileListContextMenu.State mixed = FileListContextMenu.stateFor(item,
+                new FileListContextMenu.ParamsInfo(true, true, false, false));
+        assertFalse(mixed.copyParams(), "参数不统一 ⇒ 禁用");
+        assertEquals(FileListContextMenu.KEY_COPY_MIXED_PARAMS, mixed.copyParamsTextKey(), "理由二：参数不统一");
+
+        FileListContextMenu.State ok = FileListContextMenu.stateFor(item,
+                new FileListContextMenu.ParamsInfo(true, true, true, false));
+        assertTrue(ok.copyParams(), "有生效参数且统一 ⇒ 可用");
+        assertEquals(FileListContextMenu.KEY_COPY_PARAMS, ok.copyParamsTextKey(), "可用时的文案");
+
+        // 三个键在当前 locale 下必须两两不同，否则"文案切换"不可判
+        assertEquals(3, List.of(I18n.get(FileListContextMenu.KEY_COPY_PARAMS),
+                        I18n.get(FileListContextMenu.KEY_COPY_NO_PARAMS),
+                        I18n.get(FileListContextMenu.KEY_COPY_MIXED_PARAMS)).stream().distinct().count(),
+                "复制参数的三个文案键渲染后必须两两不同");
+    }
+
+    // ==================== 3c. R7.3：「应用到所选」的前置 ====================
+
+    @Test
+    void applyToSelectionIsDisabledUntilSomethingWasCopied() {
+        FileListContextMenu.TargetType item = FileListContextMenu.TargetType.TOP_ITEM;
+        assertFalse(FileListContextMenu.stateFor(item,
+                new FileListContextMenu.ParamsInfo(true, true, true, false)).applyToSelection(),
+                "未复制过 ⇒ 不可交互");
+        assertTrue(FileListContextMenu.stateFor(item,
+                new FileListContextMenu.ParamsInfo(true, true, true, true)).applyToSelection(),
+                "复制过 ⇒ 可用");
+        // 与"是否有参数"无关：无参数目标 + 已复制过 ⇒ 仍可用（应用是写，不要求目标自己有参数）
+        assertTrue(FileListContextMenu.stateFor(item,
+                new FileListContextMenu.ParamsInfo(false, false, true, true)).applyToSelection(),
+                "已复制过 ⇒ 可用（与目标自身是否有参数无关）");
+        // 清空剪贴板 → 回到禁用（ParamClipboard.clear 的语义在下一条用例里钉住）
+        assertFalse(FileListContextMenu.stateFor(item,
+                new FileListContextMenu.ParamsInfo(true, true, true, false)).applyToSelection(),
+                "清空（copied=false）⇒ 回到禁用");
+    }
+
+    // ==================== 3d. R7.6：判定走 EffectiveParamsService ====================
+
+    /**
+     * R7.2/R7.6 的"共用证据"：用<b>真实</b> {@link EffectiveParamsService} 判"有生效参数 / 是否统一"，
+     * 再把结果喂给真实的 {@code stateFor} —— 覆盖"两个目标生效参数相同（应可用）"与"不同（应禁用）"。
+     * 若有人把判定改成"自己比签名/自己判 null"，本用例的第一、二条至少有一条会变红。
+     */
+    @Test
+    void copyEnablementFollowsEffectiveParamsServiceForUniformAndMixedSelections() {
+        EffectiveParamsService service = new EffectiveParamsService();
+        EffectiveParamsService.Context ctx =
+                new EffectiveParamsService.Context(false, null, null);   // 文本模式，两组全局参数都未确认
+
+        PreviewItem a = item("a", paramsWithMarker("SAME"));
+        PreviewItem b = item("b", paramsWithMarker("SAME"));
+        PreviewItem c = item("c", paramsWithMarker("OTHER"));
+        PreviewItem bare = item("bare", null);
+
+        // 生效参数相同（且是不同实例）→ 可用
+        assertTrue(service.isUniform(List.of(a, b), ctx), "装置自检：两个相同签名的配置应判为统一");
+        assertNotSame(a.textItemParams, b.textItemParams,
+                "装置自检：两份参数必须是不同实例（AppConfig 的 equals 是值语义，此处只认身份）");
+        FileListContextMenu.State same = stateFor(service, List.of(a, b), ctx);
+        assertTrue(same.copyParams(), "两个目标生效参数相同 ⇒ 复制可用");
+        assertEquals(FileListContextMenu.KEY_COPY_PARAMS, same.copyParamsTextKey());
+
+        // 生效参数不同 → 禁用，理由 = 参数不统一
+        assertTrue(service.hasMixedEffectiveParams(List.of(a, c), ctx), "装置自检：SAME/OTHER 应判为混合");
+        FileListContextMenu.State mixed = stateFor(service, List.of(a, c), ctx);
+        assertFalse(mixed.copyParams(), "参数不同 ⇒ 复制禁用");
+        assertEquals(FileListContextMenu.KEY_COPY_MIXED_PARAMS, mixed.copyParamsTextKey());
+
+        // 一半有参数一半没有 → 服务口径把 null 当成一种取值 ⇒ 同样"不统一"（R7.2 的保守解读）
+        FileListContextMenu.State half = stateFor(service, List.of(a, bare), ctx);
+        assertFalse(half.copyParams(), "一半有参数 ⇒ 禁用");
+        assertEquals(FileListContextMenu.KEY_COPY_MIXED_PARAMS, half.copyParamsTextKey());
+
+        // 全都没有生效参数 → 禁用，理由 = 无参数
+        FileListContextMenu.State none = stateFor(service, List.of(bare), ctx);
+        assertFalse(none.copyParams(), "无生效参数 ⇒ 禁用");
+        assertEquals(FileListContextMenu.KEY_COPY_NO_PARAMS, none.copyParamsTextKey());
+
+        // 全局参数一确认，无独立参数的目标也有了生效参数 → 理由从"无参数"变为可用
+        EffectiveParamsService.Context withGlobal =
+                new EffectiveParamsService.Context(false, paramsWithMarker("GLOBAL"), null);
+        FileListContextMenu.State globalFallback = stateFor(service, List.of(bare), withGlobal);
+        assertTrue(globalFallback.copyParams(), "全局参数已确认 ⇒ 目标有生效参数（回落全局）⇒ 可用");
+    }
+
+    /** 把真实服务的判定结果送进真实的 {@code stateFor}（4 个布尔一次给全的形态） */
+    private static FileListContextMenu.State stateFor(EffectiveParamsService service, List<Object> targets,
+                                                      EffectiveParamsService.Context ctx) {
+        return FileListContextMenu.stateFor(FileListContextMenu.TargetType.TOP_ITEM,
+                new FileListContextMenu.ParamsInfo(false,
+                        service.anyHasEffectiveParams(targets, ctx), service.isUniform(targets, ctx), false));
+    }
+
+    private static PreviewItem item(String name, AppConfig textParams) {
+        PreviewItem it = new PreviewItem("C:/q10/" + name + ".mht", name + ".mht",
+                LocalDateTime.now(), "C:/q10");
+        it.textItemParams = textParams;
+        return it;
+    }
+
+    private static AppConfig paramsWithMarker(String marker) {
+        AppConfig c = new AppConfig();
+        c.setStartMarker(marker);
+        return c;
+    }
+
     // ==================== 4. 规则落到菜单项上（apply 的字段映射） ====================
 
-    /** 桩宿主：目标类型与"是否独立参数"由测试预置；12 个动作只记名字。 */
+    /** 桩宿主：目标类型与参数判定快照由测试预置；14 个动作只记名字。 */
     private static final class Stub implements FileListContextMenu.Actions {
         FileListContextMenu.TargetType kind = FileListContextMenu.TargetType.BLANK;
-        boolean independent;
+        FileListContextMenu.ParamsInfo info = info(false);
         final List<String> calls = new ArrayList<>();
 
         @Override public boolean isDragActive() { return false; }
@@ -187,7 +340,7 @@ class FileListContextMenuTest {
         @Override public void selectRow(Object target) { }
         @Override public FileListContextMenu.TargetType targetType(Object target) { return kind; }
         @Override public boolean isLiveTarget(Object item) { return true; }
-        @Override public boolean hasIndependentParams(Object target) { return independent; }
+        @Override public FileListContextMenu.ParamsInfo paramsInfo(Object target) { return info; }
         @Override public void select(Object target) { calls.add("select"); }
         @Override public void selectAll(Object target) { calls.add("selectAll"); }
         @Override public void openFolder(Object target) { calls.add("openFolder"); }
@@ -196,13 +349,15 @@ class FileListContextMenuTest {
         @Override public void params(Object target) { calls.add("params"); }
         @Override public void clearParams(Object target) { calls.add("clearParams"); }
         @Override public void applyGlobal(Object target) { calls.add("applyGlobal"); }
+        @Override public void copyParams(Object target) { calls.add("copyParams"); }
+        @Override public void applyToSelection(Object target) { calls.add("applyToSelection"); }
         @Override public void group() { calls.add("group"); }
         @Override public void ungroup() { calls.add("ungroup"); }
         @Override public void remove() { calls.add("remove"); }
         @Override public void removeGroup(Object target) { calls.add("removeGroup"); }
     }
 
-    /** 12 个菜单项都有实例；4 个分隔符没有实例 */
+    /** 14 个菜单项都有实例；4 个分隔符没有实例 */
     @Test
     void everyMenuEntryHasItsOwnItemAndSeparatorsHaveNone() {
         FileListContextMenu menu = new FileListContextMenu(new Stub());
@@ -215,13 +370,14 @@ class FileListContextMenuTest {
                 itemCount++;
             }
         }
-        assertEquals(12, itemCount, "菜单项恒 12 个");
+        assertEquals(14, itemCount, "菜单项恒 14 个");
         assertNotNull(menu.clearParamsItem(), "ctxClearParams 对应的项必须可取到（test-support 字段指向它）");
     }
 
     /**
      * 每个启用位的<b>落点</b>：{@code stateFor} 算对了但 {@code apply} 写错了项，同样会被这里抓住
-     * （每项断言自己的 {@code isDisable()}）。同时验证"参数文案"在空白/非空白之间切换。
+     * （每项断言自己的 {@code isDisable()}）。同时验证"参数文案"在空白/非空白之间切换、
+     * 以及 R7.2 的复制文案三态与 R7.3 的应用位。
      */
     @Test
     void applyLandsEveryFlagOnItsOwnMenuItem() {
@@ -233,10 +389,10 @@ class FileListContextMenuTest {
                 FileListContextMenu.TargetType.GROUP)) {
             stub.kind = kind;
             for (boolean independent : new boolean[] {false, true}) {
-                stub.independent = independent;
+                stub.info = info(independent);
                 menu.updateState("target");
-                FileListContextMenu.State s = FileListContextMenu.stateFor(kind, independent);
-                String what = kind + "（hasIndependentParams=" + independent + "）";
+                FileListContextMenu.State s = FileListContextMenu.stateFor(kind, info(independent));
+                String what = kind + "（independent=" + independent + "）";
 
                 assertEquals(!s.select(), disabled(menu, FileListContextMenu.Entry.SELECT), what + "：勾选");
                 assertEquals(!s.selectAll(), disabled(menu, FileListContextMenu.Entry.SELECT_ALL), what + "：全选");
@@ -246,6 +402,9 @@ class FileListContextMenuTest {
                 assertEquals(!s.params(), disabled(menu, FileListContextMenu.Entry.PARAMS), what + "：设置参数");
                 assertEquals(!s.clearParams(), disabled(menu, FileListContextMenu.Entry.CLEAR_PARAMS), what + "：清除参数");
                 assertEquals(!s.applyGlobal(), disabled(menu, FileListContextMenu.Entry.APPLY_GLOBAL), what + "：应用到全局");
+                assertEquals(!s.copyParams(), disabled(menu, FileListContextMenu.Entry.COPY_PARAMS), what + "：复制参数");
+                assertEquals(!s.applyToSelection(), disabled(menu, FileListContextMenu.Entry.APPLY_TO_SELECTION),
+                        what + "：应用到所选");
                 assertEquals(!s.group(), disabled(menu, FileListContextMenu.Entry.GROUP), what + "：建组");
                 assertEquals(!s.ungroup(), disabled(menu, FileListContextMenu.Entry.UNGROUP), what + "：拆分组");
                 assertEquals(!s.remove(), disabled(menu, FileListContextMenu.Entry.REMOVE), what + "：移除");
@@ -255,7 +414,25 @@ class FileListContextMenuTest {
                         ? FileListContextMenu.KEY_PARAMS_GLOBAL : FileListContextMenu.KEY_PARAMS;
                 assertEquals(I18n.get(expectedKey), menu.item(FileListContextMenu.Entry.PARAMS).getText(),
                         what + "：参数文案键");
+                assertEquals(I18n.get(s.copyParamsTextKey()),
+                        menu.item(FileListContextMenu.Entry.COPY_PARAMS).getText(), what + "：复制参数文案键");
             }
+        }
+
+        // R7.2 落点：三种参数判定 → 菜单项文本随之切换（真实 apply(State) 写到真实 MenuItem 上）
+        for (String key : List.of(FileListContextMenu.KEY_COPY_NO_PARAMS,
+                FileListContextMenu.KEY_COPY_MIXED_PARAMS, FileListContextMenu.KEY_COPY_PARAMS)) {
+            stub.info = switch (key) {
+                case FileListContextMenu.KEY_COPY_NO_PARAMS -> new FileListContextMenu.ParamsInfo(false, false, true, false);
+                case FileListContextMenu.KEY_COPY_MIXED_PARAMS -> new FileListContextMenu.ParamsInfo(false, true, false, false);
+                default -> new FileListContextMenu.ParamsInfo(false, true, true, false);
+            };
+            stub.kind = FileListContextMenu.TargetType.TOP_ITEM;
+            menu.updateState("target");
+            assertEquals(I18n.get(key), menu.item(FileListContextMenu.Entry.COPY_PARAMS).getText(),
+                    "复制参数文案必须落到菜单项上：" + key);
+            assertEquals(!FileListContextMenu.KEY_COPY_PARAMS.equals(key),
+                    disabled(menu, FileListContextMenu.Entry.COPY_PARAMS), "禁用位与文案键必须一致：" + key);
         }
     }
 
@@ -263,11 +440,12 @@ class FileListContextMenuTest {
         return menu.item(entry).isDisable();
     }
 
-    // ==================== 5. 12 个动作的转发接线 ====================
+    // ==================== 5. 14 个动作的转发接线 ====================
 
     /**
      * 逐项触发，断言触发的是<b>它自己</b>那个动作 —— 抓"复制粘贴错接线"（例如把"应用到全局"接到
-     * "清除参数"）。{@code target} 未设置时为 {@code null}，与"空白区域右键"一致。
+     * "清除参数"、把"复制参数"接到"应用到所选"）。{@code target} 未设置时为 {@code null}，
+     * 与"空白区域右键"一致。
      */
     @Test
     void firingEachItemInvokesExactlyItsOwnAction() {
@@ -281,7 +459,7 @@ class FileListContextMenuTest {
             menu.item(entry).fire();
             assertEquals(1, stub.calls.size(), "触发 " + entry + " 必须恰好调用一次动作，实际 " + stub.calls);
         }
-        // 12 个动作名必须一一对应（顺序与 LAYOUT 的菜单项顺序一致）
+        // 14 个动作名必须一一对应（顺序与 LAYOUT 的菜单项顺序一致）
         List<String> fired = new ArrayList<>();
         for (FileListContextMenu.Entry entry : itemEntries) {
             stub.calls.clear();
@@ -289,7 +467,8 @@ class FileListContextMenuTest {
             fired.add(stub.calls.get(0));
         }
         assertEquals(List.of("select", "selectAll", "openInBrowser", "openFolder", "viewSource",
-                        "params", "clearParams", "applyGlobal", "group", "ungroup", "remove", "removeGroup"),
+                        "params", "clearParams", "applyGlobal", "copyParams", "applyToSelection",
+                        "group", "ungroup", "remove", "removeGroup"),
                 fired, "菜单项 → 动作的接线必须逐项对应（注意 openInBrowser 在 openFolder 之前）");
     }
 

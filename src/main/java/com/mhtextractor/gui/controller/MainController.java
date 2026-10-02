@@ -415,6 +415,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     private final AtomicBoolean browserExporting = new AtomicBoolean(false);
     /** Q9a：FeatureExercise 按<b>字段访问</b>读它的 isDisable()，故保留同名字段指向新类里那一个 */
     /* test-support */ MenuItem ctxClearParams;
+    /** Q10：参数剪贴板（R7.1-R7.7）—— 复制快照 + 批量应用编排；路由与应用本体都是下方那两个方法 */
+    private final ParamClipboard paramClipboard = new ParamClipboard(ws::push, this::paramScopeTarget, this::applyTargetParams);
 
     // ===== 折叠/展开动画状态（方案 B 抽屉式，快照平移手法与拖拽一致） =====
     /** 动画全局锁：动画期间列表项目不可交互（按钮可点但无效果），快速连点折叠箭头直接忽略 */
@@ -1041,18 +1043,32 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (listAnimating) {
             return;
         }
-        Object sel = currentSelection();
-        ParamScope.Target target = switch (sel) {
+        openParamDialog(paramScopeTarget(currentSelection()));
+    }
+
+    /** 选择对象 → 参数作用域目标（R7.4 复用点）："设置参数"按钮与"应用到所选"共用这一份路由 */
+    private ParamScope.Target paramScopeTarget(Object sel) {
+        return switch (sel) {
             case GroupItem<?> g -> new ParamScope.GroupTarget(g);
             case PreviewItem it when it.parentGroup != null -> new ParamScope.GroupTarget(it.parentGroup);
             case PreviewItem it -> new ParamScope.ItemTarget<>(it, it.textItemParams, it.imageItemParams);
             case null, default -> ParamScope.GLOBAL;
         };
-        openParamDialog(target);
+    }
+
+    /** 确认路径的应用本体（R7.4 唯一实现点）：组 → 组参数；条目 → 条目参数；其余 → 全局参数 */
+    private void applyTargetParams(ParamScope.Target target, boolean imageMode, AppConfig params) {
+        switch (target) {
+            case ParamScope.GroupTarget(GroupItem<?> g) -> applyGroupParams(asPreviewGroup(g), imageMode, params);
+            case ParamScope.ItemTarget<?> it -> applyItemParams((PreviewItem) it.item(), imageMode, params);
+            default -> {
+                applyConfirmedParams(imageMode, params);
+                log.info(I18n.msg("log.maincontroller.15", modeWord(imageMode)));
+            }
+        }
     }
 
     /** 打开参数设置侧边栏并应用确认结果（按钮行与右键菜单共用；空白区域菜单项强制传全局目标） */
-    @SuppressWarnings("unchecked")
     private void openParamDialog(ParamScope.Target target) {
         boolean imageMode = imageModeToggle.isSelected();
         try {
@@ -1063,16 +1079,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             // ParamFormPane.isDirty() 一处，这里只接线（每次 show 都重设，幂等）。
             panel.setDirtyListener(this::updateStartButtonState);
             panel.show(target, imageMode, textParamsCache, imageParamsCache,
-                    params -> {
-                        if (target instanceof ParamScope.GroupTarget(GroupItem<?> group)) {
-                            applyGroupParams((GroupItem<PreviewItem>) group, imageMode, params);
-                        } else if (target instanceof ParamScope.ItemTarget<?> it) {
-                            applyItemParams((PreviewItem) it.item(), imageMode, params);
-                        } else {
-                            applyConfirmedParams(imageMode, params);
-                            log.info(I18n.msg("log.maincontroller.15", modeWord(imageMode)));
-                        }
-                    });
+                    params -> applyTargetParams(target, imageMode, params));
             updateStartButtonState();   // 本次 show 可能什么都没变（同目标重开 / 取消切换）⇒ 兜底重算
         } catch (Exception e) {
             log.error(I18n.msg("log.maincontroller.16"), e);
@@ -1088,10 +1095,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         } else {
             item.textItemParams = params;
         }
-        ws.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
-                null, -1, List.of(), List.of(), List.of(), List.of(),
-                false, null, null, null, imageMode, item.path, null, before,
-                false, null, null));
+        paramClipboard.pushParamUndo(imageMode, item.path, null, before);
         clearExtractOutcomes(List.of(item));
         clearPreviewCache(item);
         workspaceParamService.paramsChanged(imageMode, item);   // 规则 (a)：参数变化 → 删该项目缓存目录
@@ -1111,10 +1115,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         } else {
             textParamsCache = params;
         }
-        ws.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
-                null, -1, List.of(), List.of(), List.of(), List.of(),
-                false, null, null, null, imageMode, null, null, before,
-                false, null, null));
+        paramClipboard.pushParamUndo(imageMode, null, null, before);
         // 拍板：全局参数重新确认 → 全部条目旧提取结果色失效
         clearExtractOutcomes(allPreviewItems());
         // 规则 (a)：全局参数变化 → 全部条目缓存目录删除（保守全删：有独立参数的条目删除也只是下次预览重建，语义安全）
@@ -1133,10 +1134,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         log.info(I18n.msg("log.maincontroller.18", group.getName(), modeWord(imageMode)));
         // 入撤销栈（PARAM_SET，组参数设置可撤销）
-        ws.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of(),
-                null, -1, List.of(), List.of(), List.of(), List.of(),
-                false, null, null, null, imageMode, null, group.getGroupNo(), before,
-                false, null, null));
+        paramClipboard.pushParamUndo(imageMode, null, group.getGroupNo(), before);
         // 拍板：组参数重新确认 → 该组成员旧提取结果色失效
         List<PreviewItem> members = group.getMembers().stream().filter(m -> !m.removed).toList();
         clearExtractOutcomes(members);
@@ -1181,8 +1179,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             @Override public boolean isLiveTarget(Object item) {
                 return !(item instanceof PreviewItem it && it.removed);
             }
-            @Override public boolean hasIndependentParams(Object target) {
-                return MainController.this.hasIndependentParams(target);
+            @Override public FileListContextMenu.ParamsInfo paramsInfo(Object target) {
+                return paramClipboard.paramsInfo(resolveParamTargets(target), hasIndependentParams(target),
+                        effectiveParamsService, effectiveContext());
             }
             @Override public void select(Object target) { onContextSelect(target); }
             @Override public void selectAll(Object target) { onContextSelectAll(target); }
@@ -1192,6 +1191,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             @Override public void params(Object target) { onContextParams(target); }
             @Override public void clearParams(Object target) { onContextClearParams(target); }
             @Override public void applyGlobal(Object target) { onContextApplyGlobal(target); }
+            @Override public void copyParams(Object target) { onContextCopyParams(target); }
+            @Override public void applyToSelection(Object target) { onContextApplyToSelection(target); }
             @Override public void group() { onGroupClicked(); }
             @Override public void ungroup() { onUngroupClicked(); }
             @Override public void remove() { onRemoveClicked(); }
@@ -1485,7 +1486,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (listAnimating) {
             return;
         }
-        clearParamsForTargets(resolveClearTargets(currentSelection()));
+        clearParamsForTargets(resolveParamTargets(currentSelection()));
     }
 
     /** 右键菜单"清除参数"：动作逻辑与按钮一致（勾选优先 → 右键目标；启用看右键目标） */
@@ -1493,17 +1494,31 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (listAnimating) {
             return;
         }
-        clearParamsForTargets(resolveClearTargets(target));
+        clearParamsForTargets(resolveParamTargets(target));
     }
 
-    /** 勾选集合优先 → 回退对象（与"移除"的勾选优先拍板一致） */
-    private List<Object> resolveClearTargets(Object fallback) {
+    // ==================== 参数目标解析 / 清除参数 / 复制与应用（Q10） ====================
+
+    /** 勾选集合优先 → 回退对象（与"移除"的勾选优先拍板一致）；复制/应用与清除参数共用同一"所选"口径 */
+    private List<Object> resolveParamTargets(Object fallback) {
         List<PreviewItem> checked = allVisibleItems().stream()
                 .filter(i -> i.selected).toList();
         if (!checked.isEmpty()) {
             return new ArrayList<>(checked);
         }
         return fallback == null ? new ArrayList<>() : new ArrayList<>(List.of(fallback));
+    }
+
+    /** 右键「复制参数」（R7.2 的禁用理由写在菜单项文本里；R7.7 只存可持久化提取参数快照） */
+    private void onContextCopyParams(Object target) {
+        List<Object> targets = resolveParamTargets(target);
+        if (!targets.isEmpty()) paramClipboard.copy(effectiveForObject(targets.get(0)));
+    }
+
+    /** 右键「应用到所选」（R7.4/R7.5）：逐目标复用确认路径的应用函数；整批只压一条 PARAM_SET 记录 */
+    private void onContextApplyToSelection(Object target) {
+        if (listAnimating || paramClipboard.isEmpty()) return;
+        paramClipboard.applyToSelection(resolveParamTargets(target), imageModeToggle.isSelected());
     }
 
     /**
@@ -2680,7 +2695,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 case PARAM_SET -> {
                     // 条目独立参数需求拍板：设置参数类操作（条目/组/全局）可撤销，恢复设置前的参数
                     boolean im = record.paramImageMode();
-                    if (record.paramTargetPath() != null) {
+                    if (!record.clearItemParamsBefore().isEmpty() || !record.clearGroupParamsBefore().isEmpty()) {
+                        // Q10/R7.5 批量「应用到所选」：一条记录携带全部目标的 before 快照，
+                        // 恢复与 CLEAR_PARAMS 撤销共用同一份实现（不另写一套）
+                        restoreParamSnapshots(im, record.clearItemParamsBefore(), record.clearGroupParamsBefore());
+                    } else if (record.paramTargetPath() != null) {
                         for (PreviewItem it : allPreviewItems()) {
                             if (it.path.equals(record.paramTargetPath())) {
                                 if (im) {
@@ -2738,41 +2757,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 case CLEAR_PARAMS -> {
                     // 清除参数拍板 Q4：按 before 快照一次恢复全部被清除的条目/组参数，并重走联动刷新
                     boolean im = record.clearImageMode();
-                    Map<String, AppConfig> itemBefore = record.clearItemParamsBefore();
-                    List<PreviewItem> restoredItems = new ArrayList<>();
-                    for (PreviewItem it : allPreviewItems()) {
-                        if (itemBefore.containsKey(it.path)) {
-                            if (im) {
-                                it.imageItemParams = itemBefore.get(it.path);
-                            } else {
-                                it.textItemParams = itemBefore.get(it.path);
-                            }
-                            restoredItems.add(it);
-                        }
-                    }
                     Map<Integer, AppConfig> groupBefore = record.clearGroupParamsBefore();
-                    List<PreviewItem> affected = new ArrayList<>(restoredItems);
-                    for (Object o : items) {
-                        if (o instanceof GroupItem<?> g) {
-                            GroupItem<PreviewItem> grp = asPreviewGroup(g);
-                            if (groupBefore.containsKey(grp.getGroupNo())) {
-                                if (im) {
-                                    grp.setImageParamsCache(groupBefore.get(grp.getGroupNo()));
-                                } else {
-                                    grp.setTextParamsCache(groupBefore.get(grp.getGroupNo()));
-                                }
-                                affected.addAll(grp.getMembers().stream()
-                                        .filter(m -> !m.removed).toList());
-                            }
-                        }
-                    }
-                    clearExtractOutcomes(affected);
-                    // 规则 (a)：撤销恢复被清除的参数 → 受影响条目生效参数变化 → 删其缓存目录
-                    workspaceParamService.paramsChanged(im, affected);
-                    refreshAfterTargetedParamsChange(affected);
-                    updateListButtons();
-                    updateExtractBanner(currentSelection());
-                    log.info(I18n.msg("log.maincontroller.54", modeWord(im), restoredItems.size(), groupBefore.size()));
+                    int restoredItems = restoreParamSnapshots(im, record.clearItemParamsBefore(), groupBefore);
+                    log.info(I18n.msg("log.maincontroller.54", modeWord(im), restoredItems, groupBefore.size()));
                 }
                 case APPLY_GLOBAL -> {
                     // 条目独立参数需求拍板：恢复应用前的全局参数与全部独立参数快照
@@ -2824,6 +2811,38 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (!reparseAfter.isEmpty() && currentModeConfirmed()) {
             startPreParseFor(reparseAfter);
         }
+    }
+
+    /** 按 (path | groupNo → AppConfig) 快照恢复参数并重走联动刷新与缓存失效（清除参数 / 批量应用共用） */
+    private int restoreParamSnapshots(boolean im, Map<String, AppConfig> itemBefore,
+                                      Map<Integer, AppConfig> groupBefore) {
+        List<PreviewItem> restoredItems = new ArrayList<>();
+        for (PreviewItem it : allPreviewItems()) {
+            if (itemBefore.containsKey(it.path)) {
+                if (im) it.imageItemParams = itemBefore.get(it.path);
+                else it.textItemParams = itemBefore.get(it.path);
+                restoredItems.add(it);
+            }
+        }
+        List<PreviewItem> affected = new ArrayList<>(restoredItems);
+        for (Object o : items) {
+            if (o instanceof GroupItem<?> g) {
+                GroupItem<PreviewItem> grp = asPreviewGroup(g);
+                if (groupBefore.containsKey(grp.getGroupNo())) {
+                    if (im) grp.setImageParamsCache(groupBefore.get(grp.getGroupNo()));
+                    else grp.setTextParamsCache(groupBefore.get(grp.getGroupNo()));
+                    affected.addAll(grp.getMembers().stream()
+                            .filter(m -> !m.removed).toList());
+                }
+            }
+        }
+        clearExtractOutcomes(affected);
+        // 规则 (a)：撤销恢复旧参数 = 生效参数变化 → 删受影响条目缓存目录（经 WorkspaceParamService 收口）
+        workspaceParamService.paramsChanged(im, affected);
+        refreshAfterTargetedParamsChange(affected);
+        updateListButtons();
+        updateExtractBanner(currentSelection());
+        return restoredItems.size();
     }
 
     /** 选中最近的可见行（项目或组条目；优先下一行，无则选上一行，都没有则清空选中） */

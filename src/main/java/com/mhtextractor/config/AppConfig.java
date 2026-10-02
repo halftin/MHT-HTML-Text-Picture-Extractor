@@ -148,4 +148,66 @@ public class AppConfig {
     private static void appendFingerprintField(StringBuilder sb, String value) {
         sb.append(value == null ? -1 : value.length()).append(':').append(value == null ? "" : value);
     }
+
+    // ==================== 提取参数深拷贝（R7.7） ====================
+
+    /**
+     * <b>可持久化提取参数</b>的深拷贝（R7.7）：返回<b>新实例</b>，字段值逐项复制。
+     *
+     * <p><b>为什么必须深拷贝</b>：本类是 Lombok {@code @Data} 可变对象，其 javadoc 明禁把
+     * {@code equals} 当判定键 —— 共享同一个实例会让"后续就地修改"串味（{@code buildRuntimeConfig}
+     * 与提取前补运行时字段都是就地 set）。</p>
+     *
+     * <p><b>不参与的字段</b>：4 个 {@code @JsonIgnore} 运行时/GUI 字段
+     * （{@code inputFolder} / {@code outputFolder} / {@code imageModeEnabled} /
+     * {@code openFolderAfterComplete}）—— 它们属主窗口 GUI 状态（见 {@link GuiState}），
+     * 复制它们会在"应用到所选"时把用户当前目录/模式写进别的条目（真 bug 级错误）。
+     * 副本里这 4 个字段保持 {@code null/false} 的初值。</p>
+     *
+     * <p><b>覆盖范围 = 提取参数全集</b>：与
+     * {@link com.mhtextractor.app.EffectiveParamsService#signatureOf} 的字段集合<b>完全相同</b>
+     * （{@code AppConfig} 全部字段减去该服务的 {@code runtimeOnlyFields()}）；两侧都有守护测试
+     * （{@code AppConfigCopyTest}），漏一个字段会立刻红。</p>
+     *
+     * <p>字段逐个赋值而<b>不用反射/序列化</b>：本类要进 GraalVM native 镜像，显式赋值零元数据负担，
+     * 且编译期可查（少写一个字段会被上面那条覆盖范围断言拦下）。</p>
+     */
+    public AppConfig copyExtractionParams() {
+        AppConfig c = new AppConfig();
+        // 通用
+        c.separateFiles = separateFiles;
+        // 文本提取
+        c.enableContentLimit = enableContentLimit;
+        c.startMarker = startMarker;
+        c.endMarker = endMarker;
+        c.useRegex = useRegex;
+        c.enableTemplate = enableTemplate;
+        c.startTemplate = startTemplate;
+        c.endTemplate = endTemplate;
+        c.addChapterNumber = addChapterNumber;
+        c.autoFixEncoding = autoFixEncoding;
+        c.enableTitleExtraction = enableTitleExtraction;
+        c.titleStartMarker = titleStartMarker;
+        c.titleEndMarker = titleEndMarker;
+        c.titleUseRegex = titleUseRegex;
+        // 图片提取
+        c.enableNameExtraction = enableNameExtraction;
+        c.imageNameStartMarker = imageNameStartMarker;
+        c.imageNameEndMarker = imageNameEndMarker;
+        c.enableRegionExtraction = enableRegionExtraction;
+        c.imageRegionStartMarker = imageRegionStartMarker;
+        c.imageRegionEndMarker = imageRegionEndMarker;
+        c.enableBatchRenaming = enableBatchRenaming;
+        c.enableZipPackaging = enableZipPackaging;
+        c.enableCbzPackaging = enableCbzPackaging;
+        c.singleOutputMode = singleOutputMode;
+        // 处理模式
+        c.highSpeedMemoryMode = highSpeedMemoryMode;
+        // 兼容旧版废弃字段（保留反序列化兼容，仍参与"参数是否统一"判定）
+        c.nameLimitStart = nameLimitStart;
+        c.nameLimitEnd = nameLimitEnd;
+        c.contentLimitStart = contentLimitStart;
+        c.contentLimitEnd = contentLimitEnd;
+        return c;
+    }
 }

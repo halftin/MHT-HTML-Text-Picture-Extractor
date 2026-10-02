@@ -8,12 +8,14 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 import com.mhtextractor.App;
+import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.controller.FileListContextMenu;
 import com.mhtextractor.gui.controller.MainController;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.GroupItem;
 
+import atlantafx.base.controls.ToggleSwitch;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.event.Event;
@@ -32,27 +34,31 @@ import javafx.stage.Stage;
 
 /**
  * Q9a 右键菜单探针：在<b>带 toolkit 的真实装配</b>里验证 {@code FileListContextMenu}。
+ * Q10 增补 R7.1-R7.7 的端到端（复制参数 → 应用到所选 → 撤销一条 → 控制组）。
  *
  * <p><b>为什么需要它</b>：无头单测 JVM 里 {@code new SeparatorMenuItem()} / {@code new ContextMenu()}
  * 会抛 {@code Toolkit not initialized}（实测），所以"新类的 {@code LAYOUT} 与真实
  * {@code ContextMenu.getItems()} 是否一致"只能在这里证 —— 否则 {@code LAYOUT} 只是一个没人校验的副本。</p>
  *
- * <p><b>本探针里的期望值是独立副本</b>：16 项类型序列、12 个文案键、四种目标的禁用矩阵都在本文件里
+ * <p><b>本探针里的期望值是独立副本</b>：18 项类型序列、14 个文案键、四种目标的禁用矩阵都在本文件里
  * 逐项写死（<b>不复用</b> {@code FileListContextMenu.LAYOUT} / {@code TEXT_KEYS}），因此新类里改错
  * 顺序 / 换错键 / 写错启用位都会在这里失败。</p>
  *
  * <p>被测对象是 {@code MainView.fxml} 加载出的<b>真实</b> {@code MainController}（与 App.start() 同构装配），
- * 菜单实例经反射取私有字段 {@code contextMenu}；因此覆盖"宿主目标类型判定 + 规则 + 落点"的完整链路。</p>
+ * 菜单实例经反射取私有字段 {@code contextMenu}；因此覆盖"宿主目标类型判定 + 规则 + 落点"的完整链路。
+ * R7 的动作也一律经<b>真实菜单项</b> {@code MenuItem.fire()} 触发（只把新类的私有 {@code target}
+ * 字段指向被测目标，等价于真实右键命中那一行），故覆盖"菜单项 → Actions → 宿主实现"整条接线。</p>
  *
  * <p>退出码：0 = 全过，1 = 有失败，2 = 看门狗超时（防探针挂死）。</p>
  */
 public class ContextMenuProbe extends Application {
 
-    /** 期望的 16 项序列（独立副本）：item:&lt;文案键&gt; 或 sep */
+    /** 期望的 18 项序列（独立副本）：item:&lt;文案键&gt; 或 sep；R7.1 的两项在第 3 组末尾 */
     private static final List<String> EXPECTED_ORDER = List.of(
             "item:list.menuSelect", "item:list.menuSelectAll", "sep",
             "item:browser.menuOpen", "item:list.menuOpenFolder", "item:browser.menuViewSource", "sep",
-            "item:params.menuSet", "item:params.menuClear", "item:params.menuApplyGlobal", "sep",
+            "item:params.menuSet", "item:params.menuClear", "item:params.menuApplyGlobal",
+            "item:params.menuCopy", "item:params.menuApplyToSelection", "sep",
             "item:group.menuMerge", "item:group.menuUngroup", "sep",
             "item:list.menuRemove", "item:group.menuRemove");
 
@@ -95,6 +101,7 @@ public class ContextMenuProbe extends Application {
 
         Timer timer = new Timer("context-menu-probe", true);
         timer.schedule(at(400, this::runStaticAssertions), 400);
+        timer.schedule(at(700, this::r7CopyApplyEndToEnd), 700);
         timer.schedule(at(1200, this::behaviorShowA), 1200);
         timer.schedule(at(1700, this::behaviorFireA), 1700);
         timer.schedule(at(2200, this::behaviorShowB), 2200);
@@ -149,9 +156,9 @@ public class ContextMenuProbe extends Application {
             return;
         }
 
-        // ---- 1. 恒 16 项同序：真实 getItems() 逐项对账 ----
+        // ---- 1. 恒 18 项同序：真实 getItems() 逐项对账 ----
         List<MenuItem> items = real.getItems();
-        check("真实 ContextMenu 恒 16 项（实际 " + items.size() + "）", items.size() == EXPECTED_ORDER.size());
+        check("真实 ContextMenu 恒 18 项（实际 " + items.size() + "）", items.size() == EXPECTED_ORDER.size());
         int n = Math.min(items.size(), EXPECTED_ORDER.size());
         List<String> actualOrder = new ArrayList<>();
         for (int i = 0; i < n; i++) {
@@ -170,18 +177,18 @@ public class ContextMenuProbe extends Application {
                 actualOrder.add("item:" + key);
             }
         }
-        check("真实 getItems() 的 16 项类型/键序列 == 硬编码期望（独立副本）",
+        check("真实 getItems() 的 18 项类型/键序列 == 硬编码期望（独立副本）",
                 actualOrder.equals(EXPECTED_ORDER));
 
-        // 装置自检：12 个文案键在当前 locale 下必须两两不同，否则"键位互换"抓不到
+        // 装置自检：14 个文案键在当前 locale 下必须两两不同，否则"键位互换"抓不到
         List<String> texts = new ArrayList<>();
         for (String entry : EXPECTED_ORDER) {
             if (entry.startsWith("item:")) {
                 texts.add(I18n.get(entry.substring("item:".length())));
             }
         }
-        check("装置自检：12 个文案键的文本两两不同（否则键位互换不可判）",
-                texts.size() == 12 && texts.stream().distinct().count() == 12);
+        check("装置自检：14 个文案键的文本两两不同（否则键位互换不可判）",
+                texts.size() == 14 && texts.stream().distinct().count() == 14);
 
         // ---- 2. 新类的 LAYOUT 与真实序列同源（同一个硬编码期望对两边都成立） ----
         List<String> fromLayout = new ArrayList<>();
@@ -275,6 +282,165 @@ public class ContextMenuProbe extends Application {
 
     private boolean dis(FileListContextMenu.Entry entry) {
         return menu.item(entry).isDisable();
+    }
+
+    private String text(FileListContextMenu.Entry entry) {
+        return menu.item(entry).getText();
+    }
+
+    // ==================== t=700ms：R7 端到端（复制 → 应用 → 撤销 → 控制组） ====================
+
+    /**
+     * R7.1-R7.7 的端到端：经<b>真实菜单项</b> {@code fire()} 触发复制与应用，断言"目标生效参数变成复制的
+     * 快照 / 一次应用只压一条撤销记录 / 撤销能完整恢复到 before 快照 / 4 个运行时字段没被改"；
+     * 并给"可用"配两组<b>控制组</b>：① 无参数条目上「复制参数」必须禁用且文案是"无参数"版本；
+     * ② 未复制前「应用到所选」必须禁用。
+     */
+    private void r7CopyApplyEndToEnd() {
+        try {
+            boolean im = ((javafx.scene.control.ToggleButton) fieldOf(controller, "imageModeToggle")).isSelected();
+            System.out.println("      (info) R7 端到端：当前模式 imageMode=" + im);
+
+            PreviewItem a = newPreview("r7-a");
+            PreviewItem b = newPreview("r7-b");
+            PreviewItem bare = newPreview("r7-bare");
+            AppConfig source = params("Q10-SRC");
+            source.setSeparateFiles(true);
+            source.setInputFolder("C:/probe/runtime-in");
+            source.setOutputFolder("C:/probe/runtime-out");
+            source.setImageModeEnabled(true);
+            source.setOpenFolderAfterComplete(true);
+            setItemParams(a, im, source);
+            setItemParams(b, im, params("BEFORE-B"));
+            workspace().appendItems(new ArrayList<>(List.of(a, b)));
+
+            String inBefore = ((javafx.scene.control.TextField) fieldOf(controller, "inputFolderField")).getText();
+            String outBefore = ((javafx.scene.control.TextField) fieldOf(controller, "outputFolderField")).getText();
+            boolean openAfterBefore = ((ToggleSwitch) fieldOf(controller, "openFolderAfterCompleteCheck")).isSelected();
+
+            // ---- 控制组 ①：无参数目标 + 未复制过 ⇒ 两项都禁用，复制文案 = "无参数" ----
+            updateState(bare);
+            check("控制组：无生效参数条目上「复制参数」禁用（证明'可用'不是恒真）", dis(FileListContextMenu.Entry.COPY_PARAMS));
+            check("R7.2：禁用理由写在选项文本里（无参数版）",
+                    I18n.get(FileListContextMenu.KEY_COPY_NO_PARAMS).equals(text(FileListContextMenu.Entry.COPY_PARAMS)));
+            check("R7.3：未复制过 ⇒「应用到所选」禁用", dis(FileListContextMenu.Entry.APPLY_TO_SELECTION));
+
+            // ---- R7.2 理由二：两个勾选项生效参数不同 ⇒ 禁用 + "参数不统一"版文案 ----
+            a.selected = true;
+            b.selected = true;
+            updateState(a);
+            check("R7.2：多选参数不统一 ⇒「复制参数」禁用", dis(FileListContextMenu.Entry.COPY_PARAMS));
+            check("R7.2：禁用理由是'参数不统一'版文案",
+                    I18n.get(FileListContextMenu.KEY_COPY_MIXED_PARAMS).equals(text(FileListContextMenu.Entry.COPY_PARAMS)));
+            a.selected = false;
+            b.selected = false;
+
+            // ---- R7.1/R7.2 可用态：右键有参数条目 ⇒ 复制参数启用、文案 = "复制参数" ----
+            updateState(a);
+            check("R7.2：有生效参数且统一 ⇒「复制参数」启用", !dis(FileListContextMenu.Entry.COPY_PARAMS));
+            check("R7.2：可用时文案 = params.menuCopy",
+                    I18n.get(FileListContextMenu.KEY_COPY_PARAMS).equals(text(FileListContextMenu.Entry.COPY_PARAMS)));
+
+            // ---- R7.1：经真实菜单项复制（复制不写模型、不压撤销记录） ----
+            int depthBeforeCopy = workspace().undoDepth();
+            fire(FileListContextMenu.Entry.COPY_PARAMS, a);
+            check("R7.1：复制参数不写模型（撤销栈不变）", workspace().undoDepth() == depthBeforeCopy);
+            updateState(b);
+            check("R7.3：复制过之后「应用到所选」启用", !dis(FileListContextMenu.Entry.APPLY_TO_SELECTION));
+
+            // ---- R7.4/R7.5/R7.7：应用到所选（真实菜单项 → 宿主既有 apply* 路径） ----
+            fire(FileListContextMenu.Entry.APPLY_TO_SELECTION, b);
+            check("R7.5：一次应用只压一条撤销记录（实际 +" + (workspace().undoDepth() - depthBeforeCopy)
+                    + "）", workspace().undoDepth() == depthBeforeCopy + 1);
+            AppConfig applied = itemParamsOf(b, im);
+            check("R7.4：b 的生效参数 = 复制的快照（真实参数槽位）",
+                    applied != null && effectiveSignature(applied).equals(effectiveSignature(source)));
+            check("R7.7：b 拿到的是副本而非源实例", applied != source && applied != itemParamsOf(a, im));
+            check("R7.7：应用未把源的 inputFolder 写进 b", applied.getInputFolder() == null);
+            check("R7.7：应用未把源的 outputFolder 写进 b", applied.getOutputFolder() == null);
+            check("R7.7：应用未把源的 imageModeEnabled 写进 b", !applied.isImageModeEnabled());
+            check("R7.7：应用未把源的 openFolderAfterComplete 写进 b", !applied.isOpenFolderAfterComplete());
+            check("R7.7：应用未改主窗口输入目录", inBefore.equals(
+                    ((javafx.scene.control.TextField) fieldOf(controller, "inputFolderField")).getText()));
+            check("R7.7：应用未改主窗口输出目录", outBefore.equals(
+                    ((javafx.scene.control.TextField) fieldOf(controller, "outputFolderField")).getText()));
+            check("R7.7：应用未改主窗口「完成后打开文件夹」开关", openAfterBefore ==
+                    ((ToggleSwitch) fieldOf(controller, "openFolderAfterCompleteCheck")).isSelected());
+            check("R7.7：应用未改当前模式", im ==
+                    ((javafx.scene.control.ToggleButton) fieldOf(controller, "imageModeToggle")).isSelected());
+
+            // ---- R7.5：撤销那一条记录必须完整恢复到 before 快照 ----
+            callNoArg(controller, "onUndoClicked");
+            check("R7.5：撤销后 b 的生效参数回到应用前（一条记录携带了 before 快照）",
+                    itemParamsOf(b, im) != null
+                            && effectiveSignature(itemParamsOf(b, im)).equals(effectiveSignature(params("BEFORE-B"))));
+            check("R7.5：撤销后撤销栈回到应用前深度", workspace().undoDepth() == depthBeforeCopy);
+        } catch (Throwable t) {
+            check("R7 端到端步骤抛异常: " + t, false);
+            t.printStackTrace(System.out);
+        }
+    }
+
+    private PreviewItem newPreview(String name) {
+        return new PreviewItem("C:/probe/" + name + ".mht", name + ".mht", LocalDateTime.now(), "C:/probe");
+    }
+
+    private static AppConfig params(String marker) {
+        AppConfig c = new AppConfig();
+        c.setStartMarker(marker);
+        return c;
+    }
+
+    private static void setItemParams(PreviewItem item, boolean imageMode, AppConfig p) {
+        if (imageMode) {
+            item.imageItemParams = p;
+        } else {
+            item.textItemParams = p;
+        }
+    }
+
+    private static AppConfig itemParamsOf(PreviewItem item, boolean imageMode) {
+        return imageMode ? item.imageItemParams : item.textItemParams;
+    }
+
+    /** 提取参数的内容签名（与生产同一实现，不用 equals：AppConfig 是可变对象） */
+    private static String effectiveSignature(AppConfig c) {
+        return com.mhtextractor.app.EffectiveParamsService.signatureOf(c);
+    }
+
+    /** 经真实菜单项触发动作：把新类的私有 target 指向被测目标（等价于真实右键命中那一行），再 fire() */
+    private void fire(FileListContextMenu.Entry entry, Object target) throws Exception {
+        Field tf = FileListContextMenu.class.getDeclaredField("target");
+        tf.setAccessible(true);
+        tf.set(menu, target);
+        menu.item(entry).fire();
+    }
+
+    /** 直接调宿主的 updateContextMenuState（test-support 可见性经反射）来刷新菜单项状态 */
+    private void updateState(Object target) {
+        try {
+            Method m = MainController.class.getDeclaredMethod("updateContextMenuState", Object.class);
+            m.setAccessible(true);
+            m.invoke(controller, target);
+        } catch (Exception e) {
+            check("反射调用 updateContextMenuState: " + e, false);
+        }
+    }
+
+    private Object fieldOf(Object owner, String name) throws Exception {
+        Field f = owner.getClass().getDeclaredField(name);
+        f.setAccessible(true);
+        return f.get(owner);
+    }
+
+    private com.mhtextractor.app.WorkspaceModel workspace() throws Exception {
+        return (com.mhtextractor.app.WorkspaceModel) fieldOf(controller, "ws");
+    }
+
+    private void callNoArg(Object owner, String name) throws Exception {
+        Method m = owner.getClass().getDeclaredMethod(name);
+        m.setAccessible(true);
+        m.invoke(owner);
     }
 
     // ==================== t=1200ms 起：点击菜单外即关闭（A/B 对照，同一菜单） ====================
