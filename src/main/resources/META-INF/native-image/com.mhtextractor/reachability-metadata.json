@@ -3299,6 +3299,38 @@
   },
   {
    "type": "javafx.scene.image.ImageView"
+  },
+  {
+   "type": "com.sun.scenario.effect.impl.prism.PrMergePeer",
+   "methods": [
+    {
+     "name": "<init>",
+     "parameterTypes": [
+      "com.sun.scenario.effect.FilterContext",
+      "com.sun.scenario.effect.impl.Renderer",
+      "java.lang.String"
+     ]
+    }
+   ]
+  },
+  {
+   "type": "com.sun.scenario.effect.impl.prism.ps.PPSLinearConvolveShadowPeer",
+   "methods": [
+    {
+     "name": "<init>",
+     "parameterTypes": [
+      "com.sun.scenario.effect.FilterContext",
+      "com.sun.scenario.effect.impl.Renderer",
+      "java.lang.String"
+     ]
+    }
+   ]
+  },
+  {
+   "type": "javafx.scene.effect.Effect"
+  },
+  {
+   "type": "javafx.scene.text.TextFlow"
   }
  ],
  "resources": [
