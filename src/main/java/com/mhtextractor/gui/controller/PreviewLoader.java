@@ -41,7 +41,7 @@ public final class PreviewLoader {
     /** 超大文件完整解析确认阈值（字节） */
     private static final long LARGE_FILE_THRESHOLD = 50L * 1024 * 1024;
 
-    private boolean imageLoadActive = false;
+    boolean imageLoadActive = false;
     private PreviewItem loadingItem = null;
     /** 在途预览加载线程（规则 d 退出清空时等待其结束用；仅 FX 线程写） */
     private volatile Thread previewLoadThread = null;
