@@ -301,9 +301,9 @@ public final class AcceptanceDriver {
             mc.updateStartButtonState();
         }
 
-        /** 进度条/状态栏刷新（包级；测试用 parseToken 精确驱动代次语义，手势不可控）。 */
+        /** 进度条/状态栏刷新（包级；测试用 parseToken 精确驱动代次语义，手势不可控；C5 起经预解析协作者）。 */
         public void updateProgressStatus(int token) {
-            mc.updateProgressStatus(token);
+            mc.preparseController.updateProgressStatus(token);
         }
 
         /** 右键菜单禁用态刷新（包级；真实手势 = 弹出右键菜单，popup 处理脆弱）。 */

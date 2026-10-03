@@ -10,10 +10,6 @@ import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
-import com.mhtextractor.core.MimeParser;
-import com.mhtextractor.core.SourceParsers;
-import com.mhtextractor.extractor.ImageExtractor;
-import com.mhtextractor.extractor.TextExtractor;
 import com.mhtextractor.gui.component.ExtractOutcomeStyles;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
@@ -22,18 +18,13 @@ import com.mhtextractor.gui.util.JavaFxUtil;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.processor.BatchProcessor;
-import com.mhtextractor.processor.FileResult;
-import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.processor.PerFileOverrides;
 import com.mhtextractor.util.DropResolver;
-import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.MhtImportPlanner;
 import com.mhtextractor.util.OutputUnitPlanner;
 import com.mhtextractor.util.ParamScope;
-import com.mhtextractor.util.SanitizeUtils;
-import com.mhtextractor.util.SourceKinds;
 import com.mhtextractor.util.UndoManager;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
@@ -49,6 +40,7 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.input.DragEvent;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.FlowPane;
@@ -335,8 +327,58 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public Button previewEffectButton() { return refs.previewEffectButton(); }
         @Override public boolean extractionRunning() { return running().get(); }
         @Override public void setProgressBarActivity(String styleClass) { MainController.this.setProgressBarActivity(styleClass); }
-        @Override public void updateProgressStatus(int token) { MainController.this.updateProgressStatus(token); }
+        @Override public void updateProgressStatus(int token) { preparseController.updateProgressStatus(token); }
         @Override public void refreshList() { refs.fileListView().refresh(); }
+    });
+    /**
+     * 预解析编排协作者（C5）：全量/增量预解析、条目状态回写与预解析进度从本类原样外迁到
+     * {@link PreparseController}；宿主能力经 {@link PreparseController.Host} 收窄为具名方法
+     * （本匿名类逐个转发到下方保留成员）。文案键、线程名（preview-preparse）、代次语义
+     * （parseToken 留在本类）与进度条样式不变。包级字段：测试源集 AcceptanceDriver 经
+     * {@code mc.preparseController.updateProgressStatus(token)} 驱动。
+     */
+    final PreparseController preparseController = new PreparseController(new PreparseController.Host() {
+        @Override public int parseToken() { return parseToken; }
+        @Override public int nextParseToken() { return ++parseToken; }
+        @Override public boolean extractionRunning() { return running().get(); }
+        @Override public boolean isPreviewLoading() { return previewLoader.isActive(); }
+        @Override public boolean isDragActive() { return listInteraction.isDragActive(); }
+        @Override public boolean isAnimating() { return groupCommand.isAnimating(); }
+        @Override public boolean isTextMode() { return MainController.this.isTextMode(); }
+        @Override public AppConfig effectiveParams(Object item) { return MainController.this.effectiveForObject(item); }
+        @Override public List<PreviewItem> allVisibleItems() { return MainController.this.allVisibleItems(); }
+        @Override public ProgressBar progressBar() { return refs.progressBar(); }
+        @Override public Label statusLabel() { return refs.statusLabel(); }
+        @Override public Object currentSelection() { return MainController.this.currentSelection(); }
+        @Override public void refreshList() { refs.fileListView().refresh(); }
+        @Override public void recomputeBadges() { listInteraction.recomputeBadges(); }
+        @Override public void updateInfoArea(Object sel) { infoPresenter.updateInfoArea(sel); }
+        @Override public void updateContentArea(Object sel) { MainController.this.updateContentArea(sel); }
+        @Override public void setProgressBarActivity(String styleClass) { MainController.this.setProgressBarActivity(styleClass); }
+    });
+    /**
+     * 工作区信息呈现协作者（C5）：模式摘要、选中信息区与提取结果展示从本类原样外迁到
+     * {@link WorkspaceInfoPresenter}；宿主能力经 {@link WorkspaceInfoPresenter.Host} 收窄为具名方法
+     * （本匿名类逐个转发到下方保留成员）。文案键、日志键（log.maincontroller.29）、
+     * 组名编辑框接线与提取结果 banner 语义不变。
+     */
+    private final WorkspaceInfoPresenter infoPresenter = new WorkspaceInfoPresenter(new WorkspaceInfoPresenter.Host() {
+        @Override public Label titleInfoLabel() { return refs.titleInfoLabel(); }
+        @Override public Label outputNameLabel() { return refs.outputNameLabel(); }
+        @Override public HBox groupNameBox() { return refs.groupNameBox(); }
+        @Override public Label badgeHeaderLabel() { return refs.badgeHeaderLabel(); }
+        @Override public Label outputModeLabel() { return refs.outputModeLabel(); }
+        @Override public Label extractResultBanner() { return refs.extractResultBanner(); }
+        @Override public TextField inputFolderField() { return refs.inputFolderField(); }
+        @Override public AppConfig effectiveParams(Object item) { return MainController.this.effectiveForObject(item); }
+        @Override public AppConfig currentParamsOrDefaults() { return MainController.this.currentParamsOrDefaults(); }
+        @Override public boolean isTextMode() { return MainController.this.isTextMode(); }
+        @Override public List<PreviewItem> allVisibleItems() { return MainController.this.allVisibleItems(); }
+        @Override public List<PreviewItem> allPreviewItems() { return MainController.this.allPreviewItems(); }
+        @Override public Object currentSelection() { return MainController.this.currentSelection(); }
+        @Override public void refreshList() { refs.fileListView().refresh(); }
+        @Override public void attachGroupNameEditor(GroupItem<PreviewItem> group) { MainController.this.attachGroupNameEditor(group); }
+        @Override public void clearNameEditingGroup() { nameEditingGroup = null; }
     });
     /**
      * 列表交互协作者（C2）：列表选择 / 勾选联动 / 拖拽生命周期 / 章节徽标重算从本类原样外迁到
@@ -366,12 +408,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public boolean isCurrentModeConfirmed() { return currentModeConfirmed(); }
         @Override public void cancelPreviewLoad() { requestToken++; previewLoader.cancel(); }
         @Override public void updateListButtons() { MainController.this.updateListButtons(); }
-        @Override public void updateInfoArea(Object sel) { MainController.this.updateInfoArea(sel); }
+        @Override public void updateInfoArea(Object sel) { infoPresenter.updateInfoArea(sel); }
         @Override public void updateContentArea(Object sel) { MainController.this.updateContentArea(sel); }
         @Override public void updateAdjustCheck(Object sel) { MainController.this.updateAdjustCheck(sel); }
-        @Override public void updateProgressStatus() { MainController.this.updateProgressStatus(parseToken); }
+        @Override public void updateProgressStatus() { preparseController.updateProgressStatus(parseToken); }
         @Override public void renderThumbnails(PreviewItem item) { previewRenderer.renderThumbnails(item); }
-        @Override public void startPreParseFor(List<PreviewItem> items) { MainController.this.startPreParseFor(items); }
+        @Override public void startPreParseFor(List<PreviewItem> items) { preparseController.startPreParseFor(items); }
         @Override public void clearPreviewCache(PreviewItem item) { MainController.this.clearPreviewCache(item); }
         @Override public void toggleGroupExpanded(GroupItem<PreviewItem> group) { groupCommand.toggleGroupExpanded(group); }
     });
@@ -404,7 +446,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void cacheRulesForRemovedItems(Iterable<PreviewItem> items) { workspaceParamService.itemsRemoved(items); }
         @Override public void clearItemPreviewState(PreviewItem item) { MainController.this.clearPreviewCache(item); }
         @Override public void refreshAfterListChange() { MainController.this.refreshAfterListChange(); }
-        @Override public void startPreParseFor(List<PreviewItem> items) { MainController.this.startPreParseFor(items); }
+        @Override public void startPreParseFor(List<PreviewItem> items) { preparseController.startPreParseFor(items); }
         @Override public boolean currentModeConfirmed() { return MainController.this.currentModeConfirmed(); }
         @Override public boolean hasCachedEntries() { return workspaceParamService.hasCachedEntries(); }
         @Override public void cancelWorkspaceActivity() { MainController.this.cancelWorkspaceActivity(); }
@@ -670,7 +712,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 收尾统一预解析（RISK-7：导入期间抑制，收尾跑一次，避免 O(n²)） */
     @Override
     public void startPreParse(List<PreviewItem> items) {
-        startPreParseFor(items);
+        preparseController.startPreParseFor(items);
     }
 
     @Override
@@ -851,20 +893,20 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         refs.modeLabel().setText(I18n.get("mode.labelPrefix") + (refs.imageModeToggle().isSelected() ? I18n.get("mode.image")
                 : (refs.textModeToggle().isSelected() ? I18n.get("mode.text") : I18n.get("mode.none"))));
         Object sel = currentSelection();
-        updateBadgeHeader();
-        updateOutputModeLabel(sel);
+        infoPresenter.updateBadgeHeader();
+        infoPresenter.updateOutputModeLabel(sel);
         updateRenameNote(sel);
         showCurrentModeArea();
         refs.fileListView().refresh();
         updateAdjustCheck(sel);
-        updateInfoArea(sel);
+        infoPresenter.updateInfoArea(sel);
         updateContentArea(sel);
 
         if (anyModeSelected && anyVisibleItemHasEffectiveParams() && visibleCount() > 0) {
-            startPreParse();
+            preparseController.startPreParse();
         }
         // 方案A：切模式后同步进度条状态（新模式无参数条目 → 隐藏；否则显示新模式解析进度）
-        updateProgressStatus(parseToken);
+        preparseController.updateProgressStatus(parseToken);
     }
 
     private void showCurrentModeArea() {
@@ -872,34 +914,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         refs.textPreviewArea().setManaged(isTextMode());
         refs.imagePreviewBox().setVisible(!isTextMode());
         refs.imagePreviewBox().setManaged(!isTextMode());
-    }
-
-    private void updateBadgeHeader() {
-        boolean showBadgeCol = isTextMode() && anyVisibleItemHasChapterNumbers();
-        refs.badgeHeaderLabel().setVisible(showBadgeCol);
-        refs.badgeHeaderLabel().setManaged(showBadgeCol);
-    }
-
-    /** 任一有效项目的生效参数开启章节序号（组参数可独立开启，列头按需显示） */
-    private boolean anyVisibleItemHasChapterNumbers() {
-        for (PreviewItem it : allVisibleItems()) {
-            AppConfig eff = effectiveForObject(it);
-            if (eff != null && eff.isAddChapterNumber()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** 输出模式标签按当前选中对象的生效参数显示（组条目→该组生效参数；项目→其生效参数；无选中→全局） */
-    private void updateOutputModeLabel(Object sel) {
-        AppConfig params = effectiveForObject(sel);
-        if (params == null) {
-            params = currentParamsOrDefaults();
-        }
-        refs.outputModeLabel().setText(isTextMode()
-                ? (params.isSeparateFiles() ? I18n.get("extract.outputModeSeparate") : I18n.get("extract.outputModeMerged"))
-                : (params.isSingleOutputMode() ? I18n.get("extract.outputModeMerged") : I18n.get("extract.outputModeSeparate")));
     }
 
     // ==================== 参数设置弹窗 ====================
@@ -964,15 +978,15 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             item.textItemParams = params;
         }
         paramClipboard.pushParamUndo(imageMode, item.path, null, before);
-        clearExtractOutcomes(List.of(item));
+        infoPresenter.clearExtractOutcomes(List.of(item));
         clearPreviewCache(item);
         workspaceParamService.paramsChanged(imageMode, item);   // 规则 (a)：参数变化 → 删该项目缓存目录
-        startPreParseFor(List.of(item));
+        preparseController.startPreParseFor(List.of(item));
         log.info(I18n.msg("log.maincontroller.17", item.name, modeWord(imageMode)));
         refs.fileListView().refresh();
         updateListButtons();
-        updateInfoArea(item);
-        updateExtractBanner(item);
+        infoPresenter.updateInfoArea(item);
+        infoPresenter.updateExtractBanner(item);
     }
 
     /** 写入某模式的已确认参数缓存并刷新工作区（agent 演练/自动化测试也走此入口）；入撤销栈（PARAM_SET） */
@@ -985,11 +999,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         paramClipboard.pushParamUndo(imageMode, null, null, before);
         // 拍板：全局参数重新确认 → 全部条目旧提取结果色失效
-        clearExtractOutcomes(allPreviewItems());
+        infoPresenter.clearExtractOutcomes(allPreviewItems());
         // 规则 (a)：全局参数变化 → 全部条目缓存目录删除（保守全删：有独立参数的条目删除也只是下次预览重建，语义安全）
         workspaceParamService.paramsChanged(imageMode, allPreviewItems());
         refreshAfterParamsChanged();
-        updateExtractBanner(currentSelection());
+        infoPresenter.updateExtractBanner(currentSelection());
     }
 
     /** 写入某组的已确认参数缓存（R8）：参数作用域仅限预览解析与显示，提取管线按组参数输出属阶段 8 */
@@ -1005,12 +1019,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         paramClipboard.pushParamUndo(imageMode, null, group.getGroupNo(), before);
         // 拍板：组参数重新确认 → 该组成员旧提取结果色失效
         List<PreviewItem> members = group.getMembers().stream().filter(m -> !m.removed).toList();
-        clearExtractOutcomes(members);
+        infoPresenter.clearExtractOutcomes(members);
         // 规则 (a)：组参数变化 → 该组成员缓存目录删除
         workspaceParamService.paramsChanged(imageMode, members);
         refreshAfterTargetedParamsChange(members);
         updateListButtons();
-        updateExtractBanner(currentSelection());
+        infoPresenter.updateExtractBanner(currentSelection());
     }
 
     // ==================== 右键菜单（右键菜单功能需求；Q9a 外迁后只剩回调面） ====================
@@ -1229,13 +1243,13 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 null, -1, List.of(), List.of(), List.of(), List.of(),
                 imageMode, globalBefore, itemBefore, groupBefore, false, null, null, null,
                 false, null, null));
-        clearExtractOutcomes(allPreviewItems());
+        infoPresenter.clearExtractOutcomes(allPreviewItems());
         // 规则 (a)：全局参数写入 + 全部独立参数清空 → 全部条目生效参数变化 → 删除全部缓存目录
         workspaceParamService.paramsChanged(imageMode, allPreviewItems());
         log.info(I18n.msg("log.maincontroller.27", modeWord(imageMode)));
         refreshAfterParamsChanged();
         updateListButtons();
-        updateExtractBanner(currentSelection());
+        infoPresenter.updateExtractBanner(currentSelection());
     }
 
     // ==================== 清除参数（清除参数功能） ====================
@@ -1344,93 +1358,26 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             affected.addAll(grp.getMembers().stream().filter(m -> !m.removed).toList());
         }
         // 拍板：参数变更 → 受影响条目旧提取结果色失效
-        clearExtractOutcomes(affected);
+        infoPresenter.clearExtractOutcomes(affected);
         // 规则 (a)：清除参数也是参数变化（生效参数回落组/全局）→ 受影响条目缓存目录删除
         workspaceParamService.paramsChanged(imageMode, affected);
         log.info(I18n.msg("log.maincontroller.28", topItems.size(), groups.size(), modeWord(imageMode)));
         refreshAfterTargetedParamsChange(affected);
         updateListButtons();
-        updateExtractBanner(currentSelection());
-    }
-
-    // ==================== 提取结果回写与 banner（提取结果状态需求） ====================
-
-    /** 提取结果一次性回写（拍板：提取结束/取消后统一回写，非逐文件实时更新）：
-     *  按路径匹配条目写入结果字段，列表一次刷新，选中条目 banner 同步 */
-    private void applyExtractResults(BatchProcessor.ProcessStats stats) {
-        Map<String, FileResult> byPath = new HashMap<>();
-        for (FileResult r : stats.getFileResults()) {
-            byPath.put(r.path(), r);
-        }
-        for (PreviewItem it : allPreviewItems()) {
-            FileResult r = byPath.get(it.path);
-            if (r != null) {
-                it.extractOutcome = r.outcome();
-                it.extractDetail = buildExtractDetail(r);
-            }
-        }
-        refs.fileListView().refresh();
-        updateExtractBanner(currentSelection());
-        log.info(I18n.msg("log.maincontroller.29", byPath.size()));
-    }
-
-    /** 结果详情拼接：失败/跳过原因 + 警告，分号分隔；无内容返回 null */
-    private String buildExtractDetail(FileResult r) {
-        List<String> parts = new ArrayList<>();
-        if (r.message() != null && !r.message().isEmpty()) {
-            parts.add(r.message());
-        }
-        parts.addAll(r.warnings());
-        return parts.isEmpty() ? null : String.join(I18n.get("list.itemSeparator"), parts);
-    }
-
-    /** 提取结果色清除（拍板）：重新确认参数后旧结果失效，回到参数色/解析状态色 */
-    private void clearExtractOutcomes(List<PreviewItem> targets) {
-        for (PreviewItem it : targets) {
-            it.extractOutcome = ExtractOutcome.NONE;
-            it.extractDetail = null;
-        }
-    }
-
-    /** 预览区顶部 banner（拍板）：选中条目结果含红（失败/跳过/成功+警告）时显示具体情况；
-     *  无提取结果时，解析失败（黄色）条目显示解析失败原因 */
-    private void updateExtractBanner(Object sel) {
-        if (sel instanceof PreviewItem it && it.extractOutcome != ExtractOutcome.NONE
-                && it.extractDetail != null && !it.extractDetail.isEmpty()) {
-            String prefix = switch (it.extractOutcome) {
-                case FAILED -> I18n.get("extract.statusFailed");
-                case SKIPPED -> I18n.get("extract.statusSkipped");
-                case SUCCESS_WARNED -> I18n.get("extract.statusWarned");
-                default -> null;
-            };
-            if (prefix != null) {
-                refs.extractResultBanner().setText(prefix + I18n.get("list.colon") + it.extractDetail);
-                refs.extractResultBanner().setVisible(true);
-                refs.extractResultBanner().setManaged(true);
-                return;
-            }
-        }
-        if (sel instanceof PreviewItem it && it.status == PreviewItem.Status.FAILED) {
-            refs.extractResultBanner().setText(I18n.get("extract.parseFailed") + it.errorMsg);
-            refs.extractResultBanner().setVisible(true);
-            refs.extractResultBanner().setManaged(true);
-            return;
-        }
-        refs.extractResultBanner().setVisible(false);
-        refs.extractResultBanner().setManaged(false);
+        infoPresenter.updateExtractBanner(currentSelection());
     }
 
     void refreshAfterParamsChanged() {
         Object sel = currentSelection();
-        updateBadgeHeader();
-        updateOutputModeLabel(sel);
+        infoPresenter.updateBadgeHeader();
+        infoPresenter.updateOutputModeLabel(sel);
         updateRenameNote(sel);
         refs.fileListView().refresh();
         updateAdjustCheck(sel);
-        updateInfoArea(sel);
+        infoPresenter.updateInfoArea(sel);
         updateContentArea(sel);
         if (currentModeConfirmed() && visibleCount() > 0) {
-            startPreParse();
+            preparseController.startPreParse();
         }
     }
 
@@ -1449,22 +1396,22 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             m.status = PreviewItem.Status.WAITING;
         }
         Object sel = currentSelection();
-        updateBadgeHeader();
-        updateOutputModeLabel(sel);
+        infoPresenter.updateBadgeHeader();
+        infoPresenter.updateOutputModeLabel(sel);
         updateRenameNote(sel);
         listInteraction.recomputeBadges();
         refs.fileListView().refresh();
         updateAdjustCheck(sel);
-        updateInfoArea(sel);
+        infoPresenter.updateInfoArea(sel);
         updateContentArea(sel);
-        updateProgressStatus(parseToken);
+        preparseController.updateProgressStatus(parseToken);
         if (!affected.isEmpty()) {
-            preParseItems(new ArrayList<>(affected), parseToken);
+            preparseController.startPreParseFor(affected);
         }
         List<PreviewItem> interrupted = allVisibleItems().stream()
                 .filter(i -> i.status == PreviewItem.Status.WAITING && !affected.contains(i)).toList();
         if (!interrupted.isEmpty()) {
-            preParseItems(new ArrayList<>(interrupted), parseToken);
+            preparseController.startPreParseFor(interrupted);
         }
     }
 
@@ -1644,7 +1591,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
             @Override
             public void applyResults(BatchProcessor.ProcessStats stats) {
-                applyExtractResults(stats);
+                infoPresenter.applyExtractResults(stats);
             }
 
             @Override
@@ -1828,9 +1775,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         listInteraction.refreshSelectionUi();
         listInteraction.recomputeBadges();
         // 方案A：无条件刷新——全部无参数时 updateProgressStatus 会隐藏进度条且不动状态栏
-        updateProgressStatus(parseToken);
+        preparseController.updateProgressStatus(parseToken);
         Object selAfter = refs.fileListView().getSelectionModel().getSelectedItem();
-        updateInfoArea(selAfter);
+        infoPresenter.updateInfoArea(selAfter);
         updateContentArea(selAfter);
     }
 
@@ -1868,11 +1815,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                             } else {
                                 it.textItemParams = record.paramBefore();
                             }
-                            clearExtractOutcomes(List.of(it));
+                            infoPresenter.clearExtractOutcomes(List.of(it));
                             clearPreviewCache(it);
                             // 规则 (a)：撤销恢复旧参数 = 生效参数变化 → 删该项目缓存目录
                             workspaceParamService.paramsChanged(im, it);
-                            startPreParseFor(List.of(it));
+                            preparseController.startPreParseFor(List.of(it));
                             break;
                         }
                     }
@@ -1888,13 +1835,13 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                             }
                             List<PreviewItem> members = grp.getMembers().stream()
                                     .filter(m -> !m.removed).toList();
-                            clearExtractOutcomes(members);
+                            infoPresenter.clearExtractOutcomes(members);
                             for (PreviewItem m : members) {
                                 clearPreviewCache(m);
                             }
                             // 规则 (a)：撤销恢复组参数 → 成员生效参数变化 → 删其缓存目录
                             workspaceParamService.paramsChanged(im, members);
-                            startPreParseFor(members);
+                            preparseController.startPreParseFor(members);
                             break;
                         }
                     }
@@ -1904,14 +1851,14 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     } else {
                         textParamsCache = record.paramBefore();
                     }
-                    clearExtractOutcomes(allPreviewItems());
+                    infoPresenter.clearExtractOutcomes(allPreviewItems());
                     // 规则 (a)：撤销恢复全局参数 → 全部条目生效参数可能变化 → 保守全删
                     workspaceParamService.paramsChanged(im, allPreviewItems());
                     refreshAfterParamsChanged();
                 }
                 refs.fileListView().refresh();
-                updateInfoArea(currentSelection());
-                updateExtractBanner(currentSelection());
+                infoPresenter.updateInfoArea(currentSelection());
+                infoPresenter.updateExtractBanner(currentSelection());
                 updateListButtons();
                 log.info(I18n.msg("log.maincontroller.53", modeWord(im)));
             }
@@ -1954,12 +1901,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                         }
                     }
                 }
-                clearExtractOutcomes(allPreviewItems());
+                infoPresenter.clearExtractOutcomes(allPreviewItems());
                 // 规则 (a)：撤销应用到全局 → 全部条目生效参数可能变化 → 保守全删
                 workspaceParamService.paramsChanged(im, allPreviewItems());
                 refreshAfterParamsChanged();
                 updateListButtons();
-                updateExtractBanner(currentSelection());
+                infoPresenter.updateExtractBanner(currentSelection());
                 log.info(I18n.msg("log.maincontroller.55", modeWord(im)));
             }
         }
@@ -1988,12 +1935,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 }
             }
         }
-        clearExtractOutcomes(affected);
+        infoPresenter.clearExtractOutcomes(affected);
         // 规则 (a)：撤销恢复旧参数 = 生效参数变化 → 删受影响条目缓存目录（经 WorkspaceParamService 收口）
         workspaceParamService.paramsChanged(im, affected);
         refreshAfterTargetedParamsChange(affected);
         updateListButtons();
-        updateExtractBanner(currentSelection());
+        infoPresenter.updateExtractBanner(currentSelection());
         return restoredItems.size();
     }
 
@@ -2127,98 +2074,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         return I18n.get("extract.unitFolder");
     }
 
-    private void updateInfoArea(Object item) {
-        updateExtractBanner(item);
-        // 组条目：第二行（原"输出文件："位置）变为"输出组文件名："+ 可编辑输入框（F5 6.3）
-        if (item instanceof GroupItem<?> g) {
-            refs.titleInfoLabel().setVisible(false);
-            refs.titleInfoLabel().setManaged(false);
-            refs.outputNameLabel().setVisible(false);
-            refs.outputNameLabel().setManaged(false);
-            refs.groupNameBox().setVisible(true);
-            refs.groupNameBox().setManaged(true);
-            attachGroupNameEditor(ListInteractionController.asPreviewGroup(g));
-            return;
-        }
-        AppConfig params = effectiveForObject(item);
-        boolean confirmed = params != null;
-        if (params == null) {
-            params = new AppConfig();
-        }
-        nameEditingGroup = null;
-        refs.groupNameBox().setVisible(false);
-        refs.groupNameBox().setManaged(false);
-        // 提取标题行：文本模式 + 标题提取开启且起始标记非空时显示（与正式提取判定一致，按该条目生效参数）
-        boolean showTitle = confirmed && isTextMode() && params.isEnableTitleExtraction()
-                && params.getTitleStartMarker() != null && !params.getTitleStartMarker().isEmpty();
-        refs.titleInfoLabel().setVisible(showTitle);
-        refs.titleInfoLabel().setManaged(showTitle);
-        if (!(item instanceof PreviewItem it) || !confirmed) {
-            refs.outputNameLabel().setVisible(false);
-            refs.outputNameLabel().setManaged(false);
-            return;
-        }
-        if (showTitle) {
-            switch (it.status) {
-                case WAITING -> refs.titleInfoLabel().setText(I18n.get("preview.titleParsing"));
-                case FAILED, EMPTY -> refs.titleInfoLabel().setText(I18n.get("preview.titleNone"));
-                case READY -> refs.titleInfoLabel().setText(it.cachedTitle != null
-                        ? I18n.get("preview.titlePrefix") + it.cachedTitle
-                        : I18n.get("preview.titleNotFound"));
-            }
-        }
-        refs.outputNameLabel().setVisible(true);
-        refs.outputNameLabel().setManaged(true);
-        if (isTextMode()) {
-            if (params.isSeparateFiles()) {
-                refs.outputNameLabel().setText(I18n.get("preview.outputFilePrefix") + SourceKinds.stripKnownExtension(it.name) + ".txt");
-            } else {
-                String inputDirName = new File(refs.inputFolderField().getText()).getName();
-                if (inputDirName.isEmpty()) {
-                    inputDirName = "mht_output";
-                }
-                refs.outputNameLabel().setText(I18n.get("preview.outputFilePrefix") + inputDirName + ".txt"
-                        + I18n.get("preview.outputFileTxtSuffix"));
-            }
-        } else if (params.isSingleOutputMode()) {
-            String folderName = mergedFolderName(it);
-            refs.outputNameLabel().setText(I18n.get("preview.outputDirPrefix") + folderName
-                    + I18n.get("preview.outputDirMergedNote"));
-        } else {
-            String dirName = separateDirName(it);
-            refs.outputNameLabel().setText(I18n.get("preview.outputDirPrefix") + dirName);
-        }
-    }
-
-    private String separateDirName(PreviewItem item) {
-        AppConfig params = effectiveForObject(item);
-        if (params != null && params.isEnableNameExtraction()) {
-            if (item.status == PreviewItem.Status.WAITING) {
-                return I18n.get("preview.parsing");
-            }
-            if (item.cachedTitle != null) {
-                return SanitizeUtils.sanitize(item.cachedTitle);
-            }
-        }
-        return SourceKinds.stripKnownExtension(item.name);
-    }
-
-    private String mergedFolderName(PreviewItem item) {
-        AppConfig params = effectiveForObject(item);
-        if (params != null && params.isEnableNameExtraction()) {
-            PreviewItem first = allVisibleItems().stream().findFirst().orElse(null);
-            if (first != null) {
-                if (first.status == PreviewItem.Status.WAITING) {
-                    return I18n.get("preview.parsing");
-                }
-                if (first.cachedTitle != null) {
-                    return SanitizeUtils.sanitize(first.cachedTitle);
-                }
-            }
-        }
-        return ImageBatchProcessor.determineDefaultFolderName(refs.inputFolderField().getText());
-    }
-
     // ==================== 内容区渲染 ====================
 
     private void updateContentArea(Object item) {
@@ -2331,152 +2186,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     @FXML
     private void onPreviewEffect() {
         previewLoader.load();
-    }
-
-    // ==================== 预解析（文本全量 / 图片轻量） ====================
-
-    private void startPreParse() {
-        List<PreviewItem> targets = allVisibleItems();
-        if (targets.isEmpty()) {
-            return;
-        }
-        // 提取运行期间进度条归提取任务独占（相邻修复），预解析照常跑但不动进度条
-        if (!running().get()) {
-            refs.progressBar().setVisible(true);
-            refs.progressBar().setProgress(0);
-            setProgressBarActivity(ExtractOutcomeStyles.PROGRESS_PREPARSE);
-        }
-        // 快照迭代目标，避免解析期间列表被增量导入/移除修改导致并发异常
-        preParseItems(new ArrayList<>(targets), ++parseToken);
-    }
-
-    /** 增量导入专用：仅预解析新增项目，沿用当前代次（不打断进行中的全量解析） */
-    private void startPreParseFor(List<PreviewItem> targets) {
-        preParseItems(new ArrayList<>(targets), parseToken);
-    }
-
-    private void preParseItems(List<PreviewItem> targets, int token) {
-        if (targets.isEmpty()) {
-            return;
-        }
-        Thread t = new Thread(() -> {
-            for (PreviewItem item : targets) {
-                if (token != parseToken) {
-                    return;
-                }
-                // 每条目按生效参数解析（6.5）：组参数已设置用组参数，否则继承全局；无生效参数留待参数确认后解析
-                AppConfig params = effectiveForObject(item);
-                if (params == null) {
-                    continue;
-                }
-                try {
-                    var parser = SourceParsers.forPath(item.path);
-                    MimeParser.ParsedMht parsed = parser.parse(item.path, true, () -> false, null, null);   // 来源由扩展名选
-                    if (parsed.getHtmlContent() == null) {
-                        setItemStatus(token, item, PreviewItem.Status.FAILED, I18n.get("preview.unparseable"));
-                        continue;
-                    }
-                    if (isTextMode()) {
-                        TextExtractor textExtractor = new TextExtractor(parsed);
-                        String text = textExtractor.extractText(params.isAutoFixEncoding(),
-                                params.getStartMarker(), params.getEndMarker(), params.isUseRegex());
-                        item.cachedText = text;
-                        // 标题缓存：与正式提取共用同一 extractTitle 调用（从完整 HTML 提取）
-                        if (params.isEnableTitleExtraction()
-                                && params.getTitleStartMarker() != null
-                                && !params.getTitleStartMarker().isEmpty()) {
-                            try {
-                                String title = textExtractor.extractTitle(params.getTitleStartMarker(),
-                                        params.getTitleEndMarker(), params.isTitleUseRegex());
-                                item.cachedTitle = (title != null && !title.isEmpty()) ? title : null;
-                            } catch (Exception e) {
-                                item.cachedTitle = null;
-                            }
-                        }
-                        setItemStatus(token, item,
-                                (text == null || text.trim().isEmpty()) ? PreviewItem.Status.EMPTY : PreviewItem.Status.READY,
-                                null);
-                    } else {
-                        if (params.isEnableNameExtraction()) {
-                            ImageExtractor imageExtractor = new ImageExtractor(parsed,
-                                    params.getImageNameStartMarker(), params.getImageNameEndMarker(),
-                                    null, null);
-                            String title = imageExtractor.extractTitle();
-                            item.cachedTitle = (title != null && !title.isEmpty()) ? title : null;
-                        }
-                        setItemStatus(token, item, PreviewItem.Status.READY, null);
-                    }
-                } catch (Exception e) {
-                    setItemStatus(token, item, PreviewItem.Status.FAILED, I18n.get("preview.parseFailed") + e.getMessage());
-                }
-            }
-        }, "preview-preparse");
-        t.setDaemon(true);
-        t.start();
-    }
-
-    private void setItemStatus(int token, PreviewItem item, PreviewItem.Status st, String err) {
-        if (token != parseToken) {
-            return;
-        }
-        Platform.runLater(() -> {
-            if (token != parseToken) {
-                return;
-            }
-            item.status = st;
-            item.errorMsg = err == null ? "" : err;
-            if (item.removed) {
-                // 已移除项：状态已记录（撤销恢复后可见），跳过 UI 刷新
-                return;
-            }
-            if (!listInteraction.isDragActive() && !groupCommand.isAnimating()) {
-                // 拖拽/折叠动画期间暂停列表刷新，避免打乱动画画面；动画结束后统一重算
-                refs.fileListView().refresh();
-                listInteraction.recomputeBadges();
-            }
-            Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
-            updateInfoArea(sel);
-            if (sel == item) {
-                updateContentArea(item);
-            }
-            updateProgressStatus(token);
-        });
-    }
-
-    void updateProgressStatus(int token) {
-        if (token != parseToken) {
-            return;
-        }
-        // 相邻修复（拍板 2026-09-24）：提取运行期间进度条/状态栏归提取任务独占，
-        // 预解析完成等回调一律不更新（避免覆盖提取进度显示）
-        if (running().get()) {
-            return;
-        }
-        if (previewLoader.isActive()) {
-            refs.progressBar().setVisible(true);
-            refs.progressBar().setProgress(-1);
-            return;
-        }
-        // 拍板 2026-09-24（方案A）：只统计有生效参数的条目。无参数条目由 preParseItems 跳过
-        // （留待参数确认后解析），不参与进度，否则独立参数场景下进度条会卡在中间。
-        List<PreviewItem> vis = allVisibleItems().stream()
-                .filter(i -> effectiveForObject(i) != null).toList();
-        long total = vis.size();
-        long done = vis.stream().filter(i -> i.status != PreviewItem.Status.WAITING).count();
-        if (total == 0) {
-            refs.progressBar().setVisible(false);   // 全部无生效参数：不预解析，不动状态栏文案
-            setProgressBarActivity(null);
-            return;
-        }
-        if (done >= total) {
-            refs.progressBar().setVisible(false);
-            setProgressBarActivity(null);
-        } else {
-            refs.progressBar().setVisible(true);
-            refs.progressBar().setProgress((double) done / total);
-            setProgressBarActivity(ExtractOutcomeStyles.PROGRESS_PREPARSE);
-        }
-        refs.statusLabel().setText(I18n.get("preview.parseDone") + done + "/" + total);
     }
 
     /** 进度条活动样式切换（拍板 2026-09-24）：一次只保留一个活动类；null = 默认色 */
