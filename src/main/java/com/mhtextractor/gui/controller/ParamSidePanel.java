@@ -211,6 +211,18 @@ public final class ParamSidePanel {
         return loadedTarget;
     }
 
+    /**
+     * 面板本体（<b>包级</b>验收接缝）。
+     *
+     * <p>D 起参数编辑只有侧边栏一条产品路径（模态参数窗口壳已删），
+     * 演练 / 自动化经本接缝驱动<b>同一份</b> {@link ParamFormPane} 控件
+     * （setXxx / confirmButton / cancelButton），提交结果经 {@link #show} 的 commit 回调交回
+     * —— 替代已删除的模态直驱入口。</p>
+     */
+    ParamFormPane pane() {
+        return pane;
+    }
+
     private void notifyDirtyChanged() {
         if (dirtyListener != null) {
             dirtyListener.run();

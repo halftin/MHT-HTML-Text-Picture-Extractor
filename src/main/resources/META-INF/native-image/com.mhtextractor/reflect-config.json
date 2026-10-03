@@ -271,12 +271,6 @@
   "allDeclaredConstructors": true
  },
  {
-  "name": "com.mhtextractor.gui.controller.ParamDialogController",
-  "allDeclaredFields": true,
-  "allDeclaredMethods": true,
-  "allDeclaredConstructors": true
- },
- {
   "name": "com.mhtextractor.gui.controller.ParamFormPane",
   "allDeclaredFields": true,
   "allDeclaredMethods": true,

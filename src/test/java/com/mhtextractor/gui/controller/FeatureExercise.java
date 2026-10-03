@@ -186,6 +186,28 @@ public final class FeatureExercise {
         this.view = new AcceptanceDriver.View(mc);
     }
 
+    // ===== D：参数编辑只有侧边栏一条路径（模态参数窗口壳已删） =====
+
+    /** 最近一次「确认」交回的参数快照（null = 未确认 / 取消 —— 与旧 isConfirmed() 同义）。 */
+    private AppConfig lastPanelCommit;
+
+    /**
+     * 经<b>真实侧边栏路径</b>打开参数面板并返回表单本体（替代已删除的模态直驱入口）。
+     *
+     * <p>顺序与生产 {@code MainController.openParamDialog} 同：{@code ParamSidePanel.of(锚点)}
+     * → {@code show(target, imageMode, textCache, imageCache, commit 回调)}。面板按窗口缓存，
+     * 每次 show 的目标 / 模式与上次不同且干净时会 load() 重载初值；「确认」结果由 commit 回调
+     * 存进 {@link #lastPanelCommit}，调用点随后经 view 应用到对应作用域。连续切换目标前
+     * 面板必须已提交干净，否则 show 会弹 R1.6 丢弃草稿确认卡（回调异步，演练会静默错位）。</p>
+     */
+    private ParamFormPane openSidePanel(boolean imageMode, ParamScope.Target target) {
+        lastPanelCommit = null;
+        ParamSidePanel panel = ParamSidePanel.of(statusLabel());
+        panel.show(target, imageMode, this.view.textParamsCache(), this.view.imageParamsCache(),
+                params -> lastPanelCommit = params);
+        return panel.pane();
+    }
+
     // ===== P7：控件读取全部走 view（C3b-1 起 AcceptanceDriver，同包直接访问 + 残余反射壳），不再要求 @FXML 字段放宽可见性 =====
 
     private javafx.scene.control.ListView<Object> listView() {
@@ -280,8 +302,7 @@ public void exerciseAllFeatures() throws Exception {
     // Phase 2: 文本参数弹窗演练（全部开关与字段 + TitledPane 展开/折叠）
     textModeToggle().setSelected(true);
     Thread.sleep(200);
-    ParamDialogController textDialog = ParamDialogController.showDirect(
-            null, false, this.view.textParamsCache(), this.view.imageParamsCache(), ParamScope.GLOBAL);
+    ParamFormPane textDialog = openSidePanel(false, ParamScope.GLOBAL);
     Thread.sleep(400);
     textDialog.enableLimitCheck.setSelected(true);
     textDialog.useRegexCheck.setSelected(true);
@@ -307,8 +328,8 @@ public void exerciseAllFeatures() throws Exception {
     Thread.sleep(200);
     textDialog.confirmButton.fire();
     Thread.sleep(200);
-    if (textDialog.isConfirmed()) {
-        this.view.applyConfirmedParams(false, textDialog.getResult());
+    if (lastPanelCommit != null) {
+        this.view.applyConfirmedParams(false, lastPanelCommit);
     }
     Thread.sleep(200);
 
@@ -317,8 +338,7 @@ public void exerciseAllFeatures() throws Exception {
     textModeToggle().setSelected(false);
     imageModeToggle().setSelected(true);
     Thread.sleep(200);
-    ParamDialogController imageDialog = ParamDialogController.showDirect(
-            null, true, this.view.textParamsCache(), this.view.imageParamsCache(), ParamScope.GLOBAL);
+    ParamFormPane imageDialog = openSidePanel(true, ParamScope.GLOBAL);
     Thread.sleep(400);
     imageDialog.imageNameExtractCheck.setSelected(true);
     imageDialog.imageRegionExtractCheck.setSelected(true);
@@ -341,14 +361,13 @@ public void exerciseAllFeatures() throws Exception {
     Thread.sleep(200);
     imageDialog.confirmButton.fire();
     Thread.sleep(200);
-    if (imageDialog.isConfirmed()) {
-        this.view.applyConfirmedParams(true, imageDialog.getResult());
+    if (lastPanelCommit != null) {
+        this.view.applyConfirmedParams(true, lastPanelCommit);
     }
     Thread.sleep(200);
 
     // Phase 4: 配置下拉框（弹窗内，不触发保存/加载的模态输入框）
-    ParamDialogController comboDialog = ParamDialogController.showDirect(
-            null, true, this.view.textParamsCache(), this.view.imageParamsCache(), ParamScope.GLOBAL);
+    ParamFormPane comboDialog = openSidePanel(true, ParamScope.GLOBAL);
     Thread.sleep(200);
     comboDialog.configComboBox.setValue("agent_test_config");
     comboDialog.configComboBox.getEditor().setText("agent_test_config");
@@ -500,16 +519,14 @@ public void exerciseAllFeatures() throws Exception {
                 groupNameField().setText(I18n.get("test.demoGroup"));
                 Thread.sleep(300);
                 // 组参数（文本模式）：g1 确认独立参数 → 深绿背景 + 组内重解析
-                ParamDialogController groupDialog = ParamDialogController.showDirect(
-                        null, false, this.view.textParamsCache(), this.view.imageParamsCache(),
-                        new ParamScope.GroupTarget(g1));
+                ParamFormPane groupDialog = openSidePanel(false, new ParamScope.GroupTarget(g1));
                 Thread.sleep(300);
                 groupDialog.enableTitleExtractCheck.setSelected(true);
                 groupDialog.enableTemplateCheck.setSelected(false);
                 groupDialog.confirmButton.fire();
                 Thread.sleep(300);
-                if (groupDialog.isConfirmed()) {
-                    this.view.applyGroupParams(g1, false, groupDialog.getResult());
+                if (lastPanelCommit != null) {
+                    this.view.applyGroupParams(g1, false, lastPanelCommit);
                 }
                 listView().refresh();
                 Thread.sleep(400);
@@ -707,22 +724,20 @@ public boolean runAutomatedTests() {
 
         // 文本参数弹窗：开关联动 + 确定生效
         try { textModeToggle().setSelected(true); Thread.sleep(200);
-            ParamDialogController textDialog = ParamDialogController.showDirect(
-                    null, false, this.view.textParamsCache(), this.view.imageParamsCache(), ParamScope.GLOBAL);
+            ParamFormPane textDialog = openSidePanel(false, ParamScope.GLOBAL);
             Thread.sleep(300);
             textDialog.enableLimitCheck.setSelected(true); textDialog.useRegexCheck.setSelected(true);
             textDialog.separateFilesCheck.setSelected(true); textDialog.autoFixEncodingCheck.setSelected(true);
             textDialog.addChapterNumberCheck.setSelected(true); textDialog.enableTitleExtractCheck.setSelected(true);
             textDialog.confirmButton.fire(); Thread.sleep(200);
-            if (!textDialog.isConfirmed()) { throw new IllegalStateException("参数窗口未确认"); }
-            this.view.applyConfirmedParams(false, textDialog.getResult());
+            if (lastPanelCommit == null) { throw new IllegalStateException("参数窗口未确认"); }
+            this.view.applyConfirmedParams(false, lastPanelCommit);
             out.println("[PASS] Text param dialog"); p++;
         } catch (Exception e) { out.println("[FAIL] Text param dialog: " + e.getMessage()); f++; }
 
         // 图片参数弹窗
         try { imageModeToggle().setSelected(true); Thread.sleep(200);
-            ParamDialogController imageDialog = ParamDialogController.showDirect(
-                    null, true, this.view.textParamsCache(), this.view.imageParamsCache(), ParamScope.GLOBAL);
+            ParamFormPane imageDialog = openSidePanel(true, ParamScope.GLOBAL);
             Thread.sleep(300);
             imageDialog.imageNameExtractCheck.setSelected(true);
             imageDialog.imageRegionExtractCheck.setSelected(true);
@@ -730,8 +745,8 @@ public boolean runAutomatedTests() {
             imageDialog.imageZipCheck.setSelected(true);
             imageDialog.singleOutputCheck.setSelected(true);
             imageDialog.confirmButton.fire(); Thread.sleep(200);
-            if (!imageDialog.isConfirmed()) { throw new IllegalStateException("参数窗口未确认"); }
-            this.view.applyConfirmedParams(true, imageDialog.getResult());
+            if (lastPanelCommit == null) { throw new IllegalStateException("参数窗口未确认"); }
+            this.view.applyConfirmedParams(true, lastPanelCommit);
             out.println("[PASS] Image param dialog"); p++;
         } catch (Exception e) { out.println("[FAIL] Image param dialog: " + e.getMessage()); f++; }
 
@@ -915,13 +930,12 @@ public boolean runAutomatedTests() {
             this.view.finishExpandAnim();
             if (!g.isExpanded()) { throw new IllegalStateException("展开动画未生效"); }
             Thread.sleep(300);
-            ParamDialogController groupDialog = ParamDialogController.showDirect(
-                    null, false, this.view.textParamsCache(), this.view.imageParamsCache(), new ParamScope.GroupTarget(g));
+            ParamFormPane groupDialog = openSidePanel(false, new ParamScope.GroupTarget(g));
             Thread.sleep(300);
             groupDialog.enableTitleExtractCheck.setSelected(true);
             groupDialog.confirmButton.fire(); Thread.sleep(300);
-            if (!groupDialog.isConfirmed()) { throw new IllegalStateException("组参数窗口未确认"); }
-            this.view.applyGroupParams(g, false, groupDialog.getResult()); Thread.sleep(300);
+            if (lastPanelCommit == null) { throw new IllegalStateException("组参数窗口未确认"); }
+            this.view.applyGroupParams(g, false, lastPanelCommit); Thread.sleep(300);
             if (g.getTextParamsCache() == null) { throw new IllegalStateException("组参数未写入"); }
             listView().getSelectionModel().select(g); Thread.sleep(200);
             ungroupButton().fire(); Thread.sleep(300);
@@ -973,13 +987,12 @@ public boolean runAutomatedTests() {
             List<PreviewItem> vis = this.view.allVisibleItems();
             if (vis.size() < 2) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
             PreviewItem target = vis.get(0);
-            ParamDialogController itemDialog = ParamDialogController.showDirect(
-                    null, false, this.view.textParamsCache(), this.view.imageParamsCache(),
+            ParamFormPane itemDialog = openSidePanel(false,
                     new ParamScope.ItemTarget<>(target, target.textItemParams, target.imageItemParams));
             itemDialog.enableTitleExtractCheck.setSelected(true);
             itemDialog.confirmButton.fire(); Thread.sleep(300);
-            if (!itemDialog.isConfirmed()) { throw new IllegalStateException("条目参数窗口未确认"); }
-            this.view.applyItemParams(target, false, itemDialog.getResult());
+            if (lastPanelCommit == null) { throw new IllegalStateException("条目参数窗口未确认"); }
+            this.view.applyItemParams(target, false, lastPanelCommit);
             if (target.textItemParams == null) { throw new IllegalStateException("条目参数未写入"); }
             listView().getSelectionModel().select(target); Thread.sleep(200);
             if (applyGlobalButton().isDisabled()) { throw new IllegalStateException("应用到全局按钮未启用"); }
@@ -1009,13 +1022,12 @@ public boolean runAutomatedTests() {
             this.view.updateListButtons();
             PreviewItem a = vis.get(0), b = vis.get(1);
             if (!clearParamsButton().isDisabled()) { throw new IllegalStateException("无独立参数时按钮应禁用"); }
-            ParamDialogController itemDlg = ParamDialogController.showDirect(
-                    null, false, this.view.textParamsCache(), this.view.imageParamsCache(),
+            ParamFormPane itemDlg = openSidePanel(false,
                     new ParamScope.ItemTarget<>(a, a.textItemParams, a.imageItemParams));
             itemDlg.enableTitleExtractCheck.setSelected(true);
             itemDlg.confirmButton.fire(); Thread.sleep(300);
-            if (!itemDlg.isConfirmed()) { throw new IllegalStateException("条目参数窗口未确认"); }
-            this.view.applyItemParams(a, false, itemDlg.getResult());
+            if (lastPanelCommit == null) { throw new IllegalStateException("条目参数窗口未确认"); }
+            this.view.applyItemParams(a, false, lastPanelCommit);
             if (a.textItemParams == null) { throw new IllegalStateException("条目参数未写入"); }
             listView().getSelectionModel().select(a); Thread.sleep(200);
             if (clearParamsButton().isDisabled()) { throw new IllegalStateException("选中带参数条目时按钮应启用"); }
@@ -1050,12 +1062,11 @@ public boolean runAutomatedTests() {
             List<GroupItem<PreviewItem>> groups = this.view.topLevelGroups();
             if (groups.size() != 1) { throw new IllegalStateException("建组失败: " + groups.size()); }
             GroupItem<PreviewItem> g = groups.get(0);
-            ParamDialogController groupDlg = ParamDialogController.showDirect(
-                    null, false, this.view.textParamsCache(), this.view.imageParamsCache(), new ParamScope.GroupTarget(g));
+            ParamFormPane groupDlg = openSidePanel(false, new ParamScope.GroupTarget(g));
             groupDlg.enableTitleExtractCheck.setSelected(true);
             groupDlg.confirmButton.fire(); Thread.sleep(300);
-            if (!groupDlg.isConfirmed()) { throw new IllegalStateException("组参数窗口未确认"); }
-            this.view.applyGroupParams(g, false, groupDlg.getResult());
+            if (lastPanelCommit == null) { throw new IllegalStateException("组参数窗口未确认"); }
+            this.view.applyGroupParams(g, false, lastPanelCommit);
             if (g.getTextParamsCache() == null) { throw new IllegalStateException("组参数未写入"); }
             // a（组外带参数）+ b（组内成员）混合多选 → 清 a 条目参数 + 清整组 g 参数（同组去重）
             a.setSelected(true); b.setSelected(true); this.view.updateListButtons();
@@ -1193,8 +1204,7 @@ public boolean runAutomatedTests() {
             out.println("[PASS] Set output folder"); p++;
         } catch (Exception e) { out.println("[FAIL] Output folder: " + e.getMessage()); f++; }
 
-        try { ParamDialogController comboDialog = ParamDialogController.showDirect(
-                null, false, this.view.textParamsCache(), this.view.imageParamsCache(), ParamScope.GLOBAL);
+        try { ParamFormPane comboDialog = openSidePanel(false, ParamScope.GLOBAL);
             Thread.sleep(200);
             comboDialog.configComboBox.setValue("auto_test");
             comboDialog.configComboBox.getEditor().setText("auto_test");

@@ -120,7 +120,7 @@ class GuiNotificationsIsSemanticFacadeOnlyTest {
      */
     private static final List<String> FORBIDDEN_IN_FACADE = List.of(
             "ModalPane",            // 提醒宿主：门面不得自己建
-            "install(",             // 接线：App.start() / ParamDialogController 各一次，门面不得重复
+            "install(",             // 接线：App.start()（D 起唯一调用点），门面不得重复
             "setContent(",          // showModal 的三步顺序之一
             "applyCss(",            // 让皮肤就位的必须先手
             "setPersistent(",       // 遮挡层/ESC 语义

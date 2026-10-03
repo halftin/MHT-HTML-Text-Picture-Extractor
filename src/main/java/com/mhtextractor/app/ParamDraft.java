@@ -7,8 +7,8 @@ import com.mhtextractor.config.AppConfig;
  * 因此可被无头单测直接驱动 —— 这是本步刻意的可测性切分：把「脏判定」从控件里剥出来。
  *
  * <h2>为什么放在 {@code app} 包</h2>
- * <p>「当前参数与已确认值是否不同」是<b>业务语义</b>，与怎么画无关：模态窗口
- * （{@code ParamDialogController}）与 Q6a 的非模态侧边栏必须用<b>同一份</b>判定。放在 {@code gui}
+ * <p>「当前参数与已确认值是否不同」是<b>业务语义</b>，与怎么画无关：参数表单的历任宿主
+ * （模态窗口壳与 Q6a 的非模态侧边栏）必须用<b>同一份</b>判定。放在 {@code gui}
  * 会把它绑回 JavaFX 生命周期（控件在、状态才在），于是"草稿"就没法在换容器时保住。</p>
  *
  * <h2>值语义：复用 {@link EffectiveParamsService#signatureOf(AppConfig)}</h2>

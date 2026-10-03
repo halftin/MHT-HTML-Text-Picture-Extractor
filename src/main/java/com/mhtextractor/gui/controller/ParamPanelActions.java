@@ -12,8 +12,8 @@ import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 /**
  * 参数面板的「宿主侧动作」：命名配置 CRUD（保存 / 加载 / 删除）与「高速内存模式」确认卡。
  *
- * <p><b>为什么单独一个类</b>：Q6a 起同一个 {@link ParamFormPane} 有两个宿主 ——
- * 模态窗口壳 {@link ParamDialogController} 与非模态侧边栏 {@link ParamSidePanel}。
+ * <p><b>为什么单独一个类</b>：Q6a 起同一个 {@link ParamFormPane} 有两个宿主
+ * （模态窗口壳与非模态侧边栏），D 起只剩侧边栏 {@link ParamSidePanel}。
  * 这两段动作里带日志键（{@code log.paramdialogcontroller.01..06}）与提醒卡片文案，
  * <b>属产品行为</b>：复制一份会让日志调用点凭空翻倍（本项目对 {@code log.*} 逐键对账），
  * 所以抽成共用件，两个宿主各自 {@code new ParamPanelActions(pane).install()} 一次即可，

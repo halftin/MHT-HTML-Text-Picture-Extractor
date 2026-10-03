@@ -247,8 +247,8 @@ public final class AcceptanceDriver {
         }
 
         /** 写入某模式的已确认参数缓存并刷新工作区（包级；真实手势 = 驱动 ParamSidePanel 表单
-         *  填写+提交+回调，10+ 调用点全量重写且脆弱 —— 测试已有 ParamDialogController.showDirect
-         *  直驱面，缺的只是"把确认结果应用到控制器"这最后一步）。 */
+         *  填写+提交+回调，10+ 调用点全量重写且脆弱 —— 测试已直驱同一份表单面板
+         *  （ParamSidePanel.pane()），缺的只是"把确认结果应用到控制器"这最后一步）。 */
         public void applyConfirmedParams(boolean imageMode, AppConfig params) {
             mc.applyConfirmedParams(imageMode, params);
         }

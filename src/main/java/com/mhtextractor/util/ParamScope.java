@@ -6,7 +6,7 @@ import com.mhtextractor.config.AppConfig;
  * 参数作用域纯逻辑（F5 阶段 5 / 6.5 / 8.1 / 8.5 + 条目独立参数需求）：
  * 参数目标（全局/组/条目）、弹窗初值解析、生效参数三层覆盖（组 &gt; 条目 &gt; 全局）、条目背景色三态计算。
  *
- * <p>本类不感知 GUI 状态，全部方法为纯函数，供 MainController、ParamDialogController 与单元测试共用。</p>
+ * <p>本类不感知 GUI 状态，全部方法为纯函数，供 MainController、参数表单（ParamFormPane）与单元测试共用。</p>
  */
 public final class ParamScope {
 

@@ -10,7 +10,7 @@ package com.mhtextractor.i18n;
  * <p>按<b>语义</b>归纳，不按文案条数：同一场景多处调用共用一个常量
  * （如 KEEP_AT_LEAST_ONE 覆盖 MainController 三处 showAlert）。</p>
  *
- * <p>会话 14 在 MainController / ParamDialogController 落地替换时使用本清单。</p>
+ * <p>会话 14 在 MainController / 参数面板（ParamPanelActions）落地替换时使用本清单。</p>
  */
 public enum ErrorCode {
 
@@ -42,17 +42,17 @@ public enum ErrorCode {
     PROCESS_FAILED,
     /** MainController:4604 计算缓存键/读取文件信息失败 */
     READ_FILE_INFO_FAILED,
-    /** ParamDialogController:333 保存配置失败 */
+    /** ParamPanelActions:67 保存配置失败 */
     CONFIG_SAVE_FAILED,
-    /** ParamDialogController:342 请选择要加载的配置（WARNING） */
+    /** ParamPanelActions:75 请选择要加载的配置（WARNING） */
     CONFIG_SELECT_TO_LOAD,
-    /** ParamDialogController:362 加载配置失败 */
+    /** ParamPanelActions:85 加载配置失败 */
     CONFIG_LOAD_FAILED,
-    /** ParamDialogController:370 请选择要删除的配置（WARNING） */
+    /** ParamPanelActions:93 请选择要删除的配置（WARNING） */
     CONFIG_SELECT_TO_DELETE,
-    /** ParamDialogController:373 确定删除配置确认框（占位符 {name} = 配置名） */
+    /** ParamPanelActions:96 确定删除配置确认框（占位符 {name} = 配置名） */
     CONFIG_DELETE_CONFIRM,
-    /** ParamDialogController:382 删除配置失败 */
+    /** ParamPanelActions:106 删除配置失败 */
     CONFIG_DELETE_FAILED,
     /** ImageBatchProcessor:450 高速内存模式下预加载的 MHT 文件无法提供（占位符 {reason} = 原始失败原因） */
     LOAD_MHT_FAILED;

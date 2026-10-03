@@ -28,7 +28,8 @@ import java.util.regex.Pattern;
 /**
  * 只读探针：按给定 locale/窗口尺寸加载界面，报告
  * (1) 被截断（文本宽于可用宽）的可见文本、(2) 仍含中文的界面文本、(3) 快照 PNG。
- * -Dprobe.dialog=true 时还会用 showDirect 打开「提取参数设置」窗口并同样体检。
+ * -Dprobe.dialog=true 时还会把参数表单本体（ParamFormPane，自加载 ParamDialog.fxml）
+ * 放进临时 Stage 并同样体检（D 起模态参数窗口已删，参数编辑只有侧边栏一条路径）。
  */
 public class UiProbe extends Application {
 
@@ -71,13 +72,20 @@ public class UiProbe extends Application {
 
     private void openDialog(Stage owner) {
         try {
-            Class<?> ctrlType = Class.forName("com.mhtextractor.gui.controller.ParamDialogController");
-            Class<?> scopeType = Class.forName("com.mhtextractor.util.ParamScope");
-            Class<?> targetType = Class.forName("com.mhtextractor.util.ParamScope$Target");
-            Class<?> cfgType = Class.forName("com.mhtextractor.config.AppConfig");
-            Object global = scopeType.getField("GLOBAL").get(null);
-            ctrlType.getMethod("showDirect", Window.class, boolean.class, cfgType, cfgType, targetType)
-                    .invoke(null, owner, false, null, null, global);
+            // D：模态参数窗口壳已删 —— 直接构造参数表单本体（公开、自加载 ParamDialog.fxml，
+            // 与侧边栏同一份 ParamFormPane），按旧模态窗口同尺寸放进临时 Stage 体检其内容节点树。
+            com.mhtextractor.gui.controller.ParamFormPane pane =
+                    new com.mhtextractor.gui.controller.ParamFormPane();
+            pane.load(null, null, false, com.mhtextractor.util.ParamScope.GLOBAL);
+            Stage dialog = new Stage();
+            dialog.initOwner(owner);
+            dialog.setTitle(I18n.get("dialog.title"));
+            dialog.setWidth(640);
+            dialog.setHeight(620);
+            dialog.setMinWidth(520);
+            dialog.setMinHeight(480);
+            dialog.setScene(new Scene(pane));
+            dialog.show();
         } catch (Throwable t) {
             t.printStackTrace();
             Platform.exit();

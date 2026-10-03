@@ -28,10 +28,10 @@ import java.util.function.Consumer;
 
 /**
  * 提取参数表单面板（纯 {@code Pane}，可嵌入）：承载「文本参数组 / 图片参数组」两页控件与全部表单联动，
- * 提供「载入初值 → 编辑 → 收集参数」的完整闭环，供模态窗口（本步的
- * {@link ParamDialogController}）与非模态侧边栏共用。
+ * 提供「载入初值 → 编辑 → 收集参数」的完整闭环，由非模态侧边栏 {@link ParamSidePanel} 嵌入
+ * （D 起模态参数窗口壳已删，参数编辑只有侧边栏这一条产品路径）。
  *
- * <p><b>本类不持窗口</b>：没有 {@code Stage} / {@code Scene} / {@code showAndWait}，也不直接弹提醒
+ * <p><b>本类不持窗口</b>：没有 {@code Stage} / {@code Scene} / 模态阻塞，也不直接弹提醒
  * （{@code NotificationHost}）。窗口关闭与命名配置的存取由宿主注入 ——
  * {@link #setCloseHandler(Consumer)} 与 {@link #setNamedConfigActions(Runnable, Runnable, Runnable)}；
  * 未注入时对应动作是<b>无操作</b>，不会静默改变参数（只影响按钮有没有反应，不影响参数语义）。</p>
@@ -68,10 +68,10 @@ import java.util.function.Consumer;
  *
  * <p><b>已知的宿主职责</b>（有意留在宿主，不搬进来）：</p>
  * <ul>
- *   <li>窗口开关、{@code stage.setTitle(...)}、{@code NotificationHost.install(...)} —— 见
- *       {@link ParamDialogController#openAndWait}。</li>
- *   <li>「高速内存模式」的确认提醒卡片：它需要窗口内的提醒层锚点，故监听挂在
- *       {@link ParamDialogController} 侧（<b>产品行为不变</b>：仍在勾选时弹出、取消仍回退勾选）。</li>
+ *   <li>窗口级接线（{@code NotificationHost.install(...)} 等）—— 见
+ *       {@link ParamSidePanel}（D 起唯一的宿主）与其宿主窗口。</li>
+ *   <li>「高速内存模式」的确认提醒卡片：它需要窗口内的提醒层锚点，故监听由共用的宿主动作件
+ *       {@link ParamPanelActions} 挂载（<b>产品行为不变</b>：仍在勾选时弹出、取消仍回退勾选）。</li>
  *   <li>命名配置的文件 IO 与提醒文案（{@code ConfigManager} + {@code TextInputDialog} +
  *       {@code NotificationHost}）：本类只转发三个动作，<b>不决定</b>用模态窗口问用户配置名。</li>
  * </ul>
@@ -200,7 +200,7 @@ public class ParamFormPane extends BorderPane {
     // ==================== 表单 API ====================
 
     /**
-     * 按模式与作用域载入初值（= 拆分前 {@code ParamDialogController.configure} 的对外入口）：
+     * 按模式与作用域载入初值（= 拆分前模态窗口壳 configure 的对外入口）：
      * 当前模式控件从目标初值初始化（组未设置时回退全局已确认参数，均无则用默认参数）；
      * 另一模式控件由全局缓存初始化（隐藏不可见，两组隔离互不影响）。载入后触发联动并切模式。
      */
@@ -355,7 +355,7 @@ public class ParamFormPane extends BorderPane {
         imageNameExtractCheck.selectedProperty().addListener((obs, old, newVal) -> toggleImageNameSettings());
         imageRegionExtractCheck.selectedProperty().addListener((obs, old, newVal) -> toggleImageRegionSettings());
 
-        // 注：「高速内存模式」的提醒卡片需要窗口提醒层，监听由宿主挂载（ParamDialogController）。
+        // 注：「高速内存模式」的提醒卡片需要窗口提醒层，监听由宿主动作件挂载（见 ParamPanelActions.install）。
         // 注：命名配置列表由宿主在注入数据源后刷新（本类不碰文件系统）。
 
         setupTemplateFieldEnterKeyHandler();

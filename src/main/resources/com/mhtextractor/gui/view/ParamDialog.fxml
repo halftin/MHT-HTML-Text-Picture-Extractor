@@ -5,9 +5,9 @@
 <?import javafx.scene.layout.*?>
 <?import atlantafx.base.controls.ToggleSwitch?>
 
-<!-- 根是 fx:root：根节点与控制器是同一个对象 ParamFormPane（ParamDialogController 继承它）。
+<!-- 根是 fx:root：根节点与控制器是同一个对象 ParamFormPane。
      因此这里没有 fx:controller —— 载入方用 setRoot(实例)/setController(实例) 把同一个面板同时交给两者，
-     这样"参数表单面板"本身可以被模态窗口与（Q6a 的）非模态侧边栏共用。其余属性/文案/布局逐字未变。 -->
+     这样"参数表单面板"本体可以被（Q6a 的）非模态侧边栏共用。其余属性/文案/布局逐字未变。 -->
 <fx:root type="javafx.scene.layout.BorderPane" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
          prefWidth="640" prefHeight="620">
 

@@ -16,7 +16,7 @@ import com.mhtextractor.util.ParamScope;
  *
  * <h2>括号为什么不硬编码</h2>
  * <p>「组（组名）」的括号<b>复用</b>既有的 {@code dialog.parenOpen} / {@code dialog.parenClose}
- * （窗口标题里组名的括号就是这一对，见 {@code ParamDialogController.configure}）——
+ * （标题里组名的括号就是这一对）——
  * 既不在 Java 里写死全角括号（那会让 en_US 也显示中文括号），也不新增一对同义键。
  * 括号由 Java 拼成后作为 {@code {name}} 实参交给 {@code paramTarget.group/item} 模板，
  * 于是"中文紧贴括号、英文括号前留空格"这种<b>与语言相关的排版</b>留在 bundle 里
