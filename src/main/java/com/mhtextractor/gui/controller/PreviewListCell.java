@@ -33,22 +33,22 @@ import org.kordamp.ikonli.javafx.FontIcon;
 
 @Slf4j
 /*
-  列表单元格（步骤 3 从 {@code MainController} 的 430 行内部类外迁为顶层类）。
+  列表单元格（步骤 3 从宿主控制器的 430 行内部类外迁为顶层类）。
 
   <p><b>渲染与拖拽交互</b>：组行 / 项目行两种渲染（徽标、序号、文件名、状态），
   以及顶层项目拖拽排序（静态蓝线 + 滑动补位动画）。</p>
 
   <p><b>行为零变化</b>：逻辑逐字照搬，唯一改动是把原先隐式引用外部类实例的成员显式写成
-  {@code ctl.xxx} —— 顶层类不再持有隐式外部实例。</p>
+  {@code actions.xxx} —— 顶层类不再持有隐式外部实例。</p>
 
-  <p><b>为什么仍留在 {@code gui.controller} 包</b>：它仍依赖 {@code MainController} 的包级成员
-  （拖拽编排、参数解析、绘制取色、列表/开关控件）。这些成员的可见性是
-  {@code ArchitectureTest.testSupportSurfaceDoesNotGrow} 的约束对象，搬迁未改变它们的数量。</p>
+  <p><b>为什么仍留在 {@code gui.controller} 包</b>：C2 起它不再依赖宿主控制器，只依赖窄行为接口
+  {@link MainViewActions}（渲染查询 / 选择勾选交互 / 拖拽会话）；该接口的实现
+  {@link ListInteractionController} 与本类同包。</p>
  */
 class PreviewListCell extends ListCell<Object> implements CellIndicator {
 
-    /** 宿主控制器（原先靠内部类的隐式外部实例访问，现显式持有） */
-    private final MainController ctl;
+    /** 行为面（C2：原先直接持有宿主控制器，现改为窄接口 {@link MainViewActions}） */
+    private final MainViewActions actions;
 
     private final HBox box = new HBox(6);
     private final StackPane wrapper = new StackPane();
@@ -72,8 +72,8 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
      */
     private ChangeListener selectedMirror;
 
-    PreviewListCell(MainController ctl) {
-        this.ctl = ctl;
+    PreviewListCell(MainViewActions actions) {
+        this.actions = actions;
         // 内边距与列头 HBox 一致（10px 水平），保证列对齐
         box.setPadding(ROW_PAD);
         checkBox.setMinWidth(CHECK_COL_WIDTH);
@@ -154,7 +154,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         intoOverlay.setVisible(false);
     }
 
-    @SuppressWarnings("unchecked")   // MainController 原在类级抑制；外迁后需在该方法上显式声明
+    @SuppressWarnings("unchecked")   // 原在宿主控制器类级抑制；外迁后需在该方法上显式声明
     @Override
     protected void updateItem(Object item, boolean empty) {
         super.updateItem(item, empty);
@@ -174,7 +174,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         setOnMousePressed(null);
         clearInsertIndicator();
         // 折叠/展开动画期间列表项目不可交互：所有可见单元格复选框禁用
-        checkBox.setDisable(ctl.listAnimating);
+        checkBox.setDisable(actions.isListAnimating());
         if (empty || item == null) {
             setGraphic(null);
             setTooltip(null);
@@ -186,7 +186,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         if (item instanceof GroupItem<?> g) {
             renderGroupRow((GroupItem<PreviewItem>) g);
             // 折叠点击走 cell 级 pressed 判定（箭头槽位 cell x 22-46）：released 会被
-            // checkbox 吞掉（间歇丢失），pressed 到达更可靠；判定由 ctl.onCellPressed 统一处理
+            // checkbox 吞掉（间歇丢失），pressed 到达更可靠；判定由 actions.onCellPressed 统一处理
         } else if (item instanceof PreviewItem it) {
             if (it.removed) {
                 setGraphic(null);
@@ -199,9 +199,9 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             renderItemRow(it);
         }
         // Ctrl/Shift 多选手势（路线 B 拍板）：pressed 即处理（先于 released 的折叠判定，互不冲突）
-        setOnMousePressed(e -> ctl.onCellPressed(getItem(), e));
+        setOnMousePressed(e -> actions.onCellPressed(getItem(), e));
         // 双击 toggle 勾选（拍板）：clicked 的 clickCount==2 判定
-        setOnMouseClicked(e -> ctl.onCellDoubleClicked(getItem(), e));
+        setOnMouseClicked(e -> actions.onCellDoubleClicked(getItem(), e));
     }
 
     /** 组条目行：组复选框（三态随成员联动）+ 折叠箭头 + 组名（项目数）；深蓝底、行高比文字稍高、不随参数变化 */
@@ -219,7 +219,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         checkBox.setMaxWidth(GROUP_CHECK_WIDTH);
         checkBox.setScaleX(0.75);
         checkBox.setScaleY(0.75);
-        int total = ctl.visibleMemberCount(g);
+        int total = actions.visibleMemberCount(g);
         int selected = (int) g.getMembers().stream()
                 .filter(m -> !m.removed && m.selected).count();
         SelectionState.TriState state = SelectionState.computeState(selected, total);
@@ -227,7 +227,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         checkBox.setIndeterminate(state == SelectionState.TriState.SOME);
         checkBox.setOnAction(e -> {
             e.consume();
-            ctl.onGroupCheckToggled(g);
+            actions.onGroupCheckToggled(g);
         });
         arrowIcon.setIconLiteral(g.isExpanded() ? "fas-caret-down" : "fas-caret-right");
         arrowLabel.setVisible(true);
@@ -246,7 +246,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
         statusLabel.setText("");
         // 选中态灰色高亮（拍板）：inline 深蓝会覆盖默认选中色，需按选中状态显式切换
-        boolean isSelected = ctl.refs.fileListView().getSelectionModel().getSelectedItem() == g;
+        boolean isSelected = actions.isRowSelected(g);
         setStyle(isSelected ? GROUP_ROW_SELECTED_STYLE : GROUP_ROW_STYLE);
         setTooltip(null);
         setGraphic(wrapper);
@@ -281,14 +281,14 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         boundItem = it;
         arrowLabel.setVisible(false);
         arrowLabel.setManaged(false);
-        AppConfig eff = ctl.effectiveForObject(it);
-        boolean showBadgeCol = ctl.isTextMode() && eff != null && eff.isAddChapterNumber();
+        AppConfig eff = actions.effectiveForObject(it);
+        boolean showBadgeCol = actions.isTextMode() && eff != null && eff.isAddChapterNumber();
         badgeLabel.setVisible(showBadgeCol);
         badgeLabel.setManaged(showBadgeCol);
         // 单元格可能刚渲染过组条目，恢复顺序栏可见（组行会隐藏该列，不复原则项目名左移挤占顺序栏）
         posLabel.setVisible(true);
         posLabel.setManaged(true);
-        int pos = (int) ctl.unitIndex(it) + 1;
+        int pos = (int) actions.unitIndex(it) + 1;
         posLabel.setText(pos + ".");
         nameLabel.setPadding(inGroup ? new Insets(0, 0, 0, 16) : Insets.EMPTY);
         nameLabel.setText(it.name);
@@ -306,7 +306,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             badgeLabel.setText(badge);
             badgeLabel.setStyle(BADGE_STYLE);
         }
-        boolean isSelected = ctl.refs.fileListView().getSelectionModel().getSelectedItem() == it;
+        boolean isSelected = actions.isRowSelected(it);
         if (it.extractOutcome != ExtractOutcome.NONE) {
             // 提取结果色优先级最高（拍板）：覆盖解析失败黄与参数色；选中态用混合灰的显式变体色（组行同机制）
             setStyle(rowStyle(isSelected
@@ -327,7 +327,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         boolean whiteText = ExtractOutcomeStyles.usesDarkBackdrop(it.extractOutcome)
                 || (it.extractOutcome == ExtractOutcome.NONE
                         && it.status != PreviewItem.Status.FAILED
-                        && ctl.effectiveStatus(it) == ParamScope.Status.GLOBAL);
+                        && actions.effectiveStatus(it) == ParamScope.Status.GLOBAL);
         nameLabel.setStyle((inGroup ? "-fx-font-size: 12px; -fx-font-weight: bold;" : "")
                 + (whiteText ? " -fx-text-fill: #ffffff;" : ""));
         posLabel.setStyle(whiteText ? "-fx-text-fill: #ffffff;" : "");
@@ -336,9 +336,9 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
 
     /** 8.5 条目背景色（拍板 2026-09-22 选中态切换，组行同机制）：无生效参数 = 现状色（选中用主题默认高亮）；
      *  全局参数 = 深蓝；组/条目级独立参数 = 浅蓝；选中时切换到混合灰的变体色。
-     *  来源三态判定经 {@code ctl.effectiveStatus} → {@code app.EffectiveParamsService}（唯一实现点，R8-①） */
+     *  来源三态判定经 {@code actions.effectiveStatus} → {@code app.EffectiveParamsService}（唯一实现点，R8-①） */
     private String itemParamStyle(PreviewItem it, boolean selected) {
-        String paint = switch (ctl.effectiveStatus(it)) {
+        String paint = switch (actions.effectiveStatus(it)) {
             case GLOBAL -> selected ? GLOBAL_PARAM_SELECTED_PAINT : GLOBAL_PARAM_PAINT;
             case GROUP -> selected ? GROUP_PARAM_SELECTED_PAINT : GROUP_PARAM_PAINT;
             case NONE -> null;
@@ -350,7 +350,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         setOnDragDetected(e -> {
             // 阶段 7：项目（含组内成员）与组条目均可发起拖拽；已移除项已隐藏不可拖；
             // 折叠动画期间禁止拖拽；Ctrl/Shift 修饰键按下不启动拖拽（多选手势）
-            if (ctl.listAnimating || e.isControlDown() || e.isShiftDown()
+            if (actions.isListAnimating() || e.isControlDown() || e.isShiftDown()
                     || isEmpty() || getItem() == null
                     || (getItem() instanceof PreviewItem it && it.removed)) {
                 return;
@@ -366,32 +366,32 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             if (snap != null) {
                 db.setDragView(snap, snap.getWidth() / 2, 12);
             }
-            ctl.beginDrag(this);
+            actions.beginDrag(this);
             e.consume();
         });
         setOnDragOver(e -> {
             // 外部文件/文件夹拖入：本单元格不参与落点判定，仅放行事件给 ListView 级导入处理器。
             // 必须不 consume：本 handler 末尾无条件 e.consume() 会吞掉事件，列表级处理器永远收不到。
             // 不放 acceptTransferModes —— 落点位置无语义（导入一律追加到列表末尾）。
-            if (e.getDragboard().hasFiles() && !ctl.dragActive) {
+            if (e.getDragboard().hasFiles() && !actions.isDragActive()) {
                 return;
             }
             // 不能用 getGestureSource() != this 做守卫：拖起后源单元格被 ListView 虚拟化复用
             // 去显示下一条目，光标悬停其上会被误判为"自身"而拒绝落点（向下拖拽必现）。
-            // 本应用拖拽会话以 ctl.draggedObject 为准；自身落点由 resolve（dragged == target）拦截。
-            if (e.getDragboard().hasString() && ctl.draggedObject != null) {
+            // 本应用拖拽会话以 actions.draggedObject() 为准；自身落点由 resolve（dragged == target）拦截。
+            if (e.getDragboard().hasString() && actions.draggedObject() != null) {
                 Object t = getItem();
                 if (t != null && !(t instanceof PreviewItem it && it.removed)) {
                     DropResolver.Zone zone = DropResolver.zoneFor(t, e.getY(), getHeight(), GROUP_ROW_EDGE_ZONE);
                     // 合法落点判定与落点解析共用同一规则（resolve 返回 null = 非法组合）
-                    if (DropResolver.resolve(ctl.items, ctl.draggedObject, t, zone) != null) {
+                    if (DropResolver.resolve(actions.dataOrder(), actions.draggedObject(), t, zone) != null) {
                         e.acceptTransferModes(TransferMode.MOVE);
                         if (zone == DropResolver.Zone.INTO) {
                             showIntoIndicator();
                         } else {
                             showInsertIndicator(zone == DropResolver.Zone.TOP);
                         }
-                        ctl.lastDragOverCell = this;
+                        actions.setLastDragOverCell(this);
                     }
                 }
             }
@@ -399,8 +399,8 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         });
         setOnDragExited(e -> {
             clearInsertIndicator();
-            if (ctl.lastDragOverCell == this) {
-                ctl.lastDragOverCell = null;
+            if (actions.lastDragOverCell() == this) {
+                actions.setLastDragOverCell(null);
             }
             e.consume();
         });
@@ -408,17 +408,17 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             // 外部文件/文件夹拖入：与 setOnDragOver 的放行分支对应——本单元格不消费 drop，
             // 事件冒泡到 ListView 级导入处理器（松手落在单元格上时若不放行，列表级处理器
             // 永远收不到，外部导入表现为"有高亮但拖不进来"）。
-            if (e.getDragboard().hasFiles() && !ctl.dragActive) {
+            if (e.getDragboard().hasFiles() && !actions.isDragActive()) {
                 return;
             }
             Dragboard db = e.getDragboard();
             boolean ok = false;
             clearInsertIndicator();
-            ctl.lastDragOverCell = null;
+            actions.setLastDragOverCell(null);
             try {
-                if (db.hasString() && ctl.draggedObject != null) {
+                if (db.hasString() && actions.draggedObject() != null) {
                     handleDrop(e);
-                    ok = ctl.dropHandled;
+                    ok = actions.isDropHandled();
                 }
             } catch (Exception ex) {
                 log.warn(I18n.msg("log.previewlistcell.01", ex.getMessage()), ex);
@@ -427,15 +427,15 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             e.consume();
         });
         setOnDragDone(e -> {
-            if (ctl.lastDragOverCell != null) {
-                ctl.lastDragOverCell.clearInsertIndicator();
-                ctl.lastDragOverCell = null;
+            if (actions.lastDragOverCell() != null) {
+                actions.lastDragOverCell().clearInsertIndicator();
+                actions.setLastDragOverCell(null);
             }
             // 未发生 drop 的拖拽结束（Esc / 拖出列表）→ 回到原位。
-            // 守卫不检查 ctl.draggedObject：ctl.cancelDrag 只做"重建显示序 + 复位状态"（数据序未动），
-            // ctl.draggedObject 为 null 时同样能恢复显示（防"条目消失 + 交互锁死"的卡死形态）
-            if (ctl.dragActive && !ctl.dropHandled) {
-                ctl.cancelDrag();
+            // 守卫不检查 actions.draggedObject()：actions.cancelDrag() 只做"重建显示序 + 复位状态"（数据序未动），
+            // actions.draggedObject() 为 null 时同样能恢复显示（防"条目消失 + 交互锁死"的卡死形态）
+            if (actions.isDragActive() && !actions.isDropHandled()) {
+                actions.cancelDrag();
             }
             e.consume();
         });
@@ -443,7 +443,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
 
     /**
      * 拖放执行：由 DnD 事件驱动（cell 非空时附带释放动画）。
-     * 解析/执行/撤销记录等核心逻辑见 {@link MainController#performDrop}。
+     * 解析/执行/撤销记录等核心逻辑见 {@link MainViewActions#performDrop}。
      */
     private void handleDrop(javafx.scene.input.DragEvent e) {
         Object t = getItem();
@@ -451,13 +451,13 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             return;
         }
         DropResolver.Zone zone = DropResolver.zoneFor(t, e.getY(), getHeight(), GROUP_ROW_EDGE_ZONE);
-        if (ctl.performDrop(ctl.draggedObject, t, zone, this)) {
-            ctl.dropHandled = true;
+        if (actions.performDrop(actions.draggedObject(), t, zone, this)) {
+            actions.markDropHandled();
         }
     }
 
 
-    // ===== 单元格表现层常量（步骤 3 从 MainController 迁入：原先只被本类使用） =====
+    // ===== 单元格表现层常量（步骤 3 从宿主控制器迁入：原先只被本类使用） =====
     private static final String CELL_PAD = "-fx-padding: 0;";
     private static final double BADGE_COL_WIDTH = 40;
     private static final String BADGE_STYLE =
@@ -491,7 +491,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
     // ===== 迁移常量（步骤 3：原先只被本类使用的表现层常量/样式组装） =====
     private static final Insets ROW_PAD = new Insets(7, 10, 7, 10);
 
-    /** 行背景样式组装（步骤 3 从 MainController 迁入，仅本类使用） */
+    /** 行背景样式组装（步骤 3 从宿主控制器迁入，仅本类使用） */
     private static String rowStyle(String paint) {
         return CELL_PAD + " -fx-background-color: " + paint + ";";
     }

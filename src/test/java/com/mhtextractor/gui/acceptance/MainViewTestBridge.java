@@ -229,9 +229,14 @@ public final class MainViewTestBridge {
             call(mc, "finishExpandAnim");
         }
 
+        /** C2：列表交互协作者（findCell / performDrop 已从 MainController 外迁到 ListInteractionController）。 */
+        private Object listInteraction() {
+            return field(mc, "listInteraction");
+        }
+
         /** 双击 / 单元格交互用：返回 {@code javafx.scene.Node}（{@code PreviewListCell} 非 public）。 */
         public javafx.scene.Node findCellNode(Object item) {
-            Object cell = call(mc, "findCell", Object.class, item);
+            Object cell = call(listInteraction(), "findCell", Object.class, item);
             if (cell == null) {
                 return null;
             }
@@ -250,7 +255,7 @@ public final class MainViewTestBridge {
             } catch (ClassNotFoundException e) {
                 throw new IllegalStateException("找不到 PreviewListCell（P7 收口后按名字反射）", e);
             }
-            return call(mc, "performDrop", Object.class, dragged, Object.class, target,
+            return call(listInteraction(), "performDrop", Object.class, dragged, Object.class, target,
                     DropResolver.Zone.class, zone, cellType, null);
         }
 

@@ -66,7 +66,7 @@ final class MainViewInstaller {
         mc.ctxClearParams = mc.contextMenu.clearParamsItem();
 
         // 列头全选 CheckBox 三态联动（F1）：单项勾选变化实时刷新列头与组复选框，新导入项目自动挂监听
-        refs.selectAllCheck().setOnAction(_ -> mc.onSelectAllToggled());
+        refs.selectAllCheck().setOnAction(_ -> mc.listInteraction.onSelectAllToggled());
         refs.groupNameField().textProperty().addListener((_, _, newVal) -> mc.onGroupNameEdited(newVal));
         refs.groupNameField().focusedProperty().addListener((_, _, newVal) -> {
             if (!newVal) {
@@ -81,13 +81,13 @@ final class MainViewInstaller {
                 if (mc.selectionListened.add(it)) {
                     // 会话 18 · E1.3a：原 it.selected.addListener((obs2,a,b) -> ...)
                     // 改为等价的自研 ChangeListener（同步回调；仅值变化时触发）
-                    it.addSelectedChangeListener(mc::onSelectionChanged);
+                    it.addSelectedChangeListener(mc.listInteraction::onSelectionChanged);
                 }
             }
         });
 
         refs.fileListView().getSelectionModel().selectedItemProperty()
-                .addListener((_, _, newVal) -> mc.onItemSelected(newVal));
+                .addListener((_, _, newVal) -> mc.listInteraction.onItemSelected(newVal));
 
         refs.adjustCheck().selectedProperty().addListener((_, _, newVal) -> {
             if (mc.updatingAdjustCheck) {
@@ -99,7 +99,7 @@ final class MainViewInstaller {
             }
             if (mc.isTextMode()) {
                 it.chapterEnabled = newVal;
-                mc.recomputeBadges();
+                mc.listInteraction.recomputeBadges();
             }
         });
 
@@ -111,9 +111,9 @@ final class MainViewInstaller {
             for (javafx.scene.Node n : refs.fileListView().lookupAll(".scroll-bar")) {
                 if (n instanceof ScrollBar sb && sb.getOrientation() == Orientation.VERTICAL) {
                     sb.valueProperty().addListener((_, a, b) -> {
-                        if (mc.dragActive && Math.abs(b.doubleValue() - a.doubleValue()) > 0.1) {
-                            mc.dragPositionStale = true;
-                            mc.finishLift();
+                        if (mc.listInteraction.isDragActive() && Math.abs(b.doubleValue() - a.doubleValue()) > 0.1) {
+                            mc.listInteraction.markDragPositionStale();
+                            mc.listInteraction.finishLift();
                         }
                     });
                 }

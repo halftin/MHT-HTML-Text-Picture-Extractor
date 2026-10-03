@@ -35,7 +35,6 @@ import com.mhtextractor.util.OutputUnitPlanner;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.SanitizeUtils;
 import com.mhtextractor.util.SourceKinds;
-import com.mhtextractor.util.SelectionState;
 import com.mhtextractor.util.UndoManager;
 import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
@@ -58,7 +57,6 @@ import javafx.scene.control.TextArea;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.DragEvent;
-import javafx.scene.input.MouseButton;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
@@ -173,9 +171,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * 在 {@link #initialize()} 里由命名空间构造 —— <b>缺失即抛异常并指名是哪个 {@code fx:id}</b>，
      * 不会留到运行期变成 NPE（见 {@link MainViewRefs#from(java.util.Map)}）。
      *
-     * <p>包级可见（不是 {@code private}）是<b>为生产协作</b>：{@link MainViewInstaller} 与
-     * {@link PreviewListCell} 这两个同包生产类要读同一批节点，与已有先例
-     * （{@code ws} / {@code items} / {@code dragActive} / {@code effectiveForObject}）同一口径 ——
+     * <p>包级可见（不是 {@code private}）是<b>为生产协作</b>：{@link MainViewInstaller} 这个同包
+     * 生产类要读这一批节点（C2 起 {@link PreviewListCell} 已不直接读 refs，改经
+     * {@link ListInteractionController} / {@link MainViewActions}），与已有先例
+     * （{@code ws} / {@code items} / {@code listInteraction} / {@code effectiveForObject}）同一口径 ——
      * 见 {@code ArchitectureTest} 的"标记的语义边界"：{@code /* test-support *&#47;} 标记的是
      * "<b>为测试夹具</b>放宽的封装让步"，为生产类放宽<b>不带</b>标记（本轮 0 标记保持 0）。</p>
      */
@@ -196,13 +195,14 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     // 装配序列搬到 MainViewInstaller 后，它要读写本类的一部分状态与处理器方法。这些成员是
     // private → 包级（<b>只去掉 private，语义一行未动</b>）：
     //   字段：adapter / contextMenu / ctxClearParams / selectionListened / updatingAdjustCheck /
-    //         dragPositionStale / previewCacheLifecycle
-    //   方法：createPreviewCell / setupExternalImportDnD / contextActions / onSelectAllToggled /
-    //         onGroupNameEdited / onGroupNameFocusLost / onSelectionChanged / onItemSelected /
-    //         recomputeBadges / finishLift / onModeChanged / onInputFolderChanged / saveGuiState /
-    //         restoreGuiState / updateModeUi / updateFileCount / updateListButtons /
+    //         listInteraction（C2）/ previewCacheLifecycle
+    //   方法：createPreviewCell / setupExternalImportDnD / contextActions /
+    //         onGroupNameEdited / onGroupNameFocusLost / onModeChanged / onInputFolderChanged /
+    //         saveGuiState / restoreGuiState / updateModeUi / updateFileCount / updateListButtons /
     //         onWindowCloseRequest / onSizeAlertStep
-    // 口径：这是"<b>为生产协作</b>放宽"，与 PreviewListCell 用到的 12 个成员完全同类，
+    //   （C2：onSelectAllToggled / onSelectionChanged / onItemSelected / recomputeBadges / finishLift
+    //    已随列表交互整体外迁到 ListInteractionController —— 本类不再有这些成员）
+    // 口径：这是"<b>为生产协作</b>放宽"，与 PreviewListCell 用到的成员完全同类，
     // 因此<b>不打</b>那个 test-support 标记（它的语义是"为测试夹具让步"，见测试内注释）。
     // 测试侧仍然只有一条通道：测试源集的 MainViewTestBridge（反射）。
 
@@ -269,12 +269,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 正在清空缓存（FX 线程独占）：挡住清空期间的重复关窗请求，避免开两份清理 */
     private boolean shutdownInProgress = false;
     boolean updatingAdjustCheck = false;
-    /** 全选/全不选批量写入期间的联动抑制标记（F1） */
-    private boolean updatingSelection = false;
-    private Object lastSelected = null;
-    CellIndicator lastDragOverCell = null;
-    /** Shift 区间多选的锚点行（显示序元素：PreviewItem 或 GroupItem）；无锚点时 Shift 点击忽略 */
-    private Object selectionAnchor = null;
 
     // ===== 分组状态（F5） =====
     // 组编号计数器已归一到 WorkspaceModel.nextGroupNo()（手工建组与自动建组共用，避免重号）——
@@ -288,17 +282,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 已挂勾选监听的项目集合（Identity 去重，防止重复挂接） */
     final Set<PreviewItem> selectionListened =
             Collections.newSetFromMap(new IdentityHashMap<>());
-
-    // ===== 拖拽排序状态 =====
-    /** 被拖对象（PreviewItem 或 GroupItem）：null = 无进行中的拖拽会话 */
-    Object draggedObject = null;
-    boolean dragActive = false;
-    boolean dropHandled = false;
-    @Getter
-    boolean dragPositionStale = false;
-    private ParallelTransition liftAnim = null;
-    private List<PreviewListCell> liftCells = null;
-    private List<ImageView> liftViews = null;
 
     // ==================== 统一导入会话 ====================
     /** 当前导入会话：非 null = 导入进行中（用于禁用开始提取 + 恢复判定） */
@@ -372,6 +355,43 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void setProgressBarActivity(String styleClass) { MainController.this.setProgressBarActivity(styleClass); }
         @Override public void updateProgressStatus(int token) { MainController.this.updateProgressStatus(token); }
         @Override public void refreshList() { refs.fileListView().refresh(); }
+    });
+    /**
+     * 列表交互协作者（C2）：列表选择 / 勾选联动 / 拖拽生命周期 / 章节徽标重算从本类原样外迁到
+     * {@link ListInteractionController}；宿主能力经 {@link ListInteractionController.Host} 收窄为具名方法
+     * （本匿名类逐个转发到下方保留成员）。文案键、日志键（log.maincontroller.42/43/45）、
+     * 动画时序与选择语义不变。
+     */
+    final ListInteractionController listInteraction = new ListInteractionController(new ListInteractionController.Host() {
+        @Override public ListView<Object> fileListView() { return refs.fileListView(); }
+        @Override public CheckBox selectAllCheck() { return refs.selectAllCheck(); }
+        @Override public javafx.scene.layout.Pane dragOverlay() { return refs.dragOverlay(); }
+        @Override public List<Object> dataOrder() { return items; }
+        @Override public ObservableList<Object> displayItems() { return displayItems; }
+        @Override public void hideRow(Object item) { adapter.hideRow(item); }
+        @Override public WorkspaceModel.DropResult applyResolvedDrop(DropResolver.Operation op) { return ws.applyResolvedDrop(op); }
+        @Override public void rebuildDisplay() { MainController.this.rebuildDisplay(); }
+        @Override public Object currentSelection() { return MainController.this.currentSelection(); }
+        @Override public void selectRow(Object row) { refs.fileListView().getSelectionModel().select(row); }
+        @Override public List<PreviewItem> allVisibleItems() { return MainController.this.allVisibleItems(); }
+        @Override public boolean isTextMode() { return MainController.this.isTextMode(); }
+        @Override public AppConfig effectiveForObject(Object item) { return MainController.this.effectiveForObject(item); }
+        @Override public ParamScope.Status effectiveStatus(Object item) { return MainController.this.effectiveStatus(item); }
+        @Override public int visibleMemberCount(GroupItem<PreviewItem> group) { return MainController.this.visibleMemberCount(group); }
+        @Override public long unitIndex(PreviewItem item) { return MainController.this.unitIndex(item); }
+        @Override public boolean isListAnimating() { return listAnimating; }
+        @Override public Object animLockedSelection() { return animLockedSelection; }
+        @Override public boolean isCurrentModeConfirmed() { return currentModeConfirmed(); }
+        @Override public void cancelPreviewLoad() { requestToken++; previewLoader.cancel(); }
+        @Override public void updateListButtons() { MainController.this.updateListButtons(); }
+        @Override public void updateInfoArea(Object sel) { MainController.this.updateInfoArea(sel); }
+        @Override public void updateContentArea(Object sel) { MainController.this.updateContentArea(sel); }
+        @Override public void updateAdjustCheck(Object sel) { MainController.this.updateAdjustCheck(sel); }
+        @Override public void updateProgressStatus() { MainController.this.updateProgressStatus(parseToken); }
+        @Override public void renderThumbnails(PreviewItem item) { previewRenderer.renderThumbnails(item); }
+        @Override public void startPreParseFor(List<PreviewItem> items) { MainController.this.startPreParseFor(items); }
+        @Override public void clearPreviewCache(PreviewItem item) { MainController.this.clearPreviewCache(item); }
+        @Override public void toggleGroupExpanded(GroupItem<PreviewItem> group) { MainController.this.toggleGroupExpanded(group); }
     });
     /** Q9a：FeatureExercise 按<b>字段访问</b>读它的 isDisable()，故保留同名字段指向新类里那一个 */
     MenuItem ctxClearParams;
@@ -717,13 +737,13 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 外部文件/文件夹拖入的 ListView 级处理器（接受点唯一在 ListView；单元格放行分支见 setupDnD） */
     void setupExternalImportDnD() {
         refs.fileListView().setOnDragOver(e -> {
-            if (e.getDragboard().hasFiles() && !dragActive) {
+            if (e.getDragboard().hasFiles() && !listInteraction.isDragActive()) {
                 e.acceptTransferModes(TransferMode.COPY);     // 接受点唯一：ListView
                 updateImportDropHighlight(true);
             }
         });
         refs.fileListView().setOnDragEntered(e -> {
-            if (e.getDragboard().hasFiles() && !dragActive) {
+            if (e.getDragboard().hasFiles() && !listInteraction.isDragActive()) {
                 importDragDepth++;
                 updateImportDropHighlight(true);
             }
@@ -734,7 +754,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     private void onExternalFilesDropped(DragEvent e) {
-        if (dragActive) {
+        if (listInteraction.isDragActive()) {
             e.setDropCompleted(false);
             e.consume();
             return;
@@ -917,7 +937,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 确认路径的应用本体（R7.4 唯一实现点）：组 → 组参数；条目 → 条目参数；其余 → 全局参数 */
     private void applyTargetParams(ParamScope.Target target, boolean imageMode, AppConfig params) {
         switch (target) {
-            case ParamScope.GroupTarget(GroupItem<?> g) -> applyGroupParams(asPreviewGroup(g), imageMode, params);
+            case ParamScope.GroupTarget(GroupItem<?> g) -> applyGroupParams(ListInteractionController.asPreviewGroup(g), imageMode, params);
             case ParamScope.ItemTarget<?> it -> applyItemParams((PreviewItem) it.item(), imageMode, params);
             default -> {
                 applyConfirmedParams(imageMode, params);
@@ -1022,7 +1042,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      */
     FileListContextMenu.Actions contextActions() {
         return new FileListContextMenu.Actions() {
-            @Override public boolean isDragActive() { return dragActive; }
+            @Override public boolean isDragActive() { return listInteraction.isDragActive(); }
             @Override public long visibleCount() { return MainController.this.visibleCount(); }
             @Override public void selectRow(Object target) { refs.fileListView().getSelectionModel().select(target); }
             @Override public FileListContextMenu.TargetType targetType(Object target) {
@@ -1068,21 +1088,19 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (listAnimating || target == null) {
             return;
         }
-        updatingSelection = true;
-        try {
-            if (target instanceof PreviewItem it && !it.removed) {
-                it.setSelected(true);
-            } else if (target instanceof GroupItem<?> g) {
-                for (Object m : g.getMembers()) {
-                    if (m instanceof PreviewItem pi && !pi.removed) {
-                        pi.setSelected(true);
-                    }
-                }
-            }
-        } finally {
-            updatingSelection = false;
+        List<PreviewItem> targets;
+        if (target instanceof PreviewItem it && !it.removed) {
+            targets = List.of(it);
+        } else if (target instanceof GroupItem<?> g) {
+            targets = g.getMembers().stream()
+                    .filter(m -> m instanceof PreviewItem pi && !pi.removed)
+                    .map(m -> (PreviewItem) m)
+                    .toList();
+        } else {
+            targets = List.of();
         }
-        refreshSelectionUi();
+        listInteraction.setCheckedSilently(targets, true);
+        listInteraction.refreshSelectionUi();
         updateListButtons();
     }
 
@@ -1099,15 +1117,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         } else {
             targets = allVisibleItems();
         }
-        updatingSelection = true;
-        try {
-            for (PreviewItem t : targets) {
-                t.setSelected(true);
-            }
-        } finally {
-            updatingSelection = false;
-        }
-        refreshSelectionUi();
+        listInteraction.setCheckedSilently(targets, true);
+        listInteraction.refreshSelectionUi();
         updateListButtons();
     }
 
@@ -1162,30 +1173,13 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         GroupItem<PreviewItem> group = null;
         if (target instanceof GroupItem<?> g) {
-            group = asPreviewGroup(g);
+            group = ListInteractionController.asPreviewGroup(g);
         } else if (target instanceof PreviewItem it && it.parentGroup != null) {
             group = it.parentGroup;
         }
         if (group != null) {
             removeGroupWithConfirm(group);
         }
-    }
-
-    /**
-     * 把 {@code GroupItem<?>} 安全转换为 {@code GroupItem<PreviewItem>}（unchecked 转换的唯一收口点）。
-     *
-     * <p>转换前先验证全部成员确为 {@code PreviewItem}：验证通过则转换必然安全
-     * （本控制器的建组路径只会产生 {@code GroupItem<PreviewItem>}）；验证失败立即抛异常，
-     * 避免堆污染导致的 {@code ClassCastException} 在远离根因处爆发。</p>
-     */
-    @SuppressWarnings("unchecked")
-    private static GroupItem<PreviewItem> asPreviewGroup(GroupItem<?> g) {
-        for (Object m : g.getMembers()) {
-            if (!(m instanceof PreviewItem)) {
-                throw new IllegalStateException("Non-PreviewItem member in group " + g.getName() + ": " + m);
-            }
-        }
-        return (GroupItem<PreviewItem>) g;
     }
 
     // ==================== 应用到全局（条目独立参数需求） ====================
@@ -1332,7 +1326,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     topItems.add(it);
                 }
             } else if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> grp = asPreviewGroup(g);
+                GroupItem<PreviewItem> grp = ListInteractionController.asPreviewGroup(g);
                 if ((imageMode ? grp.getImageParamsCache() : grp.getTextParamsCache()) != null) {
                     groups.add(grp);
                 }
@@ -1484,7 +1478,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         updateBadgeHeader();
         updateOutputModeLabel(sel);
         updateRenameNote(sel);
-        recomputeBadges();
+        listInteraction.recomputeBadges();
         refs.fileListView().refresh();
         updateAdjustCheck(sel);
         updateInfoArea(sel);
@@ -1714,254 +1708,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         log.info(I18n.msg("log.maincontroller.41"));
     }
 
-    // ==================== 列表渲染与拖拽排序 ====================
+    // ==================== 列表渲染 ====================
 
-    /** 列表单元格工厂（单元格实现已外迁为顶层类 PreviewListCell，见该类 javadoc） */
+    /** 列表单元格工厂（单元格实现已外迁为顶层类 PreviewListCell，C2 起经窄接口 MainViewActions 依赖列表交互协作者） */
     ListCell<Object> createPreviewCell() {
-        return new PreviewListCell(this);
-    }
-
-    /**
-     * 拖放核心执行（阶段 7 6.6 拖拽规则）：落点解析 → 数据序修改 → REORDER/MERGE_GROUPS 入撤销栈 →
-     * 释放动画 → 父组变化项目重新预解析（生效参数切换，阶段 5 机制）。
-     * cell 非空 = 真实 DnD 路径（含动画）；cell 为 null = 程序化演练路径（跳过动画）。
-     */
-    boolean performDrop(Object dragged, Object target, DropResolver.Zone zone,
-                                PreviewListCell cell) {
-        if (dragged == null || target == null || (target instanceof PreviewItem it && it.removed)) {
-            return false;
-        }
-        DropResolver.Operation op = DropResolver.resolve(items, dragged, target, zone);
-        if (op == null) {
-            return false;
-        }
-        // 立即结束提起动画（若仍在进行），快照按当前实际位置重新采集
-        if (cell != null) {
-            finishLift();
-        }
-        double gapTopY = 0;
-        if (cell != null) {
-            gapTopY = DragGeometry.cellBoundsInOverlay(cell, refs.dragOverlay()).getMinY()
-                    + (zone == DropResolver.Zone.TOP ? 0 : cell.getHeight());
-        }
-        return performResolvedDrop(dragged, op, gapTopY, cell);
-    }
-
-    /** 已解析操作的执行核心：快照 → apply → 撤销记录（均由模型负责）→ 动画/瞬时重建 → 父组变化重解析 */
-    private boolean performResolvedDrop(Object dragged, DropResolver.Operation op,
-                                        double gapTopY, PreviewListCell cell) {
-        // 快照、受影响条目、各自操作前的父组指针、合并载荷与撤销记录的压栈全在模型内完成 ——
-        // 采集顺序必须早于数据序修改，那个约束现在由 WorkspaceModel.applyResolvedDrop 独占保证。
-        WorkspaceModel.DropResult drop = ws.applyResolvedDrop(op);
-        // 注意：DropResolver 拖拽致空组（R4）在原实现与新实现下都**只改结构、不打日志**；
-        // log.workspacemodel.01 只属于 WorkspaceModel.group(...) 与 removeItems(...) 两条路径，本步未触碰。
-        // 合并语义的打点（log.maincontroller.42）文案、实参、调用次数与位置一律保持原样。
-        if (drop.changed() && drop.type() == UndoManager.RecordType.MERGE_GROUPS) {
-            log.info(I18n.msg("log.maincontroller.42", drop.merged().getName(),
-                    drop.mergeTarget().getName(), drop.mergedMembers().size(), drop.merged().getName()));
-        }
-        if (cell != null) {
-            animateReleaseInsert(dragged, gapTopY);
-        } else {
-            // 空白吸附：瞬时重建显示序并复位拖拽状态
-            rebuildDisplay();
-            finishDragReset();
-        }
-        // 项目入组/出组/组合并 → 生效参数切换：受影响项目清缓存重新预解析（阶段 5 机制）
-        List<PreviewItem> reparse = new ArrayList<>();
-        for (PreviewItem it : drop.affected()) {
-            if (!it.removed && drop.affectedBefore().get(it) != it.parentGroup) {
-                // 条目独立参数生命周期拍板：入组即清除条目级参数（组内成员只认组参数）
-                if (it.parentGroup != null) {
-                    it.textItemParams = null;
-                    it.imageItemParams = null;
-                }
-                clearPreviewCache(it);
-                reparse.add(it);
-            }
-        }
-        if (!reparse.isEmpty() && currentModeConfirmed()) {
-            startPreParseFor(reparse);
-        }
-        return true;
-    }
-
-    // ==================== 拖拽排序动画 ====================
-
-    private PreviewListCell findCell(Object item) {
-        for (javafx.scene.Node n : refs.fileListView().lookupAll(".list-cell")) {
-            if (n instanceof PreviewListCell c && c.getItem() == item) {
-                return c;
-            }
-        }
-        return null;
-    }
-
-    /** 提起：被拖条目从显示序瞬间移除（数据序不动），下方条目快照上滑 0.2s 补位 */
-    void beginDrag(PreviewListCell sourceCell) {
-        draggedObject = sourceCell.getItem();
-        dragPositionStale = false;
-        dragActive = true;
-        double dragGapTopY = DragGeometry.cellBoundsInOverlay(sourceCell, refs.dragOverlay()).getMinY();
-        double rowHeight = sourceCell.getHeight();
-
-        List<PreviewListCell> cells = new ArrayList<>();
-        List<ImageView> views = new ArrayList<>();
-        try {
-            for (javafx.scene.Node n : refs.fileListView().lookupAll(".list-cell")) {
-                if (n instanceof PreviewListCell c && c != sourceCell && c.getItem() != null
-                        && !(c.getItem() instanceof PreviewItem it && it.removed)) {
-                    Bounds b = DragGeometry.cellBoundsInOverlay(c, refs.dragOverlay());
-                    if (b.getMinY() >= dragGapTopY - 1) {
-                        cells.add(c);
-                        ImageView iv = new ImageView(c.snapshot(DragGeometry.transparentSnapParams(), null));
-                        iv.setLayoutX(b.getMinX());
-                        iv.setLayoutY(b.getMinY());
-                        refs.dragOverlay().getChildren().add(iv);
-                        views.add(iv);
-                    }
-                }
-            }
-        } catch (Exception ex) {
-            // 快照失败兜底：瞬时重排复位（cancelDrag 会清除 dragActive，防卡死）
-            log.warn(I18n.msg("log.maincontroller.43", ex.getMessage()), ex);
-            refs.dragOverlay().getChildren().removeAll(views);
-            cancelDrag();
-            return;
-        }
-
-        adapter.hideRow(draggedObject);
-        cells.forEach(c -> c.setVisible(false));
-
-        liftCells = cells;
-        liftViews = views;
-        liftAnim = new ParallelTransition();
-        for (ImageView iv : views) {
-            TranslateTransition tt = new TranslateTransition(Duration.millis(200), iv);
-            tt.setByY(-rowHeight);
-            liftAnim.getChildren().add(tt);
-        }
-        liftAnim.setOnFinished(_ -> finishLift());
-        liftAnim.play();
-    }
-
-    /** 结束提起动画：清除快照、恢复单元格显示 */
-    void finishLift() {
-        if (liftAnim != null) {
-            liftAnim.stop();
-            liftAnim = null;
-        }
-        if (liftViews != null) {
-            refs.dragOverlay().getChildren().removeAll(liftViews);
-            liftViews = null;
-        }
-        if (liftCells != null) {
-            liftCells.forEach(c -> c.setVisible(true));
-            liftCells = null;
-        }
-    }
-
-    /**
-     * 松手/取消共用：调用前数据序已就绪（松手路径由调用方调整，取消路径未动），
-     * 重建显示序让条目出现在目标行（静态快照置于最上层），下方条目快照从其底下下滑 0.2s 让位
-     */
-    private void animateReleaseInsert(Object item, double gapTopY) {
-        double rowHeight = 0;
-        List<PreviewListCell> cells = new ArrayList<>();
-        List<ImageView> views = new ArrayList<>();
-        try {
-            for (javafx.scene.Node n : refs.fileListView().lookupAll(".list-cell")) {
-                if (n instanceof PreviewListCell c && c.getItem() != null
-                        && !(c.getItem() instanceof PreviewItem it && it.removed)) {
-                    Bounds b = DragGeometry.cellBoundsInOverlay(c, refs.dragOverlay());
-                    if (b.getMinY() >= gapTopY - 1) {
-                        cells.add(c);
-                        ImageView iv = new ImageView(c.snapshot(DragGeometry.transparentSnapParams(), null));
-                        iv.setLayoutX(b.getMinX());
-                        iv.setLayoutY(b.getMinY());
-                        refs.dragOverlay().getChildren().add(iv);
-                        views.add(iv);
-                        rowHeight = c.getHeight();
-                    }
-                }
-            }
-        } catch (Exception ex) {
-            log.warn(I18n.msg("log.maincontroller.43", ex.getMessage()), ex);
-            refs.dragOverlay().getChildren().removeAll(views);
-            rebuildDisplay();
-            finishDragReset();
-            return;
-        }
-
-        if (rowHeight <= 0) {
-            rowHeight = 39;
-        }
-
-        rebuildDisplay();
-        // 组合并后被拖组已不在显示序中：仅当对象仍存在时选中（避免 ListView.select 找不到对象）
-        if (displayItems.contains(item)) {
-            refs.fileListView().getSelectionModel().select(item);
-        }
-        // 同步完成单元格绑定，保证后续快照/隐藏准确
-        refs.fileListView().layout();
-        cells.forEach(c -> c.setVisible(false));
-        PreviewListCell itemCell = findCell(item);
-        if (itemCell != null) {
-            // 条目行快照最后加入覆盖层（位于最上层、静态不动），下方快照下滑时从其底下钻过
-            try {
-                Bounds ib = DragGeometry.cellBoundsInOverlay(itemCell, refs.dragOverlay());
-                ImageView itemView = new ImageView(itemCell.snapshot(DragGeometry.transparentSnapParams(), null));
-                itemView.setLayoutX(ib.getMinX());
-                itemView.setLayoutY(ib.getMinY());
-                refs.dragOverlay().getChildren().add(itemView);
-            } catch (Exception ex) {
-                log.warn(I18n.msg("log.maincontroller.45", ex.getMessage()), ex);
-            }
-            itemCell.setVisible(false);
-        }
-
-        ParallelTransition pt = new ParallelTransition();
-        for (ImageView iv : views) {
-            TranslateTransition tt = new TranslateTransition(Duration.millis(200), iv);
-            tt.setByY(rowHeight);
-            pt.getChildren().add(tt);
-        }
-        pt.setOnFinished(_ -> {
-            refs.dragOverlay().getChildren().clear();
-            cells.forEach(c -> c.setVisible(true));
-            if (itemCell != null) {
-                itemCell.setVisible(true);
-            }
-            finishDragReset();
-        });
-        pt.play();
-    }
-
-    /** 拖拽全流程结束：复位状态并重算徽标/信息区/按钮/进度 */
-    private void finishDragReset() {
-        draggedObject = null;
-        dragActive = false;
-        dropHandled = false;
-        onOrderChanged();
-    }
-
-    /** 取消拖拽：瞬时恢复到原显示位置（数据序未动，重建显示序即可）。
-     *  曾用快照释放动画，但列表外松手的恢复路径存在间歇性丢失（条目消失），改为瞬时恢复保证可靠 */
-    void cancelDrag() {
-        finishLift();
-        rebuildDisplay();
-        finishDragReset();
-    }
-
-    private void onOrderChanged() {
-        recomputeBadges();
-        updateListButtons();
-        updateProgressStatus(parseToken);
-        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
-        updateInfoArea(sel);
-        if (!isTextMode() && sel instanceof PreviewItem it && it.cachedThumbs != null) {
-            previewRenderer.renderThumbnails(it);
-        }
+        return new PreviewListCell(listInteraction);
     }
 
     /** 顶层组列表（按数据序；供 agent 演练使用）—— 委托模型 */
@@ -1988,175 +1739,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         it.cachedThumbs = null;
         it.cachedMeta = null;
         it.status = PreviewItem.Status.WAITING;
-    }
-
-    // ==================== 列表复选框（F1） ====================
-
-    /** 列头 CheckBox 点击：当前全不选 → 全选；全选或半选 → 全不选（作用于全部有效项，含组内成员） */
-    void onSelectAllToggled() {
-        if (updatingSelection || listAnimating) {
-            return;
-        }
-        boolean target = SelectionState.computeToggleTarget(currentSelectionState());
-        updatingSelection = true;
-        for (PreviewItem item : allVisibleItems()) {
-            item.setSelected(target);
-        }
-        updatingSelection = false;
-        refreshSelectionUi();
-    }
-
-    /** 单项勾选变化 → 列头三态与组复选框实时联动 */
-    void onSelectionChanged() {
-        if (!updatingSelection) {
-            refreshSelectionUi();
-            updateListButtons();
-        }
-    }
-
-    /**
-     * 行按压的 Ctrl/Shift 多选手势（路线 B 拍板）：只作用于勾选集合，不影响单选选中项。
-     * Ctrl+点击 = 反选该行（组行 = 整组全选/全不选切换）；Shift+点击 = 从锚点按显示序
-     * 区间勾选（区间内组行 = 整组勾选）；无修饰键 = 维持现状并更新锚点。
-     * 动画锁定期间忽略；removed 项不可交互。
-     */
-    void onCellPressed(Object item, javafx.scene.input.MouseEvent e) {
-        // 拖拽状态自愈：真实拖拽期间鼠标被 DnD 手势捕获，按压事件不会到达；
-        // 此处仍有 dragActive = 上次拖拽异常残留（如列表外松手后 DONE 丢失）→ 立即恢复显示与状态，
-        // 本次按压继续正常处理（数据序未动，cancelDrag 只是重建显示序 + 复位标志）
-        if (dragActive) {
-            cancelDrag();
-        }
-        // 仅左键：右键按压不得触发折叠/多选手势（右键由 contextMenuRequested 处理）
-        if (listAnimating || item == null || e.getButton() != MouseButton.PRIMARY) {
-            return;
-        }
-        if (item instanceof GroupItem<?> g) {
-            GroupItem<PreviewItem> group = asPreviewGroup(g);
-            // 箭头槽位（cell x 22-46）：折叠/展开，优先于 Ctrl/Shift 多选手势；
-            // pressed 判定比 released 可靠（released 会被 checkbox 吞掉导致间歇丢失）
-            if (e.getX() >= 22 && e.getX() <= 46) {
-                toggleGroupExpanded(group);
-                return;
-            }
-            if (e.isControlDown() && !e.isShiftDown()) {
-                onGroupCheckToggled(group);
-                selectionAnchor = group;
-            } else if (e.isShiftDown() && selectionAnchor != null) {
-                applyShiftRange(selectionAnchor, group);
-            } else {
-                selectionAnchor = group;
-            }
-            return;
-        }
-        PreviewItem it = (PreviewItem) item;
-        if (it.removed) {
-            return;
-        }
-        if (e.isControlDown() && !e.isShiftDown()) {
-            it.setSelected(!it.selected);
-            selectionAnchor = it;
-            refreshSelectionUi();
-            updateListButtons();
-        } else if (e.isShiftDown() && selectionAnchor != null) {
-            applyShiftRange(selectionAnchor, it);
-        } else {
-            selectionAnchor = it;
-        }
-    }
-
-    /**
-     * Shift 区间勾选/反选（拍板）：按显示序取锚点到当前行区间——区间内全部已完全勾选则取消，
-     * 否则全部勾选（项目行 = 自身；组行 = 全部有效成员）。
-     */
-    private void applyShiftRange(Object anchor, Object current) {
-        List<Object> range = SelectionState.shiftSelectRange(displayItems, anchor, current);
-        if (range.isEmpty()) {
-            return;
-        }
-        boolean allChecked = SelectionState.rangeAllChecked(range, this::isRowFullyChecked);
-        boolean target = !allChecked;
-        updatingSelection = true;
-        try {
-            for (Object o : range) {
-                setRangeRow(o, target);
-            }
-        } finally {
-            updatingSelection = false;
-        }
-        selectionAnchor = current;
-        refreshSelectionUi();
-        updateListButtons();
-    }
-
-    /** 行的"完全勾选"判定：项目行 = 自身勾选；组行 = 全部有效成员已勾选 */
-    private boolean isRowFullyChecked(Object o) {
-        if (o instanceof PreviewItem it) {
-            return it.selected;
-        }
-        if (o instanceof GroupItem<?> g) {
-            for (Object m : g.getMembers()) {
-                if (!(m instanceof PreviewItem p) || (!p.removed && !p.selected)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        return true;
-    }
-
-    /** 区间内行设置勾选值：项目行设自身；组行设全部有效成员 */
-    private void setRangeRow(Object o, boolean target) {
-        if (o instanceof PreviewItem it && !it.removed) {
-            it.setSelected(target);
-        } else if (o instanceof GroupItem<?> g) {
-            for (Object m : g.getMembers()) {
-                if (m instanceof PreviewItem p && !p.removed) {
-                    p.setSelected(target);
-                }
-            }
-        }
-    }
-
-    /**
-     * 双击条目 toggle 勾选（拍板）：成员行双击文件名区域（cell x ≥ 50，checkbox 槽之外）
-     * 反选自身；组行双击组名区域（cell x ≥ 46，折叠判定区之外）整组反选。
-     * 图形交互槽位（复选框/折叠箭头）内双击不触发，避免与单击行为叠加。
-     */
-    void onCellDoubleClicked(Object item, javafx.scene.input.MouseEvent e) {
-        // 仅左键双击（CLICKED 事件在松开后生成，isPrimaryButtonDown 恒为 false，须用 getButton 判定）。
-        // 多击时间窗口内 clickCount 连续递增（快速连续双击会得到 3、4、5…），
-        // 取偶数次点击（每个双击手势的第二次按下恒为偶数）保证每次双击恰好 toggle 一次。
-        if (listAnimating || item == null || e.getClickCount() < 2 || e.getClickCount() % 2 != 0
-                || e.getButton() != MouseButton.PRIMARY) {
-            return;
-        }
-        if (item instanceof GroupItem<?> g) {
-            if (e.getX() >= 46) {
-                onGroupCheckToggled(asPreviewGroup(g));
-            }
-        } else if (item instanceof PreviewItem it && !it.removed) {
-            if (e.getX() >= 50) {
-                it.setSelected(!it.selected);
-                selectionAnchor = it;
-            }
-        }
-    }
-
-    /** 按当前列表统计三态：有效项 = removed == false 的项目（含组内成员） */
-    private SelectionState.TriState currentSelectionState() {
-        List<PreviewItem> vis = allVisibleItems();
-        int total = vis.size();
-        int selected = (int) vis.stream().filter(i -> i.selected).count();
-        return SelectionState.computeState(selected, total);
-    }
-
-    /** 列头三态刷新 + 列表单元格（含组复选框）联动刷新 */
-    private void refreshSelectionUi() {
-        SelectionState.TriState state = currentSelectionState();
-        refs.selectAllCheck().setIndeterminate(state == SelectionState.TriState.SOME);
-        refs.selectAllCheck().setSelected(state == SelectionState.TriState.ALL);
-        refs.fileListView().refresh();
     }
 
     // ==================== 显示序 / 数据序（F5） ====================
@@ -2273,8 +1855,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         updateFileCount();
         updateListButtons();
         updateStartButtonState();
-        refreshSelectionUi();
-        recomputeBadges();
+        listInteraction.refreshSelectionUi();
+        listInteraction.recomputeBadges();
         // 方案A：无条件刷新——全部无参数时 updateProgressStatus 会隐藏进度条且不动状态栏
         updateProgressStatus(parseToken);
         Object selAfter = refs.fileListView().getSelectionModel().getSelectedItem();
@@ -2294,7 +1876,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         // D7：无勾选且选中组条目 → 整组移除（组名/参数随组对象保留在撤销记录中）
         if (targets.isEmpty() && sel instanceof GroupItem<?> g) {
             // G2（拍板）：整组移除一律必弹确认（R6"仅列表将空时确认"的有意例外），按钮行与右键菜单共用
-            removeGroupWithConfirm(asPreviewGroup(g));
+            removeGroupWithConfirm(ListInteractionController.asPreviewGroup(g));
             return;
         }
         if (targets.isEmpty()) {
@@ -2385,7 +1967,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         List<String> parts = new ArrayList<>();
         for (Object o : items) {
             if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> group = asPreviewGroup(g);
+                GroupItem<PreviewItem> group = ListInteractionController.asPreviewGroup(g);
                 if (!group.isExpanded()) {
                     long cnt = group.getMembers().stream()
                             .filter(m -> !m.removed && targets.contains(m)).count();
@@ -2490,7 +2072,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                         for (Object o : items) {
                             if (o instanceof GroupItem<?> g
                                     && g.getGroupNo() == record.paramTargetGroupNo()) {
-                                GroupItem<PreviewItem> grp = asPreviewGroup(g);
+                                GroupItem<PreviewItem> grp = ListInteractionController.asPreviewGroup(g);
                                 if (im) {
                                     grp.setImageParamsCache(record.paramBefore());
                                 } else {
@@ -2598,7 +2180,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         List<PreviewItem> affected = new ArrayList<>(restoredItems);
         for (Object o : items) {
             if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> grp = asPreviewGroup(g);
+                GroupItem<PreviewItem> grp = ListInteractionController.asPreviewGroup(g);
                 if (groupBefore.containsKey(grp.getGroupNo())) {
                     if (im) grp.setImageParamsCache(groupBefore.get(grp.getGroupNo()));
                     else grp.setTextParamsCache(groupBefore.get(grp.getGroupNo()));
@@ -2660,14 +2242,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         registerGroupNameRefresh(group);
         // 拍板：合并为组后勾选集合复位，避免勾选残留导致下一批建组误合并
-        updatingSelection = true;
-        try {
-            for (PreviewItem t : targets) {
-                t.setSelected(false);
-            }
-        } finally {
-            updatingSelection = false;
-        }
+        listInteraction.setCheckedSilently(targets, false);
         refs.fileListView().getSelectionModel().select(group);
         refreshAfterListChange();
         log.info(I18n.msg("log.maincontroller.56", group.getName(), targets.size()));
@@ -2683,7 +2258,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (!(sel instanceof GroupItem<?> g)) {
             return;
         }
-        GroupItem<PreviewItem> group = asPreviewGroup(g);
+        GroupItem<PreviewItem> group = ListInteractionController.asPreviewGroup(g);
         if (items.indexOf(group) < 0) {
             return;
         }
@@ -2697,34 +2272,13 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         log.info(I18n.msg("log.maincontroller.57", group.getName(), members.size()));
     }
 
-    /** 组复选框点击（F1 2.5）：组内全选 → 全不选；全不选或半选 → 全选组内全部成员 */
-    void onGroupCheckToggled(GroupItem<PreviewItem> g) {
-        if (listAnimating) {
-            return;
-        }
-        int total = visibleMemberCount(g);
-        int selected = (int) g.getMembers().stream()
-                .filter(m -> !m.removed && m.selected).count();
-        boolean target = SelectionState.computeToggleTarget(
-                SelectionState.computeState(selected, total));
-        updatingSelection = true;
-        for (PreviewItem m : g.getMembers()) {
-            if (!m.removed) {
-                m.setSelected(target);
-            }
-        }
-        updatingSelection = false;
-        refreshSelectionUi();
-        updateListButtons();
-    }
-
     /**
      * 组条目折叠/展开（方案 B 拍板）：抽屉式滑出/滑入——内容不裁切，成员行整体平移，
      * 下方行同步补位/让位（快照动画手法与拖拽一致）。200ms ease-out。
      * 动画期间列表项目不可交互（按钮可点但无效果）；快速连点/拖拽会话中直接忽略。
      */
     private void toggleGroupExpanded(GroupItem<PreviewItem> g) {
-        if (listAnimating || dragActive) {
+        if (listAnimating || listInteraction.isDragActive()) {
             return;
         }
         if (g.isExpanded()) {
@@ -3038,67 +2592,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     // ==================== 选择与联动 ====================
 
-    void onItemSelected(Object item) {
-        // 折叠/展开动画期间列表选择锁定：选择变化回选至锁定项（选中项一致时不触发回选，防递归）
-        if (listAnimating) {
-            Object locked = animLockedSelection;
-            if (locked != null && refs.fileListView().getSelectionModel().getSelectedItem() != locked) {
-                refs.fileListView().getSelectionModel().select(locked);
-            }
-            return;
-        }
-        requestToken++;
-        previewLoader.cancel();
-        if (lastSelected instanceof PreviewItem last && last != item) {
-            // 仅当前文件的图片数据驻留内存
-            last.cachedImages = null;
-            last.cachedThumbs = null;
-        }
-        lastSelected = item;
-        // 组行选中/未选中背景样式随选择变化切换；拖拽动画期间暂停刷新避免打乱快照画面
-        if (!dragActive) {
-            refs.fileListView().refresh();
-        }
-        updateAdjustCheck(item);
-        updateInfoArea(item);
-        updateContentArea(item);
-        updateListButtons();
-    }
-
-    /** 章节徽标重算（R11）：每个组 = 独立提取单元（组内重算），未分组项目按顶层顺序；每文件章节覆盖优先 */
-    void recomputeBadges() {
-        int top = 1;
-        for (Object o : items) {
-            if (o instanceof GroupItem<?> g) {
-                int n = 1;
-                for (Object m : g.getMembers()) {
-                    if (m instanceof PreviewItem it) {
-                        n = assignBadge(it, n);
-                    }
-                }
-            } else if (o instanceof PreviewItem it) {
-                top = assignBadge(it, top);
-            }
-        }
-        refs.fileListView().refresh();
-    }
-
-    /** 单项徽标赋值：按该条目生效参数判定章节编号（组参数可独立开关）；章节覆盖关闭或未解析完成时不占编号 */
-    private int assignBadge(PreviewItem it, int n) {
-        if (it.removed) {
-            it.badge = null;
-            return n;
-        }
-        AppConfig eff = effectiveForObject(it);
-        boolean numbering = isTextMode() && eff != null && eff.isAddChapterNumber();
-        if (numbering && it.status == PreviewItem.Status.READY && it.chapterEnabled) {
-            it.badge = String.valueOf(n);
-            return n + 1;
-        }
-        it.badge = null;
-        return n;
-    }
-
     private void updateAdjustCheck(Object item) {
         // 第三行：文本模式 = 章节复选框（逐文件调整）；图片模式 = 输出结果展示（全局打包配置）；组条目两者均不显示
         boolean isItem = item instanceof PreviewItem it && !it.removed;
@@ -3145,7 +2638,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             refs.outputNameLabel().setManaged(false);
             refs.groupNameBox().setVisible(true);
             refs.groupNameBox().setManaged(true);
-            attachGroupNameEditor(asPreviewGroup(g));
+            attachGroupNameEditor(ListInteractionController.asPreviewGroup(g));
             return;
         }
         AppConfig params = effectiveForObject(item);
@@ -3238,7 +2731,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         // 组条目：预览区显示组信息与参数状态提示（6.5）
         if (item instanceof GroupItem<?> g) {
-            GroupItem<PreviewItem> group = asPreviewGroup(g);
+            GroupItem<PreviewItem> group = ListInteractionController.asPreviewGroup(g);
             String info = I18n.get("preview.groupInfo") + group.getName()
                     + I18n.get("preview.groupItemCount", "count", visibleMemberCount(group))
                     + I18n.get("preview.paramsLabel") + groupParamStatusText(group);
@@ -3437,10 +2930,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 // 已移除项：状态已记录（撤销恢复后可见），跳过 UI 刷新
                 return;
             }
-            if (!dragActive && !listAnimating) {
+            if (!listInteraction.isDragActive() && !listAnimating) {
                 // 拖拽/折叠动画期间暂停列表刷新，避免打乱动画画面；动画结束后统一重算
                 refs.fileListView().refresh();
-                recomputeBadges();
+                listInteraction.recomputeBadges();
             }
             Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
             updateInfoArea(sel);
