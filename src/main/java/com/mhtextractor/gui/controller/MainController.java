@@ -17,6 +17,7 @@ import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.core.SourceParsers;
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.TextExtractor;
+import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.HtmlSourceViewer;
 import com.mhtextractor.gui.component.LogTextArea;
 import com.mhtextractor.gui.component.NotificationHost;
@@ -24,7 +25,6 @@ import com.mhtextractor.gui.WorkspaceFxAdapter;
 import com.mhtextractor.platform.BrowserLauncher;
 import com.mhtextractor.platform.FileOpener;
 import com.mhtextractor.gui.util.JavaFxUtil;
-import com.mhtextractor.i18n.ErrorCode;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ThumbnailData;
 import com.mhtextractor.i18n.I18n;
@@ -96,7 +96,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.glavo.webp.WebPImage;
 import org.glavo.webp.WebPImageLoadOptions;
 import org.glavo.webp.javafx.WebPFXImage;
-import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -586,8 +585,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             return;
         }
         // 会话 19：无按钮等待卡片 —— 清空期间不可交互（persistent），清完自动收卡片并自动关窗，无需点确定
-        String quote = I18n.get("cache.clearingBeforeExit") + "\n" + previewCacheLifecycle.store().root();
-        NotificationHost.busy(statusLabel, I18n.get("cache.clearingTitle"), quote, FontAwesomeSolid.BROOM,
+        GuiNotifications.cacheClearing(statusLabel, previewCacheLifecycle.store().root(),
                 this::clearPreviewCache, stage::close);
     }
 
@@ -749,7 +747,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             if (!roots.isEmpty()) {
                 String msg = I18n.get("import.rootDirConfirmMsg") + String.join("\n", roots)
                         + I18n.get("import.rootDirConfirmNote");
-                NotificationHost.confirm(statusLabel, msg, FontAwesomeSolid.HDD, ok -> {
+                GuiNotifications.driveRootConfirm(statusLabel, msg, ok -> {
                     if (ok) {
                         importSessions.start(normalized.kept(), sourceDesc, fromDrag);
                     } else {
@@ -824,12 +822,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     @Override
     public void confirmQuotaReached(String message, Consumer<Boolean> answer) {
-        NotificationHost.confirm(statusLabel, message, FontAwesomeSolid.CLIPBOARD_LIST, answer);
+        GuiNotifications.quotaConfirm(statusLabel, message, answer);
     }
 
     @Override
     public void showImportFailed() {
-        NotificationHost.error(statusLabel, ErrorCode.IMPORT_FAILED.message(), FontAwesomeSolid.FILE_IMPORT);
+        GuiNotifications.importFailed(statusLabel);
     }
 
     /** 组名刷新监听注册（手动/自动建组共用；F8/RISK-11） */
@@ -1086,7 +1084,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             updateStartButtonState();   // 本次 show 可能什么都没变（同目标重开 / 取消切换）⇒ 兜底重算
         } catch (Exception e) {
             log.error(I18n.msg("log.maincontroller.16"), e);
-            NotificationHost.error(statusLabel, ErrorCode.PARAM_DIALOG_OPEN_FAILED.message(), FontAwesomeSolid.SLIDERS_H);
+            GuiNotifications.paramDialogOpenFailed(statusLabel);
         }
     }
 
@@ -1280,11 +1278,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 new ProcessBuilder("explorer.exe", dir.getAbsolutePath()).start();
             } else {
                 log.warn(I18n.msg("log.maincontroller.20", dir == null ? it.path : dir.getAbsolutePath()));
-                NotificationHost.toastWarning(statusLabel, ErrorCode.FILE_DIR_MISSING.message("path", it.path), FontAwesomeSolid.FOLDER_OPEN);
+                GuiNotifications.fileDirMissing(statusLabel, it.path);
             }
         } catch (Exception ex) {
             log.error(I18n.msg("log.maincontroller.21"), ex);
-            NotificationHost.error(statusLabel, ErrorCode.OPEN_FOLDER_FAILED.message(), FontAwesomeSolid.FOLDER_OPEN);
+            GuiNotifications.openFolderFailed(statusLabel);
         }
     }
 
@@ -1307,7 +1305,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         File f = new File(it.path);
         if (!f.exists()) {
             log.warn(I18n.msg("log.maincontroller.22", it.path));
-            NotificationHost.toastWarning(statusLabel, ErrorCode.FILE_MISSING.message("path", it.path), FontAwesomeSolid.FILE);
+            GuiNotifications.fileMissing(statusLabel, it.path);
             return;
         }
         if (!browserExporting.compareAndSet(false, true)) {
@@ -1336,15 +1334,14 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     boolean ok = BrowserLauncher.openHtml(r.htmlFile());
                     if (!ok) {
                         log.warn(I18n.msg("log.maincontroller.25", r.htmlFile()));
-                        Platform.runLater(() -> NotificationHost.toastWarning(statusLabel,
-                                ErrorCode.BROWSER_LAUNCH_FAILED.message("file", r.htmlFile()), FontAwesomeSolid.GLOBE));
+                        Platform.runLater(() -> GuiNotifications.browserLaunchFailed(statusLabel, r.htmlFile()));
                     }
                 }, "html-browser-launch");
                 launcher.setDaemon(true);
                 launcher.start();
             } catch (Exception e) {
                 log.error(I18n.msg("log.maincontroller.26", it.path), e);
-                Platform.runLater(() -> NotificationHost.error(statusLabel, ErrorCode.BROWSER_VIEW_FAILED.message(), FontAwesomeSolid.GLOBE));
+                Platform.runLater(() -> GuiNotifications.browserViewFailed(statusLabel));
             } finally {
                 browserExporting.set(false);
                 Platform.runLater(() -> statusLabel.setText(I18n.get("main.statusReady")));
@@ -1738,11 +1735,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         if (denial != null) {
             // 会话 19：ERROR 走居中错误卡片（必须确认），WARNING 走右上角 toast（非阻塞）
-            if (denial.level() == ExtractionPreconditions.Level.ERROR) {
-                NotificationHost.error(statusLabel, denial.code().message(), FontAwesomeSolid.EXCLAMATION_CIRCLE);
-            } else {
-                NotificationHost.toastWarning(statusLabel, denial.code().message(), FontAwesomeSolid.EXCLAMATION_TRIANGLE);
-            }
+            GuiNotifications.preconditionDenied(statusLabel, denial);
             return;
         }
 
@@ -1765,7 +1758,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             String msg = otherConfirmed
                     ? I18n.get("extract.confirmModeSwitch")
                     : I18n.get("extract.confirmParamsUnset");
-            NotificationHost.confirm(statusLabel, msg, FontAwesomeSolid.SLIDERS_H, ok -> {
+            GuiNotifications.paramTargetConfirm(statusLabel, msg, ok -> {
                 if (ok) {
                     startExtractionTask();
                 }
@@ -1847,7 +1840,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     + I18n.get("alert.recursionDepthContent")
                     + I18n.get("alert.recursionDepthContinue")
                     + I18n.get("alert.recursionDepthSkip");
-            Platform.runLater(() -> NotificationHost.confirm(statusLabel, msg, FontAwesomeSolid.SITEMAP, future::complete));
+            Platform.runLater(() -> GuiNotifications.recursionDepthConfirm(statusLabel, msg, future::complete));
             return future.join();
         };
     }
@@ -2541,7 +2534,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             final List<PreviewItem> pending = targets;
             String msg = I18n.get("list.removeAllConfirm", "count", pending.size())
                     + collapsedGroupHint(pending);
-            NotificationHost.confirm(statusLabel, msg, FontAwesomeSolid.TRASH_ALT, ok -> {
+            GuiNotifications.removeAllConfirm(statusLabel, msg, ok -> {
                 if (ok) {
                     removeSelected(pending);
                 }
@@ -2556,7 +2549,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         removeItems(targets);
         log.info(I18n.msg("log.maincontroller.46", targets.size(), visibleCount()));
         if (visibleCount() == 0) {
-            NotificationHost.toastInfo(statusLabel, ErrorCode.KEEP_AT_LEAST_ONE.message(), FontAwesomeSolid.LIST);
+            GuiNotifications.listEmpty(statusLabel);
         }
     }
 
@@ -2569,12 +2562,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         String msg = memberCount >= visibleCount()
                 ? I18n.get("group.removeConfirm", "count", memberCount) + collapsedHint
                 : I18n.get("group.removeConfirmSimple", "count", memberCount) + collapsedHint;
-        NotificationHost.confirm(statusLabel, msg, FontAwesomeSolid.OBJECT_GROUP, ok -> {
+        GuiNotifications.removeGroupConfirm(statusLabel, msg, ok -> {
             if (ok) {
                 removeGroup(group);
                 log.info(I18n.msg("log.maincontroller.47", group.getName(), memberCount, visibleCount()));
                 if (visibleCount() == 0) {
-                    NotificationHost.toastInfo(statusLabel, ErrorCode.KEEP_AT_LEAST_ONE.message(), FontAwesomeSolid.LIST);
+                    GuiNotifications.listEmpty(statusLabel);
                 }
             }
         });
@@ -3748,7 +3741,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             String msg = I18n.get("preview.largeFileConfirmHeader") + "\n"
                     + item.name + I18n.get("preview.largeFileConfirmBody",
                             "size", f.length() / 1024 / 1024);
-            NotificationHost.confirm(statusLabel, msg, FontAwesomeSolid.FILE_ALT, ok -> {
+            GuiNotifications.largeFileConfirm(statusLabel, msg, ok -> {
                 if (ok) {
                     onPreviewEffect(true);
                 }
@@ -3763,7 +3756,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     PreviewCacheMeta.FORMAT_VERSION);
         } catch (IOException e) {
             log.error(I18n.msg("log.maincontroller.61", item.path), e);
-            NotificationHost.error(statusLabel, ErrorCode.READ_FILE_INFO_FAILED.message(), FontAwesomeSolid.FILE_ALT);
+            GuiNotifications.readFileInfoFailed(statusLabel);
             return;
         }
 
@@ -4054,6 +4047,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                         "step", stepGiB, "actual", String.format("%.1f", actualGiB),
                         "dir", previewCacheLifecycle.store().root())
                 + I18n.get("cache.sizeAlertNote");
-        NotificationHost.toastWarning(statusLabel, message, FontAwesomeSolid.HDD);
+        GuiNotifications.cacheStepWarning(statusLabel, message);
     }
 }
