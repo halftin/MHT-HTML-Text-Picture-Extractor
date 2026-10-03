@@ -20,6 +20,7 @@ REM  用法：
 REM    build-native.cmd                 完整构建
 REM    build-native.cmd --prepare-only  只做 JVM 侧准备（不调用 native-image）
 REM    build-native.cmd --skip-package  跳过 mvn package
+REM    build-native.cmd --skip-card-smoke  跳过 native 卡片渲染冒烟（post-build 验证）
 REM    build-native.cmd --no-editbin    保留控制台子系统（便于看启动期崩溃）
 REM
 REM  环境变量覆盖：BUILD_JAVA_HOME / GRAALVM_HOME / MAVEN_CMD / OUTPUT_DIR /
@@ -37,11 +38,13 @@ set "TMPCMD=%TEMP%\mht-native-step.cmd"
 set "SKIP_PACKAGE="
 set "NO_EDITBIN="
 set "PREPARE_ONLY="
+set "SKIP_CARD_SMOKE="
 :parse
 if "%~1"=="" goto parsed
 if /i "%~1"=="--skip-package" set "SKIP_PACKAGE=1"
 if /i "%~1"=="--no-editbin"   set "NO_EDITBIN=1"
 if /i "%~1"=="--prepare-only" set "PREPARE_ONLY=1"
+if /i "%~1"=="--skip-card-smoke" set "SKIP_CARD_SMOKE=1"
 shift
 goto parse
 :parsed
@@ -317,6 +320,34 @@ call :end 0
 set "STATUS=OK"
 set "RC=0"
 
+REM ---------- post-build smoke: can the native image actually PAINT a reminder card? ----------
+REM   Background (2026-10-03 incident): when the native image lacks the JavaFX effect-peer
+REM   reflection registrations (PrMergePeer / PPSLinearConvolveShadowPeer), EVERY centered
+REM   reminder card fails to paint while its ModalPane keeps blocking input -> "no card +
+REM   black window + cannot interact + cannot exit". The JVM is unaffected, so unit tests,
+REM   GUI automation and the UI probes cannot catch it. This step runs the real assembly in
+REM   the native image and asserts a confirm card is actually laid out.
+REM   Skip with --skip-card-smoke or NATIVE_CARD_SMOKE=0.
+if /i "%SKIP_CARD_SMOKE%"=="1" goto :card_smoke_skipped
+if /i "%NATIVE_CARD_SMOKE%"=="0" goto :card_smoke_skipped
+call :begin "SMOKE" "native card render smoke"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\tools\native\native-card-smoke.ps1" -Repo "%REPO%" -OutDir "%REPO%\.claude-work\native-card-smoke" -JavaHome "%BUILD_JAVA_HOME%" -NativeImage "%NATIVE_IMAGE%" -PrismCommonLib "%PRISM_COMMON_LIB%" >> "%LOG%" 2>&1
+if errorlevel 1 (
+    call :end 1
+    call :say "      [ERROR] native card smoke FAILED - the native image cannot paint a reminder card."
+    call :say "              Usual cause: missing JavaFX effect-peer reflection metadata."
+    call :say "              See tools/native/native-card-smoke.ps1 + tools/probes/AppCardProbe.java."
+    set "RC=1"
+    set "FAILSTEP=SMOKE native card render smoke"
+    set "STATUS=FAILED"
+    goto :done
+)
+call :end 0
+call :say "      OK: native image paints a centered confirm card"
+goto :card_smoke_done
+:card_smoke_skipped
+call :say "      [SKIP] native card smoke skipped"
+:card_smoke_done
 :done
 REM ---------- 失败现场（若有） ----------
 if not "%STATUS%"=="FAILED" goto :report
