@@ -143,8 +143,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p><b>与 MainController 的耦合（P7 起）</b>：本类<b>不再</b>依赖 {@code MainController} 的包级成员。
  * P7 之前它靠 44 处 {@code test-support} 标记的包级成员（可变状态 + 查询 + 内部方法）驱动 GUI；
  * 那些标记已全部摘除（{@code ArchitectureTest.testSupportSurfaceDoesNotGrow} 的上限随之归零），
- * 本类改为经 <b>{@link com.mhtextractor.gui.acceptance.MainViewTestBridge}</b>（测试源集的反射桥）
- * 访问同一批成员 —— 断言一条没少，生产类的封装全部收回。</p>
+ * 本类改为经 <b>{@link AcceptanceDriver}</b>（测试源集驱动，与本类同包；C3b-1 起 A/B 类
+ * 直接访问/派生，C/D 残余反射壳）访问同一批成员 —— 断言一条没少，生产类的封装全部收回。</p>
  *
  * <p><b>入口</b>：测试源集的 {@code com.mhtextractor.gui.acceptance.TestMain} 的
  * {@code -Dagent.exit.delay}（演练，调 {@code exerciseAllFeatures()}）与
@@ -176,17 +176,17 @@ public final class FeatureExercise {
      *
      * <p>此前这些成员为"同包测试夹具"从 {@code private} 放宽成包级（共 44 处
      * {@code /* test-support *&#47;} 标记）。P7 把可见性全部收回，测试侧改为经
-     * {@link com.mhtextractor.gui.acceptance.MainViewTestBridge} 反射访问 ——
+     * {@link AcceptanceDriver} 访问（C3b-1：同包 package-private 直接访问 + 残余反射壳）——
      * 生产控制器不再为测试开放状态面，而 31 项 UI 断言覆盖的行为一字未改。</p>
      */
-    private final com.mhtextractor.gui.acceptance.MainViewTestBridge.View view;
+    private final AcceptanceDriver.View view;
 
     public FeatureExercise(MainController mc) {
         this.mc = mc;
-        this.view = new com.mhtextractor.gui.acceptance.MainViewTestBridge.View(mc);
+        this.view = new AcceptanceDriver.View(mc);
     }
 
-    // ===== P7：控件读取全部走 view（反射桥），不再要求 @FXML 字段放宽可见性 =====
+    // ===== P7：控件读取全部走 view（C3b-1 起 AcceptanceDriver，同包直接访问 + 残余反射壳），不再要求 @FXML 字段放宽可见性 =====
 
     private javafx.scene.control.ListView<Object> listView() {
         return view.fileListView();
