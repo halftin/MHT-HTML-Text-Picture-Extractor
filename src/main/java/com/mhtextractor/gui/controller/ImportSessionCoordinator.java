@@ -40,7 +40,7 @@ import java.util.function.Consumer;
  * <ul>
  *   <li>{@link #start} 在 FX 线程调用（FXML 事件 / {@code Platform.runLater} 回调）；</li>
  *   <li>扫描循环跑在名为 {@code mht-import-scan} 的守护线程上；</li>
- *   <li>模型命令、列表刷新、收尾一律经 {@code Platform.runLater} 回到 FX 线程；</li>
+ *   <li>模型命令、列表刷新、收尾一律经<b>注入的派发器</b>（生产 = {@code Platform.runLater}）回到 FX 线程；</li>
  *   <li>配额确认的<b>等待方是导入后台线程</b>（{@code future.join()}），不阻塞 FX 线程 —— 既有形态，别改。</li>
  * </ul>
  */
@@ -95,6 +95,11 @@ public final class ImportSessionCoordinator {
 
     private final WorkspaceModel ws;
     private final ImportUi ui;
+    /** FX 派发器（生产 = {@code Platform::runLater}；测试注入延迟派发器，把任务放进队列由测试线程按序 drain） */
+    private final Consumer<Runnable> dispatcher;
+    /** 每轮配额（生产 = {@link MhtImportPlanner} 默认常量；测试注入小配额，用<b>真实扫描器</b>复现"每轮打满"） */
+    private final int maxGroupsPerRound;
+    private final int maxFilesPerRound;
     private final WorkspaceImportService service = new WorkspaceImportService();
 
     /**
@@ -106,9 +111,29 @@ public final class ImportSessionCoordinator {
      */
     private volatile WorkspaceImportService.Session active;
 
+    /**
+     * 公开构造（生产路径，签名不变）：FX 派发走 {@code Platform.runLater}，配额用
+     * {@link MhtImportPlanner} 的默认常量（与迁移前控制器私有常量同源）。
+     */
     public ImportSessionCoordinator(WorkspaceModel ws, ImportUi ui) {
+        this(ws, ui, Platform::runLater, MhtImportPlanner.DEFAULT_MAX_GROUPS, MhtImportPlanner.DEFAULT_MAX_FILES);
+    }
+
+    /**
+     * 包级构造（可测试性注入缝 —— 属线程边界设计，不是测试让步）：派发器与配额均可注入。
+     *
+     * <p>测试注入"延迟派发器"（任务进队列、由测试线程按序 drain）模拟 FX 线程被占用，从而
+     * <b>确定性</b>复现"配额卡在 apply 落地前构造"的时序竞态；注入小配额则让真实扫描器每轮打满配额
+     * （不必造 200 个组的目录树）。注入的配额必须与调用方打印的配额数一致
+     * （见 {@link WorkspaceImportService#begin(List, String, boolean, int, int)}）。</p>
+     */
+    ImportSessionCoordinator(WorkspaceModel ws, ImportUi ui, Consumer<Runnable> dispatcher,
+                             int maxGroupsPerRound, int maxFilesPerRound) {
         this.ws = ws;
         this.ui = ui;
+        this.dispatcher = dispatcher;
+        this.maxGroupsPerRound = maxGroupsPerRound;
+        this.maxFilesPerRound = maxFilesPerRound;
     }
 
     /** 地址规范化（规则在 app 层；日志由调用方按 {@link WorkspaceImportService.NormalizeResult} 逐条产出） */
@@ -123,7 +148,8 @@ public final class ImportSessionCoordinator {
      * {@code log.maincontroller.04}、BC-8 盘符根确认。</p>
      */
     public void start(List<String> normalized, String sourceDesc, boolean fromDrag) {
-        WorkspaceImportService.Session session = service.begin(normalized, sourceDesc, fromDrag);
+        WorkspaceImportService.Session session =
+                service.begin(normalized, sourceDesc, fromDrag, maxGroupsPerRound, maxFilesPerRound);
         active = session;
         ui.onImportStarted(session.addresses(), sourceDesc, fromDrag);
 
@@ -180,6 +206,22 @@ public final class ImportSessionCoordinator {
     }
 
     /**
+     * 派发形态的一轮落地（A2）：执行 {@link #apply} 后，<b>无论成败</b>都在 FX 侧完成
+     * {@code applied}（载荷 = 落地后的配额计数快照）。扫描线程在它上面 join()，
+     * 因此配额卡永远读到"含本轮"的计数；apply 失败时快照反映失败时的会话状态
+     * （异常本身仍向 FX 线程的派发方传播，与迁移前语义一致）。
+     */
+    private void applyRound(WorkspaceImportService.Session session, MhtImportPlanner.Plan plan,
+                            CompletableFuture<QuotaCounts> applied) {
+        try {
+            apply(session, plan);
+        } finally {
+            applied.complete(new QuotaCounts(
+                    service.accumulated(session).size(), service.groupCount(session)));
+        }
+    }
+
+    /**
      * 建组：组名计算（规则在 app 层）→ 注册名字刷新监听 → 追加顶层（BC-4 默认展开）。
      *
      * <p><b>为什么本方法留在 GUI 层</b>：它混合了三件 GUI 事 —— 名字刷新监听注册
@@ -215,16 +257,19 @@ public final class ImportSessionCoordinator {
         try {
             while (true) {
                 MhtImportPlanner.Plan round = service.nextRound(session);
-                Platform.runLater(() -> apply(session, round));
+                // A2：显式完成信号串起"apply 落地 → 读计数"的先后。不得用"先投递 Platform.runLater"
+                // 当隐式同步契约（FX 线程被占用时 apply 可能迟迟不落地，配额卡就会读到缺了本轮的计数）。
+                CompletableFuture<QuotaCounts> applied = new CompletableFuture<>();
+                dispatcher.accept(() -> applyRound(session, round, applied));
+                QuotaCounts counts = applied.join();   // 等待方仍是后台扫描线程，不阻塞 FX
                 if (!round.hasMore()) {
                     break;
                 }
                 if (!round.quotaHit()) {
                     continue;                     // 防御：无配额命中却还有剩余
                 }
-                log.info(I18n.msg("log.maincontroller.10",
-                        MhtImportPlanner.DEFAULT_MAX_GROUPS, MhtImportPlanner.DEFAULT_MAX_FILES));
-                boolean go = awaitQuotaConfirm(session);
+                log.info(I18n.msg("log.maincontroller.10", maxGroupsPerRound, maxFilesPerRound));
+                boolean go = awaitQuotaConfirm(counts);
                 if (!go) {
                     log.info(I18n.msg("log.maincontroller.11"));
                     break;
@@ -232,23 +277,33 @@ public final class ImportSessionCoordinator {
             }
         } catch (Exception ex) {
             log.error(I18n.msg("log.maincontroller.12"), ex);
-            Platform.runLater(ui::showImportFailed);
+            dispatcher.accept(ui::showImportFailed);
         } finally {
-            Platform.runLater(this::finishImport);   // 唯一恢复点
+            dispatcher.accept(this::finishImport);   // 唯一恢复点
         }
     }
 
+    /**
+     * 配额计数<b>不可变快照</b>（A2）：在 apply 落地之后（finally 里）由 FX 侧构造。
+     *
+     * <p>{@link #awaitQuotaConfirm} 只用本快照拼配额卡文案，扫描线程<b>不再读取会话</b>的
+     * 可变累计字段 —— 会话累计只有一个写方（FX 侧的 apply），本快照把"读什么"钉死在
+     * 落地完成那一刻，避免出现第二份可变计数器（也免去两个线程对同一份累计的时序竞态）。</p>
+     */
+    record QuotaCounts(int files, int groups) {
+    }
+
     /** 后台线程阻塞等待 FX 线程上的配额确认（会话 19：窗口内居中确认卡片；等待方是导入后台线程，不冻结界面） */
-    private boolean awaitQuotaConfirm(WorkspaceImportService.Session session) {
+    private boolean awaitQuotaConfirm(QuotaCounts counts) {
         CompletableFuture<Boolean> future = new CompletableFuture<>();
         String msg = I18n.get("import.quotaReached",
-                        "groups", MhtImportPlanner.DEFAULT_MAX_GROUPS,
-                        "files", MhtImportPlanner.DEFAULT_MAX_FILES)
+                        "groups", maxGroupsPerRound,
+                        "files", maxFilesPerRound)
                 + I18n.get("import.quotaContinue")
                 + I18n.get("import.quotaStop",
-                        "files", service.accumulated(session).size(),
-                        "groups", service.groupCount(session));
-        Platform.runLater(() -> ui.confirmQuotaReached(msg, future::complete));
+                        "files", counts.files(),
+                        "groups", counts.groups());
+        dispatcher.accept(() -> ui.confirmQuotaReached(msg, future::complete));
         return future.join();
     }
 
@@ -283,7 +338,7 @@ public final class ImportSessionCoordinator {
     private WorkspaceImportService.Session ensureSession() {
         WorkspaceImportService.Session session = active;
         if (session == null) {
-            session = service.begin(List.of(), "", false);
+            session = service.begin(List.of(), "", false, maxGroupsPerRound, maxFilesPerRound);
             active = session;
         }
         return session;
