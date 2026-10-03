@@ -69,7 +69,8 @@ public record PreviewCacheStore(Path root) {
             return null;
         }
         PreviewCacheKey key = new PreviewCacheKey(meta.source().absolutePath(), meta.source().size(),
-                meta.source().mtime(), meta.paramFingerprint(), meta.formatVersion());
+                meta.source().mtime(), meta.paramFingerprint(), meta.source().sidecarFingerprint(),
+                meta.formatVersion());
         return dirFor(key).resolve(meta.images().get(index).file());
     }
 
@@ -181,7 +182,8 @@ public record PreviewCacheStore(Path root) {
                 }
                 PreviewCacheMeta meta = MAPPER.readValue(dir.resolve(META_FILE_NAME).toFile(), PreviewCacheMeta.class);
                 keys.add(new PreviewCacheKey(meta.source().absolutePath(), meta.source().size(),
-                        meta.source().mtime(), meta.paramFingerprint(), meta.formatVersion()));
+                        meta.source().mtime(), meta.paramFingerprint(),
+                        meta.source().sidecarFingerprint(), meta.formatVersion()));
             }
         }
         return keys;

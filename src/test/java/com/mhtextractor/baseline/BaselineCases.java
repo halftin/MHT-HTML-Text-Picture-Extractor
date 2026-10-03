@@ -4,6 +4,7 @@ import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.processor.TextBatchProcessor;
+import com.mhtextractor.util.SourceKinds;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -181,6 +182,32 @@ public final class BaselineCases {
                 List.of("裸 UTF-8 中文文件名（未用 RFC 2047）由 Jakarta Mail 按 ISO-8859-1 读头 → 预期乱码；"
                         + "基线锁定该既有行为，**不作为期望值**")));
 
+        // ---------- Q11 / R6.7：HTML 与 HTML+侧车（浏览器"另存为"产物） ----------
+        // ⚠️ 夹具写的是**目录**（如 html/sidecar）：HTML 与侧车必须保持"同目录同名"的相对关系，
+        // 单拷 .html 会把 page_files/ 丢掉（那样断言的就只是"纯 HTML 无图"，与本用例的意图相反）。
+        AppConfig h1 = new AppConfig();
+        h1.setAddChapterNumber(true);
+        out.add(new Case("html-plain", List.of("html/plain/plain.html", "simple-text.mht"),
+                h1, false, true, "纯 HTML（无侧车）与 .mht 同批：验证\"混合来源同一条链路\" + 章节序号",
+                List.of()));
+
+        AppConfig h2 = imageConfig();
+        out.add(new Case("html-sidecar-relative", List.of("html/sidecar"),
+                h2, true, false,
+                "HTML+侧车多图：相对路径图片（含中文名）+ Data URI；缺失文件 / ../ 逃逸 / 绝对 URL / "
+                        + "侧车子目录一律跳过（见 HtmlFolderParser 的支持矩阵）",
+                List.of()));
+
+        AppConfig h3 = imageConfig();
+        out.add(new Case("html-same-dir", List.of("html/same-dir"),
+                h3, true, true, "图片与 HTML 同目录（无侧车）的扁平形态",
+                List.of()));
+
+        AppConfig h4 = imageConfig();
+        out.add(new Case("html-cn-filename", List.of("html/中文页面"),
+                h4, true, false, "HTML 名、侧车目录名、图片名全含中文的路径口径",
+                List.of()));
+
         return out;
     }
 
@@ -219,9 +246,21 @@ public final class BaselineCases {
                         + "（运行 node .claude-work/gen-fixtures.js 生成）");
             }
             Path dst = input.resolve(fx);
-            Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
-            Files.setLastModifiedTime(dst, FileTime.fromMillis(FIXED_MTIME_EPOCH_MILLI));
-            files.add(BatchProcessor.toMhtFileInfo(dst.toFile()));
+            if (Files.isDirectory(src)) {
+                // R6.7：HTML+侧车夹具是**目录树**（page.html + page_files/*.png），
+                // 整个目录原样复制，保持"HTML 与侧车同目录同名"的相对关系；
+                // 复制后统一 mtime，保证基线确定性自检（同例跑两遍必须逐字节一致）。
+                List<Path> sources = copyTree(src, dst);
+                setFixedMtime(dst);
+                for (Path s : sources) {
+                    files.add(BatchProcessor.toMhtFileInfo(s.toFile()));
+                }
+            } else {
+                Files.createDirectories(dst.getParent());
+                Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
+                Files.setLastModifiedTime(dst, FileTime.fromMillis(FIXED_MTIME_EPOCH_MILLI));
+                files.add(BatchProcessor.toMhtFileInfo(dst.toFile()));
+            }
         }
 
         // 产物与统计来自**同一次**运行
@@ -250,6 +289,49 @@ public final class BaselineCases {
                 stats.getFailCount(), stats.getSkipCount(), stats.getWarnCount(), outcomes);
 
         return new RunResult(sessionOut, products, summary, contentDigests);
+    }
+
+    /**
+     * 递归复制夹具目录树（保留子目录结构；不跟随符号链接）。
+     *
+     * <p>⚠️ 必须先 {@code toList()} 把路径全部收集完再开始复制：{@code Files.walk} 是<b>惰性</b>的，
+     * 而复制过程会在目标树下 {@code createDirectories}；若遍历仍在进行，目标目录一旦落在源树下
+     * 就会被"越走越深"式地卷进来（本步实测过一次，表现为复制出一堆重复层级）。</p>
+     *
+     * @return 复制后目录内的候选来源文件（扩展名判定走 {@link SourceKinds}）
+     */
+    private static List<Path> copyTree(Path src, Path dst) throws IOException {
+        List<Path> paths;
+        try (var walk = Files.walk(src)) {
+            paths = walk.toList();
+        }
+        List<Path> candidates = new ArrayList<>();
+        for (Path p : paths) {
+            Path target = dst.resolve(src.relativize(p).toString());
+            if (Files.isDirectory(p)) {
+                Files.createDirectories(target);
+            } else {
+                Files.createDirectories(target.getParent());
+                Files.copy(p, target, StandardCopyOption.REPLACE_EXISTING);
+                if (SourceKinds.isImportable(target.getFileName().toString())) {
+                    candidates.add(target);
+                }
+            }
+        }
+        candidates.sort(Comparator.comparing(Path::toString));
+        return candidates;
+    }
+
+    /**
+     * 整棵子树统一锚点 mtime（含目录），消除"复制顺序不同导致 mtime 不同"的基线噪声 */
+    private static void setFixedMtime(Path root) throws IOException {
+        List<Path> paths;
+        try (var walk = Files.walk(root)) {
+            paths = walk.toList();
+        }
+        for (Path p : paths) {
+            Files.setLastModifiedTime(p, FileTime.fromMillis(FIXED_MTIME_EPOCH_MILLI));
+        }
     }
 
     /**

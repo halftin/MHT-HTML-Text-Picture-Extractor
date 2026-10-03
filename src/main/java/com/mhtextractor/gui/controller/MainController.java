@@ -9,10 +9,12 @@ import com.mhtextractor.cache.PreviewCacheKey;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.cache.PreviewCacheStore;
+import com.mhtextractor.cache.SourceFingerprint;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
 import com.mhtextractor.core.MimeParser;
+import com.mhtextractor.core.SourceParsers;
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.TextExtractor;
 import com.mhtextractor.gui.component.HtmlSourceViewer;
@@ -41,6 +43,7 @@ import com.mhtextractor.util.MhtImportPlanner;
 import com.mhtextractor.util.OutputUnitPlanner;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.SanitizeUtils;
+import com.mhtextractor.util.SourceKinds;
 import com.mhtextractor.util.SelectionState;
 import com.mhtextractor.util.ThumbnailPixels;
 import com.mhtextractor.util.UndoManager;
@@ -1314,7 +1317,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         statusLabel.setText(I18n.get("browser.generatingPage"));
         Thread t = new Thread(() -> {
             try {
-                MimeParser.ParsedMht parsed = new MimeParser().parse(it.path, false, () -> false, null, null);
+                MimeParser.ParsedMht parsed = SourceParsers.forPath(it.path).parse(it.path, false, () -> false, null, null);
                 if (parsed.getHtmlContent() == null) {
                     throw new IllegalStateException(I18n.get("browser.exportUnparseable"));
                 }
@@ -3409,7 +3412,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         outputNameLabel.setManaged(true);
         if (isTextMode()) {
             if (params.isSeparateFiles()) {
-                outputNameLabel.setText(I18n.get("preview.outputFilePrefix") + stripMhtExt(it.name) + ".txt");
+                outputNameLabel.setText(I18n.get("preview.outputFilePrefix") + SourceKinds.stripKnownExtension(it.name) + ".txt");
             } else {
                 String inputDirName = new File(inputFolderField.getText()).getName();
                 if (inputDirName.isEmpty()) {
@@ -3438,7 +3441,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 return SanitizeUtils.sanitize(item.cachedTitle);
             }
         }
-        return stripMhtExt(item.name);
+        return SourceKinds.stripKnownExtension(item.name);
     }
 
     private String mergedFolderName(PreviewItem item) {
@@ -3455,10 +3458,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             }
         }
         return ImageBatchProcessor.determineDefaultFolderName(inputFolderField.getText());
-    }
-
-    private String stripMhtExt(String name) {
-        return name.replaceAll("\\.(?i)(mht|mhtml)$", "");
     }
 
     // ==================== 内容区渲染 ====================
@@ -3759,8 +3758,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
         final PreviewCacheKey cacheKey;
         try {
-            cacheKey = PreviewCacheKey.compute(Path.of(item.path),
-                    params.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
+            cacheKey = PreviewCacheKey.compute(Path.of(item.path),   // R6.5：键含 HTML 侧车目录内容摘要
+                    params.imageExtractionFingerprint(), SourceFingerprint.of(Path.of(item.path)),
+                    PreviewCacheMeta.FORMAT_VERSION);
         } catch (IOException e) {
             log.error(I18n.msg("log.maincontroller.61", item.path), e);
             NotificationHost.error(statusLabel, ErrorCode.READ_FILE_INFO_FAILED.message(), FontAwesomeSolid.FILE_ALT);
@@ -3786,7 +3786,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 // 缓存业务逻辑已搬入 com.mhtextractor.app.PreviewService（步骤 2），控制器只做 UI。
                 final com.mhtextractor.app.PreviewService.PreviewResult pr;
                 synchronized (previewCacheLifecycle.lockFor(cacheKey.absolutePath())) {
-                    pr = previewService.ensureCached(Path.of(item.path), params, () -> token != requestToken);
+                    pr = previewService.ensureCached(Path.of(item.path), params, cacheKey, () -> token != requestToken);
                 }
                 if (token != requestToken) {
                     return;   // 代次失效：放弃上屏（缓存保留，重选时命中复用）
@@ -3912,7 +3912,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             return;
         }
         Thread t = new Thread(() -> {
-            MimeParser parser = new MimeParser();
             for (PreviewItem item : targets) {
                 if (token != parseToken) {
                     return;
@@ -3923,7 +3922,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     continue;
                 }
                 try {
-                    MimeParser.ParsedMht parsed = parser.parse(item.path, true, () -> false, null, null);
+                    var parser = SourceParsers.forPath(item.path);
+                    MimeParser.ParsedMht parsed = parser.parse(item.path, true, () -> false, null, null);   // 来源由扩展名选
                     if (parsed.getHtmlContent() == null) {
                         setItemStatus(token, item, PreviewItem.Status.FAILED, I18n.get("preview.unparseable"));
                         continue;

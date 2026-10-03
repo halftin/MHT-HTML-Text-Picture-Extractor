@@ -50,7 +50,8 @@ class PreviewCacheLifecycleTest {
 
     private void writeCache(PreviewCacheKey key, Path mht) throws IOException {
         PreviewCacheMeta meta = new PreviewCacheMeta(PreviewCacheMeta.FORMAT_VERSION,
-                new PreviewCacheMeta.Source(key.absolutePath(), key.size(), key.mtime()),
+                new PreviewCacheMeta.Source(key.absolutePath(), key.size(), key.mtime(),
+                        key.extraFingerprint()),
                 key.paramFingerprint(), true,
                 List.of(new PreviewCacheMeta.ImageEntry("images/0001.png", "cid:x", "x.png",
                         "png", List.of())),

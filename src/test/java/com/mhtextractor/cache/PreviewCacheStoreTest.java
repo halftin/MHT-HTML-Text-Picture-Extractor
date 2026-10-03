@@ -41,7 +41,8 @@ class PreviewCacheStoreTest {
 
     private PreviewCacheMeta metaFor(PreviewCacheKey key, List<PreviewCacheMeta.ImageEntry> images) {
         return new PreviewCacheMeta(key.formatVersion(),
-                new PreviewCacheMeta.Source(key.absolutePath(), key.size(), key.mtime()),
+                new PreviewCacheMeta.Source(key.absolutePath(), key.size(), key.mtime(),
+                        key.extraFingerprint()),
                 key.paramFingerprint(), true, images, List.of("w1"));
     }
 
@@ -75,7 +76,7 @@ class PreviewCacheStoreTest {
         Optional<PreviewCacheMeta> loaded = store.load(key);
         assertTrue(loaded.isPresent());
         PreviewCacheMeta meta = loaded.get();
-        assertEquals(1, meta.formatVersion());
+        assertEquals(PreviewCacheMeta.FORMAT_VERSION, meta.formatVersion());
         assertEquals(FP, meta.paramFingerprint());
         assertEquals(file.toAbsolutePath().normalize().toString(), meta.source().absolutePath());
         assertEquals(2, meta.images().size());

@@ -3,6 +3,7 @@ package com.mhtextractor.processor;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.core.ChapterGenerator;
 import com.mhtextractor.core.MimeParser;
+import com.mhtextractor.core.SourceParsers;
 import com.mhtextractor.extractor.TextExtractor;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.output.FileWriter;
@@ -111,7 +112,6 @@ public class TextBatchProcessor extends BatchProcessor {
         log.info("========================================");
 
         AtomicInteger chapterIndex = new AtomicInteger(1);
-        MimeParser mimeParser = new MimeParser();
 
         for (int i = 0; i < mhtFiles.size(); i++) {
             MhtFileInfo fileInfo = mhtFiles.get(i);
@@ -124,7 +124,8 @@ public class TextBatchProcessor extends BatchProcessor {
                 final int idx = i + 1;
                 final String name = fileInfo.getName();
                 fireProgress(idx, mhtFiles.size(), name, 0.05);
-                MimeParser.ParsedMht parsed = mimeParser.parse(fileInfo.getPath(), recursionContinueCallback,
+                MimeParser.ParsedMht parsed = SourceParsers.forPath(fileInfo.getPath())
+                        .parse(fileInfo.getPath(), recursionContinueCallback,
                         stage -> fireParsingProgress(idx, mhtFiles.size(), name, stage),
                         progress -> fireProgress(idx, mhtFiles.size(), name, progress));
                 if (parsed.getHtmlContent() == null) {

@@ -5,6 +5,7 @@ import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.processor.TextBatchProcessor;
+import com.mhtextractor.util.SourceKinds;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -74,7 +75,9 @@ public final class MhtExtractorApp {
     // ==================== 导入 ====================
 
     /**
-     * 扫描给定路径（文件或目录，递归）下的所有 {@code .mht}/{@code .mhtml} 文件。
+     * 扫描给定路径（文件或目录，递归）下的所有可导入来源：
+     * {@code .mht}/{@code .mhtml}（历史格式）与 {@code .html}/{@code .htm}（R6.1 新增），均大小写不敏感。
+     * 侧车资源目录（{@code page.html} 配套的 {@code page_files/}，R6.4）内的文件不算输入来源。
      *
      * <p>结果为<b>去重后的绝对路径，按路径排序</b>（确定性 —— 便于基线与测试比对）。
      * 目录不存在/不可读时跳过而不抛错（与 GUI 导入链的容错精神一致）。</p>
@@ -98,11 +101,11 @@ public final class MhtExtractorApp {
             }
             try {
                 if (Files.isRegularFile(p)) {
-                    if (isMht(p)) found.add(p.toAbsolutePath().normalize());
+                    if (isImportable(p)) found.add(p.toAbsolutePath().normalize());
                 } else if (Files.isDirectory(p)) {
                     try (Stream<Path> walk = Files.walk(p)) {
                         walk.filter(Files::isRegularFile)
-                                .filter(this::isMht)
+                                .filter(f -> isImportable(f) && !isInSidecarDir(f))
                                 .map(f -> f.toAbsolutePath().normalize())
                                 .forEach(found::add);
                     }
@@ -119,9 +122,33 @@ public final class MhtExtractorApp {
         return importPaths(List.of(folder.toString()));
     }
 
-    private boolean isMht(Path p) {
-        String n = p.getFileName().toString().toLowerCase(Locale.ROOT);
-        return n.endsWith(".mht") || n.endsWith(".mhtml");
+    /**
+     * 可导入来源判定（R6.1）：{@code .mht}/{@code .mhtml}/{@code .html}/{@code .htm}，均大小写不敏感。
+     * 口径与 GUI 导入链（{@code MhtImportPlanner}）和解析器选择（{@code core.SourceParsers}）
+     * 共用 {@link SourceKinds} 这一份实现。
+     */
+    private boolean isImportable(Path p) {
+        return SourceKinds.isImportable(p.getFileName().toString());
+    }
+
+    /**
+     * 是否位于浏览器"另存为"的侧车目录（R6.4）内：{@code page.html} 的图片在
+     * {@code page_files/} 下，那些资源不是输入来源 —— 一次另存为会灌进几百个条目。
+     * 判据与 {@code MhtImportPlanner.isSidecarDir} 同义，这里按"祖先里存在配套 HTML"判定。
+     */
+    private boolean isInSidecarDir(Path p) {
+        Path dir = p.getParent();
+        if (dir == null) {
+            return false;
+        }
+        String name = dir.getFileName() == null ? "" : dir.getFileName().toString();
+        if (!name.toLowerCase(Locale.ROOT).endsWith("_files") || name.length() <= "_files".length()) {
+            return false;
+        }
+        String base = name.substring(0, name.length() - "_files".length());
+        Path parent = dir.getParent();
+        return parent != null && (Files.isRegularFile(parent.resolve(base + ".html"))
+                || Files.isRegularFile(parent.resolve(base + ".htm")));
     }
 
     // ==================== 提取 ====================

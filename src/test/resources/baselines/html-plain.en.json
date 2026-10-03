@@ -1,0 +1,23 @@
+{
+  "case": "html-plain",
+  "locale": "en",
+  "imageMode": false,
+  "mergedOutput": true,
+  "fixtures": ["html/plain/plain.html", "simple-text.mht"],
+  "note": "纯 HTML（无侧车）与 .mht 同批：验证\"混合来源同一条链路\" + 章节序号",
+  "knownIssues": [],
+  "stats": {
+    "total": 2,
+    "success": 2,
+    "fail": 0,
+    "skip": 0,
+    "warn": 0,
+    "outcomes": ["plain.html=SUCCESS", "simple-text.mht=SUCCESS"]
+  },
+  "products": [
+    {"path": "merged.txt", "sha256": "80c8b02705c3ddbe6d5c473312fea52f16b598266279fc9e3f37e0c803512660"}
+  ],
+  "contentDigests": {
+    "merged.txt": "92d1622606a07e90b8a4671f4b21b787a9f8ec90cd8cdaa8c411cc05a574fb2e"
+  }
+}

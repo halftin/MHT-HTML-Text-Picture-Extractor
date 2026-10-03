@@ -1,0 +1,22 @@
+{
+  "case": "html-same-dir",
+  "locale": "en",
+  "imageMode": true,
+  "mergedOutput": true,
+  "fixtures": ["html/same-dir"],
+  "note": "图片与 HTML 同目录（无侧车）的扁平形态",
+  "knownIssues": [],
+  "stats": {
+    "total": 1,
+    "success": 1,
+    "fail": 0,
+    "skip": 0,
+    "warn": 0,
+    "outcomes": ["same-dir.html=SUCCESS"]
+  },
+  "products": [
+    {"path": "same-dir.html/flat-a.png", "sha256": "ebf4f635a17d10d6eb46ba680b70142419aa3220f228001a036d311a22ee9d2a"}
+  ],
+  "contentDigests": {
+  }
+}

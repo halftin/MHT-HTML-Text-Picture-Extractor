@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -36,6 +37,9 @@ public final class MhtImportPlanner {
     static final Comparator<File> BY_NAME =
             Comparator.comparing(File::getName, String.CASE_INSENSITIVE_ORDER)
                     .thenComparing(File::getName);
+
+    /** 浏览器"另存为（网页，完整）"的侧车目录后缀（R6.4，大小写不敏感匹配） */
+    static final String SIDECAR_SUFFIX = "_files";
 
     private MhtImportPlanner() {
     }
@@ -227,6 +231,9 @@ public final class MhtImportPlanner {
                     continue;
                 }
                 if (f.isDirectory()) {
+                    if (isSidecarDir(f)) {
+                        continue;              // R6.4：侧车资源目录不是输入来源（见 isSidecarDir）
+                    }
                     // 已作为其它地址的子目录展开过的目录：跳过（防多地址双重展开使计数翻倍；
                     // 其文件/批次已由祖先地址的展开产出）
                     try {
@@ -285,6 +292,9 @@ public final class MhtImportPlanner {
             }
             subDirs.sort(BY_NAME);
             for (File s : subDirs) {
+                if (isSidecarDir(s)) {
+                    continue;                           // R6.4：不计 ignoredNonMht、不建组、不下探
+                }
                 if (s.getName().startsWith(".")) {
                     hiddenDirs++;                       // R-f：不建组、不递归
                     continue;
@@ -328,8 +338,48 @@ public final class MhtImportPlanner {
         }
     }
 
+    /**
+     * 可导入来源判定（R6.1）—— 委托 {@link SourceKinds}，与"解析器选择"共用同一份口径。
+     *
+     * <p>扩展名集合：{@code .mht}/{@code .mhtml}（历史格式）+ {@code .html}/{@code .htm}（本步新增）；
+     * 四者<b>均大小写不敏感</b>。⚠️ MHT 组的大小写不敏感<b>不是本步引入的</b>：改动前这里是
+     * {@code f.getName().toLowerCase().endsWith(".mht")}，而基线
+     * {@code MhtImportPlannerTest.upperCaseMhtmlExtensionIsMatched} 正锁着这条行为。
+     * 本步只做"把既有实现点搬进 {@link SourceKinds} 并新增 HTML 组"，<b>不改 MHT 组语义</b>。</p>
+     */
     private static boolean isMht(File f) {
-        String n = f.getName().toLowerCase();
-        return n.endsWith(".mht") || n.endsWith(".mhtml");
+        return SourceKinds.isImportable(f.getName());
+    }
+
+    /**
+     * 侧车目录判定（R6.4）：被主 HTML 引用的资源目录不得计入
+     * {@code ignoredNonMht} / 配额 / 目录深度统计 —— 否则一次"另存为（网页，完整）"
+     * 就会往界面上灌几百个"忽略的非 MHT 文件"，还会把配额吃光。
+     *
+     * <p>判据刻意<b>窄</b>（只认"浏览器另存为"的真实形态，且要求同目录存在对应的 HTML）：
+     * 目录名以 {@code _files} 结尾（大小写不敏感）<b>且</b> 父目录里存在同基名的
+     * {@code .html}/{@code .htm} 文件。这样 {@code 素材_files} 这种"恰好同名"的普通目录
+     * 不会被误吞（必须真的有一份同名 HTML 与之配套）。</p>
+     *
+     * <p>本步只做"排除"，<b>不把侧车当作输入来源</b>：它永远不会产出批次，也不参与
+     * {@code visitedDirs} 去重（排除掉的目录根本不下探）。</p>
+     */
+    static boolean isSidecarDir(File dir) {
+        String name = dir.getName();
+        if (name.length() <= SIDECAR_SUFFIX.length()
+                || !name.toLowerCase(Locale.ROOT).endsWith(SIDECAR_SUFFIX)) {
+            return false;
+        }
+        String base = name.substring(0, name.length() - SIDECAR_SUFFIX.length());
+        File parent = dir.getParentFile();
+        if (parent == null) {
+            return false;
+        }
+        for (String ext : List.of(".html", ".htm")) {
+            if (new File(parent, base + ext).isFile()) {
+                return true;
+            }
+        }
+        return false;
     }
 }

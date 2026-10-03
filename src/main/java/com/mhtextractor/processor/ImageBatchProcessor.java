@@ -6,6 +6,8 @@ import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.core.MimeParser;
+import com.mhtextractor.core.SourceParser;
+import com.mhtextractor.core.SourceParsers;
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.ImageSource;
 import com.mhtextractor.extractor.InMemoryImageSource;
@@ -104,7 +106,7 @@ public class ImageBatchProcessor extends BatchProcessor {
         log.info(I18n.msg("log.imagebatchprocessor.06", orderedFiles.size()));
         log.info("========================================");
 
-        MimeParser mimeParser = new MimeParser();
+        String mimeParser = orderedFiles.getFirst().getPath();
 
         if (config.isHighSpeedMemoryMode()) {
             return processWithPreload(orderedFiles, outputFolder, mergedOutputName, mimeParser, stats);
@@ -115,12 +117,17 @@ public class ImageBatchProcessor extends BatchProcessor {
 
     // ==================== 高速内存模式 ====================
 
+    /**
+     * 高速内存模式。{@code firstPath} 只是"批里第一个文件路径"的占位（历史上这里是一个
+     * {@code MimeParser} 实例）—— 解析器改为<b>逐文件</b>按扩展名选（R6.1：一次导入可以同时
+     * 含 {@code .mht} 与 {@code .html}），见 {@link #parserFor}。
+     */
     private ProcessStats processWithPreload(List<MhtFileInfo> mhtFiles, String outputFolder,
-                                             String mergedOutputName, MimeParser mimeParser,
+                                             String mergedOutputName, String firstPath,
                                              ProcessStats stats) {
         log.info(I18n.msg("log.imagebatchprocessor.07"));
 
-        PreloadResult preload = preloadAll(mhtFiles, mimeParser);
+        PreloadResult preload = preloadAll(mhtFiles, firstPath);
         if (preload.parsedList().isEmpty()) {
             log.warn(I18n.msg("log.imagebatchprocessor.08"));
         }
@@ -149,7 +156,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                 mergedNameWarning);
     }
 
-    private PreloadResult preloadAll(List<MhtFileInfo> mhtFiles, MimeParser mimeParser) {
+    private PreloadResult preloadAll(List<MhtFileInfo> mhtFiles, String firstPath) {
         List<ParsedFileEntry> parsedList = new ArrayList<>();
         Map<Integer, String> loadFailures = new HashMap<>();
         for (int i = 0; i < mhtFiles.size(); i++) {
@@ -163,7 +170,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                 final int idx = i + 1;
                 final String name = fileInfo.getName();
                 fireProgress(idx, mhtFiles.size(), name, 0.05);
-                MimeParser.ParsedMht parsed = mimeParser.parse(fileInfo.getPath(), recursionContinueCallback,
+                MimeParser.ParsedMht parsed = parserFor(fileInfo.getPath()).parse(fileInfo.getPath(), recursionContinueCallback,
                         stage -> fireParsingProgress(idx, mhtFiles.size(), name, stage),
                         progress -> fireProgress(idx, mhtFiles.size(), name, progress));
                 if (parsed.getHtmlContent() != null) {
@@ -188,13 +195,14 @@ public class ImageBatchProcessor extends BatchProcessor {
     // ==================== 流式模式 ====================
 
     private ProcessStats processStreaming(List<MhtFileInfo> mhtFiles, String outputFolder,
-                                           String mergedOutputName, MimeParser mimeParser,
+                                           String mergedOutputName, String firstPath,
                                            ProcessStats stats) {
         if (config.isSingleOutputMode()) {
             // 预解析第一个文件用于确定合并目录名
             MimeParser.ParsedMht firstParsed = null;
             try {
-                firstParsed = mimeParser.parse(mhtFiles.getFirst().getPath(), recursionContinueCallback, null, null);
+                firstParsed = parserFor(mhtFiles.getFirst().getPath())
+                        .parse(mhtFiles.getFirst().getPath(), recursionContinueCallback, null, null);
             } catch (Exception e) {
                 log.warn(I18n.msg("log.imagebatchprocessor.15", e.getMessage()), e);
             }
@@ -202,16 +210,25 @@ public class ImageBatchProcessor extends BatchProcessor {
             var handler = new MergedOutputHandler();
             String mergedNameWarning =
                     setupMergedOutput(outputFolder, mhtFiles, firstParsed, stats, handler, mergedOutputName);
-            var provider = new StreamingProvider(mimeParser, mhtFiles, firstParsed);
+            var provider = new StreamingProvider(mhtFiles, firstParsed);
             return processUnified(mhtFiles, outputFolder, provider, handler, stats, 0.35, 0.25,
                     mergedNameWarning);
         } else {
             log.info(I18n.msg("log.imagebatchprocessor.16", mhtFiles.size()));
             log.info("========================================");
             var handler = new SeparateOutputHandler(outputFolder);
-            var provider = new StreamingProvider(mimeParser, mhtFiles, null);
+            var provider = new StreamingProvider(mhtFiles, null);
             return processUnified(mhtFiles, outputFolder, provider, handler, stats, 0.3, 0.3, null);
         }
+    }
+
+    /**
+     * 逐文件按扩展名选解析器（R6.1/R6.3）：一次导入可以同时含 {@code .mht} 与 {@code .html}，
+     * 因此选择必须<b>按文件</b>发生，而不是"按批里第一个文件"定一次。唯一实现点见
+     * {@code core.SourceParsers#forPath}。
+     */
+    private static SourceParser parserFor(String path) {
+        return SourceParsers.forPath(path);
     }
 
     // ==================== 合并输出设置 ====================
@@ -454,12 +471,10 @@ public class ImageBatchProcessor extends BatchProcessor {
     }
 
     private class StreamingProvider implements ParsedMhtProvider {
-        private final MimeParser parser;
         private final List<MhtFileInfo> files;
         private MimeParser.ParsedMht preParsedFirst;
 
-        StreamingProvider(MimeParser parser, List<MhtFileInfo> files, MimeParser.ParsedMht preParsedFirst) {
-            this.parser = parser;
+        StreamingProvider(List<MhtFileInfo> files, MimeParser.ParsedMht preParsedFirst) {
             this.files = files;
             this.preParsedFirst = preParsedFirst;
         }
@@ -477,7 +492,7 @@ public class ImageBatchProcessor extends BatchProcessor {
             final String name = fi.getName();
             log.info(I18n.msg("log.imagebatchprocessor.11", name));
             fireProgress(idx, files.size(), name, 0.05);
-            return parser.parse(fi.getPath(), recursionContinueCallback,
+            return parserFor(fi.getPath()).parse(fi.getPath(), recursionContinueCallback,
                     stage -> fireParsingProgress(idx, files.size(), name, stage),
                     progress -> fireProgress(idx, files.size(), name, progress));
         }
@@ -630,7 +645,7 @@ public class ImageBatchProcessor extends BatchProcessor {
         }
         PreviewCacheKey key;
         try {
-            key = PreviewCacheKey.compute(Path.of(fileInfo.getPath()),
+            key = PreviewCacheKey.compute(Path.of(fileInfo.getPath()),   // R6.5：键含 HTML 侧车目录内容摘要
                     config.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
         } catch (IOException e) {
             log.warn(I18n.msg("log.imagebatchprocessor.36", fileInfo.getName(), e.getMessage()));

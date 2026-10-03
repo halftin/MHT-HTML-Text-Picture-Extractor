@@ -6,6 +6,8 @@ import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.core.MimeParser;
+import com.mhtextractor.core.SourceParser;
+import com.mhtextractor.core.SourceParsers;
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.ThumbnailData;
@@ -75,33 +77,49 @@ public final class PreviewService {
      *
      * <p>语义与搬迁前 {@code MainController.loadOrWritePreviewCache} <b>逐行等价</b>：</p>
      * <ol>
-     *   <li>算缓存键（绝对路径 + size + mtime + 参数指纹 + 格式版本）；</li>
+     *   <li>算缓存键（绝对路径 + size + mtime + 参数指纹 + <b>附属指纹</b> + 格式版本）；
+     *       键由<b>调用方传入</b>（见下方"为什么键是参数"）；</li>
      *   <li>{@code store.load(key)} 命中 → 直接返回（不解析、不落盘）；</li>
      *   <li>meta <b>损坏</b>（有 {@code .complete} 但反序列化失败）→ 删目录后重建
      *       （否则同 key 下会反复报错、无法自愈）；</li>
-     *   <li>未命中 → 解析 MHT、按参数抽图、构建 meta（图片文件名与写盘名严格一致），
+     *   <li>未命中 → 解析来源、按参数抽图、构建 meta（图片文件名与写盘名严格一致），
      *       经 {@code store.write} 原子落盘（{@code .tmp} → 改名 → {@code .complete}）；</li>
      *   <li>落盘成功后触发一次磁盘占用台阶检查（命中路径不触发，与搬迁前一致）。</li>
      * </ol>
      *
-     * <p><b>取消信号</b>：搬迁前控制器在"抽图完成、写盘之前"会检查自己的代次标记
-     * （{@code token != requestToken} 即放弃，<b>不写缓存</b>）。该语义由 {@code cancelled} 承接 ——
-     * 服务不认识"代次"这种 UI 概念，只认"调用方说别写了"。</p>
+     * <p><b>为什么键是参数（R6.5 的必然结果）</b>：键里多了"侧车目录内容摘要"，
+     * 计算它要遍历并读取侧车文件。若本方法自己算、调用方（GUI 的每项目写锁需要
+     * {@code key.absolutePath()}）也算一遍，同一次预览就会把侧车读两遍；
+     * 更糟的是两处算法一旦分叉就会"写进去的键 ≠ 查的键"⇒ 缓存永不命中且不报错。
+     * 因此口径统一为：<b>算一次、传进来</b>（{@link com.mhtextractor.cache.PreviewCacheKey#compute}）。</p>
      *
+     * @param cacheKey  已算好的缓存键（{@link com.mhtextractor.cache.PreviewCacheKey#compute}）
+     * @param mht       来源文件（MHT 或 HTML），仅用于日志与解析
      * @param cancelled 取消判定，可为 null（null = 不可取消）。返回 true 时在抽图后放弃写盘并返回 null
      * @return 结果；{@code cancelled} 在抽图后为 true 时返回 <b>null</b>（未写缓存）
-     * @throws Exception 计算缓存键失败（无法读取文件属性），或解析 MHT 失败
+     * @throws Exception 解析来源失败
      */
-    public PreviewResult ensureCached(Path mht, AppConfig params, Supplier<Boolean> cancelled)
-            throws Exception {
-        PreviewCacheKey cacheKey = PreviewCacheKey.compute(mht,
-                params.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
-
+    public PreviewResult ensureCached(Path mht, AppConfig params, PreviewCacheKey cacheKey,
+                                      Supplier<Boolean> cancelled) throws Exception {
         PreviewCacheMeta meta = loadOrRebuild(mht, params, cacheKey, cancelled);
         if (meta == null) {
             return null;
         }
         return new PreviewResult(meta, previewCache.store().dirFor(cacheKey), buildThumbMeta(meta, params));
+    }
+
+    /**
+     * 便捷重载：由本方法按 {@code (文件, 参数)} 现算缓存键。
+     *
+     * <p>⚠️ GUI 主路径<b>不应</b>用它：那里需要 {@code key.absolutePath()} 去取每项目写锁，
+     * 键必须在外层算一次再传进来（见上一方法的 javadoc）。本重载存在的意义是无头测试与
+     * "不需要锁"的调用方不必重复三段实参。</p>
+     */
+    public PreviewResult ensureCached(Path mht, AppConfig params, Supplier<Boolean> cancelled)
+            throws Exception {
+        return ensureCached(mht, params,
+                PreviewCacheKey.compute(mht, params.imageExtractionFingerprint(),
+                        PreviewCacheMeta.FORMAT_VERSION), cancelled);
     }
 
     // ==================== 内部：取缓存 ====================
@@ -130,7 +148,7 @@ public final class PreviewService {
     /** 解析 + 抽图 + 原子落盘。 */
     private PreviewCacheMeta rebuild(Path mht, AppConfig params, PreviewCacheKey cacheKey,
                                      Supplier<Boolean> cancelled) throws Exception {
-        MimeParser parser = new MimeParser();
+        SourceParser parser = SourceParsers.forPath(mht.toString());
         MimeParser.ParsedMht parsed = parser.parse(mht.toString(), false, () -> false, null, null);
         ImageExtractor imageExtractor = new ImageExtractor(parsed,
                 params.getImageNameStartMarker(), params.getImageNameEndMarker(),
@@ -154,7 +172,8 @@ public final class PreviewService {
                     img.getContentId(), img.getFilename(), ext, List.of()));
         }
         PreviewCacheMeta meta = new PreviewCacheMeta(PreviewCacheMeta.FORMAT_VERSION,
-                new PreviewCacheMeta.Source(cacheKey.absolutePath(), cacheKey.size(), cacheKey.mtime()),
+                new PreviewCacheMeta.Source(cacheKey.absolutePath(), cacheKey.size(), cacheKey.mtime(),
+                        cacheKey.extraFingerprint()),
                 cacheKey.paramFingerprint(), true, entries,
                 imageExtractor.getLastWarnings());
         previewCache.store().write(cacheKey, meta, imagesDir -> {

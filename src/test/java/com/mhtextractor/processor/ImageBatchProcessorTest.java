@@ -354,7 +354,8 @@ class ImageBatchProcessorTest {
         PreviewCacheKey key = PreviewCacheKey.compute(mht,
                 params.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
         PreviewCacheMeta meta = new PreviewCacheMeta(PreviewCacheMeta.FORMAT_VERSION,
-                new PreviewCacheMeta.Source(key.absolutePath(), key.size(), key.mtime()),
+                new PreviewCacheMeta.Source(key.absolutePath(), key.size(), key.mtime(),
+                        key.extraFingerprint()),
                 key.paramFingerprint(), true, images, List.of());
         store.write(key, meta, dir -> {
             for (int i = 0; i < datas.length; i++) {
@@ -1031,7 +1032,8 @@ class ImageBatchProcessorTest {
         Thread preview = new Thread(() -> {
             try {
                 PreviewCacheMeta meta = new PreviewCacheMeta(PreviewCacheMeta.FORMAT_VERSION,
-                        new PreviewCacheMeta.Source(key.absolutePath(), key.size(), key.mtime()),
+                        new PreviewCacheMeta.Source(key.absolutePath(), key.size(), key.mtime(),
+                                key.extraFingerprint()),
                         key.paramFingerprint(), true,
                         List.of(new PreviewCacheMeta.ImageEntry(
                                 "images/0001.webp", "img001", "img001", "webp", List.of())),

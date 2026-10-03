@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>侧车多图夹具</title>
+</head>
+<body>
+<!--START-->
+<h1>侧车文件夹形态</h1>
+<p>下面的引用覆盖：可读图片、Data URI、缺失文件、../ 逃逸、绝对 URL、侧车子目录。</p>
+<img src="sidecar_files/a.png" alt="可读 PNG">
+<img src="sidecar_files/横 幅.jpg" alt="中文名图片">
+<img src="sidecar_files/missing.gif" alt="缺失文件（应跳过）">
+<img src="flat-sibling.png" alt="与 HTML 同目录的图片（允许）">
+<img src="../escape.png" alt="../ 逃逸（应拒绝）">
+<img src="https://example.com/remote.png" alt="绝对 URL（应跳过）">
+<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8DwHwAHBgL+4LjBnAAAAABJRU5ErkJggg==" alt="Data URI">
+<img src="sidecar_files/deep/nested.png" alt="侧车子目录（不支持，应跳过）">
+<!--END-->
+</body>
+</html>

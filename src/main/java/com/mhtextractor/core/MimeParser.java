@@ -14,8 +14,10 @@ import lombok.Data;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -32,7 +34,7 @@ import java.util.function.Supplier;
  * 负责读取 .mht 文件，利用 JavaMail 解析 MIME 树
  * 返回结构化的 ParsedMht 对象
  */
-public class MimeParser {
+public class MimeParser implements SourceParser {
     private static final Logger logger = LoggerFactory.getLogger(MimeParser.class);
 
     /** 递归深度限制阈值 */
@@ -61,7 +63,7 @@ public class MimeParser {
      * @param progressCallback 进度报告回调，可传入 null 禁用进度报告
      */
     public ParsedMht parse(String mhtPath, Supplier<Boolean> continueCallback,
-                           Consumer<ParsingStage> progressCallback) throws Exception {
+                           Consumer<ParsingStage> progressCallback) throws IOException {
         return parse(mhtPath, false, continueCallback, progressCallback, null);
     }
 
@@ -75,16 +77,22 @@ public class MimeParser {
      */
     public ParsedMht parse(String mhtPath, Supplier<Boolean> continueCallback,
                            Consumer<ParsingStage> stageCallback,
-                           Consumer<Double> byteProgressCallback) throws Exception {
+                           Consumer<Double> byteProgressCallback) throws IOException {
         return parse(mhtPath, false, continueCallback, stageCallback, byteProgressCallback);
     }
 
     /**
-     * 解析MHT文件（textOnly=true 跳过图片二进制读取，供预览预解析使用）
+     * 解析MHT文件（textOnly=true 跳过图片二进制读取，供预览预解析使用）。
+     *
+     * <p>本方法同时是 {@link SourceParser} 的接口实现 —— 抽象化之后，{@code app} / {@code processor} /
+     * {@code gui} 三层都只依赖接口，按扩展名选实现的逻辑收在 {@link SourceParsers#forPath(String)}。
+     * 该方法签名（含 {@code textOnly}）与接口逐字一致，因此这里的 {@code @Override} 不是装饰：
+     * 它保证 MHT 路径与 HTML 路径对调用方是<b>同一个语义</b>。</p>
      */
+    @Override
     public ParsedMht parse(String mhtPath, boolean textOnly, Supplier<Boolean> continueCallback,
                            Consumer<ParsingStage> stageCallback,
-                           Consumer<Double> byteProgressCallback) throws Exception {
+                           Consumer<Double> byteProgressCallback) throws IOException {
         Properties props = new Properties();
         props.setProperty("mail.mime.decodetext.strict", "false");
         props.setProperty("mail.mime.charset", "UTF-8");
@@ -103,9 +111,16 @@ public class MimeParser {
             }
         };
 
-        try (FileInputStream fis = new FileInputStream(mhtPath)) {
+        try (InputStream fis = Files.newInputStream(Path.of(mhtPath))) {
             if (stageCallback != null) stageCallback.accept(ParsingStage.FILE_READ);
-            MimeMessage message = new MimeMessage(session, fis);
+            MimeMessage message;
+            try {
+                message = new MimeMessage(session, fis);
+            } catch (jakarta.mail.MessagingException e) {
+                // 接口契约是 IOException（MessagingException 属"这份文件读不动"）：
+                // 包成 IOException 而不是放宽接口签名 —— 否则 HTML 实现也要声明无意义的宽异常。
+                throw new IOException("MHT open failed: " + mhtPath + " (" + e.getMessage() + ")", e);
+            }
 
             // 首次快速遍历统计总 part 数，用于进度估算
             int totalParts = countTotalParts(message);
@@ -114,8 +129,17 @@ public class MimeParser {
             // 原子计数器：跟踪已处理的 part 数，用于周期性报告进度
             AtomicInteger partsProcessed = new AtomicInteger(0);
 
-            return parseMimeMessage(message, textOnly, continueCallback, stageCallback, monotonicByteProgress,
-                    partsProcessed, totalParts);
+            try {
+                return parseMimeMessage(message, textOnly, continueCallback, stageCallback,
+                        monotonicByteProgress, partsProcessed, totalParts);
+            } catch (IOException e) {
+                throw e;
+            } catch (Exception e) {
+                // 接口契约是 IOException（javax.mail 的 MessagingException 等属"读不动这份文件"）：
+                // 包成 IOException 而不是放宽接口签名 —— 否则 HTML 实现也要跟着声明无意义的宽异常，
+                // 调用方的 catch 分支会退化成"什么异常都接"，掩盖真实错误类型。
+                throw new IOException("MHT parse failed: " + mhtPath + " (" + e.getMessage() + ")", e);
+            }
         }
     }
 
