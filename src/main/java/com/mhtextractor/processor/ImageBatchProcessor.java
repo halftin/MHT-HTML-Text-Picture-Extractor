@@ -1,9 +1,7 @@
 package com.mhtextractor.processor;
 
 import com.mhtextractor.cache.DirectoryImageSource;
-import com.mhtextractor.cache.PreviewCacheKey;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
-import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.core.SourceParser;
@@ -12,39 +10,39 @@ import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.ImageSource;
 import com.mhtextractor.extractor.InMemoryImageSource;
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.output.Archiver;
-import com.mhtextractor.output.ImageWriter;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.FileUtils;
 import com.mhtextractor.util.SanitizeUtils;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 图片批量处理器
  * 支持流式/高速内存模式、单独输出/合并输出、ZIP/CBZ 打包
+ *
+ * <p><b>Q12 结构说明</b>：本类现在只承担"对外处理器 + 流程协调器"（指南 §3"保留的主干"）：
+ * 初始化统计、校验输出目录、选择预加载/流式、驱动 {@link #processUnified}、记录文件结果与结束统计。
+ * 三块实现已移出为同包组件（都是 package-private 顶层类）：</p>
+ * <ul>
+ *   <li>{@link ImageInputStrategy}（{@link PreloadedImageInput} / {@link StreamingImageInput}）——
+ *       两种输入策略不合并（内存占用与首文件解析策略不同，指南 §1.4-1）；</li>
+ *   <li>{@link ImageOutputStrategy}（{@link MergedImageOutput} / {@link SeparateImageOutput}）——
+ *       两种输出不合并（命名/序号/进度区间/归档失败结果不同，指南 §1.4-2）；</li>
+ *   <li>{@link ExtractionPreviewCache} —— 缓存键、可复用判据与提取完成后的清理。</li>
+ * </ul>
+ * <p>{@code processUnified} 的<b>条件顺序</b>在本次搬迁中一字未改（缓存命中 → 标题解析 →
+ * 解析结果可用性 → 无图片内容快速检查 → 提取 → 保存与归档），这是本步唯一的行为保持判据所依赖的骨架。</p>
  */
 @Slf4j
 public class ImageBatchProcessor extends BatchProcessor {
 
-    private record ParsedFileEntry(MimeParser.ParsedMht parsed, int fileIndex) {}
-
-    /** 预加载结果：解析成功的条目 + 解析抛异常的文件（原始下标 → 异常消息，供 processUnified 记 FAILED） */
-    private record PreloadResult(List<ParsedFileEntry> parsedList, Map<Integer, String> loadFailures) {}
-
     private final AppConfig config;
-    /** 预览缓存生命周期（会话 10 提取复用接线）；null = 复用关闭，行为与既有提取完全一致 */
-    private final PreviewCacheLifecycle previewCache;
+    /** 提取期缓存策略（会话 10 提取复用接线）；构造时 previewCache 为 null = 复用关闭，行为与既有提取完全一致 */
+    private final ExtractionPreviewCache previewCache;
 
     public ImageBatchProcessor(AppConfig config) {
         this(config, null);
@@ -52,7 +50,7 @@ public class ImageBatchProcessor extends BatchProcessor {
 
     public ImageBatchProcessor(AppConfig config, PreviewCacheLifecycle previewCache) {
         this.config = config;
-        this.previewCache = previewCache;
+        this.previewCache = new ExtractionPreviewCache(previewCache, config);
     }
 
     /**
@@ -127,7 +125,8 @@ public class ImageBatchProcessor extends BatchProcessor {
                                              ProcessStats stats) {
         log.info(I18n.msg("log.imagebatchprocessor.07"));
 
-        PreloadResult preload = preloadAll(mhtFiles, firstPath);
+        PreloadedImageInput.LoadResult preload = PreloadedImageInput.preload(mhtFiles, firstPath,
+                index -> loadFile(mhtFiles, index), this::isCancelled, this::fireProgress);
         if (preload.parsedList().isEmpty()) {
             log.warn(I18n.msg("log.imagebatchprocessor.08"));
         }
@@ -135,61 +134,26 @@ public class ImageBatchProcessor extends BatchProcessor {
         log.info(I18n.msg("log.imagebatchprocessor.09", preload.parsedList().size()));
         log.info("========================================");
 
-        ParsedMhtProvider provider = new PreloadedProvider(preload.parsedList(), preload.loadFailures());
-        ImageOutputHandler handler;
+        ImageInputStrategy inputs =
+                new PreloadedImageInput(preload.parsedList(), preload.loadFailures());
+        ImageOutputStrategy outputs;
         String mergedNameWarning = null;
 
         if (config.isSingleOutputMode()) {
-            var mh = new MergedOutputHandler();
             // 与流式模式一致：仅当第一个文件本身解析成功才用其标题，否则回退默认目录名
             MimeParser.ParsedMht firstParsed = null;
             if (!preload.parsedList().isEmpty() && preload.parsedList().getFirst().fileIndex() == 0) {
                 firstParsed = preload.parsedList().getFirst().parsed();
             }
-            mergedNameWarning =
-                    setupMergedOutput(outputFolder, mhtFiles, firstParsed, stats, mh, mergedOutputName);
-            handler = mh;
+            MergedImageOutput merged = MergedImageOutput.create(config, outputFolder, mhtFiles,
+                    firstParsed, stats, mergedOutputName);
+            mergedNameWarning = merged.nameWarning();
+            outputs = merged;
         } else {
-            handler = new SeparateOutputHandler(outputFolder);
+            outputs = new SeparateImageOutput(outputFolder);
         }
-        return processUnified(mhtFiles, outputFolder, provider, handler, stats, 0.3, 0.3,
+        return processUnified(mhtFiles, outputFolder, inputs, outputs, stats, 0.3, 0.3,
                 mergedNameWarning);
-    }
-
-    private PreloadResult preloadAll(List<MhtFileInfo> mhtFiles, String firstPath) {
-        List<ParsedFileEntry> parsedList = new ArrayList<>();
-        Map<Integer, String> loadFailures = new HashMap<>();
-        for (int i = 0; i < mhtFiles.size(); i++) {
-            MhtFileInfo fileInfo = mhtFiles.get(i);
-            if (isCancelled()) {
-                log.info(I18n.msg("log.imagebatchprocessor.10", i, mhtFiles.size()));
-                break;
-            }
-            try {
-                log.info(I18n.msg("log.imagebatchprocessor.11", fileInfo.getName()));
-                final int idx = i + 1;
-                final String name = fileInfo.getName();
-                fireProgress(idx, mhtFiles.size(), name, 0.05);
-                MimeParser.ParsedMht parsed = parserFor(fileInfo.getPath()).parse(fileInfo.getPath(), recursionContinueCallback,
-                        stage -> fireParsingProgress(idx, mhtFiles.size(), name, stage),
-                        progress -> fireProgress(idx, mhtFiles.size(), name, progress));
-                if (parsed.getHtmlContent() != null) {
-                    fireProgress(idx, mhtFiles.size(), name, 0.35);
-                    parsedList.add(new ParsedFileEntry(parsed, i));
-                    fireProgress(idx, mhtFiles.size(), name, 0.5);
-                    log.info(I18n.msg("log.imagebatchprocessor.12", name));
-                } else {
-                    // 不在此记录结果：统一由 processUnified 记录（GUI 按路径取最后一条，双记录会互相覆盖）
-                    log.warn(I18n.msg("log.imagebatchprocessor.13", name));
-                }
-            } catch (Exception e) {
-                log.error(I18n.msg("log.imagebatchprocessor.14", fileInfo.getName(), e.getMessage()), e);
-                loadFailures.put(i, e.getMessage() == null ? I18n.get("extract.unknownError") : e.getMessage());
-            } finally {
-                fireProgress(i + 1, mhtFiles.size(), fileInfo.getName(), 1.0);
-            }
-        }
-        return new PreloadResult(parsedList, loadFailures);
     }
 
     // ==================== 流式模式 ====================
@@ -207,71 +171,70 @@ public class ImageBatchProcessor extends BatchProcessor {
                 log.warn(I18n.msg("log.imagebatchprocessor.15", e.getMessage()), e);
             }
 
-            var handler = new MergedOutputHandler();
-            String mergedNameWarning =
-                    setupMergedOutput(outputFolder, mhtFiles, firstParsed, stats, handler, mergedOutputName);
-            var provider = new StreamingProvider(mhtFiles, firstParsed);
-            return processUnified(mhtFiles, outputFolder, provider, handler, stats, 0.35, 0.25,
+            MergedImageOutput merged = MergedImageOutput.create(config, outputFolder, mhtFiles,
+                    firstParsed, stats, mergedOutputName);
+            String mergedNameWarning = merged.nameWarning();
+            var inputs = new StreamingImageInput(mhtFiles, firstParsed,
+                    index -> loadFile(mhtFiles, index), this::isCancelled);
+            return processUnified(mhtFiles, outputFolder, inputs, merged, stats, 0.35, 0.25,
                     mergedNameWarning);
         } else {
             log.info(I18n.msg("log.imagebatchprocessor.16", mhtFiles.size()));
             log.info("========================================");
-            var handler = new SeparateOutputHandler(outputFolder);
-            var provider = new StreamingProvider(mhtFiles, null);
-            return processUnified(mhtFiles, outputFolder, provider, handler, stats, 0.3, 0.3, null);
+            var outputs = new SeparateImageOutput(outputFolder);
+            var inputs = new StreamingImageInput(mhtFiles, null,
+                    index -> loadFile(mhtFiles, index), this::isCancelled);
+            return processUnified(mhtFiles, outputFolder, inputs, outputs, stats, 0.3, 0.3, null);
         }
+    }
+
+    /**
+     * 解析一个文件的唯一入口（供 {@link StreamingImageInput} / {@link PreloadedImageInput} 的窄回调使用）。
+     *
+     * <p>进度上报（解析阶段 0.05 起点 + 阶段/字节回调）仍<b>由本类承接</b>，因此输入策略组件不需要认识
+     * {@code BatchProcessor} 的进度回调（指南 §3 表格："解析阶段进度和取消仍由传入的窄回调承接"）。</p>
+     *
+     * <p>文件列表经参数传入（不用实例字段暂存）：输入策略在两种模式下的解析时机不同，把它记在字段上
+     * 会让"当前是哪一批"变成可变共享状态，而解析完全在单线程里发生 —— 闭包捕获局部变量更安全。</p>
+     */
+    private MimeParser.ParsedMht loadFile(List<MhtFileInfo> mhtFiles, int index) throws Exception {
+        MhtFileInfo fileInfo = mhtFiles.get(index);
+        final int idx = index + 1;
+        final String name = fileInfo.getName();
+        log.info(I18n.msg("log.imagebatchprocessor.11", name));
+        fireProgress(idx, mhtFiles.size(), name, 0.05);
+        return parserFor(fileInfo.getPath()).parse(fileInfo.getPath(), recursionContinueCallback,
+                stage -> fireParsingProgress(idx, mhtFiles.size(), name, stage),
+                progress -> fireProgress(idx, mhtFiles.size(), name, progress));
     }
 
     /**
      * 逐文件按扩展名选解析器（R6.1/R6.3）：一次导入可以同时含 {@code .mht} 与 {@code .html}，
      * 因此选择必须<b>按文件</b>发生，而不是"按批里第一个文件"定一次。唯一实现点见
      * {@code core.SourceParsers#forPath}。
+     *
+     * <p><b>为什么是 {@code protected} 实例方法</b>（Q12）：本方法是一次"解析调用"的唯一入口，
+     * 因此它也是"某文件被解析了几次"这件事<b>可被观测</b>的唯一位置。测试用同包子类覆写它来
+     * 计次（见 {@code ImageExtractionMatrixTest}），从而把"流式合并模式首文件只解析一次"从
+     * 一句自述变成可复算的断言；覆写只需包内可见，故不是公开 API 的一部分。</p>
      */
-    private static SourceParser parserFor(String path) {
+    protected SourceParser parserFor(String path) {
         return SourceParsers.forPath(path);
-    }
-
-    // ==================== 合并输出设置 ====================
-
-    private String setupMergedOutput(String outputFolder, List<MhtFileInfo> mhtFiles,
-                                     MimeParser.ParsedMht firstParsed, ProcessStats stats,
-                                     MergedOutputHandler handler, String explicitName) {
-        String folderName = explicitName;
-        String nameWarning = null;
-        if (folderName != null && !folderName.isEmpty()) {
-            folderName = SanitizeUtils.sanitize(folderName);
-            if (folderName.isEmpty()) {
-                folderName = null;
-            }
-        }
-        if (folderName == null) {
-            folderName = determineMergedFolderName(firstParsed, config.isEnableNameExtraction(),
-                    config.getImageNameStartMarker(), config.getImageNameEndMarker());
-            if (folderName == null) {
-                folderName = determineDefaultFolderName(config.getInputFolder());
-                if (config.isEnableNameExtraction() && firstParsed != null && firstParsed.getHtmlContent() != null) {
-                    nameWarning = I18n.get("extract.titleFallback", "name", folderName);
-                    stats.incrementWarn();
-                    stats.addWarnDetail(I18n.get("extract.fileWarned",
-                            "file", mhtFiles.getFirst().getName(), "message", nameWarning));
-                    log.warn(I18n.msg("log.imagebatchprocessor.17", folderName));
-                }
-            }
-        }
-        String mergedDir = Paths.get(outputFolder, folderName).toString();
-        FileUtils.ensureDirectory(mergedDir);
-        handler.init(mergedDir, folderName);
-
-        log.info(I18n.msg("log.imagebatchprocessor.18", mergedDir));
-        log.info(I18n.msg("log.imagebatchprocessor.19", mhtFiles.size()));
-        log.info("========================================");
-        return nameWarning;
     }
 
     // ==================== 统一处理循环 ====================
 
+    /**
+     * 统一处理循环。
+     *
+     * <p>🚩 <b>条件顺序是本步的行为骨架，Q12 搬迁中一字未改</b>：① 取消检查 → ② 缓存命中查找 →
+     * ③ 标题解析需求（单独模式 + 名称提取）→ ④ 命中则回退判据（解析不出 HTML）→
+     * ⑤ 命中路径（DirectoryImageSource + 缓存警告）或未命中路径（无法解析 SKIPPED → 无图片内容
+     * SKIPPED → 提取 → 空结果 SKIPPED）→ ⑥ 保存与归档 → ⑦ 规则 (b) 清缓存 →
+     * ⑧ 末尾命名警告并入 + 输出策略收尾。</p>
+     */
     private ProcessStats processUnified(List<MhtFileInfo> mhtFiles, String outputFolder,
-                                         ParsedMhtProvider parseProvider, ImageOutputHandler outputHandler,
+                                         ImageInputStrategy inputs, ImageOutputStrategy outputs,
                                          ProcessStats stats, double extractionBaseProgress,
                                          double extractionRange, String mergedNameWarning) {
         int total = mhtFiles.size();
@@ -294,20 +257,21 @@ public class ImageBatchProcessor extends BatchProcessor {
                 // —— 会话 10：逐文件查预览缓存（P3 按文件、非按输出单元）。
                 // 命中 → 跳过解析与图片提取，直接以 DirectoryImageSource 产出；
                 // 未命中 → 走原路径，行为完全不变。
-                CacheHit hit = lookupPreviewCache(fileInfo);
+                Optional<ExtractionPreviewCache.CacheHit> found = previewCache.lookup(fileInfo);
                 // 单独模式 + 名称提取：输出目录名依赖 HTML 标题（P13 缓存元数据不含标题，
                 // 必须提取期重算）→ 命中时仍解析一次取标题，图片不重新提取
-                boolean needsTitleParse = hit != null
+                boolean needsTitleParse = found.isPresent()
                         && !config.isSingleOutputMode() && config.isEnableNameExtraction();
                 MimeParser.ParsedMht parsed = null;
-                if (hit == null || needsTitleParse) {
-                    parsed = parseProvider.provide(i);
+                if (found.isEmpty() || needsTitleParse) {
+                    parsed = inputs.provide(i);
                 }
                 if (needsTitleParse && (parsed == null || parsed.getHtmlContent() == null)) {
                     // 防御：缓存存在但解析不出 HTML（文件未变时不会发生）→ 回退原路径，
                     // 与未命中路径的「无法解析」SKIPPED 保持一致
-                    hit = null;
+                    found = Optional.empty();
                 }
+                ExtractionPreviewCache.CacheHit hit = found.orElse(null);
 
                 ImageSource imageSource;
                 String extractedTitle = null;
@@ -317,7 +281,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                     log.info(I18n.msg("log.imagebatchprocessor.22", name, hit.meta().images().size()));
                     fireProgress(idx, total, name, extractionBaseProgress);
                     imageSource = new DirectoryImageSource(hit.meta(),
-                            previewCache.store().dirFor(hit.key()));
+                            previewCache.dirFor(hit.key()));
                     fileWarnings = new ArrayList<>(hit.meta().warnings());
                     reportExtractorWarnings(name, () -> fileWarnings, stats);
                     if (needsTitleParse) {
@@ -342,7 +306,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                     // 于是「纯 Data URI 的 MHT」在提取**之前**就被判为"无图片内容"而 SKIPPED。
                     // 现补上 Data URI 判据，只有三者皆空才真正跳过。
                     if (parsed.getCidMap().isEmpty() && parsed.getLocationDataMap().isEmpty()
-                            && !hasDataUriImages(parsed.getHtmlContent())) {
+                            && !ExtractionPreviewCache.hasDataUriImages(parsed.getHtmlContent())) {
                         log.info(I18n.msg("log.imagebatchprocessor.24", name));
                         stats.incrementSkip();
                         stats.addSkipDetail(I18n.get("extract.fileSkippedNoImages", "file", name));
@@ -384,8 +348,10 @@ public class ImageBatchProcessor extends BatchProcessor {
                     imageSource = new InMemoryImageSource(images);
                 }
 
-                // 保存与归档（委托给输出处理器；命中与未命中共用，命名在提取期重算 P13）
-                int saved = outputHandler.saveImages(imageSource, extractedTitle, fileInfo, i, total, stats);
+                // 保存与归档（委托给输出策略；命中与未命中共用，命名在提取期重算 P13）
+                OutputContext ctx = new OutputContext(fileInfo, i, total, outputFolder, stats,
+                        this, config);
+                int saved = outputs.saveImages(imageSource, extractedTitle, ctx);
                 if (saved > 0) {
                     totalImageCount += saved;
                     stats.incrementSuccess();
@@ -393,10 +359,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                     // 规则 (b)：该项目提取完成（SUCCESS/SUCCESS_WARNED）→ 删其缓存目录。
                     // 命中与否都删（未命中也可能残留旧指纹目录，规则 (a) 的兜底）；
                     // 取消（未处理到该项目）或 FAILED/SKIPPED → 保留缓存以便重试（C10）。
-                    // hasCachedEntries 守卫：会话缓存为空时跳过逐文件扫描
-                    if (previewCache != null && previewCache.hasCachedEntries()) {
-                        previewCache.onExtractionCompleted(fileInfo.getPath());
-                    }
+                    previewCache.onExtractionCompleted(fileInfo.getPath());
                 } else {
                     String failReason = I18n.get("extract.allImagesWriteFailed", "count", imageSource.size());
                     stats.incrementFail();
@@ -420,7 +383,7 @@ public class ImageBatchProcessor extends BatchProcessor {
             stats.attachWarningTo(mhtFiles.getFirst().getPath(), mergedNameWarning);
         }
 
-        outputHandler.afterAll(outputFolder, stats);
+        outputs.onAllFilesProcessed(config, outputFolder, stats);
 
         if (config.isSingleOutputMode()) {
             log.info("========================================");
@@ -431,247 +394,6 @@ public class ImageBatchProcessor extends BatchProcessor {
         log.info("{}", stats);
         return stats;
     }
-
-    // ==================== 策略接口 ====================
-
-    @FunctionalInterface
-    private interface ParsedMhtProvider {
-        MimeParser.ParsedMht provide(int index) throws Exception;
-    }
-
-    private interface ImageOutputHandler {
-        int saveImages(ImageSource images, String extractedTitle,
-                       MhtFileInfo fileInfo, int fileIndex, int totalFiles, ProcessStats stats);
-        void afterAll(String outputFolder, ProcessStats stats);
-    }
-
-    // ==================== 解析策略实现 ====================
-
-    private static class PreloadedProvider implements ParsedMhtProvider {
-        // provide 的参数是完整文件列表下标：必须按 fileIndex 查表，不能按 entries 循环位置取
-        // （解析失败的文件不在表里 → 返回 null，由 processUnified 记 SKIPPED）
-        private final Map<Integer, MimeParser.ParsedMht> byFileIndex = new HashMap<>();
-        private final Map<Integer, String> loadFailures;
-
-        PreloadedProvider(List<ParsedFileEntry> entries, Map<Integer, String> loadFailures) {
-            for (ParsedFileEntry entry : entries) {
-                byFileIndex.put(entry.fileIndex(), entry.parsed());
-            }
-            this.loadFailures = loadFailures;
-        }
-
-        @Override
-        public MimeParser.ParsedMht provide(int index) {
-            String failure = loadFailures.get(index);
-            if (failure != null) {
-                throw new RuntimeException(I18n.get("error.LOAD_MHT_FAILED", "reason", failure));
-            }
-            return byFileIndex.get(index);
-        }
-    }
-
-    private class StreamingProvider implements ParsedMhtProvider {
-        private final List<MhtFileInfo> files;
-        private MimeParser.ParsedMht preParsedFirst;
-
-        StreamingProvider(List<MhtFileInfo> files, MimeParser.ParsedMht preParsedFirst) {
-            this.files = files;
-            this.preParsedFirst = preParsedFirst;
-        }
-
-        @Override
-        public MimeParser.ParsedMht provide(int index) throws Exception {
-            if (index == 0 && preParsedFirst != null) {
-                var result = preParsedFirst;
-                preParsedFirst = null;
-                return result;
-            }
-
-            MhtFileInfo fi = files.get(index);
-            final int idx = index + 1;
-            final String name = fi.getName();
-            log.info(I18n.msg("log.imagebatchprocessor.11", name));
-            fireProgress(idx, files.size(), name, 0.05);
-            return parserFor(fi.getPath()).parse(fi.getPath(), recursionContinueCallback,
-                    stage -> fireParsingProgress(idx, files.size(), name, stage),
-                    progress -> fireProgress(idx, files.size(), name, progress));
-        }
-    }
-
-    // ==================== 输出策略实现 ====================
-
-    private class MergedOutputHandler implements ImageOutputHandler {
-        private String mergedDir;
-        private String folderName;
-        private final AtomicInteger globalIndex = new AtomicInteger(1);
-
-        void init(String mergedDir, String folderName) {
-            this.mergedDir = mergedDir;
-            this.folderName = folderName;
-        }
-
-        @Override
-        public int saveImages(ImageSource images, String extractedTitle,
-                               MhtFileInfo fileInfo, int fileIndex, int totalFiles, ProcessStats stats) {
-            String filePrefix = "";
-            if (!config.isEnableBatchRenaming() && totalFiles > 1) {
-                filePrefix = String.format("f%02d_", fileIndex + 1);
-            }
-
-            final int fi = fileIndex;
-            final String fn = fileInfo.getName();
-            fireProgress(fi + 1, totalFiles, fn, 0.6);
-
-            int imageCount = images.size();
-            int saved = ImageWriter.saveImagesWithGlobalIndex(images, mergedDir, "jpg",
-                    config.isEnableBatchRenaming(), filePrefix, globalIndex,
-                    count -> {
-                        double p = 0.6 + 0.3 * ((double) count / imageCount);
-                        fireProgress(fi + 1, totalFiles, fn, p);
-                    });
-
-            fireProgress(fi + 1, totalFiles, fn, 0.9);
-            if (saved > 0) {
-                log.info(I18n.msg("log.imagebatchprocessor.31", fn, saved, globalIndex.get() - 1));
-            } else {
-                log.warn(I18n.msg("log.imagebatchprocessor.32", fn, imageCount));
-            }
-            return saved;
-        }
-
-        @Override
-        public void afterAll(String outputFolder, ProcessStats stats) {
-            if (!archiveMergedOutput(mergedDir, folderName, outputFolder)) {
-                stats.incrementFail();
-                stats.addFailDetail(I18n.get("extract.archiveFailedKeep", "dir", mergedDir));
-                log.error(I18n.msg("log.imagebatchprocessor.33", mergedDir));
-            }
-        }
-    }
-
-    private class SeparateOutputHandler implements ImageOutputHandler {
-        private final String outputFolder;
-
-        SeparateOutputHandler(String outputFolder) {
-            this.outputFolder = outputFolder;
-        }
-
-        @Override
-        public int saveImages(ImageSource images, String extractedTitle,
-                               MhtFileInfo fileInfo, int fileIndex, int totalFiles, ProcessStats stats) {
-            final int idx = fileIndex + 1;
-            final String name = fileInfo.getName();
-
-            // 确定输出目录名
-            String baseName;
-            if (extractedTitle != null && !extractedTitle.isEmpty()) {
-                baseName = SanitizeUtils.sanitize(extractedTitle);
-            } else {
-                baseName = getOutputDirName(name);
-            }
-            String fileOutputDir = Paths.get(outputFolder, baseName).toString();
-            FileUtils.ensureDirectory(fileOutputDir);
-
-            // 保存图片
-            fireProgress(idx, totalFiles, name, 0.6);
-            int imageCount = images.size();
-            int saved = ImageWriter.saveImagesConcurrent(images, fileOutputDir, "jpg",
-                    config.isEnableBatchRenaming(), "", count -> {
-                        double p = 0.6 + 0.25 * ((double) count / imageCount);
-                        fireProgress(idx, totalFiles, name, p);
-                    });
-            fireProgress(idx, totalFiles, name, 0.85);
-            if (saved > 0) {
-                log.info(I18n.msg("log.imagebatchprocessor.34", name, fileOutputDir, saved));
-            } else {
-                log.warn(I18n.msg("log.imagebatchprocessor.35", name, fileOutputDir, imageCount));
-            }
-
-            // 逐文件 ZIP/CBZ 打包（由全局配置决定）；失败则保留源目录并抛异常 → processUnified 记 FAILED
-            if (!archiveWithCleanup(fileOutputDir, outputFolder, baseName,
-                    idx, totalFiles, name, 0.85, 0.05, 0.05)) {
-                throw new RuntimeException(I18n.get("extract.fileArchiveFailedKeep", "dir", fileOutputDir));
-            }
-            fireProgress(idx, totalFiles, name, 0.95);
-
-            return saved;
-        }
-
-        @Override
-        public void afterAll(String outputFolder, ProcessStats stats) {
-            // 逐文件归档，无需批量操作
-        }
-    }
-
-    // ==================== 工具方法 ====================
-
-    /*
-      会话 10：逐文件查预览缓存（P3 按文件、P9 四要素命中）。
-      指纹取单元已解析参数（本处理器 config）：OutputUnitPlanner 按「来源 + 参数内容」分桶，
-      同一单元内各文件生效图片参数完全相同（H7 收敛），按文件再解析只会得到同一指纹；
-      且条目级参数表不在本层可见。预览落盘时用的正是同一生效参数（effectiveForObject），
-      因此预览指纹与提取指纹必然同源。
-
-      <p>除 store.load 的四要素 + .complete + 图片文件存在性校验外，额外要求：
-      元数据含 ≥1 张图、且 ≥1 张有非空来源标识（cid）。后者等价于未命中路径的
-      「无图片内容」快速检查（cidMap/locationDataMap 非空）会放行——只有能证明
-      未命中路径会走到提取阶段的缓存才可复用；0 图或全 data URI 的缓存按未命中处理
-      （回全量路径，结果与无缓存时完全一致）。
-
-      @return 命中；任何不满足（含 IO 失败、meta 损坏）→ null（走原路径）
-     */
-    /**
-     * HTML 里是否存在 Data URI 形式的图片引用（{@code <img src="data:...">}）。
-     *
-     * <p>用于"无图片内容"的快速判据（步骤 7 修复）：Data URI 图片既无 {@code Content-ID} 也无
-     * {@code Content-Location}，因此只看 {@code cidMap}/{@code locationDataMap} 会把
-     * "纯 Data URI 的 MHT"误判为空。这里用**宽松的字符串判据**（只做快速筛查，不是提取判据）——
-     * 精确判据仍是 {@code ImageExtractor} 里基于 Jsoup 的 {@code img[src^=data:]}；
-     * 宽松只会让极少数文件多走一次完整提取（其结果是 0 张图），不会漏图。</p>
-     */
-    private static boolean hasDataUriImages(String html) {
-        if (html == null || html.isEmpty()) {
-            return false;
-        }
-        return html.toLowerCase(java.util.Locale.ROOT).contains("src=\"data:");
-    }
-
-    /**
-     * 预览缓存查找（未命中/不可用返回 null；命中返回键与元数据）。
-     */
-    private CacheHit lookupPreviewCache(MhtFileInfo fileInfo) {
-        if (previewCache == null) {
-            return null;
-        }
-        PreviewCacheKey key;
-        try {
-            key = PreviewCacheKey.compute(Path.of(fileInfo.getPath()),   // R6.5：键含 HTML 侧车目录内容摘要
-                    config.imageExtractionFingerprint(), PreviewCacheMeta.FORMAT_VERSION);
-        } catch (IOException e) {
-            log.warn(I18n.msg("log.imagebatchprocessor.36", fileInfo.getName(), e.getMessage()));
-            return null;
-        }
-        try {
-            Optional<PreviewCacheMeta> meta = previewCache.store().load(key);
-            if (meta.isEmpty()) {
-                return null;
-            }
-            PreviewCacheMeta m = meta.get();
-            boolean reusable = !m.images().isEmpty()
-                    && m.images().stream().anyMatch(e -> e.sourceId() != null && !e.sourceId().isEmpty());
-            if (!reusable) {
-                log.info(I18n.msg("log.imagebatchprocessor.37", fileInfo.getName()));
-                return null;
-            }
-            return new CacheHit(key, m);
-        } catch (IOException e) {
-            log.warn(I18n.msg("log.imagebatchprocessor.38", fileInfo.getName(), e.getMessage()));
-            return null;
-        }
-    }
-
-    /** 会话 10：命中结果的携带类型（key 用于取缓存目录与规则 (b) 删除，meta 提供图片与警告） */
-    private record CacheHit(PreviewCacheKey key, PreviewCacheMeta meta) {}
 
     private void logImageConfigInfo() {
         if (config.isEnableNameExtraction()) {
@@ -731,52 +453,5 @@ public class ImageBatchProcessor extends BatchProcessor {
             }
         }
         return "All_Images";
-    }
-
-    private boolean archiveMergedOutput(String mergedDir, String folderName, String outputFolder) {
-        return archiveWithCleanup(mergedDir, outputFolder, folderName, -1, 0, null, 0, 0, 0);
-    }
-
-    private boolean archiveWithCleanup(String sourceDir, String outputFolder, String baseName,
-                                       int fileIdx, int totalFiles, String fileName,
-                                       double zipBase, double zipRange, double cbzRange) {
-        if (!config.isEnableZipPackaging() && !config.isEnableCbzPackaging()) return true;
-        File dir = new File(sourceDir);
-        File[] children = dir.listFiles();
-        int childCount = children == null ? 0 : children.length;
-        if (childCount == 0) {
-            FileUtils.deleteDirectory(dir);
-            log.info(I18n.msg("log.imagebatchprocessor.50", sourceDir));
-            return true;
-        }
-        boolean zipOk = true;
-        boolean cbzOk = true;
-        if (config.isEnableZipPackaging()) {
-            zipOk = Archiver.createZip(sourceDir, Paths.get(outputFolder, baseName + ".zip").toString(), count -> {
-                if (fileIdx >= 0) {
-                    fireProgress(fileIdx, totalFiles, fileName,
-                            zipBase + zipRange * ((double) count / childCount));
-                } else {
-                    log.debug(I18n.msg("log.imagebatchprocessor.51", count, childCount));
-                }
-            });
-        }
-        if (config.isEnableCbzPackaging()) {
-            cbzOk = Archiver.createCbz(sourceDir, Paths.get(outputFolder, baseName + ".cbz").toString(), count -> {
-                if (fileIdx >= 0) {
-                    fireProgress(fileIdx, totalFiles, fileName,
-                            zipBase + zipRange + cbzRange * ((double) count / childCount));
-                } else {
-                    log.debug(I18n.msg("log.imagebatchprocessor.52", count, childCount));
-                }
-            });
-        }
-        if (!zipOk || !cbzOk) {
-            log.error(I18n.msg("log.imagebatchprocessor.53", zipOk, cbzOk, sourceDir));
-            return false;
-        }
-        FileUtils.deleteDirectory(dir);
-        log.info(I18n.msg("log.imagebatchprocessor.54", sourceDir));
-        return true;
     }
 }

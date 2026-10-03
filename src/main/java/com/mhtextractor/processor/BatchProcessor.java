@@ -225,8 +225,13 @@ public abstract class BatchProcessor {
     /**
      * 触发进度回调（带子阶段进度）
      * @param subProgress 文件内部子阶段进度 0.0~1.0
+     *
+     * <p><b>为什么是包级可见而非 {@code protected}</b>（Q12）：输出策略组件（{@link OutputContext}）
+     * 需要"与处理器完全同形"的进度上报（含回调抛异常只 warn 的兜底），而它<b>不持有</b>处理器实例。
+     * 把本方法放宽到包级，输出层就能复用<b>同一处实现</b>——否则"回调抛异常只 warn"这件事会出现第二份
+     * 拷贝，也会让 {@code log.batchprocessor.02} 多出一个调用点（日志行为必须逐键逐次不变）。</p>
      */
-    protected void fireProgress(int current, int total, String fileName, double subProgress) {
+    void fireProgress(int current, int total, String fileName, double subProgress) {
         if (progressCallback != null) {
             try {
                 progressCallback.onProgress(current, total, fileName, subProgress);
