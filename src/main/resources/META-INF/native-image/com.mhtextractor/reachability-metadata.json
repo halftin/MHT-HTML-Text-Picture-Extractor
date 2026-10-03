@@ -941,7 +941,7 @@
    ],
    "type": "com.mhtextractor.gui.controller.MainController"
   },
-   {
+  {
     "fields": [
      {
       "name": "addChapterNumberCheck"
@@ -2318,9 +2318,6 @@
    "type": "javafx.scene.Scene"
   },
   {
-   "type": "javafx.scene.control.BorderPane"
-  },
-  {
    "methods": [
     {
      "name": "<init>",
@@ -2356,9 +2353,6 @@
    "type": "javafx.scene.control.CheckBox"
   },
   {
-   "type": "javafx.scene.control.ColumnConstraints"
-  },
-  {
    "methods": [
     {
      "name": "<init>",
@@ -2388,15 +2382,6 @@
     }
    ],
    "type": "javafx.scene.control.Control"
-  },
-  {
-   "type": "javafx.scene.control.FlowPane"
-  },
-  {
-   "type": "javafx.scene.control.GridPane"
-  },
-  {
-   "type": "javafx.scene.control.HBox"
   },
   {
    "methods": [
@@ -2452,9 +2437,6 @@
    "type": "javafx.scene.control.ListView"
   },
   {
-   "type": "javafx.scene.control.Pane"
-  },
-  {
    "type": "javafx.scene.control.PopupControl"
   },
   {
@@ -2476,9 +2458,6 @@
     }
    ],
    "type": "javafx.scene.control.ProgressIndicator"
-  },
-  {
-   "type": "javafx.scene.control.Region"
   },
   {
    "methods": [
@@ -2504,9 +2483,6 @@
     }
    ],
    "type": "javafx.scene.control.ScrollPane"
-  },
-  {
-   "type": "javafx.scene.control.StackPane"
   },
   {
    "methods": [
@@ -2668,9 +2644,6 @@
     }
    ],
    "type": "javafx.scene.control.Tooltip"
-  },
-  {
-   "type": "javafx.scene.control.VBox"
   },
   {
    "type": "javafx.scene.image.Image"
@@ -2990,9 +2963,6 @@
    "type": "javafx.scene.transform.Transform"
   },
   {
-   "type": "javafx.scene.web.WebView"
-  },
-  {
    "type": "javafx.stage.PopupWindow"
   },
   {
@@ -3115,9 +3085,6 @@
    "type": "sun.text.resources.cldr.FormatData_en"
   },
   {
-   "type": "sun.text.resources.cldr.FormatData_en_US"
-  },
-  {
    "type": "sun.util.resources.cldr.CalendarData"
   },
   {
@@ -3219,12 +3186,6 @@
      "parameterTypes": []
     }
    ]
-  },
-  {
-   "type": "sun.text.resources.BreakIteratorResources_en"
-  },
-  {
-   "type": "sun.text.resources.BreakIteratorResources_en_US"
   },
   {
    "type": "com.sun.scenario.effect.impl.prism.ps.PPSBlend_SRC_INPeer",
@@ -3331,6 +3292,9 @@
   },
   {
    "type": "javafx.scene.text.TextFlow"
+  },
+  {
+   "type": "javafx.scene.web.WebView"
   }
  ],
  "resources": [
@@ -13569,6 +13533,10 @@
   {
    "module": "javafx.graphics",
    "glob": "com/sun/scenario/effect/impl/hw/d3d/hlsl/Blend_SRC_IN.obj"
+  },
+  {
+   "glob": "com/sun/scenario/effect/impl/hw/d3d/hlsl/LinearConvolveShadow_8.obj",
+   "module": "javafx.graphics"
   }
  ]
 }

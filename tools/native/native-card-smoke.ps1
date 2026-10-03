@@ -75,16 +75,21 @@ if ($NativeImage) { Say "[smoke] nativeImage= $NativeImage" }
 
 $probeSrc = Join-Path $Repo 'tools\probes\AppCardProbe.java'
 $depsFile = Join-Path $Repo 'target\cp.txt'
-foreach ($p in @($probeSrc, (Join-Path $Repo 'target\classes'), $depsFile, $JavaFxLib)) {
+foreach ($p in @($probeSrc, (Join-Path $Repo 'target\classes'), $JavaFxLib)) {
     if (-not (Test-Path $p)) { Say "[smoke] [ERROR] missing input: $p  (run a full package first)"; exit 1 }
+}
+# dependency classpath: prefer target/lib (build-native always extracts it there); cp.txt is only a fallback
+$libJars = (Get-ChildItem (Join-Path $Repo 'target\lib') -Filter '*.jar' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) -join ';'
+if ([string]::IsNullOrWhiteSpace($libJars)) {
+    if (-not (Test-Path $depsFile)) { Say "[smoke] [ERROR] neither target/lib jars nor target/cp.txt available"; exit 1 }
+    $libJars = (Get-Content -LiteralPath $depsFile -Raw).Trim()
 }
 
 $probeOut = Join-Path $Repo 'tools\probes\out'
 if (-not (Test-Path $probeOut)) { New-Item -ItemType Directory -Path $probeOut -Force | Out-Null }
 $mp = (Get-ChildItem $JavaFxLib -Filter 'javafx-*-win.jar' | ForEach-Object { $_.FullName }) -join ';'
 if ([string]::IsNullOrWhiteSpace($mp)) { Say "[smoke] [ERROR] no javafx-*-win.jar in $JavaFxLib"; exit 1 }
-$deps = (Get-Content -LiteralPath $depsFile -Raw).Trim()
-$cp = $probeOut + ';' + (Join-Path $Repo 'target\classes') + ';' + $deps
+$cp = $probeOut + ';' + (Join-Path $Repo 'target\classes') + ';' + $libJars
 
 Say "[smoke] compiling AppCardProbe ..."
 & (Join-Path $JavaHome 'bin\javac.exe') -nowarn --module-path $mp --add-modules javafx.controls,javafx.fxml -cp $cp -d $probeOut $probeSrc

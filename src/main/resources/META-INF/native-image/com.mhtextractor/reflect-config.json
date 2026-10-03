@@ -92,12 +92,6 @@
   "allDeclaredConstructors": true
  },
  {
-  "name": "com.mhtextractor.gui.util.JavaFxUtil$SmoothProgressProperty",
-  "allDeclaredMethods": true,
-  "allDeclaredConstructors": true,
-  "allDeclaredFields": true
- },
- {
   "name": "com.mhtextractor.processor.BatchProcessor$ProcessStats",
   "allDeclaredFields": true,
   "allDeclaredMethods": true,
@@ -283,10 +277,6 @@
   "allDeclaredFields": true
  },
  {
-  "name": "com.sun.javafx.scene.control.skin.ListViewSkin",
-  "allDeclaredConstructors": true
- },
- {
   "name": "javafx.scene.control.ListCell",
   "allDeclaredConstructors": true,
   "allDeclaredMethods": true,
@@ -299,18 +289,10 @@
   "allDeclaredFields": true
  },
  {
-  "name": "com.sun.javafx.scene.control.skin.TextAreaSkin",
-  "allDeclaredConstructors": true
- },
- {
   "name": "javafx.scene.control.CheckBox",
   "allDeclaredConstructors": true,
   "allDeclaredMethods": true,
   "allDeclaredFields": true
- },
- {
-  "name": "com.sun.javafx.scene.control.skin.CheckBoxSkin",
-  "allDeclaredConstructors": true
  },
  {
   "name": "javafx.scene.image.ImageView",
@@ -384,10 +366,6 @@
  {
   "name": "com.mhtextractor.gui.util.JavaFxUtil",
   "allDeclaredMethods": true,
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.mhtextractor.gui.util.JavaFxUtil$SmoothProgressProperty",
   "allDeclaredConstructors": true
  },
  {
@@ -771,10 +749,6 @@
   "allDeclaredFields": true
  },
  {
-  "name": "com.sun.javafx.tk.quantum.GlassAppletWindow",
-  "allDeclaredConstructors": true
- },
- {
   "name": "com.sun.javafx.tk.quantum.EmbeddedStage",
   "allDeclaredConstructors": true
  },
@@ -803,34 +777,6 @@
  {
   "name": "com.sun.javafx.css.StyleManager",
   "allDeclaredMethods": true
- },
- {
-  "name": "com.sun.javafx.scene.control.skin.ToggleButtonSkin",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.javafx.scene.control.skin.TextFieldSkin",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.javafx.scene.control.skin.ButtonSkin",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.javafx.scene.control.skin.ComboBoxListViewSkin",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.javafx.scene.control.skin.TitledPaneSkin",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.javafx.scene.control.skin.TabPaneSkin",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.javafx.scene.control.skin.ProgressBarSkin",
-  "allDeclaredConstructors": true
  },
  {
   "name": "com.sun.javafx.scene.text.TextLayout",
@@ -884,11 +830,6 @@
   "allDeclaredMethods": true
  },
  {
-  "name": "com.sun.glass.ui.win.WinMenu",
-  "allDeclaredConstructors": true,
-  "allDeclaredMethods": true
- },
- {
   "name": "com.sun.glass.ui.win.WinCommonDialogs",
   "allDeclaredConstructors": true,
   "allDeclaredMethods": true
@@ -936,19 +877,11 @@
   "allDeclaredMethods": true
  },
  {
-  "name": "com.sun.scenario.effect.impl.hw.d3d.D3DShader",
-  "allDeclaredMethods": true
- },
- {
   "name": "com.sun.javafx.iio.ImageLoaderFactory",
   "allDeclaredMethods": true
  },
  {
   "name": "com.sun.javafx.iio.ios.IosImageLoaderFactory",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.javafx.iio.jpg.JPEGImageLoaderFactory",
   "allDeclaredConstructors": true
  },
  {
@@ -1000,18 +933,6 @@
   "allDeclaredConstructors": true
  },
  {
-  "name": "com.sun.marlin.DRenderer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.marlin.DRendererContext",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.marlin.MarlinRenderingEngine",
-  "allDeclaredConstructors": true
- },
- {
   "name": "com.sun.marlin.MarlinUtils",
   "allDeclaredMethods": true
  },
@@ -1053,26 +974,12 @@
   "allDeclaredConstructors": true
  },
  {
-  "name": "com.sun.javafx.scene.control.skin.ScrollPaneSkin",
-  "allDeclaredConstructors": true
- },
- {
   "name": "com.sun.glass.ui.win.WinCursor",
   "allDeclaredConstructors": true,
   "allDeclaredMethods": true
  },
  {
   "name": "com.sun.glass.ui.win.WinRobot",
-  "allDeclaredConstructors": true,
-  "allDeclaredMethods": true
- },
- {
-  "name": "com.sun.glass.ui.win.WinChildWindow",
-  "allDeclaredConstructors": true,
-  "allDeclaredMethods": true
- },
- {
-  "name": "com.sun.glass.ui.win.WinScreen",
   "allDeclaredConstructors": true,
   "allDeclaredMethods": true
  },
@@ -1162,11 +1069,6 @@
   "allDeclaredMethods": true
  },
  {
-  "name": "com.sun.prism.sw.SWRenderTarget",
-  "allDeclaredConstructors": true,
-  "allDeclaredMethods": true
- },
- {
   "name": "com.sun.prism.sw.SWTexture",
   "allDeclaredConstructors": true,
   "allDeclaredMethods": true
@@ -1211,16 +1113,6 @@
  {
   "name": "com.sun.scenario.effect.impl.prism.PrRenderer",
   "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.hw.d3d.D3DContext",
-  "allDeclaredConstructors": true,
-  "allDeclaredMethods": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.hw.d3d.D3DRenderer",
-  "allDeclaredConstructors": true,
-  "allDeclaredMethods": true
  },
  {
   "name": "com.sun.scenario.Settings",
@@ -1314,11 +1206,6 @@
   "allDeclaredFields": true
  },
  {
-  "name": "com.sun.glass.ui.CommonDialogs$FolderChooserResult",
-  "allDeclaredMethods": true,
-  "allDeclaredFields": true
- },
- {
   "name": "com.sun.scenario.effect.impl.prism.PrRenderer",
   "allDeclaredConstructors": true,
   "allDeclaredMethods": true
@@ -1333,15 +1220,7 @@
   "allDeclaredConstructors": true
  },
  {
-  "name": "com.sun.scenario.effect.impl.prism.ps.PPSBlendPeer",
-  "allDeclaredConstructors": true
- },
- {
   "name": "com.sun.scenario.effect.impl.prism.ps.PPSBlend_SRC_INPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.ps.PPSBloomPeer",
   "allDeclaredConstructors": true
  },
  {
@@ -1349,116 +1228,11 @@
   "allDeclaredConstructors": true
  },
  {
-  "name": "com.sun.scenario.effect.impl.prism.ps.PPSFloodPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.ps.PPSGaussianBlurPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.ps.PPSGaussianShadowPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.ps.PPSGlowPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.ps.PPSIdentityPeer",
-  "allDeclaredConstructors": true
- },
- {
   "name": "com.sun.scenario.effect.impl.prism.ps.PPSInvertMaskPeer",
   "allDeclaredConstructors": true
  },
  {
-  "name": "com.sun.scenario.effect.impl.prism.ps.PPSMotionBlurPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.ps.PPSPhongLightingPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.ps.PPSReflectionPeer",
-  "allDeclaredConstructors": true
- },
- {
   "name": "com.sun.scenario.effect.impl.prism.ps.PPSSepiaTonePeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.ps.PPSShadowPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWRenderer",
-  "allDeclaredConstructors": true,
-  "allDeclaredMethods": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWLinearConvolveShadowPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWBlendPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWBlend_SRC_INPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWBloomPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWDisplacementMapPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWFloodPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWGaussianBlurPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWGaussianShadowPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWGlowPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWIdentityPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWInvertMaskPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWMotionBlurPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWPhongLightingPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWReflectionPeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWSepiaTonePeer",
-  "allDeclaredConstructors": true
- },
- {
-  "name": "com.sun.scenario.effect.impl.prism.sw.SWShadowPeer",
   "allDeclaredConstructors": true
  },
  {

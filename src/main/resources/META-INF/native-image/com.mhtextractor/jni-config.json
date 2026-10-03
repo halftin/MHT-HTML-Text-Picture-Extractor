@@ -61,12 +61,6 @@
     "allDeclaredFields": true
   },
   {
-    "name": "com.sun.glass.ui.win.WinScreen",
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true,
-    "allDeclaredFields": true
-  },
-  {
     "name": "com.sun.glass.ui.win.WinApplication",
     "allDeclaredMethods": true,
     "allDeclaredConstructors": true,
@@ -113,17 +107,7 @@
     "allDeclaredFields": true
   },
   {
-    "name": "com.sun.glass.ui.win.WinMenu",
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
     "name": "com.sun.glass.ui.win.WinCommonDialogs",
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.glass.ui.win.WinChildWindow",
     "allDeclaredMethods": true,
     "allDeclaredFields": true
   },
@@ -159,11 +143,6 @@
   },
   {
     "name": "com.sun.glass.ui.CommonDialogs$FileChooserResult",
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
-    "name": "com.sun.glass.ui.CommonDialogs$FolderChooserResult",
     "allDeclaredMethods": true,
     "allDeclaredFields": true
   },
@@ -242,11 +221,6 @@
     "allDeclaredFields": true
   },
   {
-    "name": "com.sun.scenario.effect.impl.hw.d3d.D3DShader",
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
     "name": "com.sun.javafx.font.PrismFontFactory",
     "allDeclaredMethods": true,
     "allDeclaredFields": true
@@ -299,11 +273,6 @@
     "allDeclaredFields": true
   },
   {
-    "name": "com.sun.javafx.iio.jpg.JPEGImageLoaderFactory",
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
-  },
-  {
     "name": "com.sun.javafx.iio.png.PNGImageLoaderFactory",
     "allDeclaredMethods": true,
     "allDeclaredFields": true
@@ -319,13 +288,13 @@
     "allDeclaredFields": true
   },
   {
-    "name": "com.sun.media.jfxmediaimpl.NativeMediaManager",
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
+   "name": "com.sun.media.jfxmediaimpl.NativeMediaManager",
+   "allDeclaredMethods": true,
+   "allDeclaredFields": true
   },
   {
-    "name": "com.sun.media.jfxmedia.locator.Locator",
-    "allDeclaredMethods": true,
-    "allDeclaredFields": true
+   "name": "com.sun.media.jfxmedia.locator.Locator",
+   "allDeclaredMethods": true,
+   "allDeclaredFields": true
   }
 ]
