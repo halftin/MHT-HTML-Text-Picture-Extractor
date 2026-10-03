@@ -871,18 +871,22 @@ public class SidePanelProbe extends Application {
      * {@code WINDOW_CLOSE_REQUEST} 都会执行 {@code window.hide(); event.consume();}。
      * 实测（控制组）：自定义处理器运行时看到 {@code isConsumed()==false}，返回后立刻变成 true。
      * 故"事件被消费"什么也证明不了，"窗口还在"才是守卫真的消费了它的唯一证据。</p>
+     *
+     * <p>C4 起清缓存路径已外迁到 {@code WorkspaceLifecycleController}：反射先取
+     * {@code controller.workspaceLifecycle} 字段，再在该对象上调用/读字段。</p>
      */
     private void prepareCloseGate() {
         // 走完清缓存分支、让窗口显示出来；注意顺序：清缓存是异步的，但 test.mode 下同步走完
-        invoke(controller, "clearPreviewCache", new Class<?>[]{});
+        Object lifecycle = field(controller, "workspaceLifecycle");
+        invoke(lifecycle, "clearPreviewCache", new Class<?>[]{});
         if (!stage.isShowing()) {
             stage.show();
             sleep(300);
         }
         check("R3.6 setup: the window is on screen and the cache branch is finished ("
                         + "showing=" + stage.isShowing()
-                        + ", shutdownCacheCleared=" + field(controller, "shutdownCacheCleared") + ")",
-                stage.isShowing() && Boolean.TRUE.equals(field(controller, "shutdownCacheCleared")));
+                        + ", shutdownCacheCleared=" + field(lifecycle, "shutdownCacheCleared") + ")",
+                stage.isShowing() && Boolean.TRUE.equals(field(lifecycle, "shutdownCacheCleared")));
     }
 
     /** 分支 1：dirty 草稿**不**拦截关窗（不弹卡、窗口照常关闭）。 */

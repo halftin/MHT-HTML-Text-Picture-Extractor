@@ -53,11 +53,11 @@ import javafx.scene.input.DragEvent;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
-import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -250,10 +250,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      */
     private final ExtractionTaskCoordinator extractionCoordinator =
             new ExtractionTaskCoordinator(extractionService);
-    /** 退出清空已完成：二次 close 放行（规则 d） */
-    private volatile boolean shutdownCacheCleared = false;
-    /** 正在清空缓存（FX 线程独占）：挡住清空期间的重复关窗请求，避免开两份清理 */
-    private boolean shutdownInProgress = false;
     boolean updatingAdjustCheck = false;
 
     // ===== 分组状态（F5） =====
@@ -379,6 +375,43 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void clearPreviewCache(PreviewItem item) { MainController.this.clearPreviewCache(item); }
         @Override public void toggleGroupExpanded(GroupItem<PreviewItem> group) { groupCommand.toggleGroupExpanded(group); }
     });
+    /**
+     * 工作区生命周期协作者（C4）：移除命令 / 结构类撤销 / 关窗清缓存从本类原样外迁到
+     * {@link WorkspaceLifecycleController}；宿主能力经 {@link WorkspaceLifecycleController.Host} 收窄为具名方法
+     * （本匿名类逐个转发到下方保留成员）。文案键、日志键（log.maincontroller.46..55）、确认卡片、
+     * 撤销记录语义、缓存规则时机与关窗守卫不变。
+     */
+    private final WorkspaceLifecycleController workspaceLifecycle =
+            new WorkspaceLifecycleController(new WorkspaceLifecycleController.Host() {
+        @Override public ListView<Object> fileListView() { return refs.fileListView(); }
+        @Override public Node anchor() { return refs.statusLabel(); }
+        @Override public List<Object> dataOrder() { return items; }
+        @Override public ObservableList<Object> displayItems() { return displayItems; }
+        @Override public Object currentSelection() { return MainController.this.currentSelection(); }
+        @Override public void selectRow(Object row) { refs.fileListView().getSelectionModel().select(row); }
+        @Override public void selectNearestVisible(int i) { MainController.this.selectNearestVisible(i); }
+        @Override public List<PreviewItem> allVisibleItems() { return MainController.this.allVisibleItems(); }
+        @Override public int visibleCount() { return (int) MainController.this.visibleCount(); }
+        @Override public int visibleMemberCount(GroupItem<PreviewItem> group) { return MainController.this.visibleMemberCount(group); }
+        @Override public boolean isAnimating() { return groupCommand.isAnimating(); }
+        @Override public void removeModelItems(List<PreviewItem> targets) { ws.removeItems(targets); }
+        @Override public void removeModelGroup(GroupItem<PreviewItem> group) { ws.removeGroup(group); }
+        @Override public boolean canUndo() { return ws.canUndo(); }
+        @Override public UndoManager.Record<PreviewItem> popRecord() { return ws.popRecord(); }
+        @Override public void applyUndo(UndoManager.Record<PreviewItem> record) { ws.applyUndo(record); }
+        @Override public List<PreviewItem> applyUndoAffected() { return ws.applyUndoAffected(); }
+        @Override public void applyParamUndo(UndoManager.Record<PreviewItem> record) { MainController.this.applyParamUndo(record); }
+        @Override public void cacheRulesForRemovedItems(Iterable<PreviewItem> items) { workspaceParamService.itemsRemoved(items); }
+        @Override public void clearItemPreviewState(PreviewItem item) { MainController.this.clearPreviewCache(item); }
+        @Override public void refreshAfterListChange() { MainController.this.refreshAfterListChange(); }
+        @Override public void startPreParseFor(List<PreviewItem> items) { MainController.this.startPreParseFor(items); }
+        @Override public boolean currentModeConfirmed() { return MainController.this.currentModeConfirmed(); }
+        @Override public boolean hasCachedEntries() { return workspaceParamService.hasCachedEntries(); }
+        @Override public void cancelWorkspaceActivity() { MainController.this.cancelWorkspaceActivity(); }
+        @Override public void awaitPreviewInFlight(long millis) { previewLoader.awaitInFlight(millis); }
+        @Override public Path cacheRoot() { return previewCacheLifecycle.store().root(); }
+        @Override public void onShutdownClearCache() { previewCacheLifecycle.onShutdown(() -> { }); }
+    });
     /** Q9a：FeatureExercise 按<b>字段访问</b>读它的 isDisable()，故保留同名字段指向新类里那一个 */
     MenuItem ctxClearParams;
     /** Q10：参数剪贴板（R7.1-R7.7）—— 复制快照 + 批量应用编排；路由与应用本体都是下方那两个方法 */
@@ -433,42 +466,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         installer.installWelcomeLog();
     }
 
-    /** 规则 (d)：关窗清空（§2.2/§2.6(6)）。有缓存 → 无按钮等待卡片 → 停后台活动 → 等在途写入（≤2s）→ 清空 → 清完自动关窗；
-     *  无缓存 → 直接放行。只清 PreviewCacheStore 的 root，绝不触碰 java.io.tmpdir 整体。
-     *
-     *  <p><b>P7：本方法不再读 {@code test.mode}</b>。此前有一条"自动化不等卡片"的旁路分支，使生产启动代码
-     *  与测试开关耦合；现在无论谁来关窗都走同一条生产路径。GUI 自动化改由测试源集的
-     *  {@code gui.acceptance.TestMain} 承载，收尾用 {@code Platform.exit()+System.exit()}，
-     *  不经过关窗处理器，因此那条旁路对它本来也不起作用。</p> */
+    /** 关窗（规则 d）：本体已外迁到 {@link WorkspaceLifecycleController}（C4），此处仅作转发壳（MainViewInstaller 挂接点） */
     void onWindowCloseRequest(WindowEvent e) {
-        if (shutdownCacheCleared) {
-            return;                                    // 已清空 → 放行关闭
-        }
-        if (NotificationHost.hasPendingDecision(refs.statusLabel())) {
-            e.consume();                               // 有未回答的确认卡：不放行（旧模态 Alert 本就关不掉主窗）
-            return;
-        }
-        if (shutdownInProgress) {
-            e.consume();                               // 正在清空 → 继续等，重复的关窗请求一律挡住
-            return;
-        }
-        if (!workspaceParamService.hasCachedEntries()) {
-            return;                                    // 无缓存 → 放行（不显示卡片）
-        }
-        e.consume();
-        shutdownInProgress = true;
-        cancelWorkspaceActivity();                     // 仍在 FX 线程调用：与旧实现同线程，保持 token 可见性语义
-        Stage stage = (Stage) e.getSource();
-        // 会话 19：无按钮等待卡片 —— 清空期间不可交互（persistent），清完自动收卡片并自动关窗，无需点确定
-        GuiNotifications.cacheClearing(refs.statusLabel(), previewCacheLifecycle.store().root(),
-                this::clearPreviewCache, stage::close);
-    }
-
-    /** 关窗收尾（后台线程）：等在途写入结束 → 清空缓存（cancelWorkspaceActivity 已由调用方在 FX 线程先行调用） */
-    private void clearPreviewCache() {
-        previewLoader.awaitInFlight(2000);
-        previewCacheLifecycle.onShutdown(() -> { });
-        shutdownCacheCleared = true;
+        workspaceLifecycle.onWindowCloseRequest(e);
     }
 
     // ==================== GUI 状态持久化（logs/gui-state.json） ====================
@@ -1064,7 +1064,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             @Override public void group() { onGroupClicked(); }
             @Override public void ungroup() { onUngroupClicked(); }
             @Override public void remove() { onRemoveClicked(); }
-            @Override public void removeGroup(Object target) { onContextRemoveGroup(target); }
+            @Override public void removeGroup(Object target) { workspaceLifecycle.onContextRemoveGroup(target); }
         };
     }
 
@@ -1153,22 +1153,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             openParamDialog(ParamScope.GLOBAL);
         } else {
             onParamSettings();
-        }
-    }
-
-    /** 移除组（Q3 拍板：每次必弹确认；与按钮行整组移除共用同一路径，G2 统一） */
-    private void onContextRemoveGroup(Object target) {
-        if (groupCommand.isAnimating()) {
-            return;
-        }
-        GroupItem<PreviewItem> group = null;
-        if (target instanceof GroupItem<?> g) {
-            group = ListInteractionController.asPreviewGroup(g);
-        } else if (target instanceof PreviewItem it && it.parentGroup != null) {
-            group = it.parentGroup;
-        }
-        if (group != null) {
-            removeGroupWithConfirm(group);
         }
     }
 
@@ -1850,305 +1834,134 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         updateContentArea(selAfter);
     }
 
+    /** 移除按钮：命令本体已外迁到 {@link WorkspaceLifecycleController}（C4），此处仅作 FXML 入口转发 */
     @FXML
     private void onRemoveClicked() {
-        if (groupCommand.isAnimating()) {
-            return;
-        }
-        // R5：有复选框勾选时按勾选集合移除（优先于当前选中项，含组内成员）
-        List<PreviewItem> targets = allVisibleItems().stream()
-                .filter(i -> i.selected).toList();
-        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
-        // D7：无勾选且选中组条目 → 整组移除（组名/参数随组对象保留在撤销记录中）
-        if (targets.isEmpty() && sel instanceof GroupItem<?> g) {
-            // G2（拍板）：整组移除一律必弹确认（R6"仅列表将空时确认"的有意例外），按钮行与右键菜单共用
-            removeGroupWithConfirm(ListInteractionController.asPreviewGroup(g));
-            return;
-        }
-        if (targets.isEmpty()) {
-            if (sel instanceof PreviewItem it && !it.removed) {
-                targets = List.of(it);
-            } else {
-                return;
-            }
-        }
-        if (targets.size() >= visibleCount()) {
-            // R13 提醒文案：全选含折叠组成员时提示（会话 19：回调式居中确认取代 showAndWait）
-            final List<PreviewItem> pending = targets;
-            String msg = I18n.get("list.removeAllConfirm", "count", pending.size())
-                    + collapsedGroupHint(pending);
-            GuiNotifications.removeAllConfirm(refs.statusLabel(), msg, ok -> {
-                if (ok) {
-                    removeSelected(pending);
-                }
-            });
-            return;
-        }
-        removeSelected(targets);
+        workspaceLifecycle.onRemoveClicked();
     }
 
-    /** 移除收尾（原确认框之后的同步段）：执行移除 + 日志 + "列表已空"提醒 */
-    private void removeSelected(List<PreviewItem> targets) {
-        removeItems(targets);
-        log.info(I18n.msg("log.maincontroller.46", targets.size(), visibleCount()));
-        if (visibleCount() == 0) {
-            GuiNotifications.listEmpty(refs.statusLabel());
-        }
-    }
-
-    /** 整组移除确认 + 执行（G2 拍板：按钮行与右键菜单统一每次必弹确认；文案区分"列表将空"与折叠提示） */
-    private void removeGroupWithConfirm(GroupItem<PreviewItem> group) {
-        int memberCount = visibleMemberCount(group);
-        String collapsedHint = group.isExpanded()
-                ? ""
-                : I18n.get("group.removeNoteCollapsed");
-        String msg = memberCount >= visibleCount()
-                ? I18n.get("group.removeConfirm", "count", memberCount) + collapsedHint
-                : I18n.get("group.removeConfirmSimple", "count", memberCount) + collapsedHint;
-        GuiNotifications.removeGroupConfirm(refs.statusLabel(), msg, ok -> {
-            if (ok) {
-                removeGroup(group);
-                log.info(I18n.msg("log.maincontroller.47", group.getName(), memberCount, visibleCount()));
-                if (visibleCount() == 0) {
-                    GuiNotifications.listEmpty(refs.statusLabel());
-                }
-            }
-        });
-    }
-
-    /** 隐藏式移除：结构变更（removed 标记 + 空组自动销毁 D11）与撤销记录由 {@link WorkspaceModel#removeItems} 负责；
-     *  本类只做缓存规则 (c) 与选择/刷新收尾 */
-    private void removeItems(List<PreviewItem> targets) {
-        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
-        int selIndex = displayItems.indexOf(sel);
-        ws.removeItems(targets);                              // 结构 + 撤销记录（模型是唯一实现）
-        // 规则 (c)：从列表移除 → 删该项目缓存目录
-        workspaceParamService.itemsRemoved(targets);
-        // 被选中项若已被移除（含"所在组被销毁"）→ 选最近的可见项
-        boolean selRemoved = sel != null
-                && ((sel instanceof PreviewItem it && targets.contains(it))
-                || (sel instanceof GroupItem<?> g && items.stream().noneMatch(o -> o == g)));
-        if (selRemoved) {
-            selectNearestVisible(selIndex);
-        }
-        refreshAfterListChange();
-    }
-
-    /** 整组移除（D7）：结构变更与撤销记录由 {@link WorkspaceModel#removeGroup} 负责；本类只做缓存规则 (c) 与选择/刷新收尾 */
-    private void removeGroup(GroupItem<PreviewItem> group) {
-        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
-        int selIndex = displayItems.indexOf(sel);
-        List<PreviewItem> members = new ArrayList<>(group.getMembers());
-        ws.removeGroup(group);                                // 结构 + 撤销记录（模型是唯一实现）
-        // 规则 (c)：整组移除 → 删组内成员缓存目录
-        workspaceParamService.itemsRemoved(members);
-        if (sel == group) {
-            selectNearestVisible(selIndex);
-        }
-        refreshAfterListChange();
-    }
-
-    /** R13 确认框文案：待移除项目含折叠组成员时提示（折叠组内项目不可见，避免用户误以为未被选中） */
-    private String collapsedGroupHint(List<PreviewItem> targets) {
-        List<String> parts = new ArrayList<>();
-        for (Object o : items) {
-            if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> group = ListInteractionController.asPreviewGroup(g);
-                if (!group.isExpanded()) {
-                    long cnt = group.getMembers().stream()
-                            .filter(m -> !m.removed && targets.contains(m)).count();
-                    if (cnt > 0) {
-                        parts.add(group.getName() + I18n.get("group.itemCount", "count", cnt));
-                    }
-                }
-            }
-        }
-        return parts.isEmpty()
-                ? ""
-                : I18n.get("group.removeNoteHidden",
-                        "names", String.join(I18n.get("list.nameSeparator"), parts));
-    }
-
+    /** 撤销按钮：结构类分支已外迁到 {@link WorkspaceLifecycleController}（C4），此处仅作 FXML 入口转发；
+     *  参数类分支（PARAM_SET / CLEAR_PARAMS / APPLY_GLOBAL）经 {@link #applyParamUndo} 由协作者整体委派回来。 */
     @FXML
     private void onUndoClicked() {
-        if (groupCommand.isAnimating() || !ws.canUndo()) {
-            return;
-        }
-        UndoManager.Record<PreviewItem> record = ws.popRecord();
-        Object selectAfter = null;
-        // 结构恢复类操作（REORDER/MERGE_GROUPS）：恢复后生效参数可能变化，受影响项目重新预解析
-        List<PreviewItem> reparseAfter = List.of();
-        if (record != null) {
-            switch (record.type()) {
-                case REMOVE, REMOVE_GROUP -> {
-                    // 结构恢复（removed 复位 + 被销毁的空组/整组按原顶层索引插回）由模型负责
-                    ws.applyUndo(record);
-                    for (PreviewItem it : record.items()) {
-                        it.setSelected(false);      // 选中态属 UI 职责，模型不管
-                    }
-                    log.info(I18n.msg("log.maincontroller.48", record.items().size(), record.destroyedGroups().size()));
-                }
-                case IMPORT -> {
-                    Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
-                    int selIndex = displayItems.indexOf(sel);
-                    boolean selRemoved = sel != null && record.items().contains(sel);
-                    // 撤销导入 = 这批项目被移除：先做 UI 侧标记（removed 供致空组判定），
-                    // 结构摘除（从组内与顶层两处 + 致空组销毁）交由模型——原先本类手写了等价的两段
-                    for (PreviewItem it : record.items()) {
-                        it.removed = true;
-                        it.setSelected(false);
-                    }
-                    // 规则 (c)：撤销导入 = 从列表移除这批项目 → 删其缓存目录
-                    workspaceParamService.itemsRemoved(record.items());
-                    ws.applyUndo(record);
-                    if (selRemoved) {
-                        selectNearestVisible(selIndex);
-                    }
-                    log.info(I18n.msg("log.maincontroller.49", record.items().size(), record.groups().size()));
-                }
-                case GROUP -> {
-                    // 撤销建组：结构恢复（组解散、成员回原位置）由模型负责
-                    ws.applyUndo(record);
-                    record.items().stream()
-                            .filter(i -> !i.removed).findFirst().ifPresent(firstVisible -> refs.fileListView().getSelectionModel().select(firstVisible));
-                    log.info(I18n.msg("log.maincontroller.50", record.group().getName()));
-                }
-                case REORDER, MERGE_GROUPS -> {
-                    // 拖拽类：结构恢复（顶层顺序 / 组位置 / 组内顺序，组对象复用）自 Q0/P0 起由模型负责；
-                    // 本类只做缓存失效与重解析收尾（缓存规则不得由 GUI 直调，见不变式）。
-                    ws.applyUndo(record);
-                    reparseAfter = new ArrayList<>();
-                    for (PreviewItem it : ws.applyUndoAffected()) {
-                        clearPreviewCache(it);
-                        reparseAfter.add(it);
-                    }
-                    log.info(I18n.msg("log.maincontroller.51", I18n.get(record.type() == UndoManager.RecordType.REORDER
-                        ? "reorder.dragSort" : "reorder.groupMerge")));
-                }
-                case UNGROUP -> {
-                    // F6：组重建（成员回组、组按原索引插回、条目级参数清除）由模型负责
-                    ws.applyUndo(record);
-                    selectAfter = record.group();
-                    log.info(I18n.msg("log.maincontroller.52", record.group().getName(), record.items().size()));
-                }
-                case PARAM_SET -> {
-                    // 条目独立参数需求拍板：设置参数类操作（条目/组/全局）可撤销，恢复设置前的参数
-                    boolean im = record.paramImageMode();
-                    if (!record.clearItemParamsBefore().isEmpty() || !record.clearGroupParamsBefore().isEmpty()) {
-                        // Q10/R7.5 批量「应用到所选」：一条记录携带全部目标的 before 快照，
-                        // 恢复与 CLEAR_PARAMS 撤销共用同一份实现（不另写一套）
-                        restoreParamSnapshots(im, record.clearItemParamsBefore(), record.clearGroupParamsBefore());
-                    } else if (record.paramTargetPath() != null) {
-                        for (PreviewItem it : allPreviewItems()) {
-                            if (it.path.equals(record.paramTargetPath())) {
-                                if (im) {
-                                    it.imageItemParams = record.paramBefore();
-                                } else {
-                                    it.textItemParams = record.paramBefore();
-                                }
-                                clearExtractOutcomes(List.of(it));
-                                clearPreviewCache(it);
-                                // 规则 (a)：撤销恢复旧参数 = 生效参数变化 → 删该项目缓存目录
-                                workspaceParamService.paramsChanged(im, it);
-                                startPreParseFor(List.of(it));
-                                break;
-                            }
-                        }
-                    } else if (record.paramTargetGroupNo() != null) {
-                        for (Object o : items) {
-                            if (o instanceof GroupItem<?> g
-                                    && g.getGroupNo() == record.paramTargetGroupNo()) {
-                                GroupItem<PreviewItem> grp = ListInteractionController.asPreviewGroup(g);
-                                if (im) {
-                                    grp.setImageParamsCache(record.paramBefore());
-                                } else {
-                                    grp.setTextParamsCache(record.paramBefore());
-                                }
-                                List<PreviewItem> members = grp.getMembers().stream()
-                                        .filter(m -> !m.removed).toList();
-                                clearExtractOutcomes(members);
-                                for (PreviewItem m : members) {
-                                    clearPreviewCache(m);
-                                }
-                                // 规则 (a)：撤销恢复组参数 → 成员生效参数变化 → 删其缓存目录
-                                workspaceParamService.paramsChanged(im, members);
-                                startPreParseFor(members);
-                                break;
-                            }
-                        }
-                    } else {
-                        if (im) {
-                            imageParamsCache = record.paramBefore();
-                        } else {
-                            textParamsCache = record.paramBefore();
-                        }
-                        clearExtractOutcomes(allPreviewItems());
-                        // 规则 (a)：撤销恢复全局参数 → 全部条目生效参数可能变化 → 保守全删
-                        workspaceParamService.paramsChanged(im, allPreviewItems());
-                        refreshAfterParamsChanged();
-                    }
-                    refs.fileListView().refresh();
-                    updateInfoArea(currentSelection());
-                    updateExtractBanner(currentSelection());
-                    updateListButtons();
-                    log.info(I18n.msg("log.maincontroller.53", modeWord(im)));
-                }
-                case CLEAR_PARAMS -> {
-                    // 清除参数拍板 Q4：按 before 快照一次恢复全部被清除的条目/组参数，并重走联动刷新
-                    boolean im = record.clearImageMode();
-                    Map<Integer, AppConfig> groupBefore = record.clearGroupParamsBefore();
-                    int restoredItems = restoreParamSnapshots(im, record.clearItemParamsBefore(), groupBefore);
-                    log.info(I18n.msg("log.maincontroller.54", modeWord(im), restoredItems, groupBefore.size()));
-                }
-                case APPLY_GLOBAL -> {
-                    // 条目独立参数需求拍板：恢复应用前的全局参数与全部独立参数快照
-                    boolean im = record.applyGlobalImageMode();
-                    if (im) {
-                        imageParamsCache = record.applyGlobalBefore();
-                    } else {
-                        textParamsCache = record.applyGlobalBefore();
-                    }
-                    Map<String, AppConfig> itemBefore = record.applyGlobalItemParamsBefore();
+        workspaceLifecycle.onUndoClicked();
+    }
+
+    /** 参数类撤销分支（C4）：{@link WorkspaceLifecycleController#onUndoClicked} 的 PARAM_SET / CLEAR_PARAMS /
+     *  APPLY_GLOBAL 三个 case 体逐字搬入（含对 restoreParamSnapshots / refreshAfterParamsChanged /
+     *  clearExtractOutcomes / workspaceParamService.paramsChanged / startPreParseFor / 两参数缓存 /
+     *  updateInfoArea / updateExtractBanner / updateListButtons / modeWord 的调用）。 */
+    private void applyParamUndo(UndoManager.Record<PreviewItem> record) {
+        switch (record.type()) {
+            case PARAM_SET -> {
+                // 条目独立参数需求拍板：设置参数类操作（条目/组/全局）可撤销，恢复设置前的参数
+                boolean im = record.paramImageMode();
+                if (!record.clearItemParamsBefore().isEmpty() || !record.clearGroupParamsBefore().isEmpty()) {
+                    // Q10/R7.5 批量「应用到所选」：一条记录携带全部目标的 before 快照，
+                    // 恢复与 CLEAR_PARAMS 撤销共用同一份实现（不另写一套）
+                    restoreParamSnapshots(im, record.clearItemParamsBefore(), record.clearGroupParamsBefore());
+                } else if (record.paramTargetPath() != null) {
                     for (PreviewItem it : allPreviewItems()) {
-                        if (itemBefore.containsKey(it.path)) {
-                            AppConfig p = itemBefore.get(it.path);
+                        if (it.path.equals(record.paramTargetPath())) {
                             if (im) {
-                                it.imageItemParams = p;
+                                it.imageItemParams = record.paramBefore();
                             } else {
-                                it.textItemParams = p;
+                                it.textItemParams = record.paramBefore();
                             }
+                            clearExtractOutcomes(List.of(it));
+                            clearPreviewCache(it);
+                            // 规则 (a)：撤销恢复旧参数 = 生效参数变化 → 删该项目缓存目录
+                            workspaceParamService.paramsChanged(im, it);
+                            startPreParseFor(List.of(it));
+                            break;
                         }
                     }
-                    Map<Integer, AppConfig> groupBefore = record.applyGlobalGroupParamsBefore();
+                } else if (record.paramTargetGroupNo() != null) {
                     for (Object o : items) {
-                        if (o instanceof GroupItem<?> g) {
-                            if (groupBefore.containsKey(g.getGroupNo())) {
-                                AppConfig p = groupBefore.get(g.getGroupNo());
-                                if (im) {
-                                    g.setImageParamsCache(p);
-                                } else {
-                                    g.setTextParamsCache(p);
-                                }
+                        if (o instanceof GroupItem<?> g
+                                && g.getGroupNo() == record.paramTargetGroupNo()) {
+                            GroupItem<PreviewItem> grp = ListInteractionController.asPreviewGroup(g);
+                            if (im) {
+                                grp.setImageParamsCache(record.paramBefore());
+                            } else {
+                                grp.setTextParamsCache(record.paramBefore());
                             }
+                            List<PreviewItem> members = grp.getMembers().stream()
+                                    .filter(m -> !m.removed).toList();
+                            clearExtractOutcomes(members);
+                            for (PreviewItem m : members) {
+                                clearPreviewCache(m);
+                            }
+                            // 规则 (a)：撤销恢复组参数 → 成员生效参数变化 → 删其缓存目录
+                            workspaceParamService.paramsChanged(im, members);
+                            startPreParseFor(members);
+                            break;
                         }
+                    }
+                } else {
+                    if (im) {
+                        imageParamsCache = record.paramBefore();
+                    } else {
+                        textParamsCache = record.paramBefore();
                     }
                     clearExtractOutcomes(allPreviewItems());
-                    // 规则 (a)：撤销应用到全局 → 全部条目生效参数可能变化 → 保守全删
+                    // 规则 (a)：撤销恢复全局参数 → 全部条目生效参数可能变化 → 保守全删
                     workspaceParamService.paramsChanged(im, allPreviewItems());
                     refreshAfterParamsChanged();
-                    updateListButtons();
-                    updateExtractBanner(currentSelection());
-                    log.info(I18n.msg("log.maincontroller.55", modeWord(im)));
                 }
+                refs.fileListView().refresh();
+                updateInfoArea(currentSelection());
+                updateExtractBanner(currentSelection());
+                updateListButtons();
+                log.info(I18n.msg("log.maincontroller.53", modeWord(im)));
             }
-        }
-        refreshAfterListChange();
-        if (selectAfter != null && displayItems.contains(selectAfter)) {
-            refs.fileListView().getSelectionModel().select(selectAfter);
-        }
-        // 父组指针已在 refreshAfterListChange 重建，此时按恢复后的生效参数重解析受影响项目
-        if (!reparseAfter.isEmpty() && currentModeConfirmed()) {
-            startPreParseFor(reparseAfter);
+            case CLEAR_PARAMS -> {
+                // 清除参数拍板 Q4：按 before 快照一次恢复全部被清除的条目/组参数，并重走联动刷新
+                boolean im = record.clearImageMode();
+                Map<Integer, AppConfig> groupBefore = record.clearGroupParamsBefore();
+                int restoredItems = restoreParamSnapshots(im, record.clearItemParamsBefore(), groupBefore);
+                log.info(I18n.msg("log.maincontroller.54", modeWord(im), restoredItems, groupBefore.size()));
+            }
+            case APPLY_GLOBAL -> {
+                // 条目独立参数需求拍板：恢复应用前的全局参数与全部独立参数快照
+                boolean im = record.applyGlobalImageMode();
+                if (im) {
+                    imageParamsCache = record.applyGlobalBefore();
+                } else {
+                    textParamsCache = record.applyGlobalBefore();
+                }
+                Map<String, AppConfig> itemBefore = record.applyGlobalItemParamsBefore();
+                for (PreviewItem it : allPreviewItems()) {
+                    if (itemBefore.containsKey(it.path)) {
+                        AppConfig p = itemBefore.get(it.path);
+                        if (im) {
+                            it.imageItemParams = p;
+                        } else {
+                            it.textItemParams = p;
+                        }
+                    }
+                }
+                Map<Integer, AppConfig> groupBefore = record.applyGlobalGroupParamsBefore();
+                for (Object o : items) {
+                    if (o instanceof GroupItem<?> g) {
+                        if (groupBefore.containsKey(g.getGroupNo())) {
+                            AppConfig p = groupBefore.get(g.getGroupNo());
+                            if (im) {
+                                g.setImageParamsCache(p);
+                            } else {
+                                g.setTextParamsCache(p);
+                            }
+                        }
+                    }
+                }
+                clearExtractOutcomes(allPreviewItems());
+                // 规则 (a)：撤销应用到全局 → 全部条目生效参数可能变化 → 保守全删
+                workspaceParamService.paramsChanged(im, allPreviewItems());
+                refreshAfterParamsChanged();
+                updateListButtons();
+                updateExtractBanner(currentSelection());
+                log.info(I18n.msg("log.maincontroller.55", modeWord(im)));
+            }
         }
     }
 
