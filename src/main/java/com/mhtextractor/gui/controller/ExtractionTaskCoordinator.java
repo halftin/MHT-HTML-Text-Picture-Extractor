@@ -5,14 +5,18 @@ import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.i18n.ErrorCode;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.processor.BatchProcessor;
+import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.scene.control.Label;
 import lombok.extern.slf4j.Slf4j;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 
 import java.io.File;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.function.LongSupplier;
 
 /**
  * 提取任务协调器（Q3 / P2）—— 只负责 JavaFX {@link Task} 的<b>生命周期与 UI 回调</b>，
@@ -26,12 +30,19 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p><b>三个提取状态字段归本类持有</b>（搬迁前它们在 {@code MainController} 上）：</p>
  * <ul>
  *   <li>{@link #running} —— 提取是否在进行（解析回调据此让出进度条 / 状态栏）；</li>
- *   <li>{@link #lastExtractStats} —— <b>partial 统计的唯一可变 holder</b>。取消时 JavaFX
- *       {@code Task.getValue()} 在 {@code onCancelled} 里拿不到（值只在 SUCCEEDED 后可见），
- *       故由服务返回的 stats 在本类里落一次，取消回调只读它。搬迁前它长在 {@code MainController} 上、
- *       由 {@code Task.call()} 写入；本类接管后<b>全项目仍只有这一处写</b>；</li>
+ *   <li>{@link #lastExtractStats} —— <b>最近一次提取统计的可变 holder</b>。由 {@code Task.call()}
+ *       在服务返回后写一次，经 {@link #extractStats()} 供只读访问器（GUI 自动化断言）读取。
+ *       取消回写<b>不</b>读它（见下）；</li>
  *   <li>{@code currentTask} —— 在途任务（停止按钮据此取消）。</li>
  * </ul>
+ *
+ * <p><b>B —— 取消统计回写的三个时点</b>：① 请求取消（{@code Task.cancel(true)} 立即置 CANCELLED 并
+ * 触发 {@code onCancelled}）② worker 停止并产出 partial（{@code call()} 返回前完成本次 run 的
+ * {@link RunChannel#result}）③ UI 收到终态并回写。① ≠ ②：{@code onCancelled} 跑在①，此刻 partial
+ * 尚不存在，直接读 {@code lastExtractStats} 会拿到 null（首次运行）或上一次运行的残留 ——
+ * 把 {@code AtomicReference} 当同步保证是错的。因此取消回写在 {@link RunChannel} 上挂
+ * "②完成后经 FX 投递一次"的回调；每 run 另有 {@code runGeneration} 递增的陈旧守卫，
+ * 旧任务迟到的终态回调对已开始的新 run 一律 no-op。</p>
  *
  * <p><b>本类含 JavaFX，属 {@code gui} 层</b>；业务侧不得反向依赖它。</p>
  */
@@ -90,12 +101,77 @@ public final class ExtractionTaskCoordinator {
      * GUI 自动化两条提取配色断言会稳定变红。复位见 {@link #run} 的三个终态回调。</p>
      */
     final AtomicBoolean running = new AtomicBoolean(false);
-    /** 最近一次提取的 partial/完整统计：取消时 {@code Task.getValue()} 不可用，回写经此 holder */
+    /**
+     * 最近一次提取统计的唯一 holder：{@code Task.call()} 在服务返回后写一次，经 {@link #extractStats()}
+     * 供只读访问器读取（GUI 自动化据此断言提取完成与结果内容）。取消回写不经此 holder（见 {@link RunChannel}）。
+     */
     final AtomicReference<BatchProcessor.ProcessStats> lastExtractStats = new AtomicReference<>();
     private volatile Task<BatchProcessor.ProcessStats> currentTask;
+    /** 每 run 递增的运行代数（<b>只在 FX 线程上读写</b>）：旧任务迟到的终态回调凭它识别自己是陈旧调用 */
+    private long runGeneration;
 
     public ExtractionTaskCoordinator(WorkspaceExtractionService extractionService) {
         this.extractionService = extractionService;
+    }
+
+    /**
+     * B —— 每次 {@link ExtractionTaskCoordinator#run} 的结果通道与陈旧守卫（<b>零 JavaFX，可无头单测</b>）。
+     *
+     * <p><b>三个时点</b>：① 请求取消（{@code Task.cancel(true)} 立即置 CANCELLED 并触发
+     * {@code onCancelled}）② worker 停止并产出 partial（{@code call()} 返回前 {@link #result}
+     * 完成）③ UI 收到终态并回写。① ≠ ②：{@code onCancelled} 跑在①，此刻 partial 尚不存在 ——
+     * 直接读 {@code lastExtractStats} 会拿到 null（首次运行）或上一次运行的残留。
+     * 因此取消回写不读 holder，只在本通道上挂"②完成后投递一次"的回调。</p>
+     *
+     * <p><b>陈旧守卫</b>：新 run 一开（{@code runGeneration} 递增），旧 run 的一切迟到回调
+     * （三个终态回调与本通道挂的回写）都在派发目标线程上发现
+     * {@code runId != runGeneration} 而 no-op —— 取消后立即再开新任务时旧回调不得污染新任务。</p>
+     */
+    static final class RunChannel {
+        /** 本次 run 的序号（每 run 递增一次；旧任务回调凭它识别自己是陈旧调用） */
+        final long runId;
+        /** 本次 run 的结果容器：worker 完成处理后在 {@code call()} 里完成，<b>恰好一次</b>（异常路径完成 null） */
+        final CompletableFuture<BatchProcessor.ProcessStats> result = new CompletableFuture<>();
+        /** 到"UI 线程"的派发器（生产 = {@code Platform::runLater}；测试注入由测试线程按序 drain 的队列） */
+        final Consumer<Runnable> dispatcher;
+
+        RunChannel(long runId, Consumer<Runnable> dispatcher) {
+            this.runId = runId;
+            this.dispatcher = dispatcher;
+        }
+
+        /**
+         * 终态回调（{@code onSucceeded/onFailed/onCancelled}）的陈旧守卫：
+         * {@code currentRunId == runId} 才是当前 run。必须在派发目标线程（FX）上调用
+         * （{@code runGeneration} 只在 FX 线程上读写）。
+         */
+        boolean isCurrent(long currentRunId) {
+            return currentRunId == runId;
+        }
+
+        /**
+         * 在 worker 完成处理后经派发器投递一次回写 —— <b>取消路径专用</b>（成功路径不走此通道，避免双回写）。
+         *
+         * <p>注册时机是 {@code onCancelled}（时点①）；回写动作在 {@link #result} 完成（时点②）之后、
+         * 派发目标线程（时点③）上执行，且执行前<b>复查陈旧守卫</b> —— 注册之后又开了新 run，
+         * 本次回写必须 no-op。回调无论注册时 {@code result} 是否已完成都恰好执行一次
+         * （{@link CompletableFuture#whenComplete} 对已完成 future 仍会执行）；
+         * worker 异常路径完成 null 时回写动作不触发（无统计可回写）。</p>
+         *
+         * @param currentRunId 当前 run 序号的只读入口（在派发目标线程上求值）
+         * @param onFx         UI 回写动作（只收非 null 统计）
+         */
+        void deliverAfterWorkerFinished(LongSupplier currentRunId,
+                                        Consumer<BatchProcessor.ProcessStats> onFx) {
+            result.whenComplete((stats, error) -> dispatcher.accept(() -> {
+                if (currentRunId.getAsLong() != runId) {
+                    return;                     // 陈旧 run 的迟到回写：no-op
+                }
+                if (stats != null) {
+                    onFx.accept(stats);
+                }
+            }));
+        }
     }
 
     /**
@@ -113,22 +189,34 @@ public final class ExtractionTaskCoordinator {
         ui.extractionStarted();
         File sessionOutputFolder = new File(request.sessionOutputFolder());
         boolean openFolderAfterComplete = ui.openFolderAfterComplete();
+        // B：每次 run 建立新的运行上下文（序号 + 结果通道）；旧任务的迟到回调据此识别陈旧
+        long runId = ++runGeneration;
+        RunChannel channel = new RunChannel(runId, Platform::runLater);
         Task<BatchProcessor.ProcessStats> task = new Task<>() {
             @Override
             protected BatchProcessor.ProcessStats call() {
-                // 限定名：匿名 Task 继承自 FutureTask，裸 run(...) 会被解析成 FutureTask.run()；
-                // 进度适配用 lambda 而非 this::updateProgress（后者在匿名 Task 内无法绑到单参 void 目标）
-                BatchProcessor.ProcessStats stats = ExtractionTaskCoordinator.this.extractionService
-                        .run(request, () -> isCancelled(), v -> updateProgress(v, 1.0)).stats();
-                // 取消路径经 holder 回写（Task 取消时 getValue 不可用）
-                ExtractionTaskCoordinator.this.lastExtractStats.set(stats);
-                return stats;
+                try {
+                    // 限定名：匿名 Task 继承自 FutureTask，裸 run(...) 会被解析成 FutureTask.run()；
+                    // 进度适配用 lambda 而非 this::updateProgress（后者在匿名 Task 内无法绑到单参 void 目标）
+                    BatchProcessor.ProcessStats stats = ExtractionTaskCoordinator.this.extractionService
+                            .run(request, () -> isCancelled(), v -> updateProgress(v, 1.0)).stats();
+                    // 时点②：worker 停止并产出 partial —— 先落只读 holder，再完成本 run 的结果通道
+                    ExtractionTaskCoordinator.this.lastExtractStats.set(stats);
+                    channel.result.complete(stats);
+                    return stats;
+                } catch (Exception e) {
+                    channel.result.complete(null);  // worker 异常：通道仍收尾（无统计可回写），异常照常抛出
+                    throw e;
+                }
             }
         };
 
         task.progressProperty().addListener((_, _, newVal) -> ui.setProgress(newVal.doubleValue()));
 
         task.setOnSucceeded(_ -> {
+            if (!channel.isCurrent(runGeneration)) {
+                return; // 陈旧任务的迟到回调：no-op（取消后立即再开新任务时不得污染新任务）
+            }
             running.set(false);
             currentTask = null;
             ui.setProgress(1.0);
@@ -147,6 +235,9 @@ public final class ExtractionTaskCoordinator {
         });
 
         task.setOnFailed(_ -> {
+            if (!channel.isCurrent(runGeneration)) {
+                return; // 陈旧任务的迟到回调：no-op
+            }
             running.set(false);
             currentTask = null;
             ui.setStatusText(I18n.get("extract.statusError"));
@@ -157,11 +248,13 @@ public final class ExtractionTaskCoordinator {
         });
 
         task.setOnCancelled(_ -> {
-            // 拍板：中途取消回写已处理部分（未处理的保持原样）
-            BatchProcessor.ProcessStats partial = lastExtractStats.get();
-            if (partial != null) {
-                ui.applyResults(partial);
+            if (!channel.isCurrent(runGeneration)) {
+                return; // 陈旧任务的迟到回调：no-op（不得为旧 run 回写）
             }
+            // 拍板：中途取消回写已处理部分（未处理的保持原样）。
+            // 时点①：取消请求 ≠ worker 已退出 —— 此刻不得读 lastExtractStats（null/残留旧值），
+            // 只在结果通道上挂"worker 完成后投递一次"的回写，partial 到那时才存在。
+            channel.deliverAfterWorkerFinished(() -> runGeneration, ui::applyResults);
         });
 
         currentTask = task;
