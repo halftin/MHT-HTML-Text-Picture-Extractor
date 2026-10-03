@@ -279,6 +279,36 @@ class ImageBatchProcessorTest {
         assertEquals(1, Files.list(mergedDir).count());
     }
 
+    // ==================== A1：HTML 来源的单独输出目录名（口径收敛到 SourceKinds） ====================
+
+    @Test
+    void htmlSourceSeparateOutputDirUsesBaseName() throws Exception {
+        Path source = tmp.resolve("src");
+        Files.createDirectories(source);
+        Path page = source.resolve("page.html");
+        Files.writeString(page, "<html><body><img src=\"a.png\"></body></html>");
+        byte[] pngBytes;
+        try (InputStream is = getClass().getResourceAsStream("/fixtures/html/same-dir/flat-a.png")) {
+            assertNotNull(is, "flat-a.png 夹具缺失");
+            pngBytes = is.readAllBytes();
+        }
+        Files.write(source.resolve("a.png"), pngBytes);
+        Path out = Files.createDirectories(tmp.resolve("out"));
+
+        ImageBatchProcessor processor = new ImageBatchProcessor(preloadSeparateConfig(source));
+        BatchProcessor.ProcessStats stats = processor.process(
+                BatchProcessor.buildMhtFileInfoList(List.of(page.toString())),
+                out.toString(), null, null);
+
+        assertEquals(0, stats.getFailCount(), stats.toString());
+        assertEquals(ExtractOutcome.SUCCESS, resultsByName(stats).get("page.html").outcome());
+        assertTrue(Files.isDirectory(out.resolve("page")),
+                "A1：单独输出目录必须是基名 page，实际内容："
+                        + Files.list(out).map(p -> p.getFileName().toString()).toList());
+        assertFalse(Files.exists(out.resolve("page.html")), "修复前会把 .html 残留在目录名里");
+        assertEquals(1, Files.list(out.resolve("page")).count(), "同目录图片应落入 page/ 下");
+    }
+
     // ==================== P0-3：全部写入失败仍标记 SUCCESS ====================
 
     @Test

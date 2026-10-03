@@ -375,7 +375,7 @@ public final class MhtImportPlanner {
         if (parent == null) {
             return false;
         }
-        for (String ext : List.of(".html", ".htm")) {
+        for (String ext : SourceKinds.htmlExtensions()) {
             if (new File(parent, base + ext).isFile()) {
                 return true;
             }

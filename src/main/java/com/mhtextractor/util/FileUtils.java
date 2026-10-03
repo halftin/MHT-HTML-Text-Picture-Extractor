@@ -21,7 +21,8 @@ public class FileUtils {
     private static final Logger logger = LoggerFactory.getLogger(FileUtils.class);
 
     /**
-     * 获取目录下所有 .mht 文件，按修改时间排序
+     * 获取目录下所有可导入来源文件（.mht/.mhtml/.html/.htm，大小写不敏感），按修改时间排序。
+     * 扩展名口径唯一实现点在 {@link SourceKinds#isImportable}（A1：此前只收 MHT，漏掉 HTML）。
      */
     public static List<File> findMhtFiles(String folderPath) {
         File dir = new File(folderPath);
@@ -30,7 +31,7 @@ public class FileUtils {
             return List.of();
         }
 
-        File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".mht") || name.toLowerCase().endsWith(".mhtml"));
+        File[] files = dir.listFiles((d, name) -> SourceKinds.isImportable(name));
         if (files == null || files.length == 0) {
             logger.warn(I18n.msg("log.fileutils.02", folderPath));
             return List.of();

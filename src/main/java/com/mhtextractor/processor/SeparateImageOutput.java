@@ -5,6 +5,7 @@ import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.output.ImageWriter;
 import com.mhtextractor.util.FileUtils;
 import com.mhtextractor.util.SanitizeUtils;
+import com.mhtextractor.util.SourceKinds;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.file.Paths;
@@ -33,12 +34,13 @@ final class SeparateImageOutput implements ImageOutputStrategy {
     public int saveImages(ImageSource images, String extractedTitle, OutputContext ctx) {
         final String name = ctx.fileInfo().getName();
 
-        // 确定输出目录名：标题优先（提取期重算，P13），否则源文件名（去掉 .mht/.mhtml）
+        // 确定输出目录名：标题优先（提取期重算，P13），否则源文件名（去掉已知来源扩展名；
+        // A1：口径收敛到 SourceKinds.stripKnownExtension，此前本类的正则只认 .mht/.mhtml）
         String baseName;
         if (extractedTitle != null && !extractedTitle.isEmpty()) {
             baseName = SanitizeUtils.sanitize(extractedTitle);
         } else {
-            baseName = name.replaceAll("\\.(?i)(mht|mhtml)$", "");
+            baseName = SourceKinds.stripKnownExtension(name);
         }
         String fileOutputDir = Paths.get(outputFolder, baseName).toString();
         FileUtils.ensureDirectory(fileOutputDir);

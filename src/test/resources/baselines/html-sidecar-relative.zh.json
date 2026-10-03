@@ -15,10 +15,10 @@
     "outcomes": ["sidecar.html=SUCCESS"]
   },
   "products": [
-    {"path": "sidecar.html/a.png", "sha256": "ebf4f635a17d10d6eb46ba680b70142419aa3220f228001a036d311a22ee9d2a"},
-    {"path": "sidecar.html/flat-sibling.gif", "sha256": "693d949d8c3fdc7fd4ace7c340b5f177a9f0c5be7bafee8bc93a7d88b7523d75"},
-    {"path": "sidecar.html/image_3.png", "sha256": "e30412dc76de2f72b2e790df1ee6857ce3f761521e929fa05a80b39579b7aab4"},
-    {"path": "sidecar.html/横 幅.jpg", "sha256": "d20f6ffd523b78a86cd2f916fa34af5d1918d75f7b142237c752ad6b254213ab"}
+    {"path": "sidecar/a.png", "sha256": "ebf4f635a17d10d6eb46ba680b70142419aa3220f228001a036d311a22ee9d2a"},
+    {"path": "sidecar/flat-sibling.gif", "sha256": "693d949d8c3fdc7fd4ace7c340b5f177a9f0c5be7bafee8bc93a7d88b7523d75"},
+    {"path": "sidecar/image_3.png", "sha256": "e30412dc76de2f72b2e790df1ee6857ce3f761521e929fa05a80b39579b7aab4"},
+    {"path": "sidecar/横 幅.jpg", "sha256": "d20f6ffd523b78a86cd2f916fa34af5d1918d75f7b142237c752ad6b254213ab"}
   ],
   "contentDigests": {
   }

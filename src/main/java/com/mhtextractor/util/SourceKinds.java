@@ -1,5 +1,6 @@
 package com.mhtextractor.util;
 
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -60,6 +61,17 @@ public final class SourceKinds {
     /** HTML 组（.html / .htm，大小写不敏感 —— 本步新增） */
     public static boolean isHtml(String fileName) {
         return hasAnySuffix(fileName, HTML_EXTS);
+    }
+
+    /**
+     * HTML 组的扩展名字面量（小写、含点），供"侧车同基名文件"判定
+     * （{@code MhtImportPlanner.isSidecarDir} / {@code MhtExtractorApp.isInSidecarDir}）复用。
+     *
+     * <p>返回<b>不可变</b>副本。其余实现点一律用 {@link #isMht} / {@link #isHtml} / {@link #isImportable}
+     * 等判定函数或 {@link #stripKnownExtension}，不要自行持有扩展名集合 —— 本类是来源扩展名的唯一入口。</p>
+     */
+    public static List<String> htmlExtensions() {
+        return List.of(HTML_EXTS);
     }
 
     private static boolean hasAnySuffix(String fileName, String[] exts) {

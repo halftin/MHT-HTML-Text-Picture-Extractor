@@ -5,6 +5,7 @@ import com.mhtextractor.extractor.WarningProvider;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.FileUtils;
+import com.mhtextractor.util.SourceKinds;
 import lombok.Data;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -216,10 +217,11 @@ public abstract class BatchProcessor {
     }
 
     /**
-     * 获取输出目录名
+     * 获取输出目录名 = 剥掉已知来源扩展名后的基名（A1：口径收敛到 {@link SourceKinds#stripKnownExtension}，
+     * 此前本类的正则只认 .mht/.mhtml，HTML 来源的 .html/.htm 会残留在输出名里）。
      */
     protected String getOutputDirName(String mhtFileName) {
-        return mhtFileName.replaceAll("\\.(?i)(mht|mhtml)$", "");
+        return SourceKinds.stripKnownExtension(mhtFileName);
     }
 
     /**

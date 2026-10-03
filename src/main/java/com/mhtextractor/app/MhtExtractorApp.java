@@ -147,8 +147,16 @@ public final class MhtExtractorApp {
         }
         String base = name.substring(0, name.length() - "_files".length());
         Path parent = dir.getParent();
-        return parent != null && (Files.isRegularFile(parent.resolve(base + ".html"))
-                || Files.isRegularFile(parent.resolve(base + ".htm")));
+        if (parent == null) {
+            return false;
+        }
+        // 扩展名集合走 SourceKinds（A1：与 MhtImportPlanner.isSidecarDir 同源，不再各自持有裸字面量）
+        for (String ext : SourceKinds.htmlExtensions()) {
+            if (Files.isRegularFile(parent.resolve(base + ext))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ==================== 提取 ====================

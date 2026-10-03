@@ -15,7 +15,7 @@
     "outcomes": ["中文页面.html=SUCCESS"]
   },
   "products": [
-    {"path": "中文页面.html/中 文1.png", "sha256": "ebf4f635a17d10d6eb46ba680b70142419aa3220f228001a036d311a22ee9d2a"}
+    {"path": "中文页面/中 文1.png", "sha256": "ebf4f635a17d10d6eb46ba680b70142419aa3220f228001a036d311a22ee9d2a"}
   ],
   "contentDigests": {
   }
