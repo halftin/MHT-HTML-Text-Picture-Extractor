@@ -4,6 +4,7 @@ import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.platform.HtmlSyntaxPalette;
 import com.mhtextractor.platform.HtmlSyntaxTokens;
 import com.mhtextractor.platform.HtmlTextSelection;
+import com.mhtextractor.platform.HtmlWrapMap;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -30,6 +31,7 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
@@ -70,14 +72,14 @@ import java.util.WeakHashMap;
  * 逐个建 {@code Text} 节点必然卡死；{@code ListView} 只为可见区域建 cell
  * （判据是<b>实测节点数</b>，见 {@code tools/probes/HtmlViewerProbe}）。</p>
  *
- * <h2>横向滚动（R2.8）</h2>
- * <p>{@code ListView} 默认把行软换行、也不横向滚动，而源码视图的语义是
- * {@code white-space: pre}（与 {@code SourceViewPage} 的 {@code .lc} 一致）。
- * 做法：<b>{@link ScrollPane} 包住 {@code ListView}</b>，并把 {@code ListView} 的
- * {@code prefWidth}/{@code minWidth} 设成"行号栏 + 最长行"的像素宽
- * （行长按<b>等宽字体的字符数</b>折算，见 {@link #measureCharWidth()}）——
- * 于是超长行把内容撑宽、由外层 {@code ScrollPane} 横向滚动；行号栏与内容行同属一个
- * 被滚动的子节点，<b>横向滚动时不会错位</b>。</p>
+ * <h2>软换行（E2，取代 R2.8 的横向滚动）</h2>
+ * <p>长行<b>按字符网格折成多个视觉行</b>（等宽字体 ⇒ 每字符等宽，见
+ * {@link #measureCharWidth()}），行号对每个逻辑行只显示一次、与<b>第一折行</b>对齐，
+ * 后续折行用等宽 spacer 缩进；外层 {@link ScrollPane} {@code fitToWidth}、永不横向滚动。
+ * 折行几何与逻辑字符列共享同一套坐标：{@link HtmlWrapMap}（纯函数）负责
+ * "像素 → 视觉行/列 → 逻辑列"的投影，选择与查找高亮都按 {@link HtmlWrapMap#segments}
+ * 切成"每视觉行一段"渲染 —— 逻辑行模型、{@link HtmlTextSelection} 的选择语义、
+ * 复制的原始源码全部不变。</p>
  *
  * <h2>查找（R5）</h2>
  * <p>底部固定一行的查找栏：输入框 + 四个线条图标按钮（查 / 上一个 / 下一个 / 关闭）。匹配口径见
@@ -97,9 +99,10 @@ import java.util.WeakHashMap;
  * <p>在内容区按下拖动可做<b>字符级</b>选择（可跨 token、跨行），平台复制键（Ctrl/Cmd+C）
  * 把<b>原始源码</b>放进系统剪贴板。逻辑模型在 {@link HtmlTextSelection}（零 JavaFX）：
  * 这里只做"像素坐标 → (行, 列)"的换算与渲染。</p>
- * <p>选择高亮是每 cell 一个<b>覆盖矩形</b>（{@code selPane} 里），<b>不重建</b>任何
- * {@code Text} 节点 —— 所以拖动期间重绘不会把"鼠标抓着的节点"摘出场景图（重建方案会
- * 让拖拽中途丢事件），大文件上也绝不按总行数建节点（只画可见 cell，R2.7 判据不变）。</p>
+ * <p>选择高亮是每 cell 的<b>覆盖矩形</b>（{@code selPane} 里，折行后每视觉行一段），
+ * <b>不重建</b>任何 {@code Text} 节点 —— 所以拖动期间重绘不会把"鼠标抓着的节点"摘出
+ * 场景图（重建方案会让拖拽中途丢事件），大文件上也绝不按总行数建节点
+ * （只画可见 cell，R2.7 判据不变）。</p>
  */
 @Slf4j
 public final class HtmlSourceViewer {
@@ -111,11 +114,14 @@ public final class HtmlSourceViewer {
     private static final double FONT_SIZE = 13;
     /** 等宽字体族（与页面上的 {@code Consolas,"Courier New",monospace} 同一顺序）。 */
     private static final String FONT_FAMILY = "Consolas, \"Courier New\", monospace";
-    /** 行高（页面上是 {@code line-height:1.5}）。 */
-    private static final double ROW_HEIGHT = FONT_SIZE * 1.5;
+    /** 行高（页面上是 {@code line-height:1.5}；<b>向上取整到整像素</b>—— JavaFX 布局按像素
+     *  吸附（snapToPixel），19.5 的行实际会被吸附成 20，选择/列折算若还用 19.5 会在多折行
+     *  上累计漂移；取整后 ROW_HEIGHT 与吸附后的真实行高逐像素一致）。 */
+    private static final double ROW_HEIGHT = Math.ceil(FONT_SIZE * 1.5);
     /** 行号栏与内容之间的间距（页面上是 {@code margin-right:10px} 加一点内边距）。 */
     private static final double GUTTER_GAP = 14;
-    /** 内容右侧留白（页面上的 {@code .lc} 没有右边距，这里留一点让最后一列不贴边）。 */
+    /** 内容右侧安全留白（E2：折行列数按"视口宽 − 行号栏 − 本值"折算，既让最后一列不贴边，
+     *  也盖住 ListView 自身竖向滚动条的覆盖宽度，保证折行后字符不被它遮住）。 */
     private static final double CONTENT_TAIL = 24;
     /** 量字符宽用的样本（等宽字体下 40 个 M 的布局宽除以 40 即单字宽）。 */
     private static final String SAMPLE_MEASURE = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
@@ -140,12 +146,10 @@ public final class HtmlSourceViewer {
 
     /** 当前行模型（{@code rows.get(i)} 对应第 i 行源码）。 */
     private final ObservableList<Row> rows = FXCollections.observableArrayList();
-    /** 行号格式化宽度 = 总行数的位数（R2.8：行号列宽度固定，横向滚动时才不错位）。 */
+    /** 行号格式化宽度 = 总行数的位数（行号列宽度固定，折行时后续视觉行才与内容不错位）。 */
     private int digits = 1;
-    /** 单字符像素宽（等宽字体 ⇒ 行宽 = 字符数 × 本值）。 */
+    /** 单字符像素宽（等宽字体 ⇒ 折行列数 = 视口宽 ÷ 本值）。 */
     private double charWidth = FONT_SIZE * 0.6;
-    /** 内容列的总像素宽（行号栏 + 最长行 + 右侧留白）。 */
-    private double contentWidth = 0;
     /** 归一化后的整篇源码（查找索引的坐标基准）。 */
     private String source = "";
     private List<HtmlSyntaxTokens.Line> lines = List.of();
@@ -360,9 +364,20 @@ public final class HtmlSourceViewer {
         return scroller;
     }
 
-    /** 行内容列当前的像素宽（= 行号栏 + 最长行 + 右侧留白）。 */
+    /** 内容视口的像素宽（E2 起语义改为<b>视口宽</b>：软换行后内容不再比视口宽）。 */
     public double contentPixelWidth() {
-        return contentWidth;
+        return scroller.getViewportBounds().getWidth();
+    }
+
+    /** 单视觉行的像素高（E2：折行后 cell 高度 = 视觉行数 × 本值；探针的几何判据用）。 */
+    public double rowHeight() {
+        return ROW_HEIGHT;
+    }
+
+    /** 当前每视觉行的逻辑列数（视口宽 ÷ 单字符宽；软换行的几何基准，渲染与选择共用）。 */
+    public int wrapCols() {
+        double contentW = scroller.getViewportBounds().getWidth() - gutterWidth() - CONTENT_TAIL;
+        return HtmlWrapMap.colsPerRow(contentW, charWidth);
     }
 
     /** 以纯文本取某行的内容。 */
@@ -435,8 +450,8 @@ public final class HtmlSourceViewer {
     /**
      * 把行模型交给 {@code ListView}（<b>只在 FX 线程调用</b>）。
      *
-     * <p>行宽按"等宽字体的字符数"折算而不是逐个量 {@code TextFlow}：后者要为上万行建
-     * 一次性节点，正是 R2.7 要避免的开销。</p>
+     * <p>行宽不做任何预折算（E2 起软换行：cell 按折行后内容自适应高度，宽度贴合视口），
+     * 代价仍是 R2.7 的口径 —— 只为可见区域建 cell，不为上万行逐个量 {@code TextFlow}。</p>
      */
     private void applySource(Source src) {
         digits = Math.max(1, String.valueOf(src.lines().size()).length());
@@ -447,15 +462,8 @@ public final class HtmlSourceViewer {
         selCaret = null;
         resetFind();
         charWidth = measureCharWidth();
-        int longest = 0;
-        for (String text : src.plainLines()) {
-            longest = Math.max(longest, text.length());
-        }
-        contentWidth = digits * charWidth + GUTTER_GAP + longest * charWidth + CONTENT_TAIL;
-        listView.setPrefWidth(contentWidth);
-        listView.setMinWidth(contentWidth);
-        scroller.setHvalue(0);
         rows.setAll(src.rows());
+        listView.scrollTo(0);   // 新文档回到顶部（可变行高下不要沿用上一文档的滚动位置）
         loadCount++;
         countLabel.setText(I18n.get("viewer.findCount", "current", 0, "total", 0));
     }
@@ -476,17 +484,26 @@ public final class HtmlSourceViewer {
         // 选中的又不是字符），关掉它，让鼠标手势只属于字符选择。
         listView.setSelectionModel(null);
         wireSelection();
-        // R2.8：默认不软换行 —— cell 的首选宽 = 内容宽（见 SourceCell.updateItem），
-        // 行号栏与内容同属一个被横向滚动的子节点，所以滚动时两者一起移动、不会错位。
-        listView.setFixedCellSize(ROW_HEIGHT);
+        // E2：软换行 —— 不设固定行高（cell 高度随折行增长），外层 ScrollPane 贴合内容宽、
+        // 永不横向滚动；长行由 SourceCell 按字符网格折成多个视觉行。
         scroller.setId("sourceViewerScroll");
         scroller.getStyleClass().add("html-source-scroll");
         scroller.setContent(listView);
-        scroller.setFitToWidth(false);
+        scroller.setFitToWidth(true);
         scroller.setFitToHeight(true);
-        scroller.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scroller.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         // 纵向滚动由内层 ListView 自己负责，外层不要再来一条
         scroller.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        // 视口宽度变了（窗口/面板尺寸变化）→ 折行列数随之变，重建可见 cell 并按新几何重绘。
+        // runLater 而不是同步：listener 可能触发在布局过程里，把重建排到下一拍更稳。
+        scroller.viewportBoundsProperty().addListener((obs, oldBounds, newBounds) -> {
+            if (Math.abs(newBounds.getWidth() - oldBounds.getWidth()) > 0.5) {
+                Platform.runLater(() -> {
+                    listView.refresh();
+                    repaintSelection();
+                });
+            }
+        });
         root.setId("sourceViewer");
         root.getStyleClass().add("html-source-viewer");
         root.setCenter(scroller);
@@ -588,7 +605,9 @@ public final class HtmlSourceViewer {
     /**
      * 场景坐标 → (行, 列)。行由<b>真实 cell 的布局边界</b>命中得出（不写死
      * {@code y = 行 × ROW_HEIGHT}，不受 ListView 内边距、虚拟流滚动偏移影响）；
-     * 列 = 内容起点 + 字符宽折算，clamp 到 {@code [0, 该行字符数]}。
+     * cell 内先按 {@link #rowHeight()} 折算出<b>视觉行</b>（clamp 到该逻辑行的折行数内），
+     * 再按字符宽折算<b>视觉列</b>，逻辑列 = 视觉行 × 每行列数 + 视觉列，
+     * clamp 到 {@code [0, 该行字符数]} —— 与渲染共用的同一套折行投影（{@link HtmlWrapMap}）。
      */
     private HtmlTextSelection.Pos posAt(double sceneX, double sceneY) {
         for (Node n : listView.lookupAll(".list-cell")) {
@@ -600,11 +619,16 @@ public final class HtmlSourceViewer {
                     || sceneY < b.getMinY() || sceneY > b.getMaxY()) {
                 continue;
             }
+            String text = plainLines.get(cell.getIndex());
+            int cols = wrapCols();
+            int vRow = (int) ((sceneY - b.getMinY()) / ROW_HEIGHT);
+            vRow = Math.max(0, Math.min(vRow, HtmlWrapMap.visualRowCount(text.length(), cols) - 1));
             // round 而不是 floor：把指针位置归到"最近的字符边界"（标准文本选择语义），
             // 也免受首字符 left-bearing 造成的亚像素偏移影响（floor 在整列边界上会差 1）
-            int col = (int) Math.round((sceneX - cell.contentSceneMinX()) / charWidth);
-            String text = plainLines.get(cell.getIndex());
-            col = Math.max(0, Math.min(col, text.length()));
+            int vCol = (int) Math.round((sceneX - cell.contentSceneMinX()) / charWidth);
+            int maxInRow = Math.min(cols, text.length() - vRow * cols);
+            vCol = Math.max(0, Math.min(vCol, maxInRow));
+            int col = Math.max(0, Math.min(vRow * cols + vCol, text.length()));
             return new HtmlTextSelection.Pos(cell.getIndex(), col);
         }
         return null;
@@ -749,49 +773,51 @@ public final class HtmlSourceViewer {
     }
 
     /**
-     * 一个行 cell：左边行号、右边 {@link TextFlow}。
+     * 一个行 cell：左边行号、右边每视觉行一个 {@link TextFlow}（E2 软换行）。
      *
-     * <p>行号列宽度固定（{@link #digits} 位，右对齐），内容列宽度固定为
-     * {@link #contentWidth} 减去行号栏 —— 于是横向滚动时"行号 + 内容"作为整体移动，
-     * 相对位置不变（R2.8 的判据之一）。</p>
+     * <p>行号列宽度固定（{@link #digits} 位，右对齐），行号对每个逻辑行<b>只显示一次</b>、
+     * 与第一折行对齐；后续折行是等宽 spacer 缩进（gutter 与 flows 同一 HBox，
+     * 视觉行自然排在行号栏右侧）。cell 高度随折行增长 = 视觉行数 × {@link #ROW_HEIGHT}。</p>
      *
-     * <p>⚠️ {@code TextFlow} 绝不设 {@code wrapText}：一旦软换行，超长行会折成多行，
-     * 行号与内容立刻错位，也与源码视图的 {@code white-space: pre} 语义矛盾。</p>
+     * <p>⚠️ {@code TextFlow} 不设 {@code wrapText}：软换行是<b>按字符网格手工切</b>的
+     * （见 {@link #buildVisualRows(Row)}）——{@code wrapText} 按 token 边界折行，折行几何
+     * 与 {@link HtmlWrapMap} 的字符网格投影对不上，选择/高亮的坐标会错位。</p>
      */
     private final class SourceCell extends ListCell<Row> {
         private final Label gutter = new Label();
-        private final TextFlow flow = new TextFlow();
+        /** 一视觉行一个 {@link TextFlow}（软换行：cell 高度 = 视觉行数 × 行高）。 */
+        private final VBox flows = new VBox();
         private final HBox box = new HBox();
-        /** 选择覆盖层（E1）：叠在内容上方的透明 Pane，里面一个按列定位的矩形。 */
+        /** 选择覆盖层（E1）：叠在内容上方的透明 Pane，折行后每视觉行一段矩形。 */
         private final Pane selPane = new Pane();
-        private final Rectangle selRect = new Rectangle(0, 0, 0, 0);
-        /** cell 内容 = 行（行号 + 内容流）上面叠选择层。 */
+        /** cell 内容 = 行（行号 + 视觉行流）上面叠选择层。 */
         private final StackPane wrapper = new StackPane(box, selPane);
 
         private SourceCell() {
             gutter.getStyleClass().add("html-source-gutter");
             gutter.setAlignment(Pos.CENTER_RIGHT);
             gutter.setMinWidth(Region.USE_PREF_SIZE);
+            // 行号只显示一次、与第一折行对齐：高度钉成一行高（后续折行是等宽 spacer 缩进）
+            gutter.setPrefHeight(ROW_HEIGHT);
+            gutter.setMinHeight(ROW_HEIGHT);
+            gutter.setMaxHeight(ROW_HEIGHT);
             gutter.setTextFill(Color.web(HtmlSyntaxPalette.GUTTER_COLOR));
             gutter.setFont(monoFont());
-            flow.getStyleClass().add("html-source-line");
-            flow.setMaxWidth(Double.MAX_VALUE);
             box.getStyleClass().add("html-source-row");
             box.setAlignment(Pos.TOP_LEFT);
-            box.getChildren().addAll(gutter, flow);
-            selRect.getStyleClass().add("html-source-selected");
-            selRect.setFill(Color.web(SELECTION_COLOR));
+            box.getChildren().addAll(gutter, flows);
             // 覆盖层对鼠标完全透明：命中测试仍落到下面的 Text 上（与没有选择层时一致）
             selPane.setMouseTransparent(true);
-            selPane.getChildren().add(selRect);
             setText(null);
-            setPrefHeight(ROW_HEIGHT);
-            setMinHeight(ROW_HEIGHT);
         }
 
-        /** 内容列（行号栏之后）在本 cell 里的场景 x 起点。 */
+        /** 内容列（行号栏之后）在本 cell 里的场景 x 起点（取第一视觉行的 TextFlow 左缘）。 */
         private double contentSceneMinX() {
-            return flow.localToScene(flow.getBoundsInLocal()).getMinX();
+            if (flows.getChildren().isEmpty()) {
+                return 0;
+            }
+            Node first = flows.getChildren().get(0);
+            return first.localToScene(first.getBoundsInLocal()).getMinX();
         }
 
         @Override
@@ -803,61 +829,99 @@ public final class HtmlSourceViewer {
                 return;
             }
             gutter.setText(String.format("%0" + digits + "d", row.number()));
-            gutter.setPrefWidth(digits * charWidth + GUTTER_GAP);
-            flow.getChildren().setAll(buildRuns(row));
-            // cell 宽 = 内容宽：把行撑到最长行那么宽（横向滚动的依据），
-            // 而不是让 ListView 自己去量 TextFlow（那会把整个列表拉成一行那么长）。
-            double w = Math.max(contentWidth - CONTENT_TAIL, 0);
-            setPrefWidth(w);
-            setMinWidth(w);
-            setMaxWidth(w);
-            box.setPrefWidth(w);
+            gutter.setPrefWidth(gutterWidth());
+            flows.getChildren().setAll(buildVisualRows(row));
             setGraphic(wrapper);
             paintSelection(row.number() - 1);
         }
 
         /**
-         * 本行的选择段（与 {@code [0, 行长)} 的交集）画进覆盖矩形；无交集 → 隐藏。
-         * 只动矩形属性，不重建文本节点（见 {@link HtmlSourceViewer#repaintSelection()}）。
+         * 本行的选择段（与 {@code [0, 行长)} 的交集）按折行切成"每视觉行一段"，每段一个
+         * 覆盖矩形；无交集 → 一个矩形都不画。只动覆盖层的矩形、不重建文本节点
+         * （见 {@link HtmlSourceViewer#repaintSelection()}）。
          */
         private void paintSelection(int line) {
             HtmlTextSelection.Range r = HtmlSourceViewer.this.selectionRange();
             String text = line >= 0 && line < plainLines.size() ? plainLines.get(line) : null;
             if (r == null || text == null || line < r.startLine() || line > r.endLine()) {
-                selRect.setVisible(false);
+                selPane.getChildren().clear();
                 return;
             }
             int from = line == r.startLine() ? r.startCol() : 0;
             int to = line == r.endLine() ? r.endCol() : text.length();
-            from = Math.max(0, Math.min(from, text.length()));
-            to = Math.max(0, Math.min(to, text.length()));
-            selRect.setVisible(to > from);
-            selRect.setX(digits * charWidth + GUTTER_GAP + from * charWidth);
-            selRect.setWidth((to - from) * charWidth);
-            selRect.setY(0);
-            selRect.setHeight(ROW_HEIGHT);
+            int cols = wrapCols();
+            selPane.getChildren().clear();
+            for (int[] seg : HtmlWrapMap.segments(text.length(), from, to, cols)) {
+                int vRow = seg[0] / cols;
+                Rectangle rect = new Rectangle(0, 0, 0, 0);
+                rect.getStyleClass().add("html-source-selected");
+                rect.setFill(Color.web(SELECTION_COLOR));
+                rect.setX(gutterWidth() + (seg[0] - vRow * cols) * charWidth);
+                rect.setY(vRow * ROW_HEIGHT);
+                rect.setWidth((seg[1] - seg[0]) * charWidth);
+                rect.setHeight(ROW_HEIGHT);
+                selPane.getChildren().add(rect);
+            }
         }
 
-        /** 把一行的 token 变成节点；当前命中的那段换成带高亮背景的 {@link Label}。 */
-        private List<Node> buildRuns(Row row) {
-            List<Node> runs = new ArrayList<>();
-            int col = 0;
+        /**
+         * 把一行切成"每视觉行一个 TextFlow"（软换行按字符网格手工切，不用 TextFlow 的
+         * {@code wrapText} —— 后者按 token 边界折、几何与选择坐标对不上）。行号只在第一
+         * 视觉行旁边出现一次（gutter 与 flows 是同一 HBox 的两个格子）。
+         */
+        private List<Node> buildVisualRows(Row row) {
+            String text = plainText(row.tokens());
+            int cols = wrapCols();
+            int rowCount = HtmlWrapMap.visualRowCount(text.length(), cols);
             boolean active = row.number() - 1 == currentHitLine();
             int[] hit = active ? currentHitColumns() : null;
+            List<Node> out = new ArrayList<>(rowCount);
+            for (int v = 0; v < rowCount; v++) {
+                int from = v * cols;
+                int to = Math.min(text.length(), (v + 1) * cols);
+                out.add(buildRowFlow(row, from, to, hit));
+            }
+            return out;
+        }
+
+        /** 一个视觉行：逻辑列区间 {@code [from, to)} 内的 token 切片拼成一个固定行高的 TextFlow。 */
+        private TextFlow buildRowFlow(Row row, int from, int to, int[] hit) {
+            TextFlow flow = new TextFlow();
+            flow.getStyleClass().add("html-source-line");
+            flow.setPrefHeight(ROW_HEIGHT);
+            flow.setMinHeight(ROW_HEIGHT);
+            flow.setMaxHeight(ROW_HEIGHT);
+            flow.getChildren().setAll(buildRowRuns(row, from, to, hit));
+            return flow;
+        }
+
+        /**
+         * 一行的 token 在逻辑列区间 {@code [from, to)} 内的切片（每视觉行调用一次）；
+         * 当前命中的那段在切片内仍换成带高亮背景的 {@link StackPane}（命中跨折行边界时
+         * 每个视觉行各出一段，样式不变、列号仍是<b>逻辑列</b>）。
+         */
+        private List<Node> buildRowRuns(Row row, int from, int to, int[] hit) {
+            List<Node> runs = new ArrayList<>();
+            int col = 0;
             for (HtmlSyntaxTokens.Token t : row.tokens()) {
                 int len = t.text().length();
-                if (hit != null && len > 0 && col < hit[1] && col + len > hit[0]) {
-                    int localStart = Math.max(0, hit[0] - col);
-                    int localEnd = Math.min(len, hit[1] - col);
-                    if (localStart > 0) {
-                        runs.add(textNode(t.kind(), t.text().substring(0, localStart)));
+                int s = Math.max(from, col);
+                int e = Math.min(to, col + len);
+                if (e > s) {
+                    String slice = t.text().substring(s - col, e - col);
+                    if (hit != null && s < hit[1] && e > hit[0]) {
+                        int localStart = Math.max(0, hit[0] - s);
+                        int localEnd = Math.min(slice.length(), hit[1] - s);
+                        if (localStart > 0) {
+                            runs.add(textNode(t.kind(), slice.substring(0, localStart)));
+                        }
+                        runs.add(hitNode(t.kind(), slice.substring(localStart, localEnd)));
+                        if (localEnd < slice.length()) {
+                            runs.add(textNode(t.kind(), slice.substring(localEnd)));
+                        }
+                    } else {
+                        runs.add(textNode(t.kind(), slice));
                     }
-                    runs.add(hitNode(t.kind(), t.text().substring(localStart, localEnd)));
-                    if (localEnd < len) {
-                        runs.add(textNode(t.kind(), t.text().substring(localEnd)));
-                    }
-                } else {
-                    runs.add(textNode(t.kind(), t.text()));
                 }
                 col += len;
             }

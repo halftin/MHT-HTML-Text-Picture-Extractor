@@ -5,6 +5,8 @@ import com.mhtextractor.gui.component.HtmlSourceViewer;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.platform.HtmlSyntaxTokens;
+import com.mhtextractor.platform.HtmlWrapMap;
 import atlantafx.base.controls.ModalPane;
 import atlantafx.base.theme.NordLight;
 import javafx.application.Application;
@@ -31,6 +33,7 @@ import javafx.event.Event;
 import javafx.event.EventType;
 import javafx.scene.layout.BorderPane;import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.Stage;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
@@ -68,8 +71,15 @@ import java.util.TimerTask;
  *       viewer's buttons do not hijack the window's ENTER (no defaultButton);</li>
  *   <li>R2.7 virtualization: a 5000-line source opens within a timeout and the number of
  *       materialised {@code .list-cell} nodes is far below the line count (measured, not felt);</li>
- *   <li>R2.8 a long line is not soft-wrapped (preferred width &gt; viewport), the content really
- *       scrolls horizontally to its tail, and the gutter stays aligned with the content;</li>
+ *   <li>E2 (replaces R2.8) a long line IS soft-wrapped into several visual rows on the character
+ *       grid: no horizontal scrolling, the line number appears once per logical line and aligns
+ *       with the first visual row, following visual rows are spacer-indented, the cell height
+ *       grows with the wrap count, and selection / find / copy stay on the shared logical
+ *       (line, column) coordinates across wrap boundaries (segmented highlight rectangles);</li>
+ *   <li>E2 §3.1 a Chromium-style corpus (LF/CRLF/CR, consecutive empty lines, trailing newline
+ *       or not, tabs, leading/trailing spaces, a 209-char long line, a cross-line comment) is
+ *       loaded through the real viewer: line model and whole-doc / per-line copies are
+ *       char-exact;</li>
  *   <li>R5.2/R5.3/R5.4 find bar at the bottom, four line-icon buttons, "n / m" counter, next/prev
  *       wrap around, a query with no hits shows 0 and raises nothing;</li>
  *   <li>R5.4 hit highlight is a node-level fact and the hit line is scrolled into view;
@@ -360,10 +370,10 @@ public class HtmlViewerProbe extends Application {
                 ? String.valueOf(titleText(leftPanel)) : "?"),
                 leftPanel instanceof BorderPane bp3 && bp3.getTop() != null
                         && !titleText(leftPanel).isEmpty() && !titleText(leftPanel).startsWith("!"));
-        check("R2.7/R2.8 the viewer has a ListView inside a ScrollPane",
+        check("R2.7/E2 the viewer has a ListView inside a ScrollPane",
                 listView != null && scroller != null && scroller.getContent() == listView);
-        check("R2.8 the outer ScrollPane is not fitting the content to its own width",
-                !scroller.isFitToWidth());
+        check("E2 the outer ScrollPane fits the content to its own width (soft wrap)",
+                scroller.isFitToWidth());
     }
 
     /**
@@ -732,7 +742,8 @@ public class HtmlViewerProbe extends Application {
      *
      * <p>⚠️ 顺序还有讲究：R5 的查找断言必须跑在<b>大源码</b>（5000 行）上，
      * 所以 {@link #openLongLineSource()}（它会把查看器换成 4 行的源码）排在最后；
-     * 否则"计数 / 循环 / 高亮 / 定点重绘"全部会落在一个 4 行文档上，判据失去意义。</p>
+     * 否则"计数 / 循环 / 高亮 / 定点重绘"全部会落在一个 4 行文档上，判据失去意义。
+     * E2 的软换行 / 折行映射 / 语料步骤接在它后面（同样先切回小文档）。</p>
      */
     private final List<Runnable> BIG_STEPS = List.of(
             this::checkR27Virtualization,
@@ -741,7 +752,9 @@ public class HtmlViewerProbe extends Application {
             this::checkHighlightAndScroll, this::checkMinimalRepaint, this::checkFindBarBottom,
             this::checkSelectionAndCopy,
             this::openLongLineSource,
-            this::checkR28NoSoftWrap, this::checkR28ScrollToTail,
+            this::checkE2SoftWrap, this::checkE2WrapMapping,
+            this::openCorpusSource, this::checkE2Corpus,
+            this::openCorpusSourceNoTrailingNl, this::checkE2CorpusNoTrailingNl,
             this::checkCollapseR29, this::checkGuiStateUnchanged,
             this::snapshotFinal, this::finish);
 
@@ -806,8 +819,8 @@ public class HtmlViewerProbe extends Application {
     // ---------- E1 字符选择与复制 ----------
 
     /**
-     * E1：选择/复制的 13 条断言，作为一步排在 R2.8 之前（之后由 {@link #openLongLineSource()}
-     * 切回长行源，确保 R2.8 的既有断言不受影响）。
+     * E1：选择/复制的 13 条断言，作为一步排在 E2 软换行断言之前（之后由
+     * {@link #openLongLineSource()} 切回长行源，E2 步骤接在后面）。
      *
      * <p>先用自己的小组装源码（{@link #showSource} 同步路径）验 #1..#11 与 #13，
      * 再同步装上 5000 行大源码验 #12（虚拟化）；每条复制断言都从<b>系统剪贴板读回</b>
@@ -839,7 +852,9 @@ public class HtmlViewerProbe extends Application {
                     && wrapper.getChildren().size() >= 1
                     && wrapper.getChildren().get(0) instanceof javafx.scene.layout.HBox hb
                     && hb.getChildren().size() >= 2
-                    && hb.getChildren().get(1) instanceof javafx.scene.text.TextFlow tf) {
+                    && hb.getChildren().get(1) instanceof VBox vb
+                    && !vb.getChildren().isEmpty()
+                    && vb.getChildren().get(0) instanceof javafx.scene.text.TextFlow tf) {
                 flowMinX = tf.localToScene(tf.getBoundsInLocal()).getMinX();
             }
             System.out.println("E1 geometry: cellMinX=" + fmt(cb.getMinX())
@@ -1101,61 +1116,334 @@ public class HtmlViewerProbe extends Application {
         };
     }
 
-    // ---------- R2.8 横向滚动 ----------
+    // ---------- E2 软换行 + 折行 ↔ 逻辑偏移映射（取代 R2.8 横向滚动） ----------
 
     private void openLongLineSource() {
         // showSource 是同步路径（tokenize 在调用线程上），返回时行模型已就位
         HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), longSource());
         viewer.node().applyCss();
         viewer.node().layout();
-        // 视口宽度（横向滚动的判据：内容宽 > 视口宽）
-        System.out.println("R2.8 long line: contentWidth=" + fmt(viewer.contentPixelWidth())
-                + " viewport=" + fmt(scroller.getViewportBounds().getWidth())
-                + " scrollerWidth=" + fmt(scroller.getWidth())
-                + " line0 chars=" + viewer.lineText(0).length());
+        System.out.println("E2 long line: contentPixelWidth=" + fmt(viewer.contentPixelWidth())
+                + " wrapCols=" + viewer.wrapCols()
+                + " charWidth=" + fmt(viewer.charWidth())
+                + " gutter=" + fmt(viewer.gutterWidth())
+                + " rowHeight=" + fmt(viewer.rowHeight())
+                + " longLine chars=" + viewer.lineText(1).length());
     }
 
-    private void checkR28NoSoftWrap() {
+    /** E2 软换行呈现：长行折成多视觉行、无横向滚动、行号只一次且与首折行对齐、cell 高度随折行增长。 */
+    private void checkE2SoftWrap() {
         double viewport = scroller.getViewportBounds().getWidth();
-        double content = viewer.contentPixelWidth();
-        check("R2.8 the content column is wider than the viewport (content=" + fmt(content)
-                        + " viewport=" + fmt(viewport) + ")",
-                viewport > 0 && content > viewport + 10);
-        check("R2.8 the ListView's own pref width follows the longest line (pref="
-                        + fmt(listView.getPrefWidth()) + " > viewport=" + fmt(viewport) + ")",
-                listView.getPrefWidth() > viewport);
-        check("R2.8 the long line is one single row model (no soft wrap -> lineCount stays 4): "
+        int cols = viewer.wrapCols();
+        int longLen = viewer.lineText(1).length();
+        int visualRows = HtmlWrapMap.visualRowCount(longLen, cols);
+        check("E2 soft wrap: contentPixelWidth() is now the viewport width ("
+                        + fmt(viewer.contentPixelWidth()) + " ~ " + fmt(viewport) + ")",
+                viewport > 0 && Math.abs(viewer.contentPixelWidth() - viewport) <= TOL);
+        // 判据是"用户不可能水平滚动"：无横向滚动条 + hvalue 停在 0（本环境 hmax 恒报 1.0 的
+        // 1px 退化余量，基线（内容 15445px 宽、真横向滚动）时 hmax 也是 1.0 —— 不拿它当判据）
+        check("E2 soft wrap: no horizontal scrolling (hbarPolicy=" + scroller.getHbarPolicy()
+                        + ", hvalue=" + fmt(scroller.getHvalue()) + ", hmax=" + fmt(scroller.getHmax()) + ")",
+                scroller.getHbarPolicy() == ScrollPane.ScrollBarPolicy.NEVER
+                        && scroller.getHvalue() <= 0.001);
+        check("E2 soft wrap: the ListView no longer outgrows the viewport (pref="
+                        + fmt(listView.getPrefWidth()) + " <= viewport=" + fmt(viewport) + ")",
+                listView.getPrefWidth() <= viewport + 1);
+        check("E2 soft wrap: the logical line model is unchanged (lineCount stays 4): "
                         + viewer.lineCount(), viewer.lineCount() == 4);
-        // R2.8 行号对齐的机械判据：行号列宽 == 位数 × 单字宽 + 固定间距，且位数取自总行数
+        // 行号对齐的机械判据（沿用 R2.8 的口径）：行号列宽 == 位数 × 单字宽 + 固定间距，位数取自总行数
         double expectedGutter = viewer.gutterDigits() * viewer.charWidth() + viewer.gutterGap();
-        System.out.println("R2.8 gutter=" + fmt(viewer.gutterWidth()) + " expected=" + fmt(expectedGutter)
+        System.out.println("E2 gutter=" + fmt(viewer.gutterWidth()) + " expected=" + fmt(expectedGutter)
                 + " digits=" + viewer.gutterDigits() + " charWidth=" + fmt(viewer.charWidth())
                 + " totalLines=" + viewer.lineCount());
-        check("R2.8 the gutter width is exactly digits × charWidth + gap (" + fmt(viewer.gutterWidth())
-                        + " vs " + fmt(expectedGutter) + ") ⇒ 行号列固定、滚动时与内容不错位",
+        check("E2 soft wrap: the gutter width is exactly digits × charWidth + gap ("
+                        + fmt(viewer.gutterWidth()) + " vs " + fmt(expectedGutter) + ")",
                 Math.abs(viewer.gutterWidth() - expectedGutter) < 0.001 && viewer.gutterDigits() >= 1);
-        check("R2.8/R2.8 the gutter digit count comes from the total line count (digits="
+        check("E2 soft wrap: the gutter digit count comes from the total line count (digits="
                         + viewer.gutterDigits() + ", lines=" + viewer.lineCount() + ")",
                 viewer.gutterDigits() == String.valueOf(viewer.lineCount()).length());
+        // 长行 cell：高度 = 视觉行数 × 行高；内部一视觉行一个 TextFlow、行号恰好一个
+        Node cell = revealCellForLine(1);
+        Bounds cb = cell == null ? null : cell.localToScene(cell.getBoundsInLocal());
+        check("E2 soft wrap: the long line really wraps into multiple visual rows (wrapCols="
+                        + cols + ", longLen=" + longLen + ", visualRows=" + visualRows + ")",
+                visualRows > 1);
+        check("E2 soft wrap: the long line cell exists and its height grew to the visual-row count ("
+                        + fmt(cb == null ? -1 : cb.getHeight()) + " px vs " + fmt(visualRows * viewer.rowHeight()) + ")",
+                cell != null && cb != null
+                        && Math.abs(cb.getHeight() - visualRows * viewer.rowHeight()) <= TOL);
+        long flowsInCell = cell == null ? -1 : cell.lookupAll(".html-source-line").size();
+        check("E2 soft wrap: the cell renders one TextFlow per visual row (" + flowsInCell
+                        + " == " + visualRows + ")", flowsInCell == visualRows);
+        long guttersInCell = cell == null ? -1 : cell.lookupAll(".html-source-gutter").size();
+        check("E2 soft wrap: the line number appears exactly once per logical line (gutters in "
+                        + "the wrapped cell = " + guttersInCell + ")", guttersInCell == 1);
+        // 行号与第一折行对齐（纵向中心一致）；后续折行等宽 spacer 缩进（与首折行同一起点 x）
+        Bounds gb = null;
+        Bounds firstFlow = null;
+        Bounds secondFlow = null;
+        if (cell instanceof javafx.scene.control.ListCell<?> lc
+                && lc.getGraphic() instanceof StackPane wrapper
+                && !wrapper.getChildren().isEmpty()
+                && wrapper.getChildren().get(0) instanceof javafx.scene.layout.HBox hb
+                && hb.getChildren().size() == 2
+                && hb.getChildren().get(0) instanceof Label gutterLabel
+                && hb.getChildren().get(1) instanceof VBox vb && vb.getChildren().size() >= 2) {
+            gb = gutterLabel.localToScene(gutterLabel.getBoundsInLocal());
+            firstFlow = vb.getChildren().get(0).localToScene(vb.getChildren().get(0).getBoundsInLocal());
+            secondFlow = vb.getChildren().get(1).localToScene(vb.getChildren().get(1).getBoundsInLocal());
+        }
+        check("E2 soft wrap: the line number aligns with the FIRST visual row (gutter center "
+                        + fmt(centerY(gb)) + " vs first row center " + fmt(centerY(firstFlow)) + ")",
+                gb != null && firstFlow != null
+                        && Math.abs(centerY(gb) - centerY(firstFlow)) <= 4);
+        check("E2 soft wrap: the gutter spans exactly one visual row height (" + fmt(height(gb))
+                        + " vs " + fmt(viewer.rowHeight()) + ")",
+                gb != null && Math.abs(height(gb) - viewer.rowHeight()) <= 2);
+        check("E2 soft wrap: following visual rows are spacer-indented to the same content start "
+                        + "(2nd row minX " + fmt(minX(secondFlow)) + " == 1st row minX " + fmt(minX(firstFlow)) + ")",
+                secondFlow != null && firstFlow != null
+                        && Math.abs(minX(secondFlow) - minX(firstFlow)) <= 1);
+        // 折行切片不丢字符：把 cell 里所有文本节点按序拼起来 == 整行原文
+        String reassembled = reassembledText(cell);
+        check("E2 soft wrap: the wrapped visual rows reassemble the whole logical line char-by-char "
+                        + "(len " + reassembled.length() + " vs " + longLen + ")",
+                reassembled.equals(viewer.lineText(1)));
+        // 无横向滚动后纵向 scrollTo(最后一行) 直接可见（旧判据"横向推到行尾"的取代）
+        listView.scrollTo(viewer.lineCount() - 1);
+        viewer.node().applyCss();
+        viewer.node().layout();
+        Node lastCell = cellForLine(viewer.lineCount() - 1);
+        check("E2 soft wrap: vertical scrollTo(last line) brings the last line's cell into the "
+                        + "viewport (cell=" + describe(lastCell) + ")", lastCell != null);
+        check("E2 soft wrap: the viewport width is a real positive number ("
+                        + fmt(scroller.getViewportBounds().getWidth()) + ")",
+                scroller.getViewportBounds().getWidth() > 0);
+        snapshot("htmlviewer-e2-softwrap");
     }
 
-    private void checkR28ScrollToTail() {
-        Bounds before = scroller.getViewportBounds();
-        double h0 = scroller.getHvalue();
-        scroller.setHvalue(scroller.getHmax());
+    /** E2 折行 ↔ 逻辑偏移映射：跨折行拖选 / 高亮分段 / 命中仍按逻辑列。 */
+    private void checkE2WrapMapping() {
+        int cols = viewer.wrapCols();
+        int longLen = viewer.lineText(1).length();
+        // 1) 跨折行边界的拖选（视觉行 0 尾 → 视觉行 1 首）→ 复制逐字符 = 逻辑子串
+        int fromCol = Math.max(0, cols - 3);
+        int toCol = Math.min(longLen, cols + 5);
+        dragVisual(1, 0, fromCol, 1, 1, toCol - cols);
+        copyViaApi();
+        String expected = viewer.lineText(1).substring(fromCol, toCol);
+        check("E2 wrap mapping: a drag across the wrap boundary copies the exact logical range "
+                        + "(clipboard=" + esc(clipboardString()) + ")",
+                charByChar("E2-wrap-cross-boundary", expected, clipboardString()));
+        // 2) 选择高亮跨视觉行：cell 内 ≥2 个选中矩形、y 位于不同视觉行
+        Node cell = revealCellForLine(1);
+        List<Double> selYs = new ArrayList<>();
+        if (cell != null) {
+            for (Node n : cell.lookupAll(".html-source-selected")) {
+                if (n instanceof Rectangle r && r.isVisible()) {
+                    selYs.add(r.localToScene(r.getBoundsInLocal()).getMinY());
+                }
+            }
+        }
+        boolean spansRows = selYs.size() >= 2
+                && selYs.get(selYs.size() - 1) - selYs.get(0) >= viewer.rowHeight() - 1;
+        check("E2 wrap mapping: the selection highlight spans visual rows (rects=" + selYs.size()
+                        + ", y span=" + (selYs.size() >= 2 ? fmt(selYs.get(selYs.size() - 1) - selYs.get(0)) : "n/a") + ")",
+                spansRows);
+        snapshot("htmlviewer-e2-wrapped-selection");   // 此刻的选择正是跨折行的两段
+        // 3) 最后一个视觉行的行尾拖选 → 复制 = 行尾子串（含"行长不在折行边界"的尾段）
+        int lastVRow = HtmlWrapMap.visualRowCount(longLen, cols) - 1;
+        int lastRowStart = lastVRow * cols;
+        dragVisual(1, lastVRow, longLen - lastRowStart - 4, 1, lastVRow, longLen - lastRowStart);
+        copyViaApi();
+        String expectedTail = viewer.lineText(1).substring(longLen - 4);
+        check("E2 wrap mapping: selecting the tail of the last visual row copies the line end "
+                        + "(clipboard=" + esc(clipboardString()) + ")",
+                charByChar("E2-wrap-tail", expectedTail, clipboardString()));
+        // 4) 查找命中仍按逻辑列：查 "END"（位于长行后部、逻辑列远超 wrapCols）
+        viewer.queryField().setText("END");
+        viewer.findButtons().get(0).fire();
+        int[] hitCols = viewer.currentHitColumns();
+        int hitLine = viewer.currentHitLine();
+        System.out.println("E2 wrap mapping find: query=END hitLine=" + hitLine
+                + " hitCols=" + java.util.Arrays.toString(hitCols)
+                + " wrapCols=" + cols + " hitCount=" + viewer.hitCount());
+        check("E2 wrap mapping: find columns stay LOGICAL on a wrapped line (hitCols="
+                        + java.util.Arrays.toString(hitCols) + ", endCol > wrapCols=" + cols + ")",
+                hitLine == 1 && hitCols != null && hitCols.length == 2 && hitCols[1] > cols);
+        Node hitCell = revealCellForLine(1);
+        List<String> hitTexts = hitTextsWithin(hitCell);
+        check("E2 wrap mapping: the hit is highlighted at the node level on the wrapped line ("
+                        + hitTexts + ")", hitTexts.size() == 1 && "END".equals(hitTexts.get(0)));
+        // 命中高亮落在后部视觉行（不在第一折行上）
+        double hitMinY = Double.NaN;
+        if (hitCell != null) {
+            for (Node n : hitCell.lookupAll(".html-source-hit")) {
+                hitMinY = n.localToScene(n.getBoundsInLocal()).getMinY();
+                break;
+            }
+        }
+        Bounds cb2 = hitCell == null ? null : hitCell.localToScene(hitCell.getBoundsInLocal());
+        check("E2 wrap mapping: the hit highlight sits on a LATER visual row (hitMinY "
+                        + fmt(hitMinY) + " vs first-row bottom " + fmt(cb2 == null ? Double.NaN : cb2.getMinY() + viewer.rowHeight()) + ")",
+                hitCell != null && cb2 != null && hitMinY >= cb2.getMinY() + viewer.rowHeight() - 1);
+        // 5) 复制内容仍不含行号/装饰（跨折行选择已逐字符比对；这里补一条行号反向断言）
+        dragVisual(1, 0, 0, 1, 0, 2);
+        copyViaApi();
+        String clip = clipboardString();
+        check("E2 wrap mapping: the copy contains no gutter line number (clipboard starts with '"
+                        + (clip == null || clip.isEmpty() ? "(empty)" : escChar(clip.charAt(0))) + "', line number is '2')",
+                charByChar("E2-wrap-no-gutter", viewer.lineText(1).substring(0, 2), clip)
+                        && clip != null && !clip.startsWith("2"));
+    }
+
+    // ---------- E2 §3.1 Chromium 对照语料（走真实查看器） ----------
+
+    /** 语料（带末尾换行 → 末尾空行保留）。 */
+    private String corpusBody() {
+        return "<html>\r\n"
+                + "  <body>\r"
+                + "\n"
+                + "\n"
+                + "\n"
+                + "    <p title=\"a\tb\">\n"
+                + "<!-- cross\n"
+                + "line comment -->\n"
+                + "<!-- " + "LONG-".repeat(40) + " -->\n"
+                + "<div>trailing   ";
+    }
+
+    private void openCorpusSource() {
+        HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), corpusBody() + "\n");
         viewer.node().applyCss();
         viewer.node().layout();
-        double h1 = scroller.getHvalue();
-        System.out.println("R2.8 hvalue " + fmt(h0) + " -> " + fmt(h1)
-                + " (hmax=" + fmt(scroller.getHmax()) + ")");
-        check("R2.8 the outer ScrollPane really scrolls horizontally (hvalue reached the max)",
-                h1 > h0 && h1 >= scroller.getHmax() - 0.001);
-        scroller.setHvalue(0);
+        System.out.println("E2 corpus (trailing NL): lines=" + viewer.lineCount()
+                + " wrapCols=" + viewer.wrapCols());
+        for (int i = 0; i < viewer.lineCount(); i++) {
+            System.out.println("    [" + i + "] len=" + viewer.lineText(i).length()
+                    + " <" + esc(viewer.lineText(i)) + ">");
+        }
+    }
+
+    private void checkE2Corpus() {
+        String[] expected = new String[]{
+                "<html>", "  <body>", "", "",
+                "    <p title=\"a\tb\">", "<!-- cross", "line comment -->",
+                "<!-- " + "LONG-".repeat(40) + " -->", "<div>trailing   ", ""};
+        check("E2 corpus: lineCount == 1 + newlines (10 lines: " + viewer.lineCount() + ")",
+                viewer.lineCount() == expected.length);
+        boolean allSame = viewer.lineCount() == expected.length;
+        for (int i = 0; allSame && i < expected.length; i++) {
+            allSame = viewer.lineText(i).equals(expected[i]);
+        }
+        check("E2 corpus: every lineText is char-exact (CRLF/CR normalized to LF, tabs / leading "
+                        + "/ trailing spaces / consecutive empty lines / trailing empty line kept)",
+                allSame);
+        // 整篇复制：逻辑范围 (0,0) → (9,0)，逐字符 = 语料归一化全文（末尾空行 → 结尾 LF）
+        dragVisual(0, 0, 0, 9, 0, 0);
+        copyViaApi();
+        check("E2 corpus: whole-doc copy is char-exact and ends with the trailing empty line's LF "
+                        + "(clipboard=" + esc(clipboardString()) + ")",
+                charByChar("E2-corpus-whole", String.join("\n", expected), clipboardString()));
+        // 跨连续空行 + 制表符行的复制
+        dragVisual(2, 0, 0, 4, 0, 19);
+        copyViaApi();
+        check("E2 corpus: a copy spanning consecutive empty lines and the tab line is char-exact "
+                        + "(clipboard=" + esc(clipboardString()) + ")",
+                charByChar("E2-corpus-empties-tab", "\n\n    <p title=\"a\tb\">", clipboardString()));
+        // 行尾空格行整行复制
+        dragVisual(8, 0, 0, 8, 0, 16);
+        copyViaApi();
+        check("E2 corpus: copying the trailing-space line keeps every space (clipboard="
+                        + esc(clipboardString()) + ")",
+                charByChar("E2-corpus-trailing", "<div>trailing   ", clipboardString()));
+        // 超长行（209 字符）整行复制：跨多个折行逐字符
+        int cols = viewer.wrapCols();
+        String longLine = viewer.lineText(7);
+        int lastVRow = HtmlWrapMap.visualRowCount(longLine.length(), cols) - 1;
+        int lastRowStart = lastVRow * cols;
+        dragVisual(7, 0, 0, 7, lastVRow, longLine.length() - lastRowStart);
+        copyViaApi();
+        check("E2 corpus: copying the 209-char long line across its visual rows is char-exact "
+                        + "(visualRows=" + (lastVRow + 1) + ", clipboard len="
+                        + (clipboardString() == null ? -1 : clipboardString().length()) + ")",
+                charByChar("E2-corpus-long-line", longLine, clipboardString()));
+        // 空行单击（空选择）不产生复制内容（选择清空、剪贴板保持哨兵）
+        setClipboard("SENTINEL-E2-EMPTY-LINE");
+        dragVisual(2, 0, 0, 2, 0, 0);
+        copyViaApi();
+        check("E2 corpus: clicking an empty line leaves the clipboard alone (clipboard="
+                        + esc(clipboardString()) + ")",
+                "SENTINEL-E2-EMPTY-LINE".equals(clipboardString()));
+    }
+
+    private void openCorpusSourceNoTrailingNl() {
+        HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), corpusBody());
         viewer.node().applyCss();
         viewer.node().layout();
-        check("R2.8 scrolling back to the left restores hvalue 0", scroller.getHvalue() <= 0.001);
-        check("R2.8 the viewport width is a real positive number (" + fmt(before.getWidth()) + ")",
-                before.getWidth() > 0);
+        System.out.println("E2 corpus (no trailing NL): lines=" + viewer.lineCount()
+                + " lastLine=" + esc(viewer.lineText(viewer.lineCount() - 1)));
+    }
+
+    private void checkE2CorpusNoTrailingNl() {
+        check("E2 corpus (no trailing NL): lineCount == 9 (no trailing empty line): "
+                        + viewer.lineCount(), viewer.lineCount() == 9);
+        check("E2 corpus (no trailing NL): the last line keeps its trailing spaces (len="
+                        + viewer.lineText(8).length() + ")", viewer.lineText(8).length() == 16);
+        dragVisual(0, 0, 0, 8, 0, 16);
+        copyViaApi();
+        String expected = HtmlSyntaxTokens.normalizeNewlines(corpusBody());
+        check("E2 corpus (no trailing NL): whole-doc copy is char-exact and does NOT end with LF "
+                        + "(clipboard len=" + (clipboardString() == null ? -1 : clipboardString().length())
+                        + " vs " + expected.length() + ")",
+                charByChar("E2-corpus-no-nl", expected, clipboardString()));
+    }
+
+    /** 视觉行坐标的拖选：视觉行号是逻辑行<b>内部</b>的折行行号，视觉列是该折行内的列。 */
+    private void dragVisual(int fromLine, int fromVRow, int fromVCol, int toLine, int toVRow, int toVCol) {
+        Node cell = revealCellForLine(fromLine);
+        if (cell == null) {
+            check("dragVisual could not reveal line " + fromLine, false);
+            return;
+        }
+        Bounds b = cell.localToScene(cell.getBoundsInLocal());
+        double contentX = b.getMinX() + viewer.gutterWidth();
+        double cw = viewer.charWidth();
+        double y = b.getMinY() + (fromVRow + 0.5) * viewer.rowHeight();
+        fireMouse(MouseEvent.MOUSE_PRESSED, cell, contentX + fromVCol * cw, y, true);
+        Node cell2 = revealCellForLine(toLine);
+        if (cell2 != null) {
+            Bounds b2 = cell2.localToScene(cell2.getBoundsInLocal());
+            y = b2.getMinY() + (toVRow + 0.5) * viewer.rowHeight();
+        }
+        double x = contentX + toVCol * cw;
+        fireMouse(MouseEvent.MOUSE_DRAGGED, listView, x, y, true);
+        fireMouse(MouseEvent.MOUSE_RELEASED, listView, x, y, false);
+    }
+
+    /** 把 cell 里所有 {@code .html-source-text} 文本按序拼起来（"折行切片不丢字符"的证据）。 */
+    private static String reassembledText(Node cell) {
+        StringBuilder sb = new StringBuilder();
+        if (cell != null) {
+            for (Node n : cell.lookupAll(".html-source-text")) {
+                if (n instanceof javafx.scene.text.Text t) {
+                    sb.append(t.getText());
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    private static double centerY(Bounds b) {
+        return b == null ? Double.NaN : (b.getMinY() + b.getMaxY()) / 2;
+    }
+
+    private static double height(Bounds b) {
+        return b == null ? Double.NaN : b.getHeight();
+    }
+
+    private static double minX(Bounds b) {
+        return b == null ? Double.NaN : b.getMinX();
     }
 
     // ---------- R5 查找 ----------
@@ -1490,10 +1778,9 @@ public class HtmlViewerProbe extends Application {
     /**
      * 复刻 JavaFX 的命中测试（与 {@code SidePanelProbe} 同法，外加一条本步必须的裁剪判定）。
      *
-     * <p>🚩 <b>必须判定祖先裁剪</b>：查看器的内层 {@code ListView} 会被撑到"最长行"那么宽
-     * （横向滚动的实现方式），于是每个 cell 的 {@code layoutBounds} 有 15000+ px 宽，
-     * 而 {@code ScrollPane} 的视口只有 631px。不做裁剪判定就会"命中"到远处那些
-     * <b>屏幕上看不见、而且被视口裁掉</b>的 cell —— 实测正是它把"右半区仍可点主界面"
+     * <p>🚩 <b>必须判定祖先裁剪</b>：查看器是一个覆盖半区的 {@code ScrollPane} 视口，
+     * 下方 cell / 相邻面板的内容都可能超出视口边界；不做裁剪判定就会"命中"到
+     * <b>屏幕上看不见、而且被视口裁掉</b>的节点 —— 实测正是它把"右半区仍可点主界面"
      * 这条断言判成了假失败。</p>
      */
     private static Node pick(Node node, double sceneX, double sceneY) {
