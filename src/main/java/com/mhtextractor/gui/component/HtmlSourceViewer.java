@@ -3,9 +3,11 @@ package com.mhtextractor.gui.component;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.platform.HtmlSyntaxPalette;
 import com.mhtextractor.platform.HtmlSyntaxTokens;
+import com.mhtextractor.platform.HtmlTextSelection;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -17,12 +19,19 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
@@ -83,6 +92,14 @@ import java.util.WeakHashMap;
  *
  * <h2>无草稿语义（R2.9）</h2>
  * <p>收起就是隐藏：没有提交/丢弃，也不落盘。</p>
+ *
+ * <h2>字符选择与复制（E1）</h2>
+ * <p>在内容区按下拖动可做<b>字符级</b>选择（可跨 token、跨行），平台复制键（Ctrl/Cmd+C）
+ * 把<b>原始源码</b>放进系统剪贴板。逻辑模型在 {@link HtmlTextSelection}（零 JavaFX）：
+ * 这里只做"像素坐标 → (行, 列)"的换算与渲染。</p>
+ * <p>选择高亮是每 cell 一个<b>覆盖矩形</b>（{@code selPane} 里），<b>不重建</b>任何
+ * {@code Text} 节点 —— 所以拖动期间重绘不会把"鼠标抓着的节点"摘出场景图（重建方案会
+ * 让拖拽中途丢事件），大文件上也绝不按总行数建节点（只画可见 cell，R2.7 判据不变）。</p>
  */
 @Slf4j
 public final class HtmlSourceViewer {
@@ -102,6 +119,8 @@ public final class HtmlSourceViewer {
     private static final double CONTENT_TAIL = 24;
     /** 量字符宽用的样本（等宽字体下 40 个 M 的布局宽除以 40 即单字宽）。 */
     private static final String SAMPLE_MEASURE = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
+    /** 选择高亮背景色（E1；浅蓝，与 {@code html-source-hit} 的 #ffe680 可并存）。 */
+    private static final String SELECTION_COLOR = "#cfe3ff";
 
     private final SidePanelHost host;
     private final ListView<Row> listView = new ListView<>();
@@ -130,6 +149,12 @@ public final class HtmlSourceViewer {
     /** 归一化后的整篇源码（查找索引的坐标基准）。 */
     private String source = "";
     private List<HtmlSyntaxTokens.Line> lines = List.of();
+    /** 逐行纯文本（<b>复制的唯一文本来源</b>：不含行尾换行、行号与任何标记）。 */
+    private List<String> plainLines = List.of();
+    /** E1 选择锚点（按下处）；null = 无选择。 */
+    private HtmlTextSelection.Pos selAnchor;
+    /** E1 选择游标（当前拖到处）；null = 无选择。 */
+    private HtmlTextSelection.Pos selCaret;
 
     /** 当前查找结果；{@link HtmlFindIndex#EMPTY} = 无命中。 */
     private HtmlFindIndex hits = HtmlFindIndex.EMPTY;
@@ -345,6 +370,26 @@ public final class HtmlSourceViewer {
         return index >= 0 && index < rows.size() ? plainText(rows.get(index).tokens()) : null;
     }
 
+    /** 当前字符选择范围（起止已归一化）；无选择 / 空选择 → {@code null}。 */
+    public HtmlTextSelection.Range selectionRange() {
+        if (selAnchor == null || selCaret == null) {
+            return null;
+        }
+        HtmlTextSelection.Range r = HtmlTextSelection.ordered(selAnchor, selCaret);
+        return HtmlTextSelection.isEmpty(r) ? null : r;
+    }
+
+    /** 把当前选择复制进系统剪贴板（空选择 → 不动剪贴板、不抛异常）。 */
+    public void copySelection() {
+        HtmlTextSelection.Range r = selectionRange();
+        if (r == null) {
+            return;
+        }
+        ClipboardContent content = new ClipboardContent();
+        content.putString(HtmlTextSelection.extract(plainLines, r));
+        Clipboard.getSystemClipboard().setContent(content);
+    }
+
     // ==================== 载入 ====================
 
     private void showSourceNow(String title, String html) {
@@ -397,6 +442,9 @@ public final class HtmlSourceViewer {
         digits = Math.max(1, String.valueOf(src.lines().size()).length());
         source = src.normalized();
         lines = src.lines();
+        plainLines = src.plainLines();
+        selAnchor = null;      // 新文档没有跨文档的选择
+        selCaret = null;
         resetFind();
         charWidth = measureCharWidth();
         int longest = 0;
@@ -424,6 +472,10 @@ public final class HtmlSourceViewer {
         listView.getStyleClass().add("html-source-list");
         listView.setItems(rows);
         listView.setCellFactory(v -> new SourceCell());
+        // E1：字符选择与复制。ListView 的整行选中对源码查看没有意义（还给整行染色、
+        // 选中的又不是字符），关掉它，让鼠标手势只属于字符选择。
+        listView.setSelectionModel(null);
+        wireSelection();
         // R2.8：默认不软换行 —— cell 的首选宽 = 内容宽（见 SourceCell.updateItem），
         // 行号栏与内容同属一个被横向滚动的子节点，所以滚动时两者一起移动、不会错位。
         listView.setFixedCellSize(ROW_HEIGHT);
@@ -475,6 +527,101 @@ public final class HtmlSourceViewer {
         b.setGraphic(new FontIcon(icon));
         b.setTooltip(new Tooltip(I18n.get(tooltipKey)));
         return b;
+    }
+
+    // ==================== 字符选择与复制（E1） ====================
+
+    private void wireSelection() {
+        listView.addEventHandler(MouseEvent.MOUSE_PRESSED, this::onSelectionPressed);
+        listView.addEventHandler(MouseEvent.MOUSE_DRAGGED, this::onSelectionDragged);
+        listView.addEventHandler(MouseEvent.MOUSE_RELEASED, this::onSelectionReleased);
+        listView.addEventHandler(KeyEvent.KEY_PRESSED, this::onSelectionKey);
+    }
+
+    /** 按下：锚点 = 命中的行 + 内容 x 折算的列（行号区列 clamp 到 0，行号不进选择）。 */
+    private void onSelectionPressed(MouseEvent e) {
+        if (!e.isPrimaryButtonDown()) {
+            return;
+        }
+        listView.requestFocus();   // 让复制键随后送到本组件
+        HtmlTextSelection.Pos p = posAt(e.getSceneX(), e.getSceneY());
+        if (p == null) {
+            return;
+        }
+        selAnchor = p;
+        selCaret = p;
+        repaintSelection();
+    }
+
+    /** 拖动：游标跟着指针走（锚点不动）。 */
+    private void onSelectionDragged(MouseEvent e) {
+        if (selAnchor == null || !e.isPrimaryButtonDown()) {
+            return;
+        }
+        HtmlTextSelection.Pos p = posAt(e.getSceneX(), e.getSceneY());
+        if (p == null) {
+            return;   // 拖出所有可见行（如查找栏上）：保持当前游标
+        }
+        selCaret = p;
+        repaintSelection();
+    }
+
+    /** 松开：定稿；单击（锚点==游标）视为清空选择。 */
+    private void onSelectionReleased(MouseEvent e) {
+        if (selAnchor == null) {
+            return;
+        }
+        if (selAnchor.equals(selCaret)) {
+            selAnchor = null;
+            selCaret = null;
+            repaintSelection();
+        }
+    }
+
+    /** 平台复制键（Windows/Linux=Ctrl、macOS=Cmd）+ C：把选择放进系统剪贴板。 */
+    private void onSelectionKey(KeyEvent e) {
+        if (e.getCode() == KeyCode.C && e.isShortcutDown()) {
+            copySelection();
+        }
+    }
+
+    /**
+     * 场景坐标 → (行, 列)。行由<b>真实 cell 的布局边界</b>命中得出（不写死
+     * {@code y = 行 × ROW_HEIGHT}，不受 ListView 内边距、虚拟流滚动偏移影响）；
+     * 列 = 内容起点 + 字符宽折算，clamp 到 {@code [0, 该行字符数]}。
+     */
+    private HtmlTextSelection.Pos posAt(double sceneX, double sceneY) {
+        for (Node n : listView.lookupAll(".list-cell")) {
+            if (!(n instanceof SourceCell cell) || cell.isEmpty() || cell.getIndex() < 0) {
+                continue;
+            }
+            Bounds b = cell.localToScene(cell.getBoundsInLocal());
+            if (sceneX < b.getMinX() || sceneX > b.getMaxX()
+                    || sceneY < b.getMinY() || sceneY > b.getMaxY()) {
+                continue;
+            }
+            // round 而不是 floor：把指针位置归到"最近的字符边界"（标准文本选择语义），
+            // 也免受首字符 left-bearing 造成的亚像素偏移影响（floor 在整列边界上会差 1）
+            int col = (int) Math.round((sceneX - cell.contentSceneMinX()) / charWidth);
+            String text = plainLines.get(cell.getIndex());
+            col = Math.max(0, Math.min(col, text.length()));
+            return new HtmlTextSelection.Pos(cell.getIndex(), col);
+        }
+        return null;
+    }
+
+    /**
+     * 把选择画到<b>可见</b> cell 的覆盖矩形上：只动可见 cell 里的矩形属性，
+     * 不触碰 items 模型、不重建任何 {@code Text} 节点 —— 所以拖动期间调用也安全
+     * （重建方案会把"鼠标抓着的节点"摘出场景图，拖拽中途丢事件），且代价只与
+     * 可见区域有关、与文件行数无关（R2.7 判据不变）。
+     */
+    private void repaintSelection() {
+        for (Node n : listView.lookupAll(".list-cell")) {
+            if (n instanceof SourceCell cell && !cell.isEmpty() && cell.getIndex() >= 0) {
+                cell.paintSelection(cell.getIndex());
+            }
+        }
     }
 
     // ==================== 查找（R5） ====================
@@ -615,6 +762,11 @@ public final class HtmlSourceViewer {
         private final Label gutter = new Label();
         private final TextFlow flow = new TextFlow();
         private final HBox box = new HBox();
+        /** 选择覆盖层（E1）：叠在内容上方的透明 Pane，里面一个按列定位的矩形。 */
+        private final Pane selPane = new Pane();
+        private final Rectangle selRect = new Rectangle(0, 0, 0, 0);
+        /** cell 内容 = 行（行号 + 内容流）上面叠选择层。 */
+        private final StackPane wrapper = new StackPane(box, selPane);
 
         private SourceCell() {
             gutter.getStyleClass().add("html-source-gutter");
@@ -627,9 +779,19 @@ public final class HtmlSourceViewer {
             box.getStyleClass().add("html-source-row");
             box.setAlignment(Pos.TOP_LEFT);
             box.getChildren().addAll(gutter, flow);
+            selRect.getStyleClass().add("html-source-selected");
+            selRect.setFill(Color.web(SELECTION_COLOR));
+            // 覆盖层对鼠标完全透明：命中测试仍落到下面的 Text 上（与没有选择层时一致）
+            selPane.setMouseTransparent(true);
+            selPane.getChildren().add(selRect);
             setText(null);
             setPrefHeight(ROW_HEIGHT);
             setMinHeight(ROW_HEIGHT);
+        }
+
+        /** 内容列（行号栏之后）在本 cell 里的场景 x 起点。 */
+        private double contentSceneMinX() {
+            return flow.localToScene(flow.getBoundsInLocal()).getMinX();
         }
 
         @Override
@@ -650,7 +812,30 @@ public final class HtmlSourceViewer {
             setMinWidth(w);
             setMaxWidth(w);
             box.setPrefWidth(w);
-            setGraphic(box);
+            setGraphic(wrapper);
+            paintSelection(row.number() - 1);
+        }
+
+        /**
+         * 本行的选择段（与 {@code [0, 行长)} 的交集）画进覆盖矩形；无交集 → 隐藏。
+         * 只动矩形属性，不重建文本节点（见 {@link HtmlSourceViewer#repaintSelection()}）。
+         */
+        private void paintSelection(int line) {
+            HtmlTextSelection.Range r = HtmlSourceViewer.this.selectionRange();
+            String text = line >= 0 && line < plainLines.size() ? plainLines.get(line) : null;
+            if (r == null || text == null || line < r.startLine() || line > r.endLine()) {
+                selRect.setVisible(false);
+                return;
+            }
+            int from = line == r.startLine() ? r.startCol() : 0;
+            int to = line == r.endLine() ? r.endCol() : text.length();
+            from = Math.max(0, Math.min(from, text.length()));
+            to = Math.max(0, Math.min(to, text.length()));
+            selRect.setVisible(to > from);
+            selRect.setX(digits * charWidth + GUTTER_GAP + from * charWidth);
+            selRect.setWidth((to - from) * charWidth);
+            selRect.setY(0);
+            selRect.setHeight(ROW_HEIGHT);
         }
 
         /** 把一行的 token 变成节点；当前命中的那段换成带高亮背景的 {@link Label}。 */

@@ -21,6 +21,14 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
+import javafx.event.Event;
+import javafx.event.EventType;
 import javafx.scene.layout.BorderPane;import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.shape.Rectangle;
@@ -67,6 +75,9 @@ import java.util.TimerTask;
  *   <li>R5.4 hit highlight is a node-level fact and the hit line is scrolled into view;
  *       the highlight refresh touches only the active lines (far fewer than the line count);</li>
  *   <li>R2.9 collapsing hides the left panel without touching the right one.</li>
+ *   <li>E1 character selection &amp; copy: mouse drag selects by (line, column), the platform
+ *       copy key puts the raw source chars into the system clipboard (13 assertions, each one
+ *       read back from the system clipboard and compared char-by-char).</li>
  * </ol>
  *
  * <p>Exit code 0 = all assertions passed, 1 = at least one failed.</p>
@@ -728,6 +739,7 @@ public class HtmlViewerProbe extends Application {
             this::checkFindBarShape, this::checkFindCount, this::checkFindNavigate,
             this::checkFindWrapAround, this::checkFindNoHits,
             this::checkHighlightAndScroll, this::checkMinimalRepaint, this::checkFindBarBottom,
+            this::checkSelectionAndCopy,
             this::openLongLineSource,
             this::checkR28NoSoftWrap, this::checkR28ScrollToTail,
             this::checkCollapseR29, this::checkGuiStateUnchanged,
@@ -789,6 +801,304 @@ public class HtmlViewerProbe extends Application {
         check("R2.7 the loading state was visible immediately after showFile (label was not the "
                         + "final count at call time)", loadMillis >= 0);
         snapshot("htmlviewer-virtualized");
+    }
+
+    // ---------- E1 字符选择与复制 ----------
+
+    /**
+     * E1：选择/复制的 13 条断言，作为一步排在 R2.8 之前（之后由 {@link #openLongLineSource()}
+     * 切回长行源，确保 R2.8 的既有断言不受影响）。
+     *
+     * <p>先用自己的小组装源码（{@link #showSource} 同步路径）验 #1..#11 与 #13，
+     * 再同步装上 5000 行大源码验 #12（虚拟化）；每条复制断言都从<b>系统剪贴板读回</b>
+     * 并<b>逐字符</b>比对。</p>
+     */
+    private void checkSelectionAndCopy() {
+        HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), selectionSource());
+        viewer.node().applyCss();
+        viewer.node().layout();
+        System.out.println("E1 selection source: lines=" + viewer.lineCount());
+        for (int i = 0; i < viewer.lineCount(); i++) {
+            System.out.println("    [" + i + "] <" + esc(viewer.lineText(i)) + ">");
+        }
+        // 坐标几何诊断：cell 边界 / 行号栏 / 内容流 / 第一个 Text 的场景 x，四个应逐级衔接
+        Node diag = revealCellForLine(4);
+        if (diag != null) {
+            Bounds cb = diag.localToScene(diag.getBoundsInLocal());
+            double derived = cb.getMinX() + viewer.gutterWidth();
+            double textMinX = Double.NaN;
+            for (Node n : diag.lookupAll(".html-source-text")) {
+                if (n instanceof javafx.scene.text.Text t && !t.getText().isEmpty()) {
+                    textMinX = t.localToScene(t.getBoundsInLocal()).getMinX();
+                    break;
+                }
+            }
+            double flowMinX = Double.NaN;
+            if (diag instanceof javafx.scene.control.ListCell<?> lc
+                    && lc.getGraphic() instanceof StackPane wrapper
+                    && wrapper.getChildren().size() >= 1
+                    && wrapper.getChildren().get(0) instanceof javafx.scene.layout.HBox hb
+                    && hb.getChildren().size() >= 2
+                    && hb.getChildren().get(1) instanceof javafx.scene.text.TextFlow tf) {
+                flowMinX = tf.localToScene(tf.getBoundsInLocal()).getMinX();
+            }
+            System.out.println("E1 geometry: cellMinX=" + fmt(cb.getMinX())
+                    + " gutterWidth=" + fmt(viewer.gutterWidth())
+                    + " derivedContentX=" + fmt(derived)
+                    + " firstTextSceneMinX=" + fmt(textMinX)
+                    + " flowBoundsSceneMinX=" + fmt(flowMinX)
+                    + " textDelta=" + fmt(textMinX - derived)
+                    + " flowDelta=" + fmt(flowMinX - derived));
+        }
+        // #13 的行模型快照（断言前先记下）
+        int linesBefore = viewer.lineCount();
+        List<String> modelBefore = new ArrayList<>();
+        for (int i = 0; i < linesBefore; i++) {
+            modelBefore.add(viewer.lineText(i));
+        }
+
+        // #1 单行内拖选 → 剪贴板 == 原始子串（API 复制路径，逐字符）
+        dragSelect(4, 3, 4, 21);
+        copyViaApi();
+        String expected1 = viewer.lineText(4).substring(3, 21);
+        check("E1#1 single-line drag copies the exact source substring (clipboard="
+                        + esc(clipboardString()) + ")",
+                charByChar("E1#1", expected1, clipboardString()));
+
+        // #2 跨语法 token（注释 → 标签 → 正文）→ 剪贴板 == 原始字符（无标记注入）
+        dragSelect(3, 0, 4, 21);
+        copyViaKey();
+        String expected2 = viewer.lineText(3) + "\n" + viewer.lineText(4).substring(0, 21);
+        check("E1#2 cross-token (comment→tag→text) copy is the raw source chars (clipboard="
+                        + esc(clipboardString()) + ")",
+                charByChar("E1#2", expected2, clipboardString()));
+
+        // #3 跨逻辑行 → LF 连接、含中间整行
+        dragSelect(3, 4, 5, 2);
+        copyViaKey();
+        String expected3 = viewer.lineText(3).substring(4) + "\n" + viewer.lineText(4)
+                + "\n" + viewer.lineText(5).substring(0, 2);
+        check("E1#3 cross-line copy joins with LF and keeps the middle line whole (clipboard="
+                        + esc(clipboardString()) + ")",
+                charByChar("E1#3", expected3, clipboardString()));
+
+        // #4 范围内含空行 → 连续 LF 保留
+        dragSelect(1, 2, 3, 8);
+        copyViaKey();
+        String expected4 = viewer.lineText(1).substring(2) + "\n" + viewer.lineText(2)
+                + "\n" + viewer.lineText(3).substring(0, 8);
+        check("E1#4 an empty line inside the range keeps the consecutive LFs (clipboard="
+                        + esc(clipboardString()) + ")",
+                charByChar("E1#4", expected4, clipboardString()) && expected4.contains("\n\n"));
+
+        // #5 行首缩进 + 行尾空格保留（行 1 = 4 个前导空格 + 4 个行尾空格）
+        dragSelect(1, 0, 1, viewer.lineText(1).length());
+        copyViaKey();
+        check("E1#5 indent and trailing spaces survive char-by-char (clipboard="
+                        + esc(clipboardString()) + ")",
+                charByChar("E1#5", viewer.lineText(1), clipboardString()));
+
+        // #6 复制文本不含行号（逐字符 equals 已证；再加反向断言：不以行号字符串开头）
+        String clip6 = clipboardString();
+        String first6 = clip6 == null || clip6.isEmpty() ? "(empty)" : escChar(clip6.charAt(0));
+        check("E1#6 the copy contains no gutter line number (starts with '" + first6
+                        + "', not the line number '2')",
+                charByChar("E1#6", viewer.lineText(1), clip6) && clip6 != null && !clip6.startsWith("2"));
+
+        // #7 平台复制键（Ctrl/Cmd+C）触发复制（与 #1 的 API 路径对照：这里只有按键）
+        setClipboard("SENTINEL-7");
+        dragSelect(4, 5, 4, 10);
+        copyViaKey();
+        String expected7 = viewer.lineText(4).substring(5, 10);
+        check("E1#7 the platform copy key (Ctrl/Cmd+C) copies the selection (clipboard="
+                        + esc(clipboardString()) + ")",
+                charByChar("E1#7", expected7, clipboardString()));
+
+        // #8 无选择时复制键不覆盖剪贴板 / 不抛异常（单击 = 清空选择）
+        dragSelect(0, 0, 0, 0);
+        setClipboard("SENTINEL-8-NO-SELECTION");
+        String verdict8;
+        try {
+            copyViaKey();
+            verdict8 = "no exception";
+        } catch (Throwable ex) {
+            verdict8 = "threw " + ex;
+        }
+        check("E1#8 the copy key with no selection leaves the clipboard alone and raises nothing ("
+                        + verdict8 + ", clipboard=" + esc(clipboardString()) + ")",
+                "no exception".equals(verdict8) && "SENTINEL-8-NO-SELECTION".equals(clipboardString()));
+
+        // #9 在 gutter 上按下拖动 → 列 clamp 到内容区，行号不进复制
+        dragSelectFromGutter(4, 21);
+        copyViaApi();
+        String expected9 = viewer.lineText(4).substring(0, 21);
+        check("E1#9 a drag starting in the gutter does not copy line numbers (clipboard="
+                        + esc(clipboardString()) + ")",
+                charByChar("E1#9", expected9, clipboardString()));
+
+        // #10 选择后 find 命中数不变（查找未被破坏）
+        viewer.queryField().setText(SEARCH_TOKEN);
+        viewer.findButtons().get(0).fire();
+        int hitsBefore = viewer.hitCount();
+        dragSelect(2, 0, 4, 10);
+        check("E1#10 find hits are unchanged by a selection (before=" + hitsBefore
+                        + " after=" + viewer.hitCount() + ")",
+                hitsBefore > 0 && viewer.hitCount() == hitsBefore);
+
+        // #11 选择后语法高亮仍在 + html-source-selected 出现 + find 命中样式并存
+        viewer.node().applyCss();
+        viewer.node().layout();
+        long textNodes = viewer.node().lookupAll(".html-source-text").size();
+        long selectedVisible = viewer.node().lookupAll(".html-source-selected").stream()
+                .filter(Node::isVisible).count();
+        long hitNodes = viewer.node().lookupAll(".html-source-hit").size();
+        check("E1#11 syntax highlight survives and the selection class shows while the find hit "
+                        + "coexists (textNodes=" + textNodes + " selectedVisible=" + selectedVisible
+                        + " hitNodes=" + hitNodes + ")",
+                textNodes > 0 && selectedVisible > 0 && hitNodes > 0);
+        snapshot("htmlviewer-selection");
+
+        // #13 选择不改变行模型（lineCount / lineText 不变）
+        boolean modelSame = viewer.lineCount() == linesBefore;
+        for (int i = 0; modelSame && i < linesBefore; i++) {
+            modelSame = viewer.lineText(i).equals(modelBefore.get(i));
+        }
+        check("E1#13 selection never changes the line model (lines=" + viewer.lineCount()
+                        + " vs " + linesBefore + ", every lineText identical=" + modelSame + ")",
+                modelSame);
+
+        // #12 5000 行大文件上选择后 .list-cell 数仍远小于行数（虚拟化保持）
+        HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), bigSource());
+        viewer.node().applyCss();
+        viewer.node().layout();
+        dragSelect(2, 5, 4, 30);
+        int cells = viewer.node().lookupAll(".list-cell").size();
+        int rowsBig = viewer.lineCount();
+        System.out.println("E1#12 big source after selection: lines=" + rowsBig + " cells=" + cells);
+        check("E1#12 on the " + rowsBig + "-line source a selection keeps virtualization (cells="
+                        + cells + " << lines)", cells > 0 && cells * 10 < rowsBig);
+    }
+
+    /** E1 用的小组装源码：行首缩进、行尾空格、空行、注释、标签、正文（坐标见各断言）。 */
+    private String selectionSource() {
+        return "<html>\n"
+                + "    <body>    \n"
+                + "\n"
+                + "<!-- " + SEARCH_TOKEN + " comment -->\n"
+                + "<p>Hello, probe world!</p>\n"
+                + "</body>\n"
+                + "</html>\n";
+    }
+
+    /** 合成一段鼠标拖选：在 (fromLine, fromCol) 按下，拖到 (toLine, toCol)，松开。 */
+    private void dragSelect(int fromLine, int fromCol, int toLine, int toCol) {
+        Node cell = revealCellForLine(fromLine);
+        if (cell == null) {
+            check("dragSelect could not reveal line " + fromLine, false);
+            return;
+        }
+        Bounds b = cell.localToScene(cell.getBoundsInLocal());
+        double contentX = b.getMinX() + viewer.gutterWidth();
+        double cw = viewer.charWidth();
+        double y = b.getMinY() + b.getHeight() / 2;
+        fireMouse(MouseEvent.MOUSE_PRESSED, cell, contentX + fromCol * cw, y, true);
+        Node cell2 = revealCellForLine(toLine);
+        if (cell2 != null) {
+            Bounds b2 = cell2.localToScene(cell2.getBoundsInLocal());
+            y = b2.getMinY() + b2.getHeight() / 2;
+        }
+        fireMouse(MouseEvent.MOUSE_DRAGGED, listView, contentX + toCol * cw, y, true);
+        fireMouse(MouseEvent.MOUSE_RELEASED, listView, contentX + toCol * cw, y, false);
+    }
+
+    /** 在行号区（gutter）按下再拖到内容列 {@code toCol}（#9：行号不得进复制）。 */
+    private void dragSelectFromGutter(int line, int toCol) {
+        Node cell = revealCellForLine(line);
+        if (cell == null) {
+            check("dragSelectFromGutter could not reveal line " + line, false);
+            return;
+        }
+        Bounds b = cell.localToScene(cell.getBoundsInLocal());
+        double contentX = b.getMinX() + viewer.gutterWidth();
+        double y = b.getMinY() + b.getHeight() / 2;
+        double cw = viewer.charWidth();
+        fireMouse(MouseEvent.MOUSE_PRESSED, cell, b.getMinX() + 2, y, true);
+        fireMouse(MouseEvent.MOUSE_DRAGGED, listView, contentX + toCol * cw, y, true);
+        fireMouse(MouseEvent.MOUSE_RELEASED, listView, contentX + toCol * cw, y, false);
+    }
+
+    private static void fireMouse(EventType<MouseEvent> type, Node target,
+                                  double sceneX, double sceneY, boolean primary) {
+        Event.fireEvent(target, new MouseEvent(type, sceneX, sceneY, sceneX, sceneY,
+                MouseButton.PRIMARY, 1, false, false, false, false,
+                primary, false, false, false, false, true, null));
+    }
+
+    /** 平台复制键（Windows 下 = Ctrl+C，经 {@code KeyEvent.isShortcutDown()} 判定）。 */
+    private void copyViaKey() {
+        Event.fireEvent(listView, new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.C,
+                false, true, false, false));
+    }
+
+    /** 经查看器的公开 API 复制（与按键路径对照用）。 */
+    private void copyViaApi() {
+        viewer.copySelection();
+    }
+
+    private static void setClipboard(String s) {
+        ClipboardContent cc = new ClipboardContent();
+        cc.putString(s);
+        Clipboard.getSystemClipboard().setContent(cc);
+    }
+
+    private static String clipboardString() {
+        return Clipboard.getSystemClipboard().getString();
+    }
+
+    /**
+     * 逐字符比对并打印证据；不等则指出第一个不同的下标与两侧字符。
+     *
+     * <p>这是 E1 复制断言的统一口径：{@code equals} 是逐字符的，但这里要的是
+     * <b>原始输出</b>（长度差 / 首个分歧点），行尾空格与 LF 都变成可见字符打印。</p>
+     */
+    private static boolean charByChar(String label, String expected, String actual) {
+        if (actual == null) {
+            System.out.println("    " + label + " char-by-char: actual=null, expected len="
+                    + expected.length());
+            return false;
+        }
+        if (actual.length() != expected.length()) {
+            System.out.println("    " + label + " char-by-char: LENGTH " + actual.length()
+                    + " vs " + expected.length() + " expected=" + esc(expected)
+                    + " actual=" + esc(actual));
+            return false;
+        }
+        for (int i = 0; i < expected.length(); i++) {
+            if (expected.charAt(i) != actual.charAt(i)) {
+                System.out.println("    " + label + " char-by-char: first diff at index " + i
+                        + " expected='" + escChar(expected.charAt(i)) + "' actual='"
+                        + escChar(actual.charAt(i)) + "'");
+                return false;
+            }
+        }
+        System.out.println("    " + label + " char-by-char OK: " + expected.length() + " chars");
+        return true;
+    }
+
+    /** 让空白可见的转义（证据打印用：LF/CR/制表符转义，空格换成 ·）。 */
+    private static String esc(String s) {
+        return s == null ? "null" : s.replace("\n", "\\n").replace("\r", "\\r")
+                .replace(" ", "·").replace("\t", "\\t");
+    }
+
+    private static String escChar(char c) {
+        return switch (c) {
+            case '\n' -> "\\n";
+            case '\r' -> "\\r";
+            case '\t' -> "\\t";
+            case ' ' -> "·";
+            default -> String.valueOf(c);
+        };
     }
 
     // ---------- R2.8 横向滚动 ----------
