@@ -1,14 +1,12 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.ExtractionPreconditions;
+import com.mhtextractor.app.PreviewService;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.app.WorkspaceImportService;
 import com.mhtextractor.app.WorkspaceModel;
-import com.mhtextractor.cache.PreviewCacheKey;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
-import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.cache.PreviewCacheStore;
-import com.mhtextractor.cache.SourceFingerprint;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
@@ -23,7 +21,6 @@ import com.mhtextractor.gui.WorkspaceFxAdapter;
 import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.gui.util.JavaFxUtil;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.model.ThumbnailData;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.FileResult;
@@ -55,6 +52,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.image.Image;
@@ -72,9 +70,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -103,9 +98,6 @@ import java.util.function.Consumer;
  */
 @Slf4j
 public class MainController implements ImportSessionCoordinator.ImportUi {
-
-    /** 超大文件完整解析确认阈值（字节） */
-    private static final long LARGE_FILE_THRESHOLD = 50L * 1024 * 1024;
 
     /* 单元格内边距清零（列头与单元格列对齐由各自 HBox 的内边距控制） */
     /* 预解析失败样式（提取结果状态需求拍板：浅黄；2026-09-25 用户反馈改为接近 Windows/WinUI 警告黄 #FFF9AE） */
@@ -234,8 +226,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     private int parseToken = 0;
     /** 列表选择代次：切换选择时自增，取消过期的图片懒加载 */
     private int requestToken = 0;
-    private boolean imageLoadActive = false;
-    private PreviewItem loadingItem = null;
     /** 预览会话缓存（需求 2 会话 9）：存储层 + 四条生命周期规则；root = <java.io.tmpdir>/mht-extractor-preview（P6/P8，与 HtmlExportBuilder 的 mht-extractor-view 并列） */
     final PreviewCacheLifecycle previewCacheLifecycle = new PreviewCacheLifecycle(
             new PreviewCacheStore(Paths.get(System.getProperty("java.io.tmpdir"), "mht-extractor-preview")));
@@ -274,8 +264,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      */
     private final ExtractionTaskCoordinator extractionCoordinator =
             new ExtractionTaskCoordinator(extractionService);
-    /** 在途预览加载线程（规则 d 退出清空时等待其结束用；仅 FX 线程写） */
-    private volatile Thread previewLoadThread = null;
     /** 退出清空已完成：二次 close 放行（规则 d） */
     private volatile boolean shutdownCacheCleared = false;
     /** 正在清空缓存（FX 线程独占）：挡住清空期间的重复关窗请求，避免开两份清理 */
@@ -362,6 +350,29 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public int unitIndex(Object item) { return (int) MainController.this.unitIndex((PreviewItem) item); }
         @Override public PreviewCacheLifecycle cacheLifecycle() { return previewCacheLifecycle; }
     });
+    /** 预览按需加载编排协作者（C1c）：原 {@code onPreviewEffect()} 主体原样外迁到 {@link PreviewLoader}，
+     *  宿主能力经 {@link PreviewLoader.Host} 收窄；文案键、日志键（log.maincontroller.61/62/63）、
+     *  线程名（preview-image-load / preview-cache-stale-delete）与代次语义全部保持不变。 */
+    private final PreviewLoader previewLoader = new PreviewLoader(new PreviewLoader.Host() {
+        @Override public int requestToken() { return requestToken; }
+        @Override public int parseToken() { return parseToken; }
+        @Override public Object currentSelection() { return MainController.this.currentSelection(); }
+        @Override public AppConfig effectiveParams(Object item) { return MainController.this.effectiveForObject(item); }
+        @Override public AppConfig effectiveImageParams(PreviewItem item) {
+            return ParamScope.effectiveImageParams(item.parentGroup, item.imageItemParams, imageParamsCache);
+        }
+        @Override public PreviewService previewService() { return previewService; }
+        @Override public PreviewCacheLifecycle cacheLifecycle() { return previewCacheLifecycle; }
+        @Override public PreviewRenderer renderer() { return previewRenderer; }
+        @Override public ProgressBar progressBar() { return refs.progressBar(); }
+        @Override public Label statusLabel() { return refs.statusLabel(); }
+        @Override public Label imageHintLabel() { return refs.imageHintLabel(); }
+        @Override public Button previewEffectButton() { return refs.previewEffectButton(); }
+        @Override public boolean extractionRunning() { return running().get(); }
+        @Override public void setProgressBarActivity(String styleClass) { MainController.this.setProgressBarActivity(styleClass); }
+        @Override public void updateProgressStatus(int token) { MainController.this.updateProgressStatus(token); }
+        @Override public void refreshList() { refs.fileListView().refresh(); }
+    });
     /** Q9a：FeatureExercise 按<b>字段访问</b>读它的 isDisable()，故保留同名字段指向新类里那一个 */
     MenuItem ctxClearParams;
     /** Q10：参数剪贴板（R7.1-R7.7）—— 复制快照 + 批量应用编排；路由与应用本体都是下方那两个方法 */
@@ -445,14 +456,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 关窗收尾（后台线程）：等在途写入结束 → 清空缓存（cancelWorkspaceActivity 已由调用方在 FX 线程先行调用） */
     private void clearPreviewCache() {
-        Thread t = previewLoadThread;
-        if (t != null && t.isAlive() && t != Thread.currentThread()) {
-            try {
-                t.join(2000);
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-            }
-        }
+        previewLoader.awaitInFlight(2000);
         previewCacheLifecycle.onShutdown(() -> { });
         shutdownCacheCleared = true;
     }
@@ -758,8 +762,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     private void cancelWorkspaceActivity() {
         parseToken++;
         requestToken++;
-        imageLoadActive = false;
-        loadingItem = null;
+        previewLoader.cancel();
     }
 
     // ==================== 模式切换与工作区 UI 状态 ====================
@@ -3045,8 +3048,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             return;
         }
         requestToken++;
-        imageLoadActive = false;
-        loadingItem = null;
+        previewLoader.cancel();
         if (lastSelected instanceof PreviewItem last && last != item) {
             // 仅当前文件的图片数据驻留内存
             last.cachedImages = null;
@@ -3297,7 +3299,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 refs.imageScrollPane().setManaged(false);
             } else if (it.cachedThumbs != null) {
                 previewRenderer.renderThumbnails(it);
-            } else if (imageLoadActive && loadingItem == it) {
+            } else if (previewLoader.isLoading(it)) {
                 // 加载中：保留渐进追加的网格，不重置
                 refs.imageHintLabel().setText(I18n.get("preview.imageLoading"));
                 refs.imageHintLabel().setVisible(true);
@@ -3336,168 +3338,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     @FXML
     private void onPreviewEffect() {
-        onPreviewEffect(false);
-    }
-
-    /** 图片按需加载主体。{@code largeFileOk=true} = 用户已确认大文件（大文件确认改成窗口内卡片后，
-     *  用"重入自己"表达"确认后继续"，好过把后面几十行加载逻辑塞进 lambda）。 */
-    private void onPreviewEffect(boolean largeFileOk) {
-        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
-        if (!(sel instanceof PreviewItem item)) {
-            return;
-        }
-        final AppConfig params = effectiveForObject(item);
-        if (params == null) {
-            return;
-        }
-        if (item.cachedThumbs != null) {
-            previewRenderer.renderThumbnails(item);
-            return;
-        }
-        if (imageLoadActive && loadingItem == item) {
-            return;
-        }
-
-        File f = new File(item.path);
-        if (!largeFileOk && f.length() > LARGE_FILE_THRESHOLD) {
-            String msg = I18n.get("preview.largeFileConfirmHeader") + "\n"
-                    + item.name + I18n.get("preview.largeFileConfirmBody",
-                            "size", f.length() / 1024 / 1024);
-            GuiNotifications.largeFileConfirm(refs.statusLabel(), msg, ok -> {
-                if (ok) {
-                    onPreviewEffect(true);
-                }
-            });
-            return;
-        }
-
-        final PreviewCacheKey cacheKey;
-        try {
-            cacheKey = PreviewCacheKey.compute(Path.of(item.path),   // R6.5：键含 HTML 侧车目录内容摘要
-                    params.imageExtractionFingerprint(), SourceFingerprint.of(Path.of(item.path)),
-                    PreviewCacheMeta.FORMAT_VERSION);
-        } catch (IOException e) {
-            log.error(I18n.msg("log.maincontroller.61", item.path), e);
-            GuiNotifications.readFileInfoFailed(refs.statusLabel());
-            return;
-        }
-
-        final int token = requestToken;
-        imageLoadActive = true;
-        loadingItem = item;
-        refs.imageHintLabel().setText(I18n.get("preview.imageLoading"));
-        refs.previewEffectButton().setDisable(true);
-        // 相邻修复：提取运行期间进度条/状态栏归提取任务独占，图片加载不动它们
-        if (!running().get()) {
-            refs.progressBar().setVisible(true);
-            refs.progressBar().setProgress(-1);
-            setProgressBarActivity(null);   // 预览加载 = 默认色（完成后回落预解析显示）
-            refs.statusLabel().setText(I18n.get("preview.loadingImage", "name", item.name));
-        }
-
-        Thread t = new Thread(() -> {
-            try {
-                // 每项目写锁（§2.6(6)）：同项目「查缓存→提取→落盘」串行，不同项目并行。
-                // 缓存业务逻辑已搬入 com.mhtextractor.app.PreviewService（步骤 2），控制器只做 UI。
-                final com.mhtextractor.app.PreviewService.PreviewResult pr;
-                synchronized (previewCacheLifecycle.lockFor(cacheKey.absolutePath())) {
-                    pr = previewService.ensureCached(Path.of(item.path), params, cacheKey, () -> token != requestToken);
-                }
-                if (token != requestToken) {
-                    return;   // 代次失效：放弃上屏（缓存保留，重选时命中复用）
-                }
-                // C2：缩略图从磁盘真实图片逐张解码，内存只留缩略图 + meta，不驻留全尺寸字节。
-                // 元数据（coreName）由无头服务给出；像素解码仍在此处（JavaFX 缩放解码 + PixelReader）。
-                final PreviewCacheMeta meta = pr.meta();
-                List<ThumbnailData> thumbs = new ArrayList<>();
-                for (int i = 0; i < meta.images().size(); i++) {
-                    if (token != requestToken) {
-                        return;
-                    }
-                    PreviewCacheMeta.ImageEntry entry = meta.images().get(i);
-                    final ThumbnailData thumb;
-                    try {
-                        byte[] data = Files.readAllBytes(pr.imagesDir().resolve(entry.file()));
-                        thumb = previewRenderer.decodeThumb(new ImageExtractor.ImageData(
-                                entry.originalName(), entry.sourceId(), data), i, params);
-                    } catch (IOException e) {
-                        log.warn(I18n.msg("log.maincontroller.62", pr.imagesDir().resolve(entry.file())), e);
-                        continue;
-                    }
-                    thumbs.add(thumb);
-                    final int idx = i;
-                    Platform.runLater(() -> {
-                        if (token != requestToken
-                                || refs.fileListView().getSelectionModel().getSelectedItem() != item) {
-                            return;
-                        }
-                        previewRenderer.appendThumb(item, thumb, idx);
-                    });
-                }
-
-                Platform.runLater(() -> {
-                    previewLoadThread = null;
-                    // 落盘期间参数/条目可能已变化（参数弹窗确认、移除等）：真正失效
-                    // （条目已移除或生效图片参数指纹与写盘时不符）时删除刚落盘的目录，避免残留。
-                    // 注意用与模式无关的图片参数解析（切模式不影响图片缓存有效性）
-                    AppConfig imageParamsNow = ParamScope.effectiveImageParams(
-                            item.parentGroup, item.imageItemParams, imageParamsCache);
-                    boolean stale = item.removed || imageParamsNow == null
-                            || !imageParamsNow.imageExtractionFingerprint()
-                                    .equals(cacheKey.paramFingerprint());
-                    if (stale) {
-                        Thread cleanup = new Thread(() -> {
-                            try {
-                                previewCacheLifecycle.store().delete(cacheKey);
-                            } catch (IOException e) {
-                                log.warn(I18n.msg("log.maincontroller.63", cacheKey.toDirName()), e);
-                            }
-                        }, "preview-cache-stale-delete");
-                        cleanup.setDaemon(true);
-                        cleanup.start();
-                        imageLoadActive = false;
-                        loadingItem = null;
-                        refs.previewEffectButton().setDisable(false);
-                        updateProgressStatus(parseToken);
-                        return;
-                    }
-                    if (token != requestToken
-                            || refs.fileListView().getSelectionModel().getSelectedItem() != item) {
-                        // 既有语义：选中/代次变化时放弃上屏；缓存保留（与选中无关），重选时命中复用
-                        return;
-                    }
-                    imageLoadActive = false;
-                    loadingItem = null;
-                    item.cachedThumbs = thumbs;
-                    item.cachedMeta = meta;
-                    item.cachedImages = null;
-                    if (meta.images().isEmpty()) {
-                        // 全量解析确认无图片 → 空内容标记
-                        item.status = PreviewItem.Status.EMPTY;
-                        refs.fileListView().refresh();
-                    }
-                    previewRenderer.renderThumbnails(item);
-                    updateProgressStatus(parseToken);
-                });
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    previewLoadThread = null;
-                    if (token != requestToken
-                            || refs.fileListView().getSelectionModel().getSelectedItem() != item) {
-                        return;
-                    }
-                    imageLoadActive = false;
-                    loadingItem = null;
-                    refs.imageHintLabel().setText(I18n.get("preview.parseFailed") + e.getMessage());
-                    refs.imageHintLabel().setVisible(true);
-                    refs.previewEffectButton().setDisable(false);
-                    updateProgressStatus(parseToken);
-                });
-            }
-        }, "preview-image-load");
-        previewLoadThread = t;
-        t.setDaemon(true);
-        t.start();
+        previewLoader.load();
     }
 
     // ==================== 预解析（文本全量 / 图片轻量） ====================
@@ -3619,7 +3460,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (running().get()) {
             return;
         }
-        if (imageLoadActive) {
+        if (previewLoader.isActive()) {
             refs.progressBar().setVisible(true);
             refs.progressBar().setProgress(-1);
             return;

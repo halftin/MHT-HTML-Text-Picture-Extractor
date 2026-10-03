@@ -288,11 +288,11 @@ public final class MainViewTestBridge {
         }
 
         public boolean imageLoadActive() {
-            return field(mc, "imageLoadActive");
+            return field(field(mc, "previewLoader"), "imageLoadActive");
         }
 
         public void imageLoadActive(boolean v) {
-            setField(mc, "imageLoadActive", v);
+            setField(field(mc, "previewLoader"), "imageLoadActive", v);
         }
 
         public int importDragDepth() {
