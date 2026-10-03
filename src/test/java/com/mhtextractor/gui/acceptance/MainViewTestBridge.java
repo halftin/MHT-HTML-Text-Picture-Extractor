@@ -222,16 +222,21 @@ public final class MainViewTestBridge {
         }
 
         public void toggleGroupExpanded(com.mhtextractor.util.GroupItem<PreviewItem> g) {
-            call(mc, "toggleGroupExpanded", com.mhtextractor.util.GroupItem.class, g);
+            call(groupCommand(), "toggleGroupExpanded", com.mhtextractor.util.GroupItem.class, g);
         }
 
         public void finishExpandAnim() {
-            call(mc, "finishExpandAnim");
+            call(groupCommand(), "finishExpandAnim");
         }
 
         /** C2：列表交互协作者（findCell / performDrop 已从 MainController 外迁到 ListInteractionController）。 */
         private Object listInteraction() {
             return field(mc, "listInteraction");
+        }
+
+        /** C3a：分组命令协作者（onGroupClicked / onUngroupClicked / toggleGroupExpanded / finishExpandAnim 已外迁）。 */
+        private Object groupCommand() {
+            return field(mc, "groupCommand");
         }
 
         /** 双击 / 单元格交互用：返回 {@code javafx.scene.Node}（{@code PreviewListCell} 非 public）。 */

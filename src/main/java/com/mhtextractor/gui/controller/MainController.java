@@ -18,7 +18,6 @@ import com.mhtextractor.gui.component.ExtractOutcomeStyles;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.WorkspaceFxAdapter;
-import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.gui.util.JavaFxUtil;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.i18n.I18n;
@@ -36,14 +35,10 @@ import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.SanitizeUtils;
 import com.mhtextractor.util.SourceKinds;
 import com.mhtextractor.util.UndoManager;
-import javafx.animation.Interpolator;
-import javafx.animation.ParallelTransition;
-import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
-import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
@@ -54,17 +49,12 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
 import javafx.scene.input.DragEvent;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
-import javafx.util.Duration;
-import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
@@ -113,10 +103,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /* 插入指示线颜色（拖拽排序反馈） */
     /* 组行"入组/合并"整行高亮（琥珀色底+边框，与成员行蓝色插入线视觉区分，6.6 视觉细节） */
     /* 组行落点三区比例：上下边缘为行间空隙（顶层/组间落点），中间带为整行（入组末尾/两组合并） */
-    /** 折叠/展开动画时长（拍板 200ms；缓动照搬 TitledPaneSkin 的 LINEAR） */
-    private static final Duration EXPAND_ANIM_DURATION = Duration.millis(200);
-    /** 成员行动画基准高度兜底（px）：ROW_PAD 7×2 + 单行文本 ≈ 34；动画开始时优先实测 */
-    private static final double MEMBER_ROW_HEIGHT_FALLBACK = 34.0;
     /* 组条目行目标高度（px）：比文字稍高（拍板） */
     /* 组行复选框槽位宽度（px）：仅容纳图形，复选框与内容之间不留空白（拍板） */
 
@@ -379,8 +365,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public ParamScope.Status effectiveStatus(Object item) { return MainController.this.effectiveStatus(item); }
         @Override public int visibleMemberCount(GroupItem<PreviewItem> group) { return MainController.this.visibleMemberCount(group); }
         @Override public long unitIndex(PreviewItem item) { return MainController.this.unitIndex(item); }
-        @Override public boolean isListAnimating() { return listAnimating; }
-        @Override public Object animLockedSelection() { return animLockedSelection; }
+        @Override public boolean isListAnimating() { return groupCommand.isAnimating(); }
+        @Override public Object animLockedSelection() { return groupCommand.animLockedSelection(); }
         @Override public boolean isCurrentModeConfirmed() { return currentModeConfirmed(); }
         @Override public void cancelPreviewLoad() { requestToken++; previewLoader.cancel(); }
         @Override public void updateListButtons() { MainController.this.updateListButtons(); }
@@ -391,34 +377,38 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void renderThumbnails(PreviewItem item) { previewRenderer.renderThumbnails(item); }
         @Override public void startPreParseFor(List<PreviewItem> items) { MainController.this.startPreParseFor(items); }
         @Override public void clearPreviewCache(PreviewItem item) { MainController.this.clearPreviewCache(item); }
-        @Override public void toggleGroupExpanded(GroupItem<PreviewItem> group) { MainController.this.toggleGroupExpanded(group); }
+        @Override public void toggleGroupExpanded(GroupItem<PreviewItem> group) { groupCommand.toggleGroupExpanded(group); }
     });
     /** Q9a：FeatureExercise 按<b>字段访问</b>读它的 isDisable()，故保留同名字段指向新类里那一个 */
     MenuItem ctxClearParams;
     /** Q10：参数剪贴板（R7.1-R7.7）—— 复制快照 + 批量应用编排；路由与应用本体都是下方那两个方法 */
     private final ParamClipboard paramClipboard = new ParamClipboard(ws::push, this::paramScopeTarget, this::applyTargetParams);
 
-    // ===== 折叠/展开动画状态（方案 B 抽屉式，快照平移手法与拖拽一致） =====
-    /** 动画全局锁：动画期间列表项目不可交互（按钮可点但无效果），快速连点折叠箭头直接忽略 */
-    boolean listAnimating = false;
-    /** 正在动画的组；null = 无动画 */
-    @Setter
-    @Getter
-    private GroupItem<PreviewItem> animatingGroup = null;
-    /** true = 展开动画；false = 折叠动画 */
-    @Setter
-    @Getter
-    private boolean animExpanding = false;
-    /** 动画 ParallelTransition（200ms ease-out；完成/快进后置 null） */
-    private ParallelTransition collapseAnim = null;
-    /** 动画中的快照视图（成员行 + 下方行；结束后从覆盖层移除） */
-    private List<ImageView> collapseViews = null;
-    /** 动画期间被隐藏的真实 cell（结束后恢复可见） */
-    private List<PreviewListCell> collapseCells = null;
-    /** 动画期间锁定的选中项：列表选择变化被回选至此项 */
-    private Object animLockedSelection = null;
-    /** 动画自身触发的显示序重建豁免标记（防快进兜底把动画自己的 rebuild 打断） */
-    private boolean suppressAnimRebuild = false;
+    /**
+     * 分组命令协作者（C3a）：分组/拆组命令与折叠/展开动画状态从本类原样外迁到
+     * {@link GroupCommandController}；宿主能力经 {@link GroupCommandController.Host} 收窄为具名方法
+     * （本匿名类逐个转发到下方保留成员）。文案键、日志键（log.maincontroller.56/57/58/59）、
+     * 动画时长与几何快照语义不变。
+     */
+    private final GroupCommandController groupCommand = new GroupCommandController(new GroupCommandController.Host() {
+        @Override public ListView<Object> fileListView() { return refs.fileListView(); }
+        @Override public javafx.scene.layout.Pane dragOverlay() { return refs.dragOverlay(); }
+        @Override public javafx.scene.control.TextField groupNameField() { return refs.groupNameField(); }
+        @Override public List<Object> dataOrder() { return items; }
+        @Override public int indexInDataOrder(Object item) { return items.indexOf(item); }
+        @Override public ObservableList<Object> displayItems() { return displayItems; }
+        @Override public GroupItem<PreviewItem> createGroup(List<PreviewItem> targets) { return ws.group(targets, I18n.get("core.groupDefault")); }
+        @Override public List<PreviewItem> ungroupGroup(GroupItem<PreviewItem> group) { return ws.ungroup(group); }
+        @Override public List<PreviewItem> allVisibleItems() { return MainController.this.allVisibleItems(); }
+        @Override public Object currentSelection() { return refs.fileListView().getSelectionModel().getSelectedItem(); }
+        @Override public void selectRow(Object row) { refs.fileListView().getSelectionModel().select(row); }
+        @Override public void selectNearestVisible(int i) { MainController.this.selectNearestVisible(i); }
+        @Override public boolean isDragActive() { return listInteraction.isDragActive(); }
+        @Override public void refreshAfterListChange() { MainController.this.refreshAfterListChange(); }
+        @Override public void rebuildDisplay() { MainController.this.rebuildDisplay(); }
+        @Override public void registerGroupNameRefresh(GroupItem<PreviewItem> group) { MainController.this.registerGroupNameRefresh(group); }
+        @Override public void setCheckedSilently(List<PreviewItem> targets, boolean value) { listInteraction.setCheckedSilently(targets, value); }
+    });
 
     // ==================== 初始化 ====================
 
@@ -918,7 +908,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      *  选中组内成员 → 其所在组参数；选中顶层项目 → 该条目的条目级参数；未选中 → 全局参数 */
     @FXML
     private void onParamSettings() {
-        if (listAnimating) {
+        if (groupCommand.isAnimating()) {
             return;
         }
         openParamDialog(paramScopeTarget(currentSelection()));
@@ -1085,7 +1075,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 选中（拍板 Q4）：项目条目勾选自身；组条目整组勾选（强制 true，不做 toggle）。目标 = 右键那一项 */
     private void onContextSelect(Object target) {
-        if (listAnimating || target == null) {
+        if (groupCommand.isAnimating() || target == null) {
             return;
         }
         List<PreviewItem> targets;
@@ -1106,7 +1096,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 全选（拍板 Q4/Q14 强制全选不回退）：组内成员/组条目 → 该组全部成员；顶层项目/空白 → 整个列表（含折叠组成员） */
     private void onContextSelectAll(Object target) {
-        if (listAnimating) {
+        if (groupCommand.isAnimating()) {
             return;
         }
         List<PreviewItem> targets;
@@ -1156,7 +1146,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 设置提取参数（拍板 Q7/G6）：空白区域 → 强制全局参数；其余复用选中项路由（Q8 已选中该行） */
     private void onContextParams(Object target) {
-        if (listAnimating) {
+        if (groupCommand.isAnimating()) {
             return;
         }
         if (target == null) {
@@ -1168,7 +1158,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 移除组（Q3 拍板：每次必弹确认；与按钮行整组移除共用同一路径，G2 统一） */
     private void onContextRemoveGroup(Object target) {
-        if (listAnimating) {
+        if (groupCommand.isAnimating()) {
             return;
         }
         GroupItem<PreviewItem> group = null;
@@ -1191,7 +1181,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 右键菜单"应用到全局"：目标 = 右键点击的条目 */
     private void onContextApplyGlobal(Object target) {
-        if (listAnimating || !hasIndependentParams(target)) {
+        if (groupCommand.isAnimating() || !hasIndependentParams(target)) {
             return;
         }
         applyGlobalParamsTo(target);
@@ -1200,7 +1190,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 按钮行"应用到全局"：目标 = 当前选中条目 */
     @FXML
     private void onApplyGlobalClicked() {
-        if (listAnimating) {
+        if (groupCommand.isAnimating()) {
             return;
         }
         Object sel = currentSelection();
@@ -1269,7 +1259,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 按钮行"清除参数"：目标 = 勾选集合（若有）否则单选，与"移除"一致 */
     @FXML
     private void onClearParamsClicked() {
-        if (listAnimating) {
+        if (groupCommand.isAnimating()) {
             return;
         }
         clearParamsForTargets(resolveParamTargets(currentSelection()));
@@ -1277,7 +1267,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 右键菜单"清除参数"：动作逻辑与按钮一致（勾选优先 → 右键目标；启用看右键目标） */
     private void onContextClearParams(Object target) {
-        if (listAnimating) {
+        if (groupCommand.isAnimating()) {
             return;
         }
         clearParamsForTargets(resolveParamTargets(target));
@@ -1303,7 +1293,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 右键「应用到所选」（R7.4/R7.5）：逐目标复用确认路径的应用函数；整批只压一条 PARAM_SET 记录 */
     private void onContextApplyToSelection(Object target) {
-        if (listAnimating || paramClipboard.isEmpty()) return;
+        if (groupCommand.isAnimating() || paramClipboard.isEmpty()) return;
         paramClipboard.applyToSelection(resolveParamTargets(target), refs.imageModeToggle().isSelected());
     }
 
@@ -1498,7 +1488,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     @FXML
     private void onStartProcessing() {
-        if (listAnimating) {
+        if (groupCommand.isAnimating()) {
             return;
         }
         String inputFolder = refs.inputFolderField().getText();
@@ -1761,9 +1751,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 按数据序重建显示序（ListView 渲染展平列表）。动画期间的外部重建（换目录/模式切换等）先快进完成动画 */
     private void rebuildDisplay() {
-        if (listAnimating && !suppressAnimRebuild) {
-            finishExpandAnim();
-        }
+        groupCommand.fastForwardOnExternalRebuild();
         rebuildParentPointers();
         adapter.project();
     }
@@ -1804,7 +1792,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 查看HTML源码按钮（浏览器查看HTML需求）：对列表当前选中条目打开源码视图 */
     @FXML
     private void onViewSourceButton() {
-        if (listAnimating) {
+        if (groupCommand.isAnimating()) {
             return;
         }
         if (currentSelection() instanceof PreviewItem it && !it.removed) {
@@ -1847,9 +1835,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * ② <b>更新计数/按钮/选择等 UI 派生状态</b> —— 下面这些自己读模型/控件的派生刷新。
      */
     private void refreshAfterListChange() {
-        if (listAnimating && !suppressAnimRebuild) {
-            finishExpandAnim();
-        }
+        groupCommand.fastForwardOnExternalRebuild();
         rebuildParentPointers();
         adapter.refresh();
         updateFileCount();
@@ -1866,7 +1852,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     @FXML
     private void onRemoveClicked() {
-        if (listAnimating) {
+        if (groupCommand.isAnimating()) {
             return;
         }
         // R5：有复选框勾选时按勾选集合移除（优先于当前选中项，含组内成员）
@@ -1985,7 +1971,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     @FXML
     private void onUndoClicked() {
-        if (listAnimating || !ws.canUndo()) {
+        if (groupCommand.isAnimating() || !ws.canUndo()) {
             return;
         }
         UndoManager.Record<PreviewItem> record = ws.popRecord();
@@ -2218,316 +2204,16 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     // ==================== 合并为组 / 组操作（F5） ====================
 
-    /** 合并为组：有复选框勾选按勾选集合，否则按当前选中项（单个项目可建组 R9）；新组默认名"组N"（全局自增） */
+    /** 合并为组（F5）：命令本体已外迁到 {@link GroupCommandController}（C3a），此处仅作 FXML 入口转发 */
     @FXML
     private void onGroupClicked() {
-        if (listAnimating) {
-            return;
-        }
-        List<PreviewItem> targets = allVisibleItems().stream()
-                .filter(i -> i.selected).toList();
-        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
-        if (targets.isEmpty()) {
-            if (sel instanceof PreviewItem it && !it.removed) {
-                targets = List.of(it);
-            } else {
-                return;
-            }
-        }
-        // 结构（落点计算 / 成员摘除 / 致空组销毁 / 条目级参数清除 / 压 GROUP 撤销记录）全部由模型负责；
-        // 组名前缀由本类传入本地化文案 —— 模型不产出面向用户的文案。
-        GroupItem<PreviewItem> group = ws.group(targets, I18n.get("core.groupDefault"));
-        if (group == null) {
-            return;
-        }
-        registerGroupNameRefresh(group);
-        // 拍板：合并为组后勾选集合复位，避免勾选残留导致下一批建组误合并
-        listInteraction.setCheckedSilently(targets, false);
-        refs.fileListView().getSelectionModel().select(group);
-        refreshAfterListChange();
-        log.info(I18n.msg("log.maincontroller.56", group.getName(), targets.size()));
+        groupCommand.onGroupClicked();
     }
 
-    /** 拆分组（F6）：选中组条目时解散该组——成员按组内顺序回顶层原组位置，组名/组参数随组对象留在撤销记录中 */
+    /** 拆分组（F6）：命令本体已外迁到 {@link GroupCommandController}（C3a），此处仅作 FXML 入口转发 */
     @FXML
     private void onUngroupClicked() {
-        if (listAnimating) {
-            return;
-        }
-        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
-        if (!(sel instanceof GroupItem<?> g)) {
-            return;
-        }
-        GroupItem<PreviewItem> group = ListInteractionController.asPreviewGroup(g);
-        if (items.indexOf(group) < 0) {
-            return;
-        }
-        int displayIdx = displayItems.indexOf(group);
-        // 拆分是整组操作，与展开/折叠无关。结构变更（成员按组内顺序回顶层原位置 + 组参数下发为
-        // 成员条目级参数 + 压 UNGROUP 撤销记录）全部由模型负责，本类只做刷新与选中收尾。
-        List<PreviewItem> members = ws.ungroup(group);
-        refreshAfterListChange();
-        // 选中的组已解散：跳转到原组位置的最近有效行（拆分后为原组第一个成员）
-        selectNearestVisible(displayIdx);
-        log.info(I18n.msg("log.maincontroller.57", group.getName(), members.size()));
-    }
-
-    /**
-     * 组条目折叠/展开（方案 B 拍板）：抽屉式滑出/滑入——内容不裁切，成员行整体平移，
-     * 下方行同步补位/让位（快照动画手法与拖拽一致）。200ms ease-out。
-     * 动画期间列表项目不可交互（按钮可点但无效果）；快速连点/拖拽会话中直接忽略。
-     */
-    private void toggleGroupExpanded(GroupItem<PreviewItem> g) {
-        if (listAnimating || listInteraction.isDragActive()) {
-            return;
-        }
-        if (g.isExpanded()) {
-            collapseGroupAnimated(g);
-        } else {
-            expandGroupAnimated(g);
-        }
-    }
-
-    /**
-     * 折叠动画（抽屉收起）：成员行快照整体下滑滑出，下方行快照上滑补位。
-     * 数据终态（expanded=false + 显示序移除成员）在动画开始时立即生效；
-     * 外部重建触发快进兜底时只清理快照即可。
-     */
-    private void collapseGroupAnimated(GroupItem<PreviewItem> g) {
-        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
-        if (sel instanceof PreviewItem it && it.parentGroup == g) {
-            refs.fileListView().getSelectionModel().select(g);
-        }
-        listAnimating = true;
-        animatingGroup = g;
-        animExpanding = false;
-        animLockedSelection = g;
-        refs.groupNameField().setDisable(true);
-
-        // 采集快照（动画前：成员行与下方行均在原位置）；组行底部 = 成员收进抽屉的目标位置
-        List<ImageView> memberViews = new ArrayList<>();
-        List<ImageView> belowViews = new ArrayList<>();
-        List<PreviewListCell> belowCells = new ArrayList<>();
-        double groupBottom = -1;
-        double memberBottom = -1;
-        double totalHeight = 0;
-        try {
-            for (javafx.scene.Node n : refs.fileListView().lookupAll(".list-cell")) {
-                if (!(n instanceof PreviewListCell c) || c.getItem() == null
-                        || (c.getItem() instanceof PreviewItem it && it.removed)) {
-                    continue;
-                }
-                Bounds b = DragGeometry.cellBoundsInOverlay(c, refs.dragOverlay());
-                if (c.getItem() == g) {
-                    groupBottom = b.getMaxY();
-                } else if (c.getItem() instanceof PreviewItem it && it.parentGroup == g) {
-                    Image snap = c.snapshot(DragGeometry.transparentSnapParams(), null);
-                    if (snap == null) {
-                        continue;   // 快照失败跳过该行，避免空白视图盖住列表
-                    }
-                    ImageView iv = new ImageView(snap);
-                    iv.setLayoutX(b.getMinX());
-                    iv.setLayoutY(b.getMinY());
-                    refs.dragOverlay().getChildren().add(iv);
-                    memberViews.add(iv);
-                    memberBottom = Math.max(memberBottom, b.getMaxY());
-                    totalHeight += c.getHeight();
-                } else if (memberBottom > 0 && b.getMinY() >= memberBottom - 1) {
-                    // 成员块下方的行（原位置快照，动画中上滑补位）
-                    Image snap = c.snapshot(DragGeometry.transparentSnapParams(), null);
-                    if (snap == null) {
-                        continue;
-                    }
-                    ImageView iv = new ImageView(snap);
-                    iv.setLayoutX(b.getMinX());
-                    iv.setLayoutY(b.getMinY());
-                    refs.dragOverlay().getChildren().add(iv);
-                    belowViews.add(iv);
-                    belowCells.add(c);
-                }
-            }
-        } catch (Exception ex) {
-            log.warn(I18n.msg("log.maincontroller.58", ex.getMessage()), ex);
-            refs.dragOverlay().getChildren().removeAll(memberViews);
-            refs.dragOverlay().getChildren().removeAll(belowViews);
-            g.setExpanded(false);
-            rebuildDisplay();
-            finishExpandAnim();
-            return;
-        }
-
-        // 数据终态：成员行移出显示序
-        g.setExpanded(false);
-        suppressAnimRebuild = true;
-        try {
-            rebuildDisplay();
-        } finally {
-            suppressAnimRebuild = false;
-        }
-        belowCells.forEach(c -> c.setVisible(false));
-
-        double slide = totalHeight > 0 ? totalHeight : MEMBER_ROW_HEIGHT_FALLBACK;
-        ParallelTransition pt = new ParallelTransition();
-        for (ImageView iv : memberViews) {
-            // 抽屉收起：每个成员滑到组行底部（位移 = 各自到组行底的距离，互不相同）
-            double dist = Math.max(0, iv.getLayoutY() - groupBottom);
-            TranslateTransition tt = new TranslateTransition(EXPAND_ANIM_DURATION, iv);
-            tt.setByY(-dist);
-            tt.setInterpolator(Interpolator.EASE_OUT);
-            pt.getChildren().add(tt);
-        }
-        for (ImageView iv : belowViews) {
-            TranslateTransition tt = new TranslateTransition(EXPAND_ANIM_DURATION, iv);
-            tt.setByY(-slide);
-            tt.setInterpolator(Interpolator.EASE_OUT);
-            pt.getChildren().add(tt);
-        }
-        if (memberViews.isEmpty() && belowViews.isEmpty()) {
-            // 无可见成员可动画：直接终态
-            refs.dragOverlay().getChildren().removeAll(memberViews);
-            refs.dragOverlay().getChildren().removeAll(belowViews);
-            belowCells.forEach(c -> c.setVisible(true));
-            finishExpandAnim();
-            return;
-        }
-        collapseAnim = pt;
-        collapseViews = memberViews;
-        collapseViews.addAll(belowViews);
-        collapseCells = belowCells;
-        pt.setOnFinished(_ -> finishExpandAnim());
-        pt.play();
-    }
-
-    /**
-     * 展开动画（抽屉拉出）：显示序先重建到终态，成员行快照从上方滑入到位，
-     * 下方行快照下滑让位。快进兜底只清理快照。
-     */
-    private void expandGroupAnimated(GroupItem<PreviewItem> g) {
-        listAnimating = true;
-        animatingGroup = g;
-        animExpanding = true;
-        animLockedSelection = refs.fileListView().getSelectionModel().getSelectedItem();
-        refs.groupNameField().setDisable(true);
-        g.setExpanded(true);
-        suppressAnimRebuild = true;
-        try {
-            rebuildDisplay();
-        } finally {
-            suppressAnimRebuild = false;
-        }
-        refs.fileListView().layout();
-
-        List<ImageView> memberViews = new ArrayList<>();
-        List<ImageView> belowViews = new ArrayList<>();
-        List<PreviewListCell> hiddenCells = new ArrayList<>();
-        double groupBottom = -1;
-        double memberBottom = -1;
-        double totalHeight = 0;
-        try {
-            for (javafx.scene.Node n : refs.fileListView().lookupAll(".list-cell")) {
-                if (!(n instanceof PreviewListCell c) || c.getItem() == null
-                        || (c.getItem() instanceof PreviewItem it && it.removed)) {
-                    continue;
-                }
-                Bounds b = DragGeometry.cellBoundsInOverlay(c, refs.dragOverlay());
-                if (c.getItem() == g) {
-                    groupBottom = b.getMaxY();
-                } else if (c.getItem() instanceof PreviewItem it && it.parentGroup == g) {
-                    Image snap = c.snapshot(DragGeometry.transparentSnapParams(), null);
-                    if (snap == null) {
-                        continue;   // 快照失败跳过该行，避免空白视图盖住列表
-                    }
-                    ImageView iv = new ImageView(snap);
-                    iv.setLayoutX(b.getMinX());
-                    iv.setLayoutY(b.getMinY());
-                    refs.dragOverlay().getChildren().add(iv);
-                    memberViews.add(iv);
-                    memberBottom = Math.max(memberBottom, b.getMaxY());
-                    totalHeight += c.getHeight();
-                    hiddenCells.add(c);
-                } else if (memberBottom > 0 && b.getMinY() >= memberBottom - 1) {
-                    Image snap = c.snapshot(DragGeometry.transparentSnapParams(), null);
-                    if (snap == null) {
-                        continue;
-                    }
-                    ImageView iv = new ImageView(snap);
-                    iv.setLayoutX(b.getMinX());
-                    iv.setLayoutY(b.getMinY());
-                    refs.dragOverlay().getChildren().add(iv);
-                    belowViews.add(iv);
-                    hiddenCells.add(c);
-                }
-            }
-        } catch (Exception ex) {
-            log.warn(I18n.msg("log.maincontroller.59", ex.getMessage()), ex);
-            refs.dragOverlay().getChildren().removeAll(memberViews);
-            refs.dragOverlay().getChildren().removeAll(belowViews);
-            hiddenCells.forEach(c -> c.setVisible(true));
-            finishExpandAnim();
-            return;
-        }
-
-        hiddenCells.forEach(c -> c.setVisible(false));
-
-        double slide = totalHeight > 0 ? totalHeight : MEMBER_ROW_HEIGHT_FALLBACK;
-        // 抽屉拉出：每个成员快照从组行底部出发（初始位移 = 各自到组行底的距离），滑到各自位置
-        for (ImageView iv : memberViews) {
-            double dist = Math.max(0, iv.getLayoutY() - groupBottom);
-            iv.setTranslateY(-dist);
-        }
-        for (ImageView iv : belowViews) {
-            iv.setTranslateY(-slide);
-        }
-        ParallelTransition pt = new ParallelTransition();
-        for (ImageView iv : memberViews) {
-            TranslateTransition tt = new TranslateTransition(EXPAND_ANIM_DURATION, iv);
-            tt.setByY(slide);
-            tt.setInterpolator(Interpolator.EASE_OUT);
-            pt.getChildren().add(tt);
-        }
-        for (ImageView iv : belowViews) {
-            TranslateTransition tt = new TranslateTransition(EXPAND_ANIM_DURATION, iv);
-            tt.setByY(slide);
-            tt.setInterpolator(Interpolator.EASE_OUT);
-            pt.getChildren().add(tt);
-        }
-        if (memberViews.isEmpty() && belowViews.isEmpty()) {
-            refs.dragOverlay().getChildren().removeAll(memberViews);
-            refs.dragOverlay().getChildren().removeAll(belowViews);
-            hiddenCells.forEach(c -> c.setVisible(true));
-            finishExpandAnim();
-            return;
-        }
-        collapseAnim = pt;
-        collapseViews = memberViews;
-        collapseViews.addAll(belowViews);
-        collapseCells = hiddenCells;
-        pt.setOnFinished(_ -> finishExpandAnim());
-        pt.play();
-    }
-
-    /** 折叠/展开动画结束（正常完成或外部重建快进）：清理快照、恢复 cell、解锁 */
-    private void finishExpandAnim() {
-        if (collapseAnim != null) {
-            collapseAnim.stop();
-            collapseAnim = null;
-        }
-        if (collapseViews != null) {
-            refs.dragOverlay().getChildren().removeAll(collapseViews);
-            collapseViews = null;
-        }
-        if (collapseCells != null) {
-            collapseCells.forEach(c -> c.setVisible(true));
-            collapseCells = null;
-        }
-        animatingGroup = null;
-        animExpanding = false;
-        animLockedSelection = null;
-        listAnimating = false;
-        refs.groupNameField().setDisable(false);
-        // 解锁后刷新单元格：动画开始时按 listAnimating=true 渲染的 checkbox 禁用状态需重渲染恢复
-        refs.fileListView().refresh();
-        refs.fileListView().requestLayout();
+        groupCommand.onUngroupClicked();
     }
 
     // ==================== 组名编辑（F5 6.3） ====================
@@ -2930,7 +2616,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 // 已移除项：状态已记录（撤销恢复后可见），跳过 UI 刷新
                 return;
             }
-            if (!listInteraction.isDragActive() && !listAnimating) {
+            if (!listInteraction.isDragActive() && !groupCommand.isAnimating()) {
                 // 拖拽/折叠动画期间暂停列表刷新，避免打乱动画画面；动画结束后统一重算
                 refs.fileListView().refresh();
                 listInteraction.recomputeBadges();
