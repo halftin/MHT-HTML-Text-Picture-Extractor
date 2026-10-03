@@ -20,15 +20,11 @@ import com.mhtextractor.gui.component.ExtractOutcomeStyles;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.WorkspaceFxAdapter;
-import com.mhtextractor.platform.FileOpener;
 import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.gui.util.JavaFxUtil;
-import com.mhtextractor.gui.util.ThumbnailFxBridge;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ThumbnailData;
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.output.FileWriter;
-import com.mhtextractor.output.ImageWriter;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.FileResult;
 import com.mhtextractor.processor.ImageBatchProcessor;
@@ -52,33 +48,29 @@ import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Bounds;
-import javafx.geometry.Pos;
-import javafx.scene.Cursor;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
-import javafx.scene.control.Tooltip;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.DragEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.TransferMode;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
 import javafx.util.Duration;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.glavo.webp.WebPImage;
-import org.glavo.webp.WebPImageLoadOptions;
-import org.glavo.webp.javafx.WebPFXImage;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -355,6 +347,20 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         public void setStatusText(String text) {
             refs.statusLabel().setText(text);
         }
+    });
+    /** 预览渲染协作者（C1b）：文本预览 / 缩略图呈现 / 单击缩略图打开缓存图片从本类原样外迁，
+     *  宿主能力经 {@link PreviewRenderer.Host} 收窄；文案键、日志键（log.maincontroller.64/65/66）、
+     *  线程名（open-cached-image）与 {@code FileOpener} 两级兜底全部保持不变。 */
+    private final PreviewRenderer previewRenderer = new PreviewRenderer(new PreviewRenderer.Host() {
+        @Override public TextArea textPreviewArea() { return refs.textPreviewArea(); }
+        @Override public Label imageHintLabel() { return refs.imageHintLabel(); }
+        @Override public ScrollPane imageScrollPane() { return refs.imageScrollPane(); }
+        @Override public FlowPane thumbnailPane() { return refs.thumbnailPane(); }
+        @Override public Button previewEffectButton() { return refs.previewEffectButton(); }
+        @Override public AppConfig effectiveParams(Object item) { return MainController.this.effectiveForObject(item); }
+        @Override public int visibleCount() { return (int) MainController.this.visibleCount(); }
+        @Override public int unitIndex(Object item) { return (int) MainController.this.unitIndex((PreviewItem) item); }
+        @Override public PreviewCacheLifecycle cacheLifecycle() { return previewCacheLifecycle; }
     });
     /** Q9a：FeatureExercise 按<b>字段访问</b>读它的 isDisable()，故保留同名字段指向新类里那一个 */
     MenuItem ctxClearParams;
@@ -1951,7 +1957,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
         updateInfoArea(sel);
         if (!isTextMode() && sel instanceof PreviewItem it && it.cachedThumbs != null) {
-            renderThumbnails(it);
+            previewRenderer.renderThumbnails(it);
         }
     }
 
@@ -3245,7 +3251,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 refs.textPreviewArea().setManaged(false);
                 refs.imagePreviewBox().setVisible(true);
                 refs.imagePreviewBox().setManaged(true);
-                resetImageArea(info, false);
+                previewRenderer.resetImageArea(info, false);
             }
             return;
         }
@@ -3267,7 +3273,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 case WAITING -> refs.textPreviewArea().setText(I18n.get("preview.imageParsing"));
                 case FAILED -> refs.textPreviewArea().setText(I18n.get("preview.parseFailed") + it.errorMsg);
                 case EMPTY -> refs.textPreviewArea().setText(I18n.get("preview.emptyContentShort"));
-                case READY -> renderTextPreview(it);
+                case READY -> previewRenderer.renderTextPreview(it);
             }
         } else {
             refs.textPreviewArea().setVisible(false);
@@ -3275,11 +3281,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             refs.imagePreviewBox().setVisible(true);
             refs.imagePreviewBox().setManaged(true);
             if (it == null) {
-                resetImageArea(visibleCount() == 0 ? HINT_NO_FILES : "", false);
+                previewRenderer.resetImageArea(visibleCount() == 0 ? HINT_NO_FILES : "", false);
                 return;
             }
             if (effectiveForObject(it) == null) {
-                resetImageArea(HINT_NEED_PARAMS, false);
+                previewRenderer.resetImageArea(HINT_NEED_PARAMS, false);
                 return;
             }
             if (it.status == PreviewItem.Status.FAILED) {
@@ -3290,7 +3296,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 refs.imageScrollPane().setVisible(false);
                 refs.imageScrollPane().setManaged(false);
             } else if (it.cachedThumbs != null) {
-                renderThumbnails(it);
+                previewRenderer.renderThumbnails(it);
             } else if (imageLoadActive && loadingItem == it) {
                 // 加载中：保留渐进追加的网格，不重置
                 refs.imageHintLabel().setText(I18n.get("preview.imageLoading"));
@@ -3300,7 +3306,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 refs.imageScrollPane().setVisible(true);
                 refs.imageScrollPane().setManaged(true);
             } else {
-                resetImageArea(null, true);
+                previewRenderer.resetImageArea(null, true);
             }
         }
     }
@@ -3314,157 +3320,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         AppConfig global = imageMode ? imageParamsCache : textParamsCache;
         return global != null ? I18n.get("group.paramsInherited") : I18n.get("group.paramsInheritedUnconfirmed");
-    }
-
-    private void renderTextPreview(PreviewItem item) {
-        AppConfig params = effectiveForObject(item);
-        if (params == null) {
-            params = new AppConfig();
-        }
-        String startTemplate = params.isEnableTemplate() ? params.getStartTemplate() : "";
-        String endTemplate = params.isEnableTemplate() ? params.getEndTemplate() : "";
-        String head = FileWriter.processTemplate(startTemplate, item.name, item.modifiedTime);
-        String tail = FileWriter.processTemplate(endTemplate, item.name, item.modifiedTime);
-        String text = item.cachedText == null ? "" : item.cachedText;
-        if (text.length() <= 10000) {
-            refs.textPreviewArea().setText(head + text + tail);
-        } else {
-            refs.textPreviewArea().setText(head
-                    + text.substring(0, 5000)
-                    + I18n.get("preview.extractedContentDivider")
-                    + text.substring(text.length() - 5000)
-                    + tail);
-        }
-    }
-
-    /** 重置图片区：hint 为 null 时显示默认按需预览说明 */
-    private void resetImageArea(String hint, boolean showPreviewButton) {
-        refs.imageHintLabel().setText(hint != null ? hint : I18n.get("preview.imageLazyHint"));
-        refs.imageHintLabel().setVisible(true);
-        refs.previewEffectButton().setVisible(showPreviewButton);
-        refs.previewEffectButton().setDisable(false);
-        refs.imageScrollPane().setVisible(false);
-        refs.imageScrollPane().setManaged(false);
-        refs.thumbnailPane().getChildren().clear();
-    }
-
-    private void renderThumbnails(PreviewItem item) {
-        List<ThumbnailData> thumbs = item.cachedThumbs;
-        refs.thumbnailPane().getChildren().clear();
-        if (thumbs == null || thumbs.isEmpty()) {
-            refs.imageHintLabel().setText(I18n.get("preview.noImages"));
-            refs.imageHintLabel().setVisible(true);
-            refs.previewEffectButton().setVisible(false);
-            refs.imageScrollPane().setVisible(false);
-            refs.imageScrollPane().setManaged(false);
-            return;
-        }
-        refs.imageHintLabel().setVisible(false);
-        refs.previewEffectButton().setVisible(false);
-        refs.imageScrollPane().setVisible(true);
-        refs.imageScrollPane().setManaged(true);
-
-        // 下标 = 缓存清单 meta.images() 的序号（cachedThumbs 与 meta 同序 1:1，见 openCachedImage 的索引语义）
-        for (int i = 0; i < thumbs.size(); i++) {
-            refs.thumbnailPane().getChildren().add(buildThumbBox(item, thumbs.get(i), i));
-        }
-    }
-
-    private void appendThumb(PreviewItem item, ThumbnailData entry, int index) {
-        refs.imageHintLabel().setVisible(false);
-        refs.previewEffectButton().setVisible(false);
-        refs.imageScrollPane().setVisible(true);
-        refs.imageScrollPane().setManaged(true);
-        refs.thumbnailPane().getChildren().add(buildThumbBox(item, entry, index));
-    }
-
-    private VBox buildThumbBox(PreviewItem item, ThumbnailData entry, int index) {
-        VBox box = new VBox(4);
-        box.setAlignment(Pos.TOP_CENTER);
-        // E1.4：模型只存像素；JavaFX Image 在此（渲染层）按需构造。构造失败等价于原 image == null
-        Image fxImage = ThumbnailFxBridge.toFxImage(entry);
-        if (fxImage == null) {
-            box.getChildren().add(new Label(I18n.get("preview.loadFailed")));
-        } else {
-            ImageView iv = new ImageView(fxImage);
-            iv.setFitWidth(150);
-            iv.setFitHeight(150);
-            iv.setPreserveRatio(true);
-            box.getChildren().add(iv);
-        }
-        Label nameLabel = new Label(thumbFileName(entry, item));
-        nameLabel.setWrapText(true);
-        nameLabel.setMaxWidth(150);
-        nameLabel.setStyle("-fx-font-size: 0.85em;");
-        box.getChildren().add(nameLabel);
-        // 点击查看（需求：预览区图片可点击查看）：单击缩略图 → 系统默认图片查看器打开缓存目录里对应的那张图
-        box.setCursor(Cursor.HAND);
-        Tooltip.install(box, new Tooltip(I18n.get("preview.thumbClickHint")));
-        box.setOnMouseClicked(e -> { if (e.getButton() == MouseButton.PRIMARY) openCachedImage(item, index); });
-        return box;
-    }
-
-    /** 单击缩略图：用系统默认图片查看器打开缓存目录里对应的图片（非 AWT；启动/校验/环境兜底见 {@link FileOpener}）。 */
-    private void openCachedImage(PreviewItem item, int index) {
-        Path file = previewCacheLifecycle.store().imageFileFor(item.cachedMeta, index);
-        if (file == null || !Files.isRegularFile(file)) {
-            log.warn(I18n.msg("log.maincontroller.65", item.name));
-            return;
-        }
-        // index 语义见 renderThumbnails 注释；打开最多等 3 秒（校验退出码）再兜底 → 后台线程，避免冻结 FX 线程
-        Thread t = new Thread(() -> {
-            FileOpener.Route route = FileOpener.open(file);
-            if (route == FileOpener.Route.FAILED) {
-                log.warn(I18n.msg("log.maincontroller.65", item.name));
-            } else {
-                log.info(I18n.msg(route == FileOpener.Route.PHOTOS_PROTOCOL
-                        ? "log.maincontroller.66" : "log.maincontroller.64", file));
-            }
-        }, "open-cached-image");
-        t.setDaemon(true);
-        t.start();
-    }
-
-    /** 合并输出且不重命名时，文件名按当前列表位置重算 f%02d_ 前缀（拖拽重排后同步刷新，按条目生效参数判定） */
-    private String thumbFileName(ThumbnailData entry, PreviewItem item) {
-        AppConfig params = effectiveForObject(item);
-        boolean mergedNoRename = params != null && params.isSingleOutputMode()
-                && !params.isEnableBatchRenaming() && visibleCount() > 1;
-        return mergedNoRename
-                ? String.format("f%02d_", (int) unitIndex(item) + 1) + entry.coreName()
-                : entry.coreName();
-    }
-
-    /**
-     * 解码单张缩略图：WebP 走 JWebP 缩放解码（150 边界），其余走 JavaFX 原生缩放解码。
-     *
-     * <p>E1.4：返回值由"持有 JavaFX {@code Image}"改为"持有纯像素"（{@link ThumbnailData}），
-     * 使该数据可脱离 UI 框架存在。解码仍在<b>后台线程</b>完成（缩放边界与算法不变），
-     * JavaFX {@code Image} 的构造下沉到渲染层的
-     * {@link com.mhtextractor.gui.util.ThumbnailFxBridge#toFxImage(ThumbnailData)}。失败时 pixels=null，
-     * 渲染层显示"无法加载"占位 —— 与原 {@code image == null} 语义一致。</p>
-     */
-    private ThumbnailData decodeThumb(ImageExtractor.ImageData imageData, int index, AppConfig params) {
-        byte[] data = imageData.getData();
-        String ext = SanitizeUtils.detectExtensionByMagicNumber(data, "jpg");
-        boolean rename = params != null && params.isEnableBatchRenaming();
-        String coreName = ImageWriter.computeFileName(imageData, ext, rename, index + 1, "");
-        Image img = null;
-        try {
-            if ("webp".equals(ext)) {
-                WebPImage webp = WebPImage.read(new ByteArrayInputStream(data),
-                        WebPImageLoadOptions.builder()
-                                .requestedWidth(150).requestedHeight(150)
-                                .preserveRatio(true).smooth(true)
-                                .build());
-                img = new WebPFXImage(webp);
-            } else {
-                img = new Image(new ByteArrayInputStream(data), 150, 150, true, true);
-            }
-        } catch (Exception e) {
-            // img 保持 null → 占位"无法加载"
-        }
-        return ThumbnailFxBridge.toThumbnailData(img, coreName);
     }
 
     private void updateRenameNote(Object sel) {
@@ -3496,7 +3351,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             return;
         }
         if (item.cachedThumbs != null) {
-            renderThumbnails(item);
+            previewRenderer.renderThumbnails(item);
             return;
         }
         if (imageLoadActive && loadingItem == item) {
@@ -3563,7 +3418,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     final ThumbnailData thumb;
                     try {
                         byte[] data = Files.readAllBytes(pr.imagesDir().resolve(entry.file()));
-                        thumb = decodeThumb(new ImageExtractor.ImageData(
+                        thumb = previewRenderer.decodeThumb(new ImageExtractor.ImageData(
                                 entry.originalName(), entry.sourceId(), data), i, params);
                     } catch (IOException e) {
                         log.warn(I18n.msg("log.maincontroller.62", pr.imagesDir().resolve(entry.file())), e);
@@ -3576,7 +3431,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                                 || refs.fileListView().getSelectionModel().getSelectedItem() != item) {
                             return;
                         }
-                        appendThumb(item, thumb, idx);
+                        previewRenderer.appendThumb(item, thumb, idx);
                     });
                 }
 
@@ -3621,7 +3476,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                         item.status = PreviewItem.Status.EMPTY;
                         refs.fileListView().refresh();
                     }
-                    renderThumbnails(item);
+                    previewRenderer.renderThumbnails(item);
                     updateProgressStatus(parseToken);
                 });
             } catch (Exception e) {
