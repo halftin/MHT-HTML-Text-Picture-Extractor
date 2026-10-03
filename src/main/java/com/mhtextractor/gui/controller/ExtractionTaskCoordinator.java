@@ -70,7 +70,7 @@ public final class ExtractionTaskCoordinator {
         void setStatusText(String text);
     }
 
-    /** 满格进度条三态（与 {@code MainController} 的 STYLE_PROGRESS_EXTRACT_* 一一对应）。 */
+    /** 满格进度条三态（与 {@code ExtractOutcomeStyles.PROGRESS_EXTRACT_*} 一一对应，P6-A 起样式类名收口于该类）。 */
     public enum ExtractOutcomeStyle {
         /** 有失败或跳过 */
         FAILED,

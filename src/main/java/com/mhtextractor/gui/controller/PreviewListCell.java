@@ -1,6 +1,8 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.gui.component.ExtractOutcomeStyles;
+import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.ChangeListener;
@@ -308,8 +310,8 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         if (it.extractOutcome != ExtractOutcome.NONE) {
             // 提取结果色优先级最高（拍板）：覆盖解析失败黄与参数色；选中态用混合灰的显式变体色（组行同机制）
             setStyle(rowStyle(isSelected
-                    ? extractOutcomeSelectedPaint(it.extractOutcome)
-                    : extractOutcomePaint(it.extractOutcome)));
+                    ? ExtractOutcomeStyles.listPaintSelected(it.extractOutcome)
+                    : ExtractOutcomeStyles.listPaint(it.extractOutcome)));
             setTooltip(it.extractDetail == null || it.extractDetail.isEmpty()
                     ? null : new Tooltip(it.extractDetail));
         } else if (it.status == PreviewItem.Status.FAILED) {
@@ -322,9 +324,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         }
         // 深色底需白字（-fx-text-background-color 不跨节点继承，直接设 label 填充色）：
         // 全局参数深蓝底、提取失败/跳过/警告行（Windows 错误红 #E81123 及红绿分割行）
-        boolean whiteText = (it.extractOutcome == ExtractOutcome.FAILED
-                || it.extractOutcome == ExtractOutcome.SKIPPED
-                || it.extractOutcome == ExtractOutcome.SUCCESS_WARNED)
+        boolean whiteText = ExtractOutcomeStyles.usesDarkBackdrop(it.extractOutcome)
                 || (it.extractOutcome == ExtractOutcome.NONE
                         && it.status != PreviewItem.Status.FAILED
                         && ctl.effectiveStatus(it) == ParamScope.Status.GLOBAL);
@@ -346,26 +346,6 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         return paint == null ? CELL_PAD : rowStyle(paint);
     }
 
-    /** 提取结果背景画值（拍板）：成功标准绿；失败/跳过浅红；成功+警告左1/3红右2/3绿 */
-    private static String extractOutcomePaint(ExtractOutcome outcome) {
-        return switch (outcome) {
-            case SUCCESS -> EXTRACT_SUCCESS_PAINT;
-            case SUCCESS_WARNED -> EXTRACT_WARNED_PAINT;
-            case FAILED, SKIPPED -> EXTRACT_FAILED_PAINT;
-            default -> null;
-        };
-    }
-
-    /** 提取结果选中态画值（拍板 2026-09-22）：基础色混合 40% 浅灰的显式变体 */
-    private static String extractOutcomeSelectedPaint(ExtractOutcome outcome) {
-        return switch (outcome) {
-            case SUCCESS -> EXTRACT_SUCCESS_SELECTED_PAINT;
-            case SUCCESS_WARNED -> EXTRACT_WARNED_SELECTED_PAINT;
-            case FAILED, SKIPPED -> EXTRACT_FAILED_SELECTED_PAINT;
-            default -> null;
-        };
-    }
-
     private void setupDnD() {
         setOnDragDetected(e -> {
             // 阶段 7：项目（含组内成员）与组条目均可发起拖拽；已移除项已隐藏不可拖；
@@ -377,7 +357,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             }
             // 拖拽影像：带投影快照（临时挂投影后截图，随即撤掉）
             setEffect(new DropShadow(10, 0, 0, Color.rgb(0, 0, 0, 0.35)));
-            Image snap = snapshot(MainController.transparentSnapParams(), null);
+            Image snap = snapshot(DragGeometry.transparentSnapParams(), null);
             setEffect(null);
             Dragboard db = startDragAndDrop(TransferMode.MOVE);
             ClipboardContent cc = new ClipboardContent();
@@ -485,14 +465,6 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
                     + " -fx-padding: 1 4; -fx-background-radius: 9;";
     private static final double CHECK_COL_WIDTH = 40;
     private static final String DROP_LINE_STYLE = "-fx-background-color: #3b82f6;";
-    private static final String EXTRACT_FAILED_PAINT = "#E81123";
-    private static final String EXTRACT_FAILED_SELECTED_PAINT = "#D75661";
-    private static final String EXTRACT_SUCCESS_PAINT = "#4CAF50";
-    private static final String EXTRACT_SUCCESS_SELECTED_PAINT = "#7AB57C";
-    private static final String EXTRACT_WARNED_PAINT =
-            "linear-gradient(to right, #E81123 0%, #E81123 33%, #2E7D32 33%, #2E7D32 100%)";
-    private static final String EXTRACT_WARNED_SELECTED_PAINT =
-            "linear-gradient(to right, #D75661 0%, #D75661 33%, #68976A 33%, #68976A 100%)";
     private static final String GLOBAL_PARAM_PAINT = "#1e4d8f";
     private static final String GLOBAL_PARAM_SELECTED_PAINT = "#5e7aa2";
     private static final double GROUP_CHECK_WIDTH = 20.0;

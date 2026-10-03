@@ -16,13 +16,16 @@ import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.core.SourceParsers;
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.TextExtractor;
+import com.mhtextractor.gui.component.ExtractOutcomeStyles;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.HtmlSourceViewer;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.WorkspaceFxAdapter;
 import com.mhtextractor.platform.BrowserLauncher;
 import com.mhtextractor.platform.FileOpener;
+import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.gui.util.JavaFxUtil;
+import com.mhtextractor.gui.util.ThumbnailFxBridge;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ThumbnailData;
 import com.mhtextractor.i18n.I18n;
@@ -43,7 +46,6 @@ import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.SanitizeUtils;
 import com.mhtextractor.util.SourceKinds;
 import com.mhtextractor.util.SelectionState;
-import com.mhtextractor.util.ThumbnailPixels;
 import com.mhtextractor.util.UndoManager;
 import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
@@ -52,12 +54,9 @@ import javafx.application.Platform;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
-import javafx.geometry.BoundingBox;
 import javafx.geometry.Bounds;
-import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
-import javafx.scene.SnapshotParameters;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
@@ -66,14 +65,11 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.image.PixelFormat;
-import javafx.scene.image.WritableImage;
 import javafx.scene.input.DragEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
 import javafx.util.Duration;
@@ -87,7 +83,6 @@ import org.glavo.webp.javafx.WebPFXImage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.nio.IntBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -127,11 +122,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /* 选中态 = 基础色混合 40% 浅灰 #bebebe（拍板 2026-09-22，与组行选中切换同机制） */
     /* 提取结果背景画值（提取结果状态需求拍板，配色修订 2026-09-21、2026-09-25）：浅红=失败/跳过；标准绿=成功；分割色=成功+警告（左1/3红右2/3绿）。
        2026-09-25 用户反馈：浅红改 Windows 错误红 #E81123（白字）；警告分割行右侧绿加深 #2E7D32 以承载白字 */
-    /** 进度条活动样式类（进度条活动配色拍板 2026-09-24）：预解析=浅蓝；提取成功=绿；有警告=黄；有失败/跳过=浅红 */
-    private static final String STYLE_PROGRESS_PREPARSE = "progress-preparse";
-    private static final String STYLE_PROGRESS_EXTRACT_SUCCESS = "progress-extract-success";
-    private static final String STYLE_PROGRESS_EXTRACT_WARNED = "progress-extract-warned";
-    private static final String STYLE_PROGRESS_EXTRACT_FAILED = "progress-extract-failed";
+    /* 进度条活动样式类（含各色）与"提取结果 → 样式/颜色"的映射统一在 gui.component.ExtractOutcomeStyles */
 
     /* 8.5 条目背景画值（配色修订 2026-09-21）：深蓝 = 生效参数为全局参数（白字）；浅蓝 = 生效参数为组/条目级独立参数 */
     /* 组条目行样式（配色修订 2026-09-21）：标准黑色底、白色文字；行高大幅缩小为比文字稍高 */
@@ -154,49 +145,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     private static final String HINT_NO_MODE_OR_DIR = I18n.get("preview.hintSelectMode");
     private static final String HINT_NEED_PARAMS = I18n.get("preview.hintParamsUnset");
     private static final String HINT_NO_FILES = I18n.get("preview.hintNoMht");
-
-    /** 缩略图纯数据 → JavaFX 图像（渲染层唯一的 JavaFX 转换点；失败返回 null 表示无法加载） */
-    private static Image toFxImage(ThumbnailData d) {
-        int[] px = d.pixels();
-        if (!ThumbnailPixels.isUsable(px, d.width(), d.height())) {
-            return null;
-        }
-        try {
-            WritableImage img = new WritableImage(d.width(), d.height());
-            // stride == width：像素为行优先连续的 ARGB int（打包/解包契约见 ThumbnailPixels）
-            img.getPixelWriter().setPixels(0, 0, d.width(), d.height(),
-                    PixelFormat.getIntArgbInstance(), px, 0, d.width());
-            return img;
-        } catch (Exception e) {
-            // 与 decodeThumb 一致：失败即视为无法加载（渲染层显示占位）
-            return null;
-        }
-    }
-
-    /** JavaFX 图像 → 缩略图纯数据（后台线程调用；失败返回 pixels=null 的数据对象） */
-    private static ThumbnailData toThumbnailData(Image img, String coreName) {
-        if (img == null) {
-            return new ThumbnailData(coreName, 0, 0, null);
-        }
-        try {
-            int w = (int) Math.round(img.getWidth());
-            int h = (int) Math.round(img.getHeight());
-            if (w <= 0 || h <= 0) {
-                return new ThumbnailData(coreName, 0, 0, null);
-            }
-            // 经 IntBuffer 接收，再交由纯 Java 的 ThumbnailPixels 打包 —— 该段逻辑有零 JavaFX 单测
-            IntBuffer buf = IntBuffer.allocate(w * h);
-            img.getPixelReader().getPixels(0, 0, w, h,
-                    PixelFormat.getIntArgbInstance(), buf, w);
-            int[] px = ThumbnailPixels.pack(buf, w, h);
-            if (px == null) {
-                return new ThumbnailData(coreName, 0, 0, null);
-            }
-            return new ThumbnailData(coreName, w, h, px);
-        } catch (Exception e) {
-            return new ThumbnailData(coreName, 0, 0, null);
-        }
-    }
 
     /** 输出单元规划的字段视图（路径/来源目录/移除标记，阶段 8） */
     static final OutputUnitPlanner.ItemView<PreviewItem> ITEM_VIEW = new OutputUnitPlanner.ItemView<>() {
@@ -1759,9 +1707,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             @Override
             public void setProgressBarOutcome(ExtractionTaskCoordinator.ExtractOutcomeStyle style) {
                 setProgressBarActivity(switch (style) {
-                    case FAILED -> STYLE_PROGRESS_EXTRACT_FAILED;
-                    case WARNED -> STYLE_PROGRESS_EXTRACT_WARNED;
-                    case SUCCESS -> STYLE_PROGRESS_EXTRACT_SUCCESS;
+                    case FAILED -> ExtractOutcomeStyles.PROGRESS_EXTRACT_FAILED;
+                    case WARNED -> ExtractOutcomeStyles.PROGRESS_EXTRACT_WARNED;
+                    case SUCCESS -> ExtractOutcomeStyles.PROGRESS_EXTRACT_SUCCESS;
                 });
             }
 
@@ -1771,7 +1719,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 refs.stopButton().setDisable(false);
                 refs.progressBar().setVisible(true);
                 refs.progressBar().setProgress(0);
-                setProgressBarActivity(STYLE_PROGRESS_EXTRACT_SUCCESS);   // 提取中 = 开始提取按钮绿
+                setProgressBarActivity(ExtractOutcomeStyles.PROGRESS_EXTRACT_SUCCESS);   // 提取中 = 开始提取按钮绿
             }
 
             @Override
@@ -1841,7 +1789,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         double gapTopY = 0;
         if (cell != null) {
-            gapTopY = cellBoundsInOverlay(cell).getMinY()
+            gapTopY = DragGeometry.cellBoundsInOverlay(cell, refs.dragOverlay()).getMinY()
                     + (zone == DropResolver.Zone.TOP ? 0 : cell.getHeight());
         }
         return performResolvedDrop(dragged, op, gapTopY, cell);
@@ -1888,23 +1836,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     // ==================== 拖拽排序动画 ====================
 
-    static SnapshotParameters transparentSnapParams() {
-        SnapshotParameters sp = new SnapshotParameters();
-        sp.setFill(Color.TRANSPARENT);
-        return sp;
-    }
-
-    /** 单元格在拖拽覆盖层坐标系中的位置 */
-    private Bounds cellBoundsInOverlay(javafx.scene.Node cell) {
-        Bounds sceneBounds = cell.localToScene(cell.getBoundsInLocal());
-        Point2D origin = refs.dragOverlay().localToScene(0, 0);
-        return new BoundingBox(
-                sceneBounds.getMinX() - origin.getX(),
-                sceneBounds.getMinY() - origin.getY(),
-                sceneBounds.getWidth(),
-                sceneBounds.getHeight());
-    }
-
     private PreviewListCell findCell(Object item) {
         for (javafx.scene.Node n : refs.fileListView().lookupAll(".list-cell")) {
             if (n instanceof PreviewListCell c && c.getItem() == item) {
@@ -1919,7 +1850,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         draggedObject = sourceCell.getItem();
         dragPositionStale = false;
         dragActive = true;
-        double dragGapTopY = cellBoundsInOverlay(sourceCell).getMinY();
+        double dragGapTopY = DragGeometry.cellBoundsInOverlay(sourceCell, refs.dragOverlay()).getMinY();
         double rowHeight = sourceCell.getHeight();
 
         List<PreviewListCell> cells = new ArrayList<>();
@@ -1928,10 +1859,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             for (javafx.scene.Node n : refs.fileListView().lookupAll(".list-cell")) {
                 if (n instanceof PreviewListCell c && c != sourceCell && c.getItem() != null
                         && !(c.getItem() instanceof PreviewItem it && it.removed)) {
-                    Bounds b = cellBoundsInOverlay(c);
+                    Bounds b = DragGeometry.cellBoundsInOverlay(c, refs.dragOverlay());
                     if (b.getMinY() >= dragGapTopY - 1) {
                         cells.add(c);
-                        ImageView iv = new ImageView(c.snapshot(transparentSnapParams(), null));
+                        ImageView iv = new ImageView(c.snapshot(DragGeometry.transparentSnapParams(), null));
                         iv.setLayoutX(b.getMinX());
                         iv.setLayoutY(b.getMinY());
                         refs.dragOverlay().getChildren().add(iv);
@@ -1990,10 +1921,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             for (javafx.scene.Node n : refs.fileListView().lookupAll(".list-cell")) {
                 if (n instanceof PreviewListCell c && c.getItem() != null
                         && !(c.getItem() instanceof PreviewItem it && it.removed)) {
-                    Bounds b = cellBoundsInOverlay(c);
+                    Bounds b = DragGeometry.cellBoundsInOverlay(c, refs.dragOverlay());
                     if (b.getMinY() >= gapTopY - 1) {
                         cells.add(c);
-                        ImageView iv = new ImageView(c.snapshot(transparentSnapParams(), null));
+                        ImageView iv = new ImageView(c.snapshot(DragGeometry.transparentSnapParams(), null));
                         iv.setLayoutX(b.getMinX());
                         iv.setLayoutY(b.getMinY());
                         refs.dragOverlay().getChildren().add(iv);
@@ -2026,8 +1957,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (itemCell != null) {
             // 条目行快照最后加入覆盖层（位于最上层、静态不动），下方快照下滑时从其底下钻过
             try {
-                Bounds ib = cellBoundsInOverlay(itemCell);
-                ImageView itemView = new ImageView(itemCell.snapshot(transparentSnapParams(), null));
+                Bounds ib = DragGeometry.cellBoundsInOverlay(itemCell, refs.dragOverlay());
+                ImageView itemView = new ImageView(itemCell.snapshot(DragGeometry.transparentSnapParams(), null));
                 itemView.setLayoutX(ib.getMinX());
                 itemView.setLayoutY(ib.getMinY());
                 refs.dragOverlay().getChildren().add(itemView);
@@ -2880,11 +2811,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                         || (c.getItem() instanceof PreviewItem it && it.removed)) {
                     continue;
                 }
-                Bounds b = cellBoundsInOverlay(c);
+                Bounds b = DragGeometry.cellBoundsInOverlay(c, refs.dragOverlay());
                 if (c.getItem() == g) {
                     groupBottom = b.getMaxY();
                 } else if (c.getItem() instanceof PreviewItem it && it.parentGroup == g) {
-                    Image snap = c.snapshot(transparentSnapParams(), null);
+                    Image snap = c.snapshot(DragGeometry.transparentSnapParams(), null);
                     if (snap == null) {
                         continue;   // 快照失败跳过该行，避免空白视图盖住列表
                     }
@@ -2897,7 +2828,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     totalHeight += c.getHeight();
                 } else if (memberBottom > 0 && b.getMinY() >= memberBottom - 1) {
                     // 成员块下方的行（原位置快照，动画中上滑补位）
-                    Image snap = c.snapshot(transparentSnapParams(), null);
+                    Image snap = c.snapshot(DragGeometry.transparentSnapParams(), null);
                     if (snap == null) {
                         continue;
                     }
@@ -2992,11 +2923,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                         || (c.getItem() instanceof PreviewItem it && it.removed)) {
                     continue;
                 }
-                Bounds b = cellBoundsInOverlay(c);
+                Bounds b = DragGeometry.cellBoundsInOverlay(c, refs.dragOverlay());
                 if (c.getItem() == g) {
                     groupBottom = b.getMaxY();
                 } else if (c.getItem() instanceof PreviewItem it && it.parentGroup == g) {
-                    Image snap = c.snapshot(transparentSnapParams(), null);
+                    Image snap = c.snapshot(DragGeometry.transparentSnapParams(), null);
                     if (snap == null) {
                         continue;   // 快照失败跳过该行，避免空白视图盖住列表
                     }
@@ -3009,7 +2940,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     totalHeight += c.getHeight();
                     hiddenCells.add(c);
                 } else if (memberBottom > 0 && b.getMinY() >= memberBottom - 1) {
-                    Image snap = c.snapshot(transparentSnapParams(), null);
+                    Image snap = c.snapshot(DragGeometry.transparentSnapParams(), null);
                     if (snap == null) {
                         continue;
                     }
@@ -3508,7 +3439,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         VBox box = new VBox(4);
         box.setAlignment(Pos.TOP_CENTER);
         // E1.4：模型只存像素；JavaFX Image 在此（渲染层）按需构造。构造失败等价于原 image == null
-        Image fxImage = toFxImage(entry);
+        Image fxImage = ThumbnailFxBridge.toFxImage(entry);
         if (fxImage == null) {
             box.getChildren().add(new Label(I18n.get("preview.loadFailed")));
         } else {
@@ -3566,7 +3497,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      *
      * <p>E1.4：返回值由"持有 JavaFX {@code Image}"改为"持有纯像素"（{@link ThumbnailData}），
      * 使该数据可脱离 UI 框架存在。解码仍在<b>后台线程</b>完成（缩放边界与算法不变），
-     * JavaFX {@code Image} 的构造下沉到渲染层的 {@link #toFxImage}。失败时 pixels=null，
+     * JavaFX {@code Image} 的构造下沉到渲染层的
+     * {@link com.mhtextractor.gui.util.ThumbnailFxBridge#toFxImage(ThumbnailData)}。失败时 pixels=null，
      * 渲染层显示"无法加载"占位 —— 与原 {@code image == null} 语义一致。</p>
      */
     private ThumbnailData decodeThumb(ImageExtractor.ImageData imageData, int index, AppConfig params) {
@@ -3589,7 +3521,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         } catch (Exception e) {
             // img 保持 null → 占位"无法加载"
         }
-        return toThumbnailData(img, coreName);
+        return ThumbnailFxBridge.toThumbnailData(img, coreName);
     }
 
     private void updateRenameNote(Object sel) {
@@ -3781,7 +3713,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (!running().get()) {
             refs.progressBar().setVisible(true);
             refs.progressBar().setProgress(0);
-            setProgressBarActivity(STYLE_PROGRESS_PREPARSE);
+            setProgressBarActivity(ExtractOutcomeStyles.PROGRESS_PREPARSE);
         }
         // 快照迭代目标，避免解析期间列表被增量导入/移除修改导致并发异常
         preParseItems(new ArrayList<>(targets), ++parseToken);
@@ -3911,15 +3843,14 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         } else {
             refs.progressBar().setVisible(true);
             refs.progressBar().setProgress((double) done / total);
-            setProgressBarActivity(STYLE_PROGRESS_PREPARSE);
+            setProgressBarActivity(ExtractOutcomeStyles.PROGRESS_PREPARSE);
         }
         refs.statusLabel().setText(I18n.get("preview.parseDone") + done + "/" + total);
     }
 
     /** 进度条活动样式切换（拍板 2026-09-24）：一次只保留一个活动类；null = 默认色 */
     private void setProgressBarActivity(String styleClass) {
-        refs.progressBar().getStyleClass().removeAll(STYLE_PROGRESS_PREPARSE, STYLE_PROGRESS_EXTRACT_SUCCESS,
-                STYLE_PROGRESS_EXTRACT_WARNED, STYLE_PROGRESS_EXTRACT_FAILED);
+        refs.progressBar().getStyleClass().removeAll(ExtractOutcomeStyles.progressActivityStyles());
         if (styleClass != null) {
             refs.progressBar().getStyleClass().add(styleClass);
         }
