@@ -244,7 +244,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
         statusLabel.setText("");
         // 选中态灰色高亮（拍板）：inline 深蓝会覆盖默认选中色，需按选中状态显式切换
-        boolean isSelected = ctl.fileListView.getSelectionModel().getSelectedItem() == g;
+        boolean isSelected = ctl.refs.fileListView().getSelectionModel().getSelectedItem() == g;
         setStyle(isSelected ? GROUP_ROW_SELECTED_STYLE : GROUP_ROW_STYLE);
         setTooltip(null);
         setGraphic(wrapper);
@@ -304,7 +304,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             badgeLabel.setText(badge);
             badgeLabel.setStyle(BADGE_STYLE);
         }
-        boolean isSelected = ctl.fileListView.getSelectionModel().getSelectedItem() == it;
+        boolean isSelected = ctl.refs.fileListView().getSelectionModel().getSelectedItem() == it;
         if (it.extractOutcome != ExtractOutcome.NONE) {
             // 提取结果色优先级最高（拍板）：覆盖解析失败黄与参数色；选中态用混合灰的显式变体色（组行同机制）
             setStyle(rowStyle(isSelected

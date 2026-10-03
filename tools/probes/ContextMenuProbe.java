@@ -80,6 +80,9 @@ public class ContextMenuProbe extends Application {
 
         // 与 App.start() 同构：FXML + i18n bundle（initialize() 会装配右键菜单）
         FXMLLoader loader = new FXMLLoader(App.class.getResource("/com/mhtextractor/gui/view/MainView.fxml"));
+        // P6-B：控制器要拿 FXML 命名空间（fx:id -> MainViewRefs），而 namespace 只有 loader 有 ——
+        // 与 App.start() / TestMain 同一根线（controller factory 覆盖 fx:controller，时机逐字相同）。
+        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader));
         loader.setResources(I18n.bundle());
         Node mainRoot = loader.load();
         this.controller = loader.getController();
@@ -298,7 +301,7 @@ public class ContextMenuProbe extends Application {
      */
     private void r7CopyApplyEndToEnd() {
         try {
-            boolean im = ((javafx.scene.control.ToggleButton) fieldOf(controller, "imageModeToggle")).isSelected();
+            boolean im = ((javafx.scene.control.ToggleButton) node("imageModeToggle")).isSelected();
             System.out.println("      (info) R7 端到端：当前模式 imageMode=" + im);
 
             PreviewItem a = newPreview("r7-a");
@@ -314,9 +317,9 @@ public class ContextMenuProbe extends Application {
             setItemParams(b, im, params("BEFORE-B"));
             workspace().appendItems(new ArrayList<>(List.of(a, b)));
 
-            String inBefore = ((javafx.scene.control.TextField) fieldOf(controller, "inputFolderField")).getText();
-            String outBefore = ((javafx.scene.control.TextField) fieldOf(controller, "outputFolderField")).getText();
-            boolean openAfterBefore = ((ToggleSwitch) fieldOf(controller, "openFolderAfterCompleteCheck")).isSelected();
+            String inBefore = ((javafx.scene.control.TextField) node("inputFolderField")).getText();
+            String outBefore = ((javafx.scene.control.TextField) node("outputFolderField")).getText();
+            boolean openAfterBefore = ((ToggleSwitch) node("openFolderAfterCompleteCheck")).isSelected();
 
             // ---- 控制组 ①：无参数目标 + 未复制过 ⇒ 两项都禁用，复制文案 = "无参数" ----
             updateState(bare);
@@ -361,13 +364,13 @@ public class ContextMenuProbe extends Application {
             check("R7.7：应用未把源的 imageModeEnabled 写进 b", !applied.isImageModeEnabled());
             check("R7.7：应用未把源的 openFolderAfterComplete 写进 b", !applied.isOpenFolderAfterComplete());
             check("R7.7：应用未改主窗口输入目录", inBefore.equals(
-                    ((javafx.scene.control.TextField) fieldOf(controller, "inputFolderField")).getText()));
+                    ((javafx.scene.control.TextField) node("inputFolderField")).getText()));
             check("R7.7：应用未改主窗口输出目录", outBefore.equals(
-                    ((javafx.scene.control.TextField) fieldOf(controller, "outputFolderField")).getText()));
+                    ((javafx.scene.control.TextField) node("outputFolderField")).getText()));
             check("R7.7：应用未改主窗口「完成后打开文件夹」开关", openAfterBefore ==
-                    ((ToggleSwitch) fieldOf(controller, "openFolderAfterCompleteCheck")).isSelected());
+                    ((ToggleSwitch) node("openFolderAfterCompleteCheck")).isSelected());
             check("R7.7：应用未改当前模式", im ==
-                    ((javafx.scene.control.ToggleButton) fieldOf(controller, "imageModeToggle")).isSelected());
+                    ((javafx.scene.control.ToggleButton) node("imageModeToggle")).isSelected());
 
             // ---- R7.5：撤销那一条记录必须完整恢复到 before 快照 ----
             callNoArg(controller, "onUndoClicked");
@@ -431,6 +434,13 @@ public class ContextMenuProbe extends Application {
         Field f = owner.getClass().getDeclaredField(name);
         f.setAccessible(true);
         return f.get(owner);
+    }
+
+    /** P6-B：FXML 节点引用现在都在 {@code MainController.refs}（{@code MainViewRefs}）里；按 fx:id 取。 */
+    private Object node(String fxId) throws Exception {
+        Object refs = fieldOf(controller, "refs");
+        Method m = refs.getClass().getMethod(fxId);
+        return m.invoke(refs);
     }
 
     private com.mhtextractor.app.WorkspaceModel workspace() throws Exception {

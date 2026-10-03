@@ -76,6 +76,9 @@ public final class TestMain extends Application {
         }
 
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/mhtextractor/gui/view/MainView.fxml"));
+        // P6-B：与 App.start() 同一行（逐行等价 —— 改一处必须改另一处，见类 javadoc）。
+        // 控制器由此拿到 loader，从而能在 initialize() 里用 getNamespace() 构造 MainViewRefs。
+        loader.setControllerFactory(_ -> new MainController(loader));
         loader.setResources(I18n.bundle());
         Parent root = loader.load();
         StackPane overlay = SidePanelHost.install(root);

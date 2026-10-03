@@ -62,6 +62,9 @@ public class NotificationProbe extends Application {
         I18n.setLocale(I18n.parseLocale(System.getProperty("probe.locale", "zh_CN")));
 
         FXMLLoader loader = new FXMLLoader(App.class.getResource("/com/mhtextractor/gui/view/MainView.fxml"));
+        // P6-B：控制器要拿 FXML 命名空间（fx:id -> MainViewRefs），而 namespace 只有 loader 有 ——
+        // 与 App.start() / TestMain 同一根线（controller factory 覆盖 fx:controller，时机逐字相同）。
+        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader));
         loader.setResources(I18n.bundle());
         Parent content = loader.load();
 

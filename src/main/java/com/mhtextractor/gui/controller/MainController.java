@@ -1,6 +1,5 @@
 package com.mhtextractor.gui.controller;
 
-import atlantafx.base.controls.ToggleSwitch;
 import com.mhtextractor.app.ExtractionPreconditions;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.app.WorkspaceImportService;
@@ -19,7 +18,6 @@ import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.TextExtractor;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.HtmlSourceViewer;
-import com.mhtextractor.gui.component.LogTextArea;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.WorkspaceFxAdapter;
 import com.mhtextractor.platform.BrowserLauncher;
@@ -53,27 +51,18 @@ import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.geometry.BoundingBox;
 import javafx.geometry.Bounds;
-import javafx.geometry.HorizontalDirection;
-import javafx.geometry.Orientation;
 import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.SnapshotParameters;
-import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
-import javafx.scene.control.ProgressBar;
-import javafx.scene.control.ScrollBar;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TextField;
-import javafx.scene.control.ToggleButton;
-import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -82,9 +71,7 @@ import javafx.scene.image.WritableImage;
 import javafx.scene.input.DragEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.TransferMode;
-import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
@@ -239,57 +226,55 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
     };
 
-    // ===== 顶部控制栏 =====
-    @FXML private ToggleGroup modeToggleGroup;
-    @FXML private ToggleButton textModeToggle;
-    @FXML ToggleButton imageModeToggle;
-    @FXML private TextField inputFolderField;
-    @FXML private TextField outputFolderField;
-    @FXML private Button browseInputButton;
-    @FXML private Button browseOutputButton;
+    /**
+     * FXML 加载器（P6-B）：由<b>加载方</b>经 {@code setControllerFactory} 注入
+     * （{@code App.start()} 与测试源集的 {@code gui.acceptance.TestMain} 逐行等价）。
+     *
+     * <p>它是 {@link #initialize()} 里构造 {@link MainViewRefs} 的<b>唯一来源</b>：
+     * {@code FXMLLoader.loadImpl} 的顺序是"先往 namespace 写 location/resources → 解析 XML
+     * （每个 {@code fx:id} 元素构造完成时写进<b>同一张</b> namespace）→ injectFields →
+     * 反射调用控制器的 {@code initialize()}"，因此 {@code initialize()} 期间 namespace 已完整
+     * （运行期证据见 {@code tools/probes/MainViewRefsProbe.java}）。</p>
+     */
+    private final FXMLLoader fxmlLoader;
 
-    // ===== 预览工作区（左：列表） =====
-    @FXML private Label fileCountLabel;
-    @FXML private CheckBox selectAllCheck;
-    @FXML private Label badgeHeaderLabel;
-    @FXML ListView<Object> fileListView;
-    @FXML private Pane dragOverlay;
-    // ===== 列表按钮行（移除/撤销/合并为组/拆分组；后两者阶段 4/6 启用） =====
-    @FXML private Button removeButton;
-    @FXML private Button clearParamsButton;
-    @FXML private Button undoButton;
-    @FXML private Button viewSourceButton;
-    @FXML private Button groupButton;
-    @FXML private Button ungroupButton;
-    @FXML private Button applyGlobalButton;
+    /**
+     * 42 个 {@code fx:id} 的节点引用（P6-B：取代原先 42 个 {@code @FXML} 节点字段）。
+     * 在 {@link #initialize()} 里由命名空间构造 —— <b>缺失即抛异常并指名是哪个 {@code fx:id}</b>，
+     * 不会留到运行期变成 NPE（见 {@link MainViewRefs#from(java.util.Map)}）。
+     *
+     * <p>包级可见（不是 {@code private}）是<b>为生产协作</b>：{@link MainViewInstaller} 与
+     * {@link PreviewListCell} 这两个同包生产类要读同一批节点，与已有先例
+     * （{@code ws} / {@code items} / {@code dragActive} / {@code effectiveForObject}）同一口径 ——
+     * 见 {@code ArchitectureTest} 的"标记的语义边界"：{@code /* test-support *&#47;} 标记的是
+     * "<b>为测试夹具</b>放宽的封装让步"，为生产类放宽<b>不带</b>标记（本轮 0 标记保持 0）。</p>
+     */
+    MainViewRefs refs;
 
-    // ===== 预览工作区（右：信息区与内容区） =====
-    @FXML private Label modeLabel;
-    @FXML private Label outputModeLabel;
-    @FXML private Label outputNameLabel;
-    @FXML private HBox groupNameBox;
-    @FXML private TextField groupNameField;
-    @FXML private Label titleInfoLabel;
-    @FXML private Label outputResultLabel;
-    @FXML CheckBox adjustCheck;
-    @FXML private TextArea textPreviewArea;
-    @FXML private VBox imagePreviewBox;
-    @FXML private Label imageHintLabel;
-    /** 提取结果提示 banner（提取结果状态需求）：预览区顶部，选中含红条目时显示失败/跳过/警告详情 */
-    @FXML private Label extractResultBanner;
-    @FXML Button previewEffectButton;
-    @FXML private Label renameNoteLabel;
-    @FXML private ScrollPane imageScrollPane;
-    @FXML private FlowPane thumbnailPane;
-    @FXML private Button paramSettingsButton;
+    /**
+     * 控制器由 {@code FXMLLoader} 的 controller factory 构造 —— <b>唯一构造入口</b>。
+     *
+     * <p>刻意<b>不</b>提供无参构造：漏了接线会在 {@code load()} 期立刻失败
+     * （{@code fx:controller} 拿不到默认构造器），而不是等到某个监听器回调时才 NPE。</p>
+     */
+    public MainController(FXMLLoader fxmlLoader) {
+        this.fxmlLoader = fxmlLoader;
+    }
 
-    // ===== 底部操作区 =====
-    @FXML private ProgressBar progressBar;
-    @FXML private Label statusLabel;
-    @FXML private Button startButton;
-    @FXML private Button stopButton;
-    @FXML LogTextArea logTextArea;
-    @FXML private ToggleSwitch openFolderAfterCompleteCheck;
+    // ==================== P6-B：为同包生产协作类放宽可见性的成员（口径见下） ====================
+    //
+    // 装配序列搬到 MainViewInstaller 后，它要读写本类的一部分状态与处理器方法。这些成员是
+    // private → 包级（<b>只去掉 private，语义一行未动</b>）：
+    //   字段：adapter / contextMenu / ctxClearParams / selectionListened / updatingAdjustCheck /
+    //         dragPositionStale / previewCacheLifecycle
+    //   方法：createPreviewCell / setupExternalImportDnD / contextActions / onSelectAllToggled /
+    //         onGroupNameEdited / onGroupNameFocusLost / onSelectionChanged / onItemSelected /
+    //         recomputeBadges / finishLift / onModeChanged / onInputFolderChanged / saveGuiState /
+    //         restoreGuiState / updateModeUi / updateFileCount / updateListButtons /
+    //         onWindowCloseRequest / onSizeAlertStep
+    // 口径：这是"<b>为生产协作</b>放宽"，与 PreviewListCell 用到的 12 个成员完全同类，
+    // 因此<b>不打</b>那个 test-support 标记（它的语义是"为测试夹具让步"，见测试内注释）。
+    // 测试侧仍然只有一条通道：测试源集的 MainViewTestBridge（反射）。
 
     // ===== 状态 =====
     // 撤销栈（F4）：唯一栈由 app.WorkspaceModel 独占；结构类由模型 undo() 应用，参数 / 拖拽类由本类 popRecord() 后自行应用
@@ -297,7 +282,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     final WorkspaceModel ws = new WorkspaceModel();
     /** 模型 → JavaFX 的投影层（Q4/P3）：显示序（ListView 绑定）由它独占维护，数据序只读投影由它提供。
      *  投影<b>时机</b>仍由本类显式给出；"为何不在每次变更上自动投影"见 {@link WorkspaceFxAdapter} 的类 javadoc。 */
-    private final WorkspaceFxAdapter adapter = new WorkspaceFxAdapter(ws);
+    final WorkspaceFxAdapter adapter = new WorkspaceFxAdapter(ws);
     /** 数据序只读投影：保留同名入口给 FeatureExercise（P7 才改造）；唯一写操作 clear() 转发为模型命令 */
     final List<Object> items = adapter.dataOrder();
     /** 显示序：ListView 直接渲染的展平列表，按数据序实时重建（F5 显示序/数据序分离）—— adapter.displayItems() 的只读别名 */
@@ -314,7 +299,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     private boolean imageLoadActive = false;
     private PreviewItem loadingItem = null;
     /** 预览会话缓存（需求 2 会话 9）：存储层 + 四条生命周期规则；root = <java.io.tmpdir>/mht-extractor-preview（P6/P8，与 HtmlExportBuilder 的 mht-extractor-view 并列） */
-    private final PreviewCacheLifecycle previewCacheLifecycle = new PreviewCacheLifecycle(
+    final PreviewCacheLifecycle previewCacheLifecycle = new PreviewCacheLifecycle(
             new PreviewCacheStore(Paths.get(System.getProperty("java.io.tmpdir"), "mht-extractor-preview")));
     /**
      * 工作区缓存失效服务（E2.2）：把原先散落在 12 处的"规则 (a)/(c)"调用收敛为具名操作，
@@ -357,7 +342,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     private volatile boolean shutdownCacheCleared = false;
     /** 正在清空缓存（FX 线程独占）：挡住清空期间的重复关窗请求，避免开两份清理 */
     private boolean shutdownInProgress = false;
-    private boolean updatingAdjustCheck = false;
+    boolean updatingAdjustCheck = false;
     /** 全选/全不选批量写入期间的联动抑制标记（F1） */
     private boolean updatingSelection = false;
     private Object lastSelected = null;
@@ -375,7 +360,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 组名输入框程序回写期间的抑制标记（防监听递归） */
     private boolean updatingGroupName = false;
     /** 已挂勾选监听的项目集合（Identity 去重，防止重复挂接） */
-    private final Set<PreviewItem> selectionListened =
+    final Set<PreviewItem> selectionListened =
             Collections.newSetFromMap(new IdentityHashMap<>());
 
     // ===== 拖拽排序状态 =====
@@ -384,7 +369,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     boolean dragActive = false;
     boolean dropHandled = false;
     @Getter
-    private boolean dragPositionStale = false;
+    boolean dragPositionStale = false;
     private ParallelTransition liftAnim = null;
     private List<PreviewListCell> liftCells = null;
     private List<ImageView> liftViews = null;
@@ -412,11 +397,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     // ===== 右键菜单（13 项 = 9 动作 + 4 分隔线；Q9a 已整体外迁到 FileListContextMenu） =====
     /** 右键菜单：菜单项所有权 / 启用规则 / 动作转发 / 显示生命周期都在新类；本类只提供回调面 */
-    private FileListContextMenu contextMenu;
+    FileListContextMenu contextMenu;
     /** 浏览器查看页生成并发闸（防重复点击并发导出） */
     private final AtomicBoolean browserExporting = new AtomicBoolean(false);
     /** Q9a：FeatureExercise 按<b>字段访问</b>读它的 isDisable()，故保留同名字段指向新类里那一个 */
-    private MenuItem ctxClearParams;
+    MenuItem ctxClearParams;
     /** Q10：参数剪贴板（R7.1-R7.7）—— 复制快照 + 批量应用编排；路由与应用本体都是下方那两个方法 */
     private final ParamClipboard paramClipboard = new ParamClipboard(ws::push, this::paramScopeTarget, this::applyTargetParams);
 
@@ -444,118 +429,25 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     // ==================== 初始化 ====================
 
+    /**
+     * 装配序列（P6-B）：控制器只留调用序列，装配本体在 {@link MainViewInstaller}。
+     *
+     * <p>顺序即语义（与 P6-B 之前的 {@code initialize()} 逐行一致）：外壳标签 → 列表接线 →
+     * 模式/目录与 GUI 状态恢复 → 预览缓存 hook → 欢迎语。两条隐性约束就藏在这个顺序里 ——
+     * ① 状态恢复必须早于初始一致性刷新；② 关窗清空处理器只能在 scene/window 装配好之后挂上。</p>
+     *
+     * <p>{@code refs} 在这一行构造：{@code FXMLLoader} 保证 {@code getNamespace()} 期间已完整，
+     * 缺任何一个 {@code fx:id} 都会在这里立刻抛异常并指名（而不是运行期 NPE）。</p>
+     */
     @FXML
     public void initialize() {
-        openFolderAfterCompleteCheck.setLabelPosition(HorizontalDirection.RIGHT);
-        badgeHeaderLabel.setTooltip(new Tooltip(I18n.get("list.chapterNoTooltip")));
-
-        // 1. 列表：单元格工厂、选择联动、逐文件章节勾选、拖拽动画滚动联动
-        fileListView.setCellFactory(_ -> createPreviewCell());
-        adapter.bindListView(fileListView);
-        setupExternalImportDnD();
-
-        // 空白/非预期区域松手：不处理 drop（无蓝条、无吸附），走取消路径瞬时恢复原位不消失
-
-        // 右键菜单（右键菜单功能需求）：ListView 级弹出（命中 cell = 条目目标；未命中 = 空白区域）。
-        // Q9a：菜单项 / 启用规则 / "点击菜单外即关闭"的显示生命周期已整体搬进 FileListContextMenu，
-        // 这里只装配 + 接线回调面，并把 test-support 字段指向新类里那一个菜单项。
-        contextMenu = new FileListContextMenu(contextActions());
-        contextMenu.install(fileListView);
-        ctxClearParams = contextMenu.clearParamsItem();
-
-        // 列头全选 CheckBox 三态联动（F1）：单项勾选变化实时刷新列头与组复选框，新导入项目自动挂监听
-        selectAllCheck.setOnAction(_ -> onSelectAllToggled());
-        groupNameField.textProperty().addListener((_, _, newVal) -> onGroupNameEdited(newVal));
-        groupNameField.focusedProperty().addListener((_, _, newVal) -> {
-            if (!newVal) {
-                onGroupNameFocusLost();
-            }
-        });
-        // 新条目自动挂勾选监听（F1）：数据序所有权移交模型后，挂接面从"列表被 add"改为"模型发布了变更"。
-        // 载荷里的条目（ITEMS_ADDED / GROUPED / UNGROUPED / UNDO_APPLIED）逐个挂接；selectionListened 按身份
-        // 去重，故"同一对象重复挂接"是 no-op —— 这比迁移前的 ObservableList 监听面只多不少，不产生第二份状态。
-        ws.addListener(change -> {
-            for (PreviewItem it : change.affected()) {
-                if (selectionListened.add(it)) {
-                    // 会话 18 · E1.3a：原 it.selected.addListener((obs2,a,b) -> ...)
-                    // 改为等价的自研 ChangeListener（同步回调；仅值变化时触发）
-                    it.addSelectedChangeListener(this::onSelectionChanged);
-                }
-            }
-        });
-
-        fileListView.getSelectionModel().selectedItemProperty()
-                .addListener((_, _, newVal) -> onItemSelected(newVal));
-
-        adjustCheck.selectedProperty().addListener((_, _, newVal) -> {
-            if (updatingAdjustCheck) {
-                return;
-            }
-            Object sel = fileListView.getSelectionModel().getSelectedItem();
-            if (!(sel instanceof PreviewItem it) || effectiveForObject(it) == null) {
-                return;
-            }
-            if (isTextMode()) {
-                it.chapterEnabled = newVal;
-                recomputeBadges();
-            }
-        });
-
-        // 拖拽动画期间若列表发生滚动（滚轮/自动滚动），标记位置失效并结束提起动画
-        fileListView.skinProperty().addListener((_, _, newSkin) -> {
-            if (newSkin == null) {
-                return;
-            }
-            for (javafx.scene.Node n : fileListView.lookupAll(".scroll-bar")) {
-                if (n instanceof ScrollBar sb && sb.getOrientation() == Orientation.VERTICAL) {
-                    sb.valueProperty().addListener((_, a, b) -> {
-                        if (dragActive && Math.abs(b.doubleValue() - a.doubleValue()) > 0.1) {
-                            dragPositionStale = true;
-                            finishLift();
-                        }
-                    });
-                }
-            }
-        });
-
-        // 2. 模式切换：互斥由 modeToggleGroup 承担，点击已选按钮可取消回到"未选择"态；
-        //    不清空另一模式参数：GUI 状态与已确认缓存按模式隔离保留
-        modeToggleGroup.selectedToggleProperty().addListener((_, _, _) -> onModeChanged());
-
-        // 3. 目录/开关变更：刷新列表 + 持久化 GUI 状态
-        inputFolderField.textProperty().addListener((_, _, _) -> onInputFolderChanged());
-        outputFolderField.textProperty().addListener((_, _, _) -> saveGuiState());
-        openFolderAfterCompleteCheck.selectedProperty().addListener((_, _, _) -> saveGuiState());
-
-        // 4. 恢复 GUI 状态（无状态文件时与旧版启动逻辑一致）
-        restoreGuiState();
-
-        // 5. 初始状态一致性（无状态文件时：两个模式都未选中，全部禁用）
-        updateModeUi();
-        updateFileCount();
-        updateListButtons();
-
-        // 6. 预览会话缓存（需求 2 会话 9）：启动扫孤儿（P7 崩溃恢复）；
-        //    关窗清空处理器经 scene/window 装配后挂接（initialize 阶段 scene 尚未存在，App.start 稍后装配）
-        previewCacheLifecycle.startupCleanup();
-        // 会话 12：磁盘占用提醒 hook（写盘成功且跨 10GiB 台阶时经 checkSizeAlert 触发；
-        // 在预览后台线程同步回调，这里换算 GiB 文案后回 FX 线程非模态弹窗）
-        previewCacheLifecycle.setSizeAlertHook(this::onSizeAlertStep);
-        fileListView.sceneProperty().addListener((_, _, newScene) -> {
-            if (newScene == null) {
-                return;
-            }
-            newScene.windowProperty().addListener((_, _, newW) -> {
-                if (newW instanceof Stage stage) {
-                    stage.setOnCloseRequest(this::onWindowCloseRequest);
-                }
-            });
-        });
-
-        Platform.runLater(() -> {
-            logTextArea.appendText(I18n.get("preview.welcome"));
-            logTextArea.appendText(I18n.get("preview.welcomeHint"));
-        });
+        refs = MainViewRefs.from(fxmlLoader.getNamespace());
+        MainViewInstaller installer = new MainViewInstaller(this, refs);
+        installer.installShellLabels();
+        installer.installFileList();
+        installer.installModeAndFolders();
+        installer.installPreviewCacheHooks();
+        installer.installWelcomeLog();
     }
 
     /** 规则 (d)：关窗清空（§2.2/§2.6(6)）。有缓存 → 无按钮等待卡片 → 停后台活动 → 等在途写入（≤2s）→ 清空 → 清完自动关窗；
@@ -565,11 +457,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      *  与测试开关耦合；现在无论谁来关窗都走同一条生产路径。GUI 自动化改由测试源集的
      *  {@code gui.acceptance.TestMain} 承载，收尾用 {@code Platform.exit()+System.exit()}，
      *  不经过关窗处理器，因此那条旁路对它本来也不起作用。</p> */
-    private void onWindowCloseRequest(WindowEvent e) {
+    void onWindowCloseRequest(WindowEvent e) {
         if (shutdownCacheCleared) {
             return;                                    // 已清空 → 放行关闭
         }
-        if (NotificationHost.hasPendingDecision(statusLabel)) {
+        if (NotificationHost.hasPendingDecision(refs.statusLabel())) {
             e.consume();                               // 有未回答的确认卡：不放行（旧模态 Alert 本就关不掉主窗）
             return;
         }
@@ -585,7 +477,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         cancelWorkspaceActivity();                     // 仍在 FX 线程调用：与旧实现同线程，保持 token 可见性语义
         Stage stage = (Stage) e.getSource();
         // 会话 19：无按钮等待卡片 —— 清空期间不可交互（persistent），清完自动收卡片并自动关窗，无需点确定
-        GuiNotifications.cacheClearing(statusLabel, previewCacheLifecycle.store().root(),
+        GuiNotifications.cacheClearing(refs.statusLabel(), previewCacheLifecycle.store().root(),
                 this::clearPreviewCache, stage::close);
     }
 
@@ -605,31 +497,31 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     // ==================== GUI 状态持久化（logs/gui-state.json） ====================
 
-    private void restoreGuiState() {
+    void restoreGuiState() {
         GuiState state = GuiStateManager.load();
         if (state == null) {
             return;
         }
         if (state.getInputFolder() != null && !state.getInputFolder().isEmpty()) {
-            inputFolderField.setText(state.getInputFolder());
+            refs.inputFolderField().setText(state.getInputFolder());
         }
         if (state.getOutputFolder() != null && !state.getOutputFolder().isEmpty()) {
-            outputFolderField.setText(state.getOutputFolder());
+            refs.outputFolderField().setText(state.getOutputFolder());
         }
-        openFolderAfterCompleteCheck.setSelected(state.isOpenFolderAfterComplete());
+        refs.openFolderAfterCompleteCheck().setSelected(state.isOpenFolderAfterComplete());
         if (state.isImageModeEnabled()) {
-            imageModeToggle.setSelected(true);
+            refs.imageModeToggle().setSelected(true);
         } else {
-            textModeToggle.setSelected(true);
+            refs.textModeToggle().setSelected(true);
         }
     }
 
-    private void saveGuiState() {
+    void saveGuiState() {
         GuiState state = new GuiState();
-        state.setImageModeEnabled(imageModeToggle.isSelected());
-        state.setInputFolder(inputFolderField.getText());
-        state.setOutputFolder(outputFolderField.getText());
-        state.setOpenFolderAfterComplete(openFolderAfterCompleteCheck.isSelected());
+        state.setImageModeEnabled(refs.imageModeToggle().isSelected());
+        state.setInputFolder(refs.inputFolderField().getText());
+        state.setOutputFolder(refs.outputFolderField().getText());
+        state.setOpenFolderAfterComplete(refs.openFolderAfterCompleteCheck().isSelected());
         Locale loc = I18n.currentLocale();
         state.setLocale(loc.getLanguage() + (loc.getCountry().isEmpty() ? "" : "_" + loc.getCountry()));
         GuiStateManager.save(state);
@@ -639,14 +531,14 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     @FXML
     private void onBrowseInput() {
-        String currentPath = inputFolderField.getText();
+        String currentPath = refs.inputFolderField().getText();
         String dir = JavaFxUtil.showDirectoryChooser(
-                inputFolderField.getScene().getWindow(),
+                refs.inputFolderField().getScene().getWindow(),
                 I18n.get("dir.chooseInput"),
                 currentPath);
         if (dir != null) {
-            boolean sameDir = dir.equals(inputFolderField.getText());
-            inputFolderField.setText(dir);
+            boolean sameDir = dir.equals(refs.inputFolderField().getText());
+            refs.inputFolderField().setText(dir);
             // 重选同一目录不触发 textProperty 变化：显式触发导入（如撤销导入后再导回同一目录）
             if (sameDir) {
                 onInputFolderChanged();
@@ -657,13 +549,13 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     @FXML
     private void onBrowseOutput() {
-        String currentPath = outputFolderField.getText();
+        String currentPath = refs.outputFolderField().getText();
         String dir = JavaFxUtil.showDirectoryChooser(
-                outputFolderField.getScene().getWindow(),
+                refs.outputFolderField().getScene().getWindow(),
                 I18n.get("dir.chooseOutput"),
                 currentPath);
         if (dir != null) {
-            outputFolderField.setText(dir);
+            refs.outputFolderField().setText(dir);
         }
     }
 
@@ -679,12 +571,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             log.warn(I18n.msg("log.maincontroller.01", outputBaseDir));
         }
 
-        outputFolderField.setText(outputBaseDir);
+        refs.outputFolderField().setText(outputBaseDir);
     }
 
     /** 输入目录变更：作为导入源增量合并（F3）——已有项目保持不变，新文件按绝对路径去重后追加末尾 */
-    private void onInputFolderChanged() {
-        String text = inputFolderField.getText();
+    void onInputFolderChanged() {
+        String text = refs.inputFolderField().getText();
         if (text == null || text.trim().isEmpty()) {
             saveGuiState();
             return;
@@ -747,7 +639,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             if (!roots.isEmpty()) {
                 String msg = I18n.get("import.rootDirConfirmMsg") + String.join("\n", roots)
                         + I18n.get("import.rootDirConfirmNote");
-                GuiNotifications.driveRootConfirm(statusLabel, msg, ok -> {
+                GuiNotifications.driveRootConfirm(refs.statusLabel(), msg, ok -> {
                     if (ok) {
                         importSessions.start(normalized.kept(), sourceDesc, fromDrag);
                     } else {
@@ -817,24 +709,24 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     @Override
     public void selectFirstRow() {
-        fileListView.getSelectionModel().selectFirst();
+        refs.fileListView().getSelectionModel().selectFirst();
     }
 
     @Override
     public void confirmQuotaReached(String message, Consumer<Boolean> answer) {
-        GuiNotifications.quotaConfirm(statusLabel, message, answer);
+        GuiNotifications.quotaConfirm(refs.statusLabel(), message, answer);
     }
 
     @Override
     public void showImportFailed() {
-        GuiNotifications.importFailed(statusLabel);
+        GuiNotifications.importFailed(refs.statusLabel());
     }
 
     /** 组名刷新监听注册（手动/自动建组共用；F8/RISK-11） */
     private void registerGroupNameRefresh(GroupItem<PreviewItem> group) {
         // 会话 18 · E1.1：GroupItem 已去 JavaFX 依赖，原 nameProperty().addListener(...)
         // 改为等价的自研 ChangeListener（同步回调，语义一致）
-        group.addNameChangeListener(fileListView::refresh);
+        group.addNameChangeListener(refs.fileListView()::refresh);
     }
 
     /** 外部导入拖拽落点高亮（去抖：状态未变化不重复操作样式类） */
@@ -844,9 +736,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         importDragOver = on;
         if (on) {
-            fileListView.getStyleClass().add(STYLE_LIST_IMPORT_HOVER);
+            refs.fileListView().getStyleClass().add(STYLE_LIST_IMPORT_HOVER);
         } else {
-            fileListView.getStyleClass().remove(STYLE_LIST_IMPORT_HOVER);
+            refs.fileListView().getStyleClass().remove(STYLE_LIST_IMPORT_HOVER);
         }
     }
 
@@ -857,22 +749,22 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 外部文件/文件夹拖入的 ListView 级处理器（接受点唯一在 ListView；单元格放行分支见 setupDnD） */
-    private void setupExternalImportDnD() {
-        fileListView.setOnDragOver(e -> {
+    void setupExternalImportDnD() {
+        refs.fileListView().setOnDragOver(e -> {
             if (e.getDragboard().hasFiles() && !dragActive) {
                 e.acceptTransferModes(TransferMode.COPY);     // 接受点唯一：ListView
                 updateImportDropHighlight(true);
             }
         });
-        fileListView.setOnDragEntered(e -> {
+        refs.fileListView().setOnDragEntered(e -> {
             if (e.getDragboard().hasFiles() && !dragActive) {
                 importDragDepth++;
                 updateImportDropHighlight(true);
             }
         });
-        fileListView.setOnDragExited(_ -> clearImportDropHighlight());
-        fileListView.setOnDragDropped(this::onExternalFilesDropped);
-        fileListView.setOnDragDone(_ -> clearImportDropHighlight());
+        refs.fileListView().setOnDragExited(_ -> clearImportDropHighlight());
+        refs.fileListView().setOnDragDropped(this::onExternalFilesDropped);
+        refs.fileListView().setOnDragDone(_ -> clearImportDropHighlight());
     }
 
     private void onExternalFilesDropped(DragEvent e) {
@@ -910,13 +802,13 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     // ==================== 模式切换与工作区 UI 状态 ====================
 
-    private void onModeChanged() {
+    void onModeChanged() {
         updateModeUi();
         saveGuiState();
     }
 
     boolean isTextMode() {
-        return !imageModeToggle.isSelected();
+        return !refs.imageModeToggle().isSelected();
     }
 
     /** 日志文案里的模式词（图片/文本 → Image/Text），供 log.* 模板的 {0} 占位符使用 */
@@ -926,12 +818,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 当前模式参数是否已确认（确定过一次即视为已设置） */
     private boolean currentModeConfirmed() {
-        return imageModeToggle.isSelected() ? imageParamsCache != null : textParamsCache != null;
+        return refs.imageModeToggle().isSelected() ? imageParamsCache != null : textParamsCache != null;
     }
 
     /** 当前模式已确认参数；未确认时返回默认参数（仅用于展示，不算已设置） */
     private AppConfig currentParamsOrDefaults() {
-        AppConfig c = imageModeToggle.isSelected() ? imageParamsCache : textParamsCache;
+        AppConfig c = refs.imageModeToggle().isSelected() ? imageParamsCache : textParamsCache;
         return c != null ? c : new AppConfig();
     }
 
@@ -950,7 +842,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 生效参数判定的解析上下文（唯一构造点）：当前模式 + 两个全局已确认参数缓存 */
     private com.mhtextractor.app.EffectiveParamsService.Context effectiveContext() {
         return new com.mhtextractor.app.EffectiveParamsService.Context(
-                imageModeToggle.isSelected(), textParamsCache, imageParamsCache);
+                refs.imageModeToggle().isSelected(), textParamsCache, imageParamsCache);
     }
 
     /** 任一有效项目存在生效参数（组参数或全局参数已确认）—— 判定收口到服务（R8-①） */
@@ -959,36 +851,36 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     private Object currentSelection() {
-        return fileListView.getSelectionModel().getSelectedItem();
+        return refs.fileListView().getSelectionModel().getSelectedItem();
     }
 
     /**
      * 更新与模式/参数相关的工作区 UI；切模式时取消旧解析，已确认则按新模式重新解析
      */
-    private void updateModeUi() {
+    void updateModeUi() {
         cancelWorkspaceActivity();
-        boolean anyModeSelected = textModeToggle.isSelected() || imageModeToggle.isSelected();
+        boolean anyModeSelected = refs.textModeToggle().isSelected() || refs.imageModeToggle().isSelected();
 
         // 顶部与底部控件
-        inputFolderField.setDisable(!anyModeSelected);
-        outputFolderField.setDisable(!anyModeSelected);
-        browseInputButton.setDisable(!anyModeSelected);
-        browseOutputButton.setDisable(!anyModeSelected);
-        openFolderAfterCompleteCheck.setDisable(!anyModeSelected);
-        paramSettingsButton.setDisable(!anyModeSelected);
+        refs.inputFolderField().setDisable(!anyModeSelected);
+        refs.outputFolderField().setDisable(!anyModeSelected);
+        refs.browseInputButton().setDisable(!anyModeSelected);
+        refs.browseOutputButton().setDisable(!anyModeSelected);
+        refs.openFolderAfterCompleteCheck().setDisable(!anyModeSelected);
+        refs.paramSettingsButton().setDisable(!anyModeSelected);
         updateStartButtonState();
         // 清除参数拍板：按钮启用状态随当前模式刷新（同时修复"应用到全局"按钮切模式后陈旧态）
         updateListButtons();
 
         // 预览工作区
-        modeLabel.setText(I18n.get("mode.labelPrefix") + (imageModeToggle.isSelected() ? I18n.get("mode.image")
-                : (textModeToggle.isSelected() ? I18n.get("mode.text") : I18n.get("mode.none"))));
+        refs.modeLabel().setText(I18n.get("mode.labelPrefix") + (refs.imageModeToggle().isSelected() ? I18n.get("mode.image")
+                : (refs.textModeToggle().isSelected() ? I18n.get("mode.text") : I18n.get("mode.none"))));
         Object sel = currentSelection();
         updateBadgeHeader();
         updateOutputModeLabel(sel);
         updateRenameNote(sel);
         showCurrentModeArea();
-        fileListView.refresh();
+        refs.fileListView().refresh();
         updateAdjustCheck(sel);
         updateInfoArea(sel);
         updateContentArea(sel);
@@ -1001,16 +893,16 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     private void showCurrentModeArea() {
-        textPreviewArea.setVisible(isTextMode());
-        textPreviewArea.setManaged(isTextMode());
-        imagePreviewBox.setVisible(!isTextMode());
-        imagePreviewBox.setManaged(!isTextMode());
+        refs.textPreviewArea().setVisible(isTextMode());
+        refs.textPreviewArea().setManaged(isTextMode());
+        refs.imagePreviewBox().setVisible(!isTextMode());
+        refs.imagePreviewBox().setManaged(!isTextMode());
     }
 
     private void updateBadgeHeader() {
         boolean showBadgeCol = isTextMode() && anyVisibleItemHasChapterNumbers();
-        badgeHeaderLabel.setVisible(showBadgeCol);
-        badgeHeaderLabel.setManaged(showBadgeCol);
+        refs.badgeHeaderLabel().setVisible(showBadgeCol);
+        refs.badgeHeaderLabel().setManaged(showBadgeCol);
     }
 
     /** 任一有效项目的生效参数开启章节序号（组参数可独立开启，列头按需显示） */
@@ -1030,7 +922,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (params == null) {
             params = currentParamsOrDefaults();
         }
-        outputModeLabel.setText(isTextMode()
+        refs.outputModeLabel().setText(isTextMode()
                 ? (params.isSeparateFiles() ? I18n.get("extract.outputModeSeparate") : I18n.get("extract.outputModeMerged"))
                 : (params.isSingleOutputMode() ? I18n.get("extract.outputModeMerged") : I18n.get("extract.outputModeSeparate")));
     }
@@ -1071,11 +963,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 打开参数设置侧边栏并应用确认结果（按钮行与右键菜单共用；空白区域菜单项强制传全局目标） */
     private void openParamDialog(ParamScope.Target target) {
-        boolean imageMode = imageModeToggle.isSelected();
+        boolean imageMode = refs.imageModeToggle().isSelected();
         try {
             // Q6a：非模态覆盖式侧边栏取代模态窗口。面板按窗口缓存（ParamSidePanel.of），
             // 复用同一个 ParamFormPane 实例 ⇒ "收起再展开同一目标"保留草稿（R1.5）。
-            ParamSidePanel panel = ParamSidePanel.of(statusLabel);
+            ParamSidePanel panel = ParamSidePanel.of(refs.statusLabel());
             // Q6b/R1.7：草稿变了（改字段 / 提交 / 切目标丢弃）就重算开始按钮 —— 判定仍只有
             // ParamFormPane.isDirty() 一处，这里只接线（每次 show 都重设，幂等）。
             panel.setDirtyListener(this::updateStartButtonState);
@@ -1084,7 +976,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             updateStartButtonState();   // 本次 show 可能什么都没变（同目标重开 / 取消切换）⇒ 兜底重算
         } catch (Exception e) {
             log.error(I18n.msg("log.maincontroller.16"), e);
-            GuiNotifications.paramDialogOpenFailed(statusLabel);
+            GuiNotifications.paramDialogOpenFailed(refs.statusLabel());
         }
     }
 
@@ -1102,7 +994,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         workspaceParamService.paramsChanged(imageMode, item);   // 规则 (a)：参数变化 → 删该项目缓存目录
         startPreParseFor(List.of(item));
         log.info(I18n.msg("log.maincontroller.17", item.name, modeWord(imageMode)));
-        fileListView.refresh();
+        refs.fileListView().refresh();
         updateListButtons();
         updateInfoArea(item);
         updateExtractBanner(item);
@@ -1163,11 +1055,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * <p>{@code visibleCount} 与 {@code hasIndependentParams} 经 {@code MainController.this} 限定，
      * 否则会递归到匿名类自己的同名方法。</p>
      */
-    private FileListContextMenu.Actions contextActions() {
+    FileListContextMenu.Actions contextActions() {
         return new FileListContextMenu.Actions() {
             @Override public boolean isDragActive() { return dragActive; }
             @Override public long visibleCount() { return MainController.this.visibleCount(); }
-            @Override public void selectRow(Object target) { fileListView.getSelectionModel().select(target); }
+            @Override public void selectRow(Object target) { refs.fileListView().getSelectionModel().select(target); }
             @Override public FileListContextMenu.TargetType targetType(Object target) {
                 return switch (target) {
                     case null -> FileListContextMenu.TargetType.BLANK;
@@ -1278,11 +1170,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 new ProcessBuilder("explorer.exe", dir.getAbsolutePath()).start();
             } else {
                 log.warn(I18n.msg("log.maincontroller.20", dir == null ? it.path : dir.getAbsolutePath()));
-                GuiNotifications.fileDirMissing(statusLabel, it.path);
+                GuiNotifications.fileDirMissing(refs.statusLabel(), it.path);
             }
         } catch (Exception ex) {
             log.error(I18n.msg("log.maincontroller.21"), ex);
-            GuiNotifications.openFolderFailed(statusLabel);
+            GuiNotifications.openFolderFailed(refs.statusLabel());
         }
     }
 
@@ -1305,14 +1197,14 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         File f = new File(it.path);
         if (!f.exists()) {
             log.warn(I18n.msg("log.maincontroller.22", it.path));
-            GuiNotifications.fileMissing(statusLabel, it.path);
+            GuiNotifications.fileMissing(refs.statusLabel(), it.path);
             return;
         }
         if (!browserExporting.compareAndSet(false, true)) {
             log.info(I18n.msg("log.maincontroller.23"));
             return;
         }
-        statusLabel.setText(I18n.get("browser.generatingPage"));
+        refs.statusLabel().setText(I18n.get("browser.generatingPage"));
         Thread t = new Thread(() -> {
             try {
                 MimeParser.ParsedMht parsed = SourceParsers.forPath(it.path).parse(it.path, false, () -> false, null, null);
@@ -1328,23 +1220,23 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 Thread launcher = new Thread(() -> {
                     if (sourceMode) {
                         // R2：源码不再交给外部浏览器，改为应用内左侧覆盖式查看器（禁用 WebView，R2.6）。
-                        HtmlSourceViewer.showFile(statusLabel, I18n.get("browser.viewerTitle"), r.htmlFile());
+                        HtmlSourceViewer.showFile(refs.statusLabel(), I18n.get("browser.viewerTitle"), r.htmlFile());
                         return;
                     }
                     boolean ok = BrowserLauncher.openHtml(r.htmlFile());
                     if (!ok) {
                         log.warn(I18n.msg("log.maincontroller.25", r.htmlFile()));
-                        Platform.runLater(() -> GuiNotifications.browserLaunchFailed(statusLabel, r.htmlFile()));
+                        Platform.runLater(() -> GuiNotifications.browserLaunchFailed(refs.statusLabel(), r.htmlFile()));
                     }
                 }, "html-browser-launch");
                 launcher.setDaemon(true);
                 launcher.start();
             } catch (Exception e) {
                 log.error(I18n.msg("log.maincontroller.26", it.path), e);
-                Platform.runLater(() -> GuiNotifications.browserViewFailed(statusLabel));
+                Platform.runLater(() -> GuiNotifications.browserViewFailed(refs.statusLabel()));
             } finally {
                 browserExporting.set(false);
-                Platform.runLater(() -> statusLabel.setText(I18n.get("main.statusReady")));
+                Platform.runLater(() -> refs.statusLabel().setText(I18n.get("main.statusReady")));
             }
         }, "html-browser-export");
         t.setDaemon(true);
@@ -1430,7 +1322,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (params == null) {
             return;
         }
-        boolean imageMode = imageModeToggle.isSelected();
+        boolean imageMode = refs.imageModeToggle().isSelected();
         // 撤销快照（拍板 2026-09-22）：应用前的全局参数 + 全部独立参数，撤销可完整回退
         AppConfig globalBefore = imageMode ? imageParamsCache : textParamsCache;
         Map<String, AppConfig> itemBefore = new HashMap<>();
@@ -1518,7 +1410,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 右键「应用到所选」（R7.4/R7.5）：逐目标复用确认路径的应用函数；整批只压一条 PARAM_SET 记录 */
     private void onContextApplyToSelection(Object target) {
         if (listAnimating || paramClipboard.isEmpty()) return;
-        paramClipboard.applyToSelection(resolveParamTargets(target), imageModeToggle.isSelected());
+        paramClipboard.applyToSelection(resolveParamTargets(target), refs.imageModeToggle().isSelected());
     }
 
     /**
@@ -1526,7 +1418,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * （按组去重）；无参数目标自然跳过；一次操作一条 CLEAR_PARAMS 撤销记录（before 快照），一次撤销全部恢复。
      */
     private void clearParamsForTargets(List<Object> rawTargets) {
-        boolean imageMode = imageModeToggle.isSelected();
+        boolean imageMode = refs.imageModeToggle().isSelected();
         List<PreviewItem> topItems = new ArrayList<>();
         Set<GroupItem<PreviewItem>> groups = new LinkedHashSet<>();
         for (Object o : rawTargets) {
@@ -1609,7 +1501,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 it.extractDetail = buildExtractDetail(r);
             }
         }
-        fileListView.refresh();
+        refs.fileListView().refresh();
         updateExtractBanner(currentSelection());
         log.info(I18n.msg("log.maincontroller.29", byPath.size()));
     }
@@ -1644,20 +1536,20 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 default -> null;
             };
             if (prefix != null) {
-                extractResultBanner.setText(prefix + I18n.get("list.colon") + it.extractDetail);
-                extractResultBanner.setVisible(true);
-                extractResultBanner.setManaged(true);
+                refs.extractResultBanner().setText(prefix + I18n.get("list.colon") + it.extractDetail);
+                refs.extractResultBanner().setVisible(true);
+                refs.extractResultBanner().setManaged(true);
                 return;
             }
         }
         if (sel instanceof PreviewItem it && it.status == PreviewItem.Status.FAILED) {
-            extractResultBanner.setText(I18n.get("extract.parseFailed") + it.errorMsg);
-            extractResultBanner.setVisible(true);
-            extractResultBanner.setManaged(true);
+            refs.extractResultBanner().setText(I18n.get("extract.parseFailed") + it.errorMsg);
+            refs.extractResultBanner().setVisible(true);
+            refs.extractResultBanner().setManaged(true);
             return;
         }
-        extractResultBanner.setVisible(false);
-        extractResultBanner.setManaged(false);
+        refs.extractResultBanner().setVisible(false);
+        refs.extractResultBanner().setManaged(false);
     }
 
     private void refreshAfterParamsChanged() {
@@ -1665,7 +1557,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         updateBadgeHeader();
         updateOutputModeLabel(sel);
         updateRenameNote(sel);
-        fileListView.refresh();
+        refs.fileListView().refresh();
         updateAdjustCheck(sel);
         updateInfoArea(sel);
         updateContentArea(sel);
@@ -1693,7 +1585,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         updateOutputModeLabel(sel);
         updateRenameNote(sel);
         recomputeBadges();
-        fileListView.refresh();
+        refs.fileListView().refresh();
         updateAdjustCheck(sel);
         updateInfoArea(sel);
         updateContentArea(sel);
@@ -1715,8 +1607,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (listAnimating) {
             return;
         }
-        String inputFolder = inputFolderField.getText();
-        String outputFolder = outputFolderField.getText();
+        String inputFolder = refs.inputFolderField().getText();
+        String outputFolder = refs.outputFolderField().getText();
 
         // 会话 18 · E4-3：前置校验**规则**（含"该用 WARNING 还是 ERROR"）已抽到
         // ExtractionPreconditions（零 JavaFX、有独立单测）。
@@ -1735,11 +1627,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         if (denial != null) {
             // 会话 19：ERROR 走居中错误卡片（必须确认），WARNING 走右上角 toast（非阻塞）
-            GuiNotifications.preconditionDenied(statusLabel, denial);
+            GuiNotifications.preconditionDenied(refs.statusLabel(), denial);
             return;
         }
 
-        boolean imageMode = imageModeToggle.isSelected();
+        boolean imageMode = refs.imageModeToggle().isSelected();
 
         // 图片模式额外校验
         if (imageMode) {
@@ -1758,7 +1650,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             String msg = otherConfirmed
                     ? I18n.get("extract.confirmModeSwitch")
                     : I18n.get("extract.confirmParamsUnset");
-            GuiNotifications.paramTargetConfirm(statusLabel, msg, ok -> {
+            GuiNotifications.paramTargetConfirm(refs.statusLabel(), msg, ok -> {
                 if (ok) {
                     startExtractionTask();
                 }
@@ -1771,14 +1663,14 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 以已确认参数（未确认时用默认参数）+ 主窗口 GUI 状态构建运行时提取配置 */
     private AppConfig buildRuntimeConfig() {
-        AppConfig config = imageModeToggle.isSelected() ? imageParamsCache : textParamsCache;
+        AppConfig config = refs.imageModeToggle().isSelected() ? imageParamsCache : textParamsCache;
         if (config == null) {
             config = new AppConfig();
         }
-        config.setInputFolder(inputFolderField.getText());
-        config.setOutputFolder(outputFolderField.getText());
-        config.setImageModeEnabled(imageModeToggle.isSelected());
-        config.setOpenFolderAfterComplete(openFolderAfterCompleteCheck.isSelected());
+        config.setInputFolder(refs.inputFolderField().getText());
+        config.setOutputFolder(refs.outputFolderField().getText());
+        config.setImageModeEnabled(refs.imageModeToggle().isSelected());
+        config.setOpenFolderAfterComplete(refs.openFolderAfterCompleteCheck().isSelected());
         return config;
     }
 
@@ -1797,11 +1689,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     private void startExtractionTask() {
         // 取消工作区后台活动，避免与提取任务争用进度条/状态栏
         cancelWorkspaceActivity();
-        boolean imageMode = imageModeToggle.isSelected();
+        boolean imageMode = refs.imageModeToggle().isSelected();
 
         // 生成时间戳会话目录，隔离每次提取运行
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern(I18n.get("params.datetimeFormat")));
-        String sessionOutputFolder = new File(outputFolderField.getText(), timestamp).getPath();
+        String sessionOutputFolder = new File(refs.outputFolderField().getText(), timestamp).getPath();
         if (!new File(sessionOutputFolder).mkdirs()) {
             log.warn(I18n.msg("log.maincontroller.31", sessionOutputFolder));
         }
@@ -1812,10 +1704,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 items, ITEM_VIEW, imageMode, textParamsCache, imageParamsCache, sessionOutputFolder);
         for (OutputUnitPlanner.OutputUnit unit : units) {
             AppConfig params = unit.getParams();
-            params.setInputFolder(inputFolderField.getText());
-            params.setOutputFolder(outputFolderField.getText());
+            params.setInputFolder(refs.inputFolderField().getText());
+            params.setOutputFolder(refs.outputFolderField().getText());
             params.setImageModeEnabled(imageMode);
-            params.setOpenFolderAfterComplete(openFolderAfterCompleteCheck.isSelected());
+            params.setOpenFolderAfterComplete(refs.openFolderAfterCompleteCheck().isSelected());
         }
         log.info(I18n.msg("log.maincontroller.33", units.stream()
                 .map(u -> I18n.get("extract.groupFileCount", "group", u.label(),
@@ -1825,8 +1717,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         extractionCoordinator.run(
                 new WorkspaceExtractionService.ExtractionRequest(sessionOutputFolder, units, overrides, imageMode,
                         recursionDecision()),
-                statusLabel,
-                extractionUi(sessionOutputFolder, openFolderAfterCompleteCheck.isSelected()));
+                refs.statusLabel(),
+                extractionUi(sessionOutputFolder, refs.openFolderAfterCompleteCheck().isSelected()));
     }
 
     /**
@@ -1840,7 +1732,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     + I18n.get("alert.recursionDepthContent")
                     + I18n.get("alert.recursionDepthContinue")
                     + I18n.get("alert.recursionDepthSkip");
-            Platform.runLater(() -> GuiNotifications.recursionDepthConfirm(statusLabel, msg, future::complete));
+            Platform.runLater(() -> GuiNotifications.recursionDepthConfirm(refs.statusLabel(), msg, future::complete));
             return future.join();
         };
     }
@@ -1861,7 +1753,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
             @Override
             public void setProgress(double value) {
-                progressBar.setProgress(value);
+                refs.progressBar().setProgress(value);
             }
 
             @Override
@@ -1875,10 +1767,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
             @Override
             public void extractionStarted() {
-                startButton.setDisable(true);
-                stopButton.setDisable(false);
-                progressBar.setVisible(true);
-                progressBar.setProgress(0);
+                refs.startButton().setDisable(true);
+                refs.stopButton().setDisable(false);
+                refs.progressBar().setVisible(true);
+                refs.progressBar().setProgress(0);
                 setProgressBarActivity(STYLE_PROGRESS_EXTRACT_SUCCESS);   // 提取中 = 开始提取按钮绿
             }
 
@@ -1889,7 +1781,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
             @Override
             public void setStatusText(String text) {
-                statusLabel.setText(text);
+                refs.statusLabel().setText(text);
             }
         };
     }
@@ -1914,18 +1806,18 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     private void onStopProcessing() {
         extractionCoordinator.cancel();
         extractionCoordinator.running.set(false);
-        startButton.setDisable(false);
-        stopButton.setDisable(true);
-        progressBar.setVisible(false);
+        refs.startButton().setDisable(false);
+        refs.stopButton().setDisable(true);
+        refs.progressBar().setVisible(false);
         setProgressBarActivity(null);
-        statusLabel.setText(I18n.get("extract.stopped"));
+        refs.statusLabel().setText(I18n.get("extract.stopped"));
         log.info(I18n.msg("log.maincontroller.41"));
     }
 
     // ==================== 列表渲染与拖拽排序 ====================
 
     /** 列表单元格工厂（单元格实现已外迁为顶层类 PreviewListCell，见该类 javadoc） */
-    private ListCell<Object> createPreviewCell() {
+    ListCell<Object> createPreviewCell() {
         return new PreviewListCell(this);
     }
 
@@ -2005,7 +1897,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 单元格在拖拽覆盖层坐标系中的位置 */
     private Bounds cellBoundsInOverlay(javafx.scene.Node cell) {
         Bounds sceneBounds = cell.localToScene(cell.getBoundsInLocal());
-        Point2D origin = dragOverlay.localToScene(0, 0);
+        Point2D origin = refs.dragOverlay().localToScene(0, 0);
         return new BoundingBox(
                 sceneBounds.getMinX() - origin.getX(),
                 sceneBounds.getMinY() - origin.getY(),
@@ -2014,7 +1906,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     private PreviewListCell findCell(Object item) {
-        for (javafx.scene.Node n : fileListView.lookupAll(".list-cell")) {
+        for (javafx.scene.Node n : refs.fileListView().lookupAll(".list-cell")) {
             if (n instanceof PreviewListCell c && c.getItem() == item) {
                 return c;
             }
@@ -2033,7 +1925,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         List<PreviewListCell> cells = new ArrayList<>();
         List<ImageView> views = new ArrayList<>();
         try {
-            for (javafx.scene.Node n : fileListView.lookupAll(".list-cell")) {
+            for (javafx.scene.Node n : refs.fileListView().lookupAll(".list-cell")) {
                 if (n instanceof PreviewListCell c && c != sourceCell && c.getItem() != null
                         && !(c.getItem() instanceof PreviewItem it && it.removed)) {
                     Bounds b = cellBoundsInOverlay(c);
@@ -2042,7 +1934,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                         ImageView iv = new ImageView(c.snapshot(transparentSnapParams(), null));
                         iv.setLayoutX(b.getMinX());
                         iv.setLayoutY(b.getMinY());
-                        dragOverlay.getChildren().add(iv);
+                        refs.dragOverlay().getChildren().add(iv);
                         views.add(iv);
                     }
                 }
@@ -2050,7 +1942,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         } catch (Exception ex) {
             // 快照失败兜底：瞬时重排复位（cancelDrag 会清除 dragActive，防卡死）
             log.warn(I18n.msg("log.maincontroller.43", ex.getMessage()), ex);
-            dragOverlay.getChildren().removeAll(views);
+            refs.dragOverlay().getChildren().removeAll(views);
             cancelDrag();
             return;
         }
@@ -2071,13 +1963,13 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 结束提起动画：清除快照、恢复单元格显示 */
-    private void finishLift() {
+    void finishLift() {
         if (liftAnim != null) {
             liftAnim.stop();
             liftAnim = null;
         }
         if (liftViews != null) {
-            dragOverlay.getChildren().removeAll(liftViews);
+            refs.dragOverlay().getChildren().removeAll(liftViews);
             liftViews = null;
         }
         if (liftCells != null) {
@@ -2095,7 +1987,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         List<PreviewListCell> cells = new ArrayList<>();
         List<ImageView> views = new ArrayList<>();
         try {
-            for (javafx.scene.Node n : fileListView.lookupAll(".list-cell")) {
+            for (javafx.scene.Node n : refs.fileListView().lookupAll(".list-cell")) {
                 if (n instanceof PreviewListCell c && c.getItem() != null
                         && !(c.getItem() instanceof PreviewItem it && it.removed)) {
                     Bounds b = cellBoundsInOverlay(c);
@@ -2104,7 +1996,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                         ImageView iv = new ImageView(c.snapshot(transparentSnapParams(), null));
                         iv.setLayoutX(b.getMinX());
                         iv.setLayoutY(b.getMinY());
-                        dragOverlay.getChildren().add(iv);
+                        refs.dragOverlay().getChildren().add(iv);
                         views.add(iv);
                         rowHeight = c.getHeight();
                     }
@@ -2112,7 +2004,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             }
         } catch (Exception ex) {
             log.warn(I18n.msg("log.maincontroller.43", ex.getMessage()), ex);
-            dragOverlay.getChildren().removeAll(views);
+            refs.dragOverlay().getChildren().removeAll(views);
             rebuildDisplay();
             finishDragReset();
             return;
@@ -2125,10 +2017,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         rebuildDisplay();
         // 组合并后被拖组已不在显示序中：仅当对象仍存在时选中（避免 ListView.select 找不到对象）
         if (displayItems.contains(item)) {
-            fileListView.getSelectionModel().select(item);
+            refs.fileListView().getSelectionModel().select(item);
         }
         // 同步完成单元格绑定，保证后续快照/隐藏准确
-        fileListView.layout();
+        refs.fileListView().layout();
         cells.forEach(c -> c.setVisible(false));
         PreviewListCell itemCell = findCell(item);
         if (itemCell != null) {
@@ -2138,7 +2030,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 ImageView itemView = new ImageView(itemCell.snapshot(transparentSnapParams(), null));
                 itemView.setLayoutX(ib.getMinX());
                 itemView.setLayoutY(ib.getMinY());
-                dragOverlay.getChildren().add(itemView);
+                refs.dragOverlay().getChildren().add(itemView);
             } catch (Exception ex) {
                 log.warn(I18n.msg("log.maincontroller.45", ex.getMessage()), ex);
             }
@@ -2152,7 +2044,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             pt.getChildren().add(tt);
         }
         pt.setOnFinished(_ -> {
-            dragOverlay.getChildren().clear();
+            refs.dragOverlay().getChildren().clear();
             cells.forEach(c -> c.setVisible(true));
             if (itemCell != null) {
                 itemCell.setVisible(true);
@@ -2182,7 +2074,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         recomputeBadges();
         updateListButtons();
         updateProgressStatus(parseToken);
-        Object sel = fileListView.getSelectionModel().getSelectedItem();
+        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
         updateInfoArea(sel);
         if (!isTextMode() && sel instanceof PreviewItem it && it.cachedThumbs != null) {
             renderThumbnails(it);
@@ -2218,7 +2110,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     // ==================== 列表复选框（F1） ====================
 
     /** 列头 CheckBox 点击：当前全不选 → 全选；全选或半选 → 全不选（作用于全部有效项，含组内成员） */
-    private void onSelectAllToggled() {
+    void onSelectAllToggled() {
         if (updatingSelection || listAnimating) {
             return;
         }
@@ -2232,7 +2124,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 单项勾选变化 → 列头三态与组复选框实时联动 */
-    private void onSelectionChanged() {
+    void onSelectionChanged() {
         if (!updatingSelection) {
             refreshSelectionUi();
             updateListButtons();
@@ -2379,9 +2271,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 列头三态刷新 + 列表单元格（含组复选框）联动刷新 */
     private void refreshSelectionUi() {
         SelectionState.TriState state = currentSelectionState();
-        selectAllCheck.setIndeterminate(state == SelectionState.TriState.SOME);
-        selectAllCheck.setSelected(state == SelectionState.TriState.ALL);
-        fileListView.refresh();
+        refs.selectAllCheck().setIndeterminate(state == SelectionState.TriState.SOME);
+        refs.selectAllCheck().setSelected(state == SelectionState.TriState.ALL);
+        refs.fileListView().refresh();
     }
 
     // ==================== 显示序 / 数据序（F5） ====================
@@ -2439,8 +2331,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         return (o instanceof PreviewItem it && !it.removed) || o instanceof GroupItem<?>;
     }
 
-    private void updateFileCount() {
-        fileCountLabel.setText(I18n.get("list.fileCount", "count", visibleCount()));
+    void updateFileCount() {
+        refs.fileCountLabel().setText(I18n.get("list.fileCount", "count", visibleCount()));
     }
 
     /* 列表操作按钮可用性：列表为空时移除禁用；撤销栈为空时撤销禁用；合并为组需勾选集合或选中项目；拆分组仅选中组条目时可用（F6） */
@@ -2455,32 +2347,32 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
     }
 
-    private void updateListButtons() {
-        removeButton.setDisable(visibleCount() == 0);
-        undoButton.setDisable(!ws.canUndo());
+    void updateListButtons() {
+        refs.removeButton().setDisable(visibleCount() == 0);
+        refs.undoButton().setDisable(!ws.canUndo());
         boolean anyChecked = allVisibleItems().stream().anyMatch(i -> i.selected);
-        Object sel = fileListView.getSelectionModel().getSelectedItem();
+        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
         boolean selItem = sel instanceof PreviewItem it && !it.removed;
-        groupButton.setDisable(!anyChecked && !selItem);
-        ungroupButton.setDisable(!(sel instanceof GroupItem<?>));
-        viewSourceButton.setDisable(!selItem);
+        refs.groupButton().setDisable(!anyChecked && !selItem);
+        refs.ungroupButton().setDisable(!(sel instanceof GroupItem<?>));
+        refs.viewSourceButton().setDisable(!selItem);
         // 条目独立参数需求拍板：仅当选中条目生效参数为独立参数时可"应用到全局"
-        applyGlobalButton.setDisable(!hasIndependentParams(sel));
+        refs.applyGlobalButton().setDisable(!hasIndependentParams(sel));
         // 清除参数拍板 Q3：勾选集合任一目标带参数（无勾选 → 单选目标）即启用
         boolean anyClearable = anyChecked
                 ? allVisibleItems().stream().filter(i -> i.selected)
                         .anyMatch(this::hasIndependentParams)
                 : hasIndependentParams(sel);
-        clearParamsButton.setDisable(!anyClearable);
+        refs.clearParamsButton().setDisable(!anyClearable);
     }
 
     /** 开始按钮可用性的唯一派生函数 —— 所有禁用/恢复都必须经由此函数 */
     private void updateStartButtonState() {
-        boolean anyMode = textModeToggle.isSelected() || imageModeToggle.isSelected();
+        boolean anyMode = refs.textModeToggle().isSelected() || refs.imageModeToggle().isSelected();
         // R1.7：有未提交的参数草稿时不许开始提取（判定唯一来源是 ParamFormPane.isDirty()，
         // 由 ParamSidePanel.setDirtyListener 在编辑/提交/切目标时把本方法叫回来）。
-        startButton.setDisable(!anyMode || visibleCount() == 0 || isImporting()
-                || ParamSidePanel.isDirty(statusLabel));
+        refs.startButton().setDisable(!anyMode || visibleCount() == 0 || isImporting()
+                || ParamSidePanel.isDirty(refs.statusLabel()));
     }
 
     /**
@@ -2502,7 +2394,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         recomputeBadges();
         // 方案A：无条件刷新——全部无参数时 updateProgressStatus 会隐藏进度条且不动状态栏
         updateProgressStatus(parseToken);
-        Object selAfter = fileListView.getSelectionModel().getSelectedItem();
+        Object selAfter = refs.fileListView().getSelectionModel().getSelectedItem();
         updateInfoArea(selAfter);
         updateContentArea(selAfter);
     }
@@ -2515,7 +2407,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         // R5：有复选框勾选时按勾选集合移除（优先于当前选中项，含组内成员）
         List<PreviewItem> targets = allVisibleItems().stream()
                 .filter(i -> i.selected).toList();
-        Object sel = fileListView.getSelectionModel().getSelectedItem();
+        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
         // D7：无勾选且选中组条目 → 整组移除（组名/参数随组对象保留在撤销记录中）
         if (targets.isEmpty() && sel instanceof GroupItem<?> g) {
             // G2（拍板）：整组移除一律必弹确认（R6"仅列表将空时确认"的有意例外），按钮行与右键菜单共用
@@ -2534,7 +2426,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             final List<PreviewItem> pending = targets;
             String msg = I18n.get("list.removeAllConfirm", "count", pending.size())
                     + collapsedGroupHint(pending);
-            GuiNotifications.removeAllConfirm(statusLabel, msg, ok -> {
+            GuiNotifications.removeAllConfirm(refs.statusLabel(), msg, ok -> {
                 if (ok) {
                     removeSelected(pending);
                 }
@@ -2549,7 +2441,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         removeItems(targets);
         log.info(I18n.msg("log.maincontroller.46", targets.size(), visibleCount()));
         if (visibleCount() == 0) {
-            GuiNotifications.listEmpty(statusLabel);
+            GuiNotifications.listEmpty(refs.statusLabel());
         }
     }
 
@@ -2562,12 +2454,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         String msg = memberCount >= visibleCount()
                 ? I18n.get("group.removeConfirm", "count", memberCount) + collapsedHint
                 : I18n.get("group.removeConfirmSimple", "count", memberCount) + collapsedHint;
-        GuiNotifications.removeGroupConfirm(statusLabel, msg, ok -> {
+        GuiNotifications.removeGroupConfirm(refs.statusLabel(), msg, ok -> {
             if (ok) {
                 removeGroup(group);
                 log.info(I18n.msg("log.maincontroller.47", group.getName(), memberCount, visibleCount()));
                 if (visibleCount() == 0) {
-                    GuiNotifications.listEmpty(statusLabel);
+                    GuiNotifications.listEmpty(refs.statusLabel());
                 }
             }
         });
@@ -2576,7 +2468,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 隐藏式移除：结构变更（removed 标记 + 空组自动销毁 D11）与撤销记录由 {@link WorkspaceModel#removeItems} 负责；
      *  本类只做缓存规则 (c) 与选择/刷新收尾 */
     private void removeItems(List<PreviewItem> targets) {
-        Object sel = fileListView.getSelectionModel().getSelectedItem();
+        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
         int selIndex = displayItems.indexOf(sel);
         ws.removeItems(targets);                              // 结构 + 撤销记录（模型是唯一实现）
         // 规则 (c)：从列表移除 → 删该项目缓存目录
@@ -2593,7 +2485,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 整组移除（D7）：结构变更与撤销记录由 {@link WorkspaceModel#removeGroup} 负责；本类只做缓存规则 (c) 与选择/刷新收尾 */
     private void removeGroup(GroupItem<PreviewItem> group) {
-        Object sel = fileListView.getSelectionModel().getSelectedItem();
+        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
         int selIndex = displayItems.indexOf(sel);
         List<PreviewItem> members = new ArrayList<>(group.getMembers());
         ws.removeGroup(group);                                // 结构 + 撤销记录（模型是唯一实现）
@@ -2646,7 +2538,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     log.info(I18n.msg("log.maincontroller.48", record.items().size(), record.destroyedGroups().size()));
                 }
                 case IMPORT -> {
-                    Object sel = fileListView.getSelectionModel().getSelectedItem();
+                    Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
                     int selIndex = displayItems.indexOf(sel);
                     boolean selRemoved = sel != null && record.items().contains(sel);
                     // 撤销导入 = 这批项目被移除：先做 UI 侧标记（removed 供致空组判定），
@@ -2667,7 +2559,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     // 撤销建组：结构恢复（组解散、成员回原位置）由模型负责
                     ws.applyUndo(record);
                     record.items().stream()
-                            .filter(i -> !i.removed).findFirst().ifPresent(firstVisible -> fileListView.getSelectionModel().select(firstVisible));
+                            .filter(i -> !i.removed).findFirst().ifPresent(firstVisible -> refs.fileListView().getSelectionModel().select(firstVisible));
                     log.info(I18n.msg("log.maincontroller.50", record.group().getName()));
                 }
                 case REORDER, MERGE_GROUPS -> {
@@ -2744,7 +2636,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                         workspaceParamService.paramsChanged(im, allPreviewItems());
                         refreshAfterParamsChanged();
                     }
-                    fileListView.refresh();
+                    refs.fileListView().refresh();
                     updateInfoArea(currentSelection());
                     updateExtractBanner(currentSelection());
                     updateListButtons();
@@ -2801,7 +2693,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         refreshAfterListChange();
         if (selectAfter != null && displayItems.contains(selectAfter)) {
-            fileListView.getSelectionModel().select(selectAfter);
+            refs.fileListView().getSelectionModel().select(selectAfter);
         }
         // 父组指针已在 refreshAfterListChange 重建，此时按恢复后的生效参数重解析受影响项目
         if (!reparseAfter.isEmpty() && currentModeConfirmed()) {
@@ -2846,17 +2738,17 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         int start = Math.max(0, Math.min(fromDisplayIndex, displayItems.size() - 1));
         for (int i = start; i < displayItems.size(); i++) {
             if (isVisibleRow(displayItems.get(i))) {
-                fileListView.getSelectionModel().select(displayItems.get(i));
+                refs.fileListView().getSelectionModel().select(displayItems.get(i));
                 return;
             }
         }
         for (int i = start - 1; i >= 0; i--) {
             if (isVisibleRow(displayItems.get(i))) {
-                fileListView.getSelectionModel().select(displayItems.get(i));
+                refs.fileListView().getSelectionModel().select(displayItems.get(i));
                 return;
             }
         }
-        fileListView.getSelectionModel().clearSelection();
+        refs.fileListView().getSelectionModel().clearSelection();
     }
 
     // ==================== 合并为组 / 组操作（F5） ====================
@@ -2869,7 +2761,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         List<PreviewItem> targets = allVisibleItems().stream()
                 .filter(i -> i.selected).toList();
-        Object sel = fileListView.getSelectionModel().getSelectedItem();
+        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
         if (targets.isEmpty()) {
             if (sel instanceof PreviewItem it && !it.removed) {
                 targets = List.of(it);
@@ -2893,7 +2785,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         } finally {
             updatingSelection = false;
         }
-        fileListView.getSelectionModel().select(group);
+        refs.fileListView().getSelectionModel().select(group);
         refreshAfterListChange();
         log.info(I18n.msg("log.maincontroller.56", group.getName(), targets.size()));
     }
@@ -2904,7 +2796,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (listAnimating) {
             return;
         }
-        Object sel = fileListView.getSelectionModel().getSelectedItem();
+        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
         if (!(sel instanceof GroupItem<?> g)) {
             return;
         }
@@ -2965,15 +2857,15 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * 外部重建触发快进兜底时只清理快照即可。
      */
     private void collapseGroupAnimated(GroupItem<PreviewItem> g) {
-        Object sel = fileListView.getSelectionModel().getSelectedItem();
+        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
         if (sel instanceof PreviewItem it && it.parentGroup == g) {
-            fileListView.getSelectionModel().select(g);
+            refs.fileListView().getSelectionModel().select(g);
         }
         listAnimating = true;
         animatingGroup = g;
         animExpanding = false;
         animLockedSelection = g;
-        groupNameField.setDisable(true);
+        refs.groupNameField().setDisable(true);
 
         // 采集快照（动画前：成员行与下方行均在原位置）；组行底部 = 成员收进抽屉的目标位置
         List<ImageView> memberViews = new ArrayList<>();
@@ -2983,7 +2875,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         double memberBottom = -1;
         double totalHeight = 0;
         try {
-            for (javafx.scene.Node n : fileListView.lookupAll(".list-cell")) {
+            for (javafx.scene.Node n : refs.fileListView().lookupAll(".list-cell")) {
                 if (!(n instanceof PreviewListCell c) || c.getItem() == null
                         || (c.getItem() instanceof PreviewItem it && it.removed)) {
                     continue;
@@ -2999,7 +2891,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     ImageView iv = new ImageView(snap);
                     iv.setLayoutX(b.getMinX());
                     iv.setLayoutY(b.getMinY());
-                    dragOverlay.getChildren().add(iv);
+                    refs.dragOverlay().getChildren().add(iv);
                     memberViews.add(iv);
                     memberBottom = Math.max(memberBottom, b.getMaxY());
                     totalHeight += c.getHeight();
@@ -3012,15 +2904,15 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     ImageView iv = new ImageView(snap);
                     iv.setLayoutX(b.getMinX());
                     iv.setLayoutY(b.getMinY());
-                    dragOverlay.getChildren().add(iv);
+                    refs.dragOverlay().getChildren().add(iv);
                     belowViews.add(iv);
                     belowCells.add(c);
                 }
             }
         } catch (Exception ex) {
             log.warn(I18n.msg("log.maincontroller.58", ex.getMessage()), ex);
-            dragOverlay.getChildren().removeAll(memberViews);
-            dragOverlay.getChildren().removeAll(belowViews);
+            refs.dragOverlay().getChildren().removeAll(memberViews);
+            refs.dragOverlay().getChildren().removeAll(belowViews);
             g.setExpanded(false);
             rebuildDisplay();
             finishExpandAnim();
@@ -3055,8 +2947,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         if (memberViews.isEmpty() && belowViews.isEmpty()) {
             // 无可见成员可动画：直接终态
-            dragOverlay.getChildren().removeAll(memberViews);
-            dragOverlay.getChildren().removeAll(belowViews);
+            refs.dragOverlay().getChildren().removeAll(memberViews);
+            refs.dragOverlay().getChildren().removeAll(belowViews);
             belowCells.forEach(c -> c.setVisible(true));
             finishExpandAnim();
             return;
@@ -3077,8 +2969,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         listAnimating = true;
         animatingGroup = g;
         animExpanding = true;
-        animLockedSelection = fileListView.getSelectionModel().getSelectedItem();
-        groupNameField.setDisable(true);
+        animLockedSelection = refs.fileListView().getSelectionModel().getSelectedItem();
+        refs.groupNameField().setDisable(true);
         g.setExpanded(true);
         suppressAnimRebuild = true;
         try {
@@ -3086,7 +2978,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         } finally {
             suppressAnimRebuild = false;
         }
-        fileListView.layout();
+        refs.fileListView().layout();
 
         List<ImageView> memberViews = new ArrayList<>();
         List<ImageView> belowViews = new ArrayList<>();
@@ -3095,7 +2987,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         double memberBottom = -1;
         double totalHeight = 0;
         try {
-            for (javafx.scene.Node n : fileListView.lookupAll(".list-cell")) {
+            for (javafx.scene.Node n : refs.fileListView().lookupAll(".list-cell")) {
                 if (!(n instanceof PreviewListCell c) || c.getItem() == null
                         || (c.getItem() instanceof PreviewItem it && it.removed)) {
                     continue;
@@ -3111,7 +3003,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     ImageView iv = new ImageView(snap);
                     iv.setLayoutX(b.getMinX());
                     iv.setLayoutY(b.getMinY());
-                    dragOverlay.getChildren().add(iv);
+                    refs.dragOverlay().getChildren().add(iv);
                     memberViews.add(iv);
                     memberBottom = Math.max(memberBottom, b.getMaxY());
                     totalHeight += c.getHeight();
@@ -3124,15 +3016,15 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     ImageView iv = new ImageView(snap);
                     iv.setLayoutX(b.getMinX());
                     iv.setLayoutY(b.getMinY());
-                    dragOverlay.getChildren().add(iv);
+                    refs.dragOverlay().getChildren().add(iv);
                     belowViews.add(iv);
                     hiddenCells.add(c);
                 }
             }
         } catch (Exception ex) {
             log.warn(I18n.msg("log.maincontroller.59", ex.getMessage()), ex);
-            dragOverlay.getChildren().removeAll(memberViews);
-            dragOverlay.getChildren().removeAll(belowViews);
+            refs.dragOverlay().getChildren().removeAll(memberViews);
+            refs.dragOverlay().getChildren().removeAll(belowViews);
             hiddenCells.forEach(c -> c.setVisible(true));
             finishExpandAnim();
             return;
@@ -3163,8 +3055,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             pt.getChildren().add(tt);
         }
         if (memberViews.isEmpty() && belowViews.isEmpty()) {
-            dragOverlay.getChildren().removeAll(memberViews);
-            dragOverlay.getChildren().removeAll(belowViews);
+            refs.dragOverlay().getChildren().removeAll(memberViews);
+            refs.dragOverlay().getChildren().removeAll(belowViews);
             hiddenCells.forEach(c -> c.setVisible(true));
             finishExpandAnim();
             return;
@@ -3184,7 +3076,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             collapseAnim = null;
         }
         if (collapseViews != null) {
-            dragOverlay.getChildren().removeAll(collapseViews);
+            refs.dragOverlay().getChildren().removeAll(collapseViews);
             collapseViews = null;
         }
         if (collapseCells != null) {
@@ -3195,10 +3087,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         animExpanding = false;
         animLockedSelection = null;
         listAnimating = false;
-        groupNameField.setDisable(false);
+        refs.groupNameField().setDisable(false);
         // 解锁后刷新单元格：动画开始时按 listAnimating=true 渲染的 checkbox 禁用状态需重渲染恢复
-        fileListView.refresh();
-        fileListView.requestLayout();
+        refs.fileListView().refresh();
+        refs.fileListView().requestLayout();
     }
 
     // ==================== 组名编辑（F5 6.3） ====================
@@ -3208,12 +3100,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (nameEditingGroup != g) {
             nameEditingGroup = g;
             lastValidGroupName = g.getName();
-            groupNameField.setText(g.getName());
+            refs.groupNameField().setText(g.getName());
         }
     }
 
     /** 组名输入即生效；重名时自动追加序号直至唯一并日志提示（R7） */
-    private void onGroupNameEdited(String newVal) {
+    void onGroupNameEdited(String newVal) {
         GroupItem<PreviewItem> g = nameEditingGroup;
         if (g == null || updatingGroupName) {
             return;
@@ -3228,7 +3120,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (!unique.equals(trimmed)) {
             log.info(I18n.msg("log.maincontroller.09", trimmed, unique));
             updatingGroupName = true;
-            groupNameField.setText(unique);
+            refs.groupNameField().setText(unique);
             updatingGroupName = false;
         }
         g.setName(unique);
@@ -3236,15 +3128,15 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 输入框失焦时空组名恢复为最近一次有效组名 */
-    private void onGroupNameFocusLost() {
+    void onGroupNameFocusLost() {
         GroupItem<PreviewItem> g = nameEditingGroup;
         if (g == null) {
             return;
         }
-        String text = groupNameField.getText();
+        String text = refs.groupNameField().getText();
         if (text == null || text.trim().isEmpty()) {
             updatingGroupName = true;
-            groupNameField.setText(lastValidGroupName);
+            refs.groupNameField().setText(lastValidGroupName);
             updatingGroupName = false;
             g.setName(lastValidGroupName);
         }
@@ -3263,12 +3155,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     // ==================== 选择与联动 ====================
 
-    private void onItemSelected(Object item) {
+    void onItemSelected(Object item) {
         // 折叠/展开动画期间列表选择锁定：选择变化回选至锁定项（选中项一致时不触发回选，防递归）
         if (listAnimating) {
             Object locked = animLockedSelection;
-            if (locked != null && fileListView.getSelectionModel().getSelectedItem() != locked) {
-                fileListView.getSelectionModel().select(locked);
+            if (locked != null && refs.fileListView().getSelectionModel().getSelectedItem() != locked) {
+                refs.fileListView().getSelectionModel().select(locked);
             }
             return;
         }
@@ -3283,7 +3175,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         lastSelected = item;
         // 组行选中/未选中背景样式随选择变化切换；拖拽动画期间暂停刷新避免打乱快照画面
         if (!dragActive) {
-            fileListView.refresh();
+            refs.fileListView().refresh();
         }
         updateAdjustCheck(item);
         updateInfoArea(item);
@@ -3292,7 +3184,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 章节徽标重算（R11）：每个组 = 独立提取单元（组内重算），未分组项目按顶层顺序；每文件章节覆盖优先 */
-    private void recomputeBadges() {
+    void recomputeBadges() {
         int top = 1;
         for (Object o : items) {
             if (o instanceof GroupItem<?> g) {
@@ -3306,7 +3198,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 top = assignBadge(it, top);
             }
         }
-        fileListView.refresh();
+        refs.fileListView().refresh();
     }
 
     /** 单项徽标赋值：按该条目生效参数判定章节编号（组参数可独立开关）；章节覆盖关闭或未解析完成时不占编号 */
@@ -3330,18 +3222,18 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         boolean isItem = item instanceof PreviewItem it && !it.removed;
         AppConfig eff = isItem ? effectiveForObject(item) : null;
         boolean checkVisible = isTextMode() && eff != null && eff.isAddChapterNumber();
-        adjustCheck.setVisible(checkVisible);
-        adjustCheck.setManaged(checkVisible);
+        refs.adjustCheck().setVisible(checkVisible);
+        refs.adjustCheck().setManaged(checkVisible);
         if (checkVisible) {
             PreviewItem it = (PreviewItem) item;
-            adjustCheck.setText(I18n.get("params.addChapterNumbers"));
+            refs.adjustCheck().setText(I18n.get("params.addChapterNumbers"));
             updatingAdjustCheck = true;
-            adjustCheck.setSelected(it.chapterEnabled);
+            refs.adjustCheck().setSelected(it.chapterEnabled);
             updatingAdjustCheck = false;
         }
         boolean resultVisible = !isTextMode() && eff != null;
-        outputResultLabel.setVisible(resultVisible);
-        outputResultLabel.setManaged(resultVisible);
+        refs.outputResultLabel().setVisible(resultVisible);
+        refs.outputResultLabel().setManaged(resultVisible);
     }
 
     /** 图片模式输出结果说明：文件夹 / ZIP / CBZ / ZIP + CBZ（打包由全局配置决定） */
@@ -3365,12 +3257,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         updateExtractBanner(item);
         // 组条目：第二行（原"输出文件："位置）变为"输出组文件名："+ 可编辑输入框（F5 6.3）
         if (item instanceof GroupItem<?> g) {
-            titleInfoLabel.setVisible(false);
-            titleInfoLabel.setManaged(false);
-            outputNameLabel.setVisible(false);
-            outputNameLabel.setManaged(false);
-            groupNameBox.setVisible(true);
-            groupNameBox.setManaged(true);
+            refs.titleInfoLabel().setVisible(false);
+            refs.titleInfoLabel().setManaged(false);
+            refs.outputNameLabel().setVisible(false);
+            refs.outputNameLabel().setManaged(false);
+            refs.groupNameBox().setVisible(true);
+            refs.groupNameBox().setManaged(true);
             attachGroupNameEditor(asPreviewGroup(g));
             return;
         }
@@ -3380,47 +3272,47 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             params = new AppConfig();
         }
         nameEditingGroup = null;
-        groupNameBox.setVisible(false);
-        groupNameBox.setManaged(false);
+        refs.groupNameBox().setVisible(false);
+        refs.groupNameBox().setManaged(false);
         // 提取标题行：文本模式 + 标题提取开启且起始标记非空时显示（与正式提取判定一致，按该条目生效参数）
         boolean showTitle = confirmed && isTextMode() && params.isEnableTitleExtraction()
                 && params.getTitleStartMarker() != null && !params.getTitleStartMarker().isEmpty();
-        titleInfoLabel.setVisible(showTitle);
-        titleInfoLabel.setManaged(showTitle);
+        refs.titleInfoLabel().setVisible(showTitle);
+        refs.titleInfoLabel().setManaged(showTitle);
         if (!(item instanceof PreviewItem it) || !confirmed) {
-            outputNameLabel.setVisible(false);
-            outputNameLabel.setManaged(false);
+            refs.outputNameLabel().setVisible(false);
+            refs.outputNameLabel().setManaged(false);
             return;
         }
         if (showTitle) {
             switch (it.status) {
-                case WAITING -> titleInfoLabel.setText(I18n.get("preview.titleParsing"));
-                case FAILED, EMPTY -> titleInfoLabel.setText(I18n.get("preview.titleNone"));
-                case READY -> titleInfoLabel.setText(it.cachedTitle != null
+                case WAITING -> refs.titleInfoLabel().setText(I18n.get("preview.titleParsing"));
+                case FAILED, EMPTY -> refs.titleInfoLabel().setText(I18n.get("preview.titleNone"));
+                case READY -> refs.titleInfoLabel().setText(it.cachedTitle != null
                         ? I18n.get("preview.titlePrefix") + it.cachedTitle
                         : I18n.get("preview.titleNotFound"));
             }
         }
-        outputNameLabel.setVisible(true);
-        outputNameLabel.setManaged(true);
+        refs.outputNameLabel().setVisible(true);
+        refs.outputNameLabel().setManaged(true);
         if (isTextMode()) {
             if (params.isSeparateFiles()) {
-                outputNameLabel.setText(I18n.get("preview.outputFilePrefix") + SourceKinds.stripKnownExtension(it.name) + ".txt");
+                refs.outputNameLabel().setText(I18n.get("preview.outputFilePrefix") + SourceKinds.stripKnownExtension(it.name) + ".txt");
             } else {
-                String inputDirName = new File(inputFolderField.getText()).getName();
+                String inputDirName = new File(refs.inputFolderField().getText()).getName();
                 if (inputDirName.isEmpty()) {
                     inputDirName = "mht_output";
                 }
-                outputNameLabel.setText(I18n.get("preview.outputFilePrefix") + inputDirName + ".txt"
+                refs.outputNameLabel().setText(I18n.get("preview.outputFilePrefix") + inputDirName + ".txt"
                         + I18n.get("preview.outputFileTxtSuffix"));
             }
         } else if (params.isSingleOutputMode()) {
             String folderName = mergedFolderName(it);
-            outputNameLabel.setText(I18n.get("preview.outputDirPrefix") + folderName
+            refs.outputNameLabel().setText(I18n.get("preview.outputDirPrefix") + folderName
                     + I18n.get("preview.outputDirMergedNote"));
         } else {
             String dirName = separateDirName(it);
-            outputNameLabel.setText(I18n.get("preview.outputDirPrefix") + dirName);
+            refs.outputNameLabel().setText(I18n.get("preview.outputDirPrefix") + dirName);
         }
     }
 
@@ -3450,16 +3342,16 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 }
             }
         }
-        return ImageBatchProcessor.determineDefaultFolderName(inputFolderField.getText());
+        return ImageBatchProcessor.determineDefaultFolderName(refs.inputFolderField().getText());
     }
 
     // ==================== 内容区渲染 ====================
 
     private void updateContentArea(Object item) {
-        boolean anyMode = textModeToggle.isSelected() || imageModeToggle.isSelected();
+        boolean anyMode = refs.textModeToggle().isSelected() || refs.imageModeToggle().isSelected();
         if (!anyMode) {
             showCurrentModeArea();
-            textPreviewArea.setText(HINT_NO_MODE_OR_DIR);
+            refs.textPreviewArea().setText(HINT_NO_MODE_OR_DIR);
             return;
         }
         // 组条目：预览区显示组信息与参数状态提示（6.5）
@@ -3469,45 +3361,45 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     + I18n.get("preview.groupItemCount", "count", visibleMemberCount(group))
                     + I18n.get("preview.paramsLabel") + groupParamStatusText(group);
             if (isTextMode()) {
-                imagePreviewBox.setVisible(false);
-                imagePreviewBox.setManaged(false);
-                textPreviewArea.setVisible(true);
-                textPreviewArea.setManaged(true);
-                textPreviewArea.setText(info);
+                refs.imagePreviewBox().setVisible(false);
+                refs.imagePreviewBox().setManaged(false);
+                refs.textPreviewArea().setVisible(true);
+                refs.textPreviewArea().setManaged(true);
+                refs.textPreviewArea().setText(info);
             } else {
-                textPreviewArea.setVisible(false);
-                textPreviewArea.setManaged(false);
-                imagePreviewBox.setVisible(true);
-                imagePreviewBox.setManaged(true);
+                refs.textPreviewArea().setVisible(false);
+                refs.textPreviewArea().setManaged(false);
+                refs.imagePreviewBox().setVisible(true);
+                refs.imagePreviewBox().setManaged(true);
                 resetImageArea(info, false);
             }
             return;
         }
         PreviewItem it = item instanceof PreviewItem p ? p : null;
         if (isTextMode()) {
-            imagePreviewBox.setVisible(false);
-            imagePreviewBox.setManaged(false);
-            textPreviewArea.setVisible(true);
-            textPreviewArea.setManaged(true);
+            refs.imagePreviewBox().setVisible(false);
+            refs.imagePreviewBox().setManaged(false);
+            refs.textPreviewArea().setVisible(true);
+            refs.textPreviewArea().setManaged(true);
             if (it == null) {
-                textPreviewArea.setText(visibleCount() == 0 ? HINT_NO_FILES : "");
+                refs.textPreviewArea().setText(visibleCount() == 0 ? HINT_NO_FILES : "");
                 return;
             }
             if (effectiveForObject(it) == null) {
-                textPreviewArea.setText(HINT_NEED_PARAMS);
+                refs.textPreviewArea().setText(HINT_NEED_PARAMS);
                 return;
             }
             switch (it.status) {
-                case WAITING -> textPreviewArea.setText(I18n.get("preview.imageParsing"));
-                case FAILED -> textPreviewArea.setText(I18n.get("preview.parseFailed") + it.errorMsg);
-                case EMPTY -> textPreviewArea.setText(I18n.get("preview.emptyContentShort"));
+                case WAITING -> refs.textPreviewArea().setText(I18n.get("preview.imageParsing"));
+                case FAILED -> refs.textPreviewArea().setText(I18n.get("preview.parseFailed") + it.errorMsg);
+                case EMPTY -> refs.textPreviewArea().setText(I18n.get("preview.emptyContentShort"));
                 case READY -> renderTextPreview(it);
             }
         } else {
-            textPreviewArea.setVisible(false);
-            textPreviewArea.setManaged(false);
-            imagePreviewBox.setVisible(true);
-            imagePreviewBox.setManaged(true);
+            refs.textPreviewArea().setVisible(false);
+            refs.textPreviewArea().setManaged(false);
+            refs.imagePreviewBox().setVisible(true);
+            refs.imagePreviewBox().setManaged(true);
             if (it == null) {
                 resetImageArea(visibleCount() == 0 ? HINT_NO_FILES : "", false);
                 return;
@@ -3517,22 +3409,22 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 return;
             }
             if (it.status == PreviewItem.Status.FAILED) {
-                imageHintLabel.setText(I18n.get("preview.parseFailed") + it.errorMsg);
-                imageHintLabel.setVisible(true);
-                previewEffectButton.setVisible(true);
-                previewEffectButton.setDisable(true);
-                imageScrollPane.setVisible(false);
-                imageScrollPane.setManaged(false);
+                refs.imageHintLabel().setText(I18n.get("preview.parseFailed") + it.errorMsg);
+                refs.imageHintLabel().setVisible(true);
+                refs.previewEffectButton().setVisible(true);
+                refs.previewEffectButton().setDisable(true);
+                refs.imageScrollPane().setVisible(false);
+                refs.imageScrollPane().setManaged(false);
             } else if (it.cachedThumbs != null) {
                 renderThumbnails(it);
             } else if (imageLoadActive && loadingItem == it) {
                 // 加载中：保留渐进追加的网格，不重置
-                imageHintLabel.setText(I18n.get("preview.imageLoading"));
-                imageHintLabel.setVisible(true);
-                previewEffectButton.setVisible(true);
-                previewEffectButton.setDisable(true);
-                imageScrollPane.setVisible(true);
-                imageScrollPane.setManaged(true);
+                refs.imageHintLabel().setText(I18n.get("preview.imageLoading"));
+                refs.imageHintLabel().setVisible(true);
+                refs.previewEffectButton().setVisible(true);
+                refs.previewEffectButton().setDisable(true);
+                refs.imageScrollPane().setVisible(true);
+                refs.imageScrollPane().setManaged(true);
             } else {
                 resetImageArea(null, true);
             }
@@ -3541,7 +3433,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 组参数状态提示（6.5）：组条目选中时预览区显示"该组使用独立参数"或"该组继承全局参数" */
     private String groupParamStatusText(GroupItem<PreviewItem> g) {
-        boolean imageMode = imageModeToggle.isSelected();
+        boolean imageMode = refs.imageModeToggle().isSelected();
         AppConfig own = imageMode ? g.getImageParamsCache() : g.getTextParamsCache();
         if (own != null) {
             return I18n.get("group.paramsIndependent");
@@ -3561,9 +3453,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         String tail = FileWriter.processTemplate(endTemplate, item.name, item.modifiedTime);
         String text = item.cachedText == null ? "" : item.cachedText;
         if (text.length() <= 10000) {
-            textPreviewArea.setText(head + text + tail);
+            refs.textPreviewArea().setText(head + text + tail);
         } else {
-            textPreviewArea.setText(head
+            refs.textPreviewArea().setText(head
                     + text.substring(0, 5000)
                     + I18n.get("preview.extractedContentDivider")
                     + text.substring(text.length() - 5000)
@@ -3573,43 +3465,43 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 重置图片区：hint 为 null 时显示默认按需预览说明 */
     private void resetImageArea(String hint, boolean showPreviewButton) {
-        imageHintLabel.setText(hint != null ? hint : I18n.get("preview.imageLazyHint"));
-        imageHintLabel.setVisible(true);
-        previewEffectButton.setVisible(showPreviewButton);
-        previewEffectButton.setDisable(false);
-        imageScrollPane.setVisible(false);
-        imageScrollPane.setManaged(false);
-        thumbnailPane.getChildren().clear();
+        refs.imageHintLabel().setText(hint != null ? hint : I18n.get("preview.imageLazyHint"));
+        refs.imageHintLabel().setVisible(true);
+        refs.previewEffectButton().setVisible(showPreviewButton);
+        refs.previewEffectButton().setDisable(false);
+        refs.imageScrollPane().setVisible(false);
+        refs.imageScrollPane().setManaged(false);
+        refs.thumbnailPane().getChildren().clear();
     }
 
     private void renderThumbnails(PreviewItem item) {
         List<ThumbnailData> thumbs = item.cachedThumbs;
-        thumbnailPane.getChildren().clear();
+        refs.thumbnailPane().getChildren().clear();
         if (thumbs == null || thumbs.isEmpty()) {
-            imageHintLabel.setText(I18n.get("preview.noImages"));
-            imageHintLabel.setVisible(true);
-            previewEffectButton.setVisible(false);
-            imageScrollPane.setVisible(false);
-            imageScrollPane.setManaged(false);
+            refs.imageHintLabel().setText(I18n.get("preview.noImages"));
+            refs.imageHintLabel().setVisible(true);
+            refs.previewEffectButton().setVisible(false);
+            refs.imageScrollPane().setVisible(false);
+            refs.imageScrollPane().setManaged(false);
             return;
         }
-        imageHintLabel.setVisible(false);
-        previewEffectButton.setVisible(false);
-        imageScrollPane.setVisible(true);
-        imageScrollPane.setManaged(true);
+        refs.imageHintLabel().setVisible(false);
+        refs.previewEffectButton().setVisible(false);
+        refs.imageScrollPane().setVisible(true);
+        refs.imageScrollPane().setManaged(true);
 
         // 下标 = 缓存清单 meta.images() 的序号（cachedThumbs 与 meta 同序 1:1，见 openCachedImage 的索引语义）
         for (int i = 0; i < thumbs.size(); i++) {
-            thumbnailPane.getChildren().add(buildThumbBox(item, thumbs.get(i), i));
+            refs.thumbnailPane().getChildren().add(buildThumbBox(item, thumbs.get(i), i));
         }
     }
 
     private void appendThumb(PreviewItem item, ThumbnailData entry, int index) {
-        imageHintLabel.setVisible(false);
-        previewEffectButton.setVisible(false);
-        imageScrollPane.setVisible(true);
-        imageScrollPane.setManaged(true);
-        thumbnailPane.getChildren().add(buildThumbBox(item, entry, index));
+        refs.imageHintLabel().setVisible(false);
+        refs.previewEffectButton().setVisible(false);
+        refs.imageScrollPane().setVisible(true);
+        refs.imageScrollPane().setManaged(true);
+        refs.thumbnailPane().getChildren().add(buildThumbBox(item, entry, index));
     }
 
     private VBox buildThumbBox(PreviewItem item, ThumbnailData entry, int index) {
@@ -3706,8 +3598,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             params = currentParamsOrDefaults();
         }
         boolean show = !isTextMode() && params.isSingleOutputMode() && params.isEnableBatchRenaming();
-        renameNoteLabel.setVisible(show);
-        renameNoteLabel.setManaged(show);
+        refs.renameNoteLabel().setVisible(show);
+        refs.renameNoteLabel().setManaged(show);
     }
 
     // ==================== 图片按需加载 ====================
@@ -3720,7 +3612,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 图片按需加载主体。{@code largeFileOk=true} = 用户已确认大文件（大文件确认改成窗口内卡片后，
      *  用"重入自己"表达"确认后继续"，好过把后面几十行加载逻辑塞进 lambda）。 */
     private void onPreviewEffect(boolean largeFileOk) {
-        Object sel = fileListView.getSelectionModel().getSelectedItem();
+        Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
         if (!(sel instanceof PreviewItem item)) {
             return;
         }
@@ -3741,7 +3633,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             String msg = I18n.get("preview.largeFileConfirmHeader") + "\n"
                     + item.name + I18n.get("preview.largeFileConfirmBody",
                             "size", f.length() / 1024 / 1024);
-            GuiNotifications.largeFileConfirm(statusLabel, msg, ok -> {
+            GuiNotifications.largeFileConfirm(refs.statusLabel(), msg, ok -> {
                 if (ok) {
                     onPreviewEffect(true);
                 }
@@ -3756,21 +3648,21 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     PreviewCacheMeta.FORMAT_VERSION);
         } catch (IOException e) {
             log.error(I18n.msg("log.maincontroller.61", item.path), e);
-            GuiNotifications.readFileInfoFailed(statusLabel);
+            GuiNotifications.readFileInfoFailed(refs.statusLabel());
             return;
         }
 
         final int token = requestToken;
         imageLoadActive = true;
         loadingItem = item;
-        imageHintLabel.setText(I18n.get("preview.imageLoading"));
-        previewEffectButton.setDisable(true);
+        refs.imageHintLabel().setText(I18n.get("preview.imageLoading"));
+        refs.previewEffectButton().setDisable(true);
         // 相邻修复：提取运行期间进度条/状态栏归提取任务独占，图片加载不动它们
         if (!running().get()) {
-            progressBar.setVisible(true);
-            progressBar.setProgress(-1);
+            refs.progressBar().setVisible(true);
+            refs.progressBar().setProgress(-1);
             setProgressBarActivity(null);   // 预览加载 = 默认色（完成后回落预解析显示）
-            statusLabel.setText(I18n.get("preview.loadingImage", "name", item.name));
+            refs.statusLabel().setText(I18n.get("preview.loadingImage", "name", item.name));
         }
 
         Thread t = new Thread(() -> {
@@ -3806,7 +3698,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     final int idx = i;
                     Platform.runLater(() -> {
                         if (token != requestToken
-                                || fileListView.getSelectionModel().getSelectedItem() != item) {
+                                || refs.fileListView().getSelectionModel().getSelectedItem() != item) {
                             return;
                         }
                         appendThumb(item, thumb, idx);
@@ -3835,12 +3727,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                         cleanup.start();
                         imageLoadActive = false;
                         loadingItem = null;
-                        previewEffectButton.setDisable(false);
+                        refs.previewEffectButton().setDisable(false);
                         updateProgressStatus(parseToken);
                         return;
                     }
                     if (token != requestToken
-                            || fileListView.getSelectionModel().getSelectedItem() != item) {
+                            || refs.fileListView().getSelectionModel().getSelectedItem() != item) {
                         // 既有语义：选中/代次变化时放弃上屏；缓存保留（与选中无关），重选时命中复用
                         return;
                     }
@@ -3852,7 +3744,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                     if (meta.images().isEmpty()) {
                         // 全量解析确认无图片 → 空内容标记
                         item.status = PreviewItem.Status.EMPTY;
-                        fileListView.refresh();
+                        refs.fileListView().refresh();
                     }
                     renderThumbnails(item);
                     updateProgressStatus(parseToken);
@@ -3861,14 +3753,14 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 Platform.runLater(() -> {
                     previewLoadThread = null;
                     if (token != requestToken
-                            || fileListView.getSelectionModel().getSelectedItem() != item) {
+                            || refs.fileListView().getSelectionModel().getSelectedItem() != item) {
                         return;
                     }
                     imageLoadActive = false;
                     loadingItem = null;
-                    imageHintLabel.setText(I18n.get("preview.parseFailed") + e.getMessage());
-                    imageHintLabel.setVisible(true);
-                    previewEffectButton.setDisable(false);
+                    refs.imageHintLabel().setText(I18n.get("preview.parseFailed") + e.getMessage());
+                    refs.imageHintLabel().setVisible(true);
+                    refs.previewEffectButton().setDisable(false);
                     updateProgressStatus(parseToken);
                 });
             }
@@ -3887,8 +3779,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         // 提取运行期间进度条归提取任务独占（相邻修复），预解析照常跑但不动进度条
         if (!running().get()) {
-            progressBar.setVisible(true);
-            progressBar.setProgress(0);
+            refs.progressBar().setVisible(true);
+            refs.progressBar().setProgress(0);
             setProgressBarActivity(STYLE_PROGRESS_PREPARSE);
         }
         // 快照迭代目标，避免解析期间列表被增量导入/移除修改导致并发异常
@@ -3976,10 +3868,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             }
             if (!dragActive && !listAnimating) {
                 // 拖拽/折叠动画期间暂停列表刷新，避免打乱动画画面；动画结束后统一重算
-                fileListView.refresh();
+                refs.fileListView().refresh();
                 recomputeBadges();
             }
-            Object sel = fileListView.getSelectionModel().getSelectedItem();
+            Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
             updateInfoArea(sel);
             if (sel == item) {
                 updateContentArea(item);
@@ -3998,8 +3890,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             return;
         }
         if (imageLoadActive) {
-            progressBar.setVisible(true);
-            progressBar.setProgress(-1);
+            refs.progressBar().setVisible(true);
+            refs.progressBar().setProgress(-1);
             return;
         }
         // 拍板 2026-09-24（方案A）：只统计有生效参数的条目。无参数条目由 preParseItems 跳过
@@ -4009,27 +3901,27 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         long total = vis.size();
         long done = vis.stream().filter(i -> i.status != PreviewItem.Status.WAITING).count();
         if (total == 0) {
-            progressBar.setVisible(false);   // 全部无生效参数：不预解析，不动状态栏文案
+            refs.progressBar().setVisible(false);   // 全部无生效参数：不预解析，不动状态栏文案
             setProgressBarActivity(null);
             return;
         }
         if (done >= total) {
-            progressBar.setVisible(false);
+            refs.progressBar().setVisible(false);
             setProgressBarActivity(null);
         } else {
-            progressBar.setVisible(true);
-            progressBar.setProgress((double) done / total);
+            refs.progressBar().setVisible(true);
+            refs.progressBar().setProgress((double) done / total);
             setProgressBarActivity(STYLE_PROGRESS_PREPARSE);
         }
-        statusLabel.setText(I18n.get("preview.parseDone") + done + "/" + total);
+        refs.statusLabel().setText(I18n.get("preview.parseDone") + done + "/" + total);
     }
 
     /** 进度条活动样式切换（拍板 2026-09-24）：一次只保留一个活动类；null = 默认色 */
     private void setProgressBarActivity(String styleClass) {
-        progressBar.getStyleClass().removeAll(STYLE_PROGRESS_PREPARSE, STYLE_PROGRESS_EXTRACT_SUCCESS,
+        refs.progressBar().getStyleClass().removeAll(STYLE_PROGRESS_PREPARSE, STYLE_PROGRESS_EXTRACT_SUCCESS,
                 STYLE_PROGRESS_EXTRACT_WARNED, STYLE_PROGRESS_EXTRACT_FAILED);
         if (styleClass != null) {
-            progressBar.getStyleClass().add(styleClass);
+            refs.progressBar().getStyleClass().add(styleClass);
         }
     }
 
@@ -4040,13 +3932,13 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * 台阶序号换算 GiB、取当前实际占用后，回 FX 线程弹<b>右上角非阻塞 toast</b>
      * （会话 19：原非模态 Alert 换成应用内提醒；连续跨台阶由 toast 图层自行限流，不再需要"先关再弹"）。
      */
-    private void onSizeAlertStep(int step) {
+    void onSizeAlertStep(int step) {
         long stepGiB = step * PreviewCacheLifecycle.SIZE_ALERT_STEP_BYTES / (1024L * 1024 * 1024);
         double actualGiB = previewCacheLifecycle.lastObservedTotalBytes() / (1024.0 * 1024 * 1024);
         String message = I18n.get("cache.sizeAlert",
                         "step", stepGiB, "actual", String.format("%.1f", actualGiB),
                         "dir", previewCacheLifecycle.store().root())
                 + I18n.get("cache.sizeAlertNote");
-        GuiNotifications.cacheStepWarning(statusLabel, message);
+        GuiNotifications.cacheStepWarning(refs.statusLabel(), message);
     }
 }

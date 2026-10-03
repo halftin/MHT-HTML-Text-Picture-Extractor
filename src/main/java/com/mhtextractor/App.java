@@ -46,6 +46,13 @@ public class App extends Application {
         }
 
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/mhtextractor/gui/view/MainView.fxml"));
+        // P6-B：控制器要拿"FXML 命名空间"（fx:id → MainViewRefs）来取代 42 个 @FXML 节点字段，
+        // 而 namespace 只有 loader 有 —— controller factory 是把它交给控制器的入口（缺这根线就是
+        // 指南记的"未验证"缺口）。它会覆盖 MainView.fxml 里的 fx:controller 实例化（工厂优先），
+        // 但"注入 @FXML 成员 → 反射调用 initialize()"的时机与默认路径逐字相同
+        // （javafx.fxml.FXMLLoader 源码 926-931 与 2555-2664 行），故 initialize() 里 namespace 已完整。
+        // TestMain 里同一行是逐行等价的镜像（改一处必须改另一处）。
+        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader));
         loader.setResources(I18n.bundle());
         // 会话 19：场景根外包一层 StackPane，供 NotificationHost 挂"右上角 toast + 居中提醒"两层
         //（取代模态 Alert；两条图层的 z 序与鼠标穿透见 NotificationHost 的类说明）

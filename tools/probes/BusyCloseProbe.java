@@ -63,6 +63,9 @@ public class BusyCloseProbe extends Application {
         Platform.setImplicitExit(false);   // 关窗后还要继续断言，别让隐式退出把探针带走
 
         FXMLLoader loader = new FXMLLoader(App.class.getResource("/com/mhtextractor/gui/view/MainView.fxml"));
+        // P6-B：控制器要拿 FXML 命名空间（fx:id -> MainViewRefs），而 namespace 只有 loader 有 ——
+        // 与 App.start() / TestMain 同一根线（controller factory 覆盖 fx:controller，时机逐字相同）。
+        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader));
         loader.setResources(I18n.bundle());
         root = loader.load();
 

@@ -82,23 +82,28 @@ public final class MainViewTestBridge {
             model().clearUndoStack();
         }
 
-        // ==================== @FXML 控件（P7 起全部收回 private） ====================
-        // 生产里 42 个 @FXML 控件字段本来就全是 private（FXMLLoader 对 private 字段照样注入）。
-        // 本类统一经反射取，避免"测试要读控件 → 控件必须放宽可见性"这条路。
+        // ==================== FXML 节点（P6-B 起经 MainViewRefs，不再是 @FXML 字段） ====================
+        // P6-B 之前这里反射读 42 个 @FXML 控件字段；现在控制器只持有 refs（MainViewRefs），
+        // 控件引用一律经它取 —— 反射名从"控件字段名"变成"refs 字段名"，契约同步收窄到一处。
+
+        /** FXML 节点引用集合（{@code MainController.refs}，P6-B 起取代 42 个 {@code @FXML} 字段）。 */
+        public com.mhtextractor.gui.controller.MainViewRefs refs() {
+            return field(mc, "refs");
+        }
 
         /** 列表控件本体（{@code fx:id=fileListView}）。 */
         public javafx.scene.control.ListView<Object> fileListView() {
-            return field(mc, "fileListView");
+            return refs().fileListView();
         }
 
         /** 章节勾选框（{@code fx:id=adjustCheck}）。 */
         public javafx.scene.control.CheckBox adjustCheck() {
-            return field(mc, "adjustCheck");
+            return refs().adjustCheck();
         }
 
         /** 「查看预览效果」按钮（{@code fx:id=previewEffectButton}）。 */
         public javafx.scene.control.Button previewEffectButton() {
-            return field(mc, "previewEffectButton");
+            return refs().previewEffectButton();
         }
 
         // ==================== 标记成员的反射访问 ====================
