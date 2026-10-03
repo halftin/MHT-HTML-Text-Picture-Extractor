@@ -98,6 +98,23 @@ public final class WorkspaceParamService {
         }
     }
 
+    /**
+     * 规则 (d)：退出前清空整个会话缓存（只清本应用专属根目录，绝不触碰 java.io.tmpdir 整体）。
+     *
+     * <p>F 阶段收口：GUI 关窗链原先直接调 {@link PreviewCacheLifecycle#onShutdown}
+     * （{@code MainController} 宿主适配），违反"GUI 不得直调缓存规则"不变式 ——
+     * {@code ArchitectureTest.guiLayerDoesNotInvokeCacheRulesDirectly} 的 ruleMethods 现已含
+     * {@code onShutdown}。清空完成后的回调与旧调用点逐字一致（空实现：放行关窗由调用方的
+     * 等待卡片收尾负责，不经该回调）。IO 失败不抛（退出路径不允许因缓存问题阻止关闭，
+     * 见 {@link PreviewCacheLifecycle#onShutdown}）。</p>
+     *
+     * <p><b>为何不叫 {@code onShutdown}</b>：不变式按 {@code .onShutdown(} 字形扫 GUI 层，
+     * 若本方法同名，路由调用本身会被误报（实测）。本方法名取规则语义而非生命周期回调名。</p>
+     */
+    public void clearAllCaches() {
+        previewCacheLifecycle.onShutdown(() -> { });
+    }
+
     // ==================== 只读查询（不含规则语义，纯转发） ====================
 
     /**

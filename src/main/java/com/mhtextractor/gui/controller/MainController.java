@@ -452,7 +452,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void cancelWorkspaceActivity() { MainController.this.cancelWorkspaceActivity(); }
         @Override public void awaitPreviewInFlight(long millis) { previewLoader.awaitInFlight(millis); }
         @Override public Path cacheRoot() { return previewCacheLifecycle.store().root(); }
-        @Override public void onShutdownClearCache() { previewCacheLifecycle.onShutdown(() -> { }); }
+        @Override public void onShutdownClearCache() { workspaceParamService.clearAllCaches(); }
     });
     /** Q9a：FeatureExercise 按<b>字段访问</b>读它的 isDisable()，故保留同名字段指向新类里那一个 */
     MenuItem ctxClearParams;

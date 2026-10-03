@@ -137,8 +137,13 @@ class ArchitectureTest {
      * DBCS 解码回退会吞掉"以非 ASCII 字符结尾那一行"的换行符。同类场景实测：
      * 默认 Get-Content = 4277 行，-Encoding UTF8 = Files.readAllLines = 4443 行。
      * 因此本常量只能与 Files.readAllLines 口径比较，且数行/读源码一律显式指定 UTF-8。</p>
+     *
+     * <p><b>演进记录（F，2026-10-03）：4370 → 2240</b>。C2–E2 把列表交互、分组命令、
+     * 移除/撤销/窗口生命周期、预解析与信息展示、参数面板、预览渲染/加载、提取任务编排
+     * 相继外迁为包级协作者后，实测行数从 4052 降至 <b>2215</b>；本上限收紧为
+     * "当前实测 + 25 行余量"（"只减不增"方向不变，余量仅容后续小修）。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 4370;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 2240;
 
     /**
      * 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限 ——
@@ -207,8 +212,10 @@ class ArchitectureTest {
      * <p><b>⚠️ 覆盖范围的边界</b>：本计数只覆盖 {@code MainController} 一个文件
      * （实现就是对该文件文本做 {@code indexOf} 计数）。类内新增同名标记会被拦住；但把测试支撑面
      * 挪到别的 GUI 类则<b>不会被拦</b> —— 谁要把暴露面搬家，请另立断言。P7 起
-     * {@code MainController} 的测试访问通道只有一条：测试源集的 {@code MainViewTestBridge}（反射），
-     * 它住在 {@code src/test/java}，不进生产 jar、不进 native 镜像。</p>
+     * {@code MainController} 的测试访问通道只有一条：测试源集的
+     * {@code com.mhtextractor.gui.controller.AcceptanceDriver}（<b>同包直访，无反射</b>），
+     * 它住在 {@code src/test/java}，不进生产 jar、不进 native 镜像。
+     * F 阶段（2026-10-03）由 {@link #reflectionAgainstMainControllerIsZero()} 固化该形态。</p>
      *
      * <p><b>审计脚本自身的教训</b>：第一版审计脚本用"取行内最后一个标识符"来判定字段名，把
      * {@code final Foo bar = new Foo();} 解析成了类型名 {@code Foo} —— 产生了一批<b>假阳性</b>
@@ -230,10 +237,88 @@ class ArchitectureTest {
         assertTrue(count <= TEST_SUPPORT_MARKER_MAX,
                 "MainController 又出现了测试支撑暴露面：" + count + " > " + TEST_SUPPORT_MARKER_MAX
                         + "。P7 起生产控制器不再为测试开放任何状态面（上限已归零）：测试要读的状态/控件"
-                        + "应经测试源集的 com.mhtextractor.gui.acceptance.MainViewTestBridge 反射访问，"
+                        + "应经测试源集的 com.mhtextractor.gui.controller.AcceptanceDriver（同包直访，无反射）访问，"
                         + "或做成真正的公开行为（如 MainViewActions），不得再把 private 放宽成包级并打标记。");
         System.out.println("[arch] MainController 测试支撑暴露面 " + count + " / 上限 "
                 + TEST_SUPPORT_MARKER_MAX + "（P7 起归零）");
+    }
+
+    /**
+     * 「测试侧不得反射 MainController」固化断言（F 阶段收口；C3b 曾把驱动反射归零，D-3 要求固化为不变式）。
+     *
+     * <p><b>背景</b>：P7 起生产控制器不再为测试开放状态面（见 {@link #testSupportSurfaceDoesNotGrow()}）。
+     * 测试要读生产状态的正路只有两条 —— 真正的公开行为（如 {@code WorkspaceModel} API）与
+     * 测试源集同包直访的 {@code gui.controller.AcceptanceDriver}（GUI 自动化驱动，无反射）。
+     * 本断言把"对 {@code MainController} 私有成员 / 私有内部记录的反射 = 0"固化为不变式。</p>
+     *
+     * <p><b>三段口径</b>：</p>
+     * <ol>
+     *   <li><b>驱动零反射</b>：{@code AcceptanceDriver} 内不得出现任何反射原语 ——
+     *       同包直访（而非反射）正是它取代旧 {@code MainViewTestBridge} 的原因。</li>
+     *   <li><b>MainController 目标归零</b>：任何测试文件（剥注释后）若<b>同时</b>出现反射原语与
+     *       {@code MainController} 代码引用，即视为对 MainController 的反射 —— 违规。
+     *       文件级近似是刻意的：跨行构造目标（先取 {@code MainController.class} 再反射）也逃不掉，
+     *       且 C3b 后实测所有含反射原语的文件剥注释后均无 {@code MainController} 代码引用。</li>
+     *   <li><b>反射使用面冻结</b>：全部测试源码中，含反射原语的文件必须落在下面的白名单内
+     *       （当前 3 个文件、8 处，全部针对 {@code AppConfig} 或 JavaFX 类加载探测，与 MainController 无关）。
+     *       新文件要引入反射必须显式扩白名单 —— 扩之前先想清楚是否真的需要、目标是不是 MainController。</li>
+     * </ol>
+     *
+     * <p><b>自指豁免</b>：本测试类自身被扫描时必然命中（反射原语是它的<b>度量工具</b>，以字符串字面量
+     * 存在于代码中；{@code MainController} 亦出现在其错误消息里）—— 与
+     * {@link #headlessTestPackagesHaveNoJavaFx()} 曾因 javadoc 提 {@code javafx} 而假失败是同一类陷阱，
+     * 故扫描显式跳过本文件。</p>
+     */
+    @Test
+    void reflectionAgainstMainControllerIsZero() throws IOException {
+        Path testRoot = Path.of("src", "test", "java");
+        Path driver = testRoot.resolve("com/mhtextractor/gui/controller/AcceptanceDriver.java");
+        assertTrue(Files.exists(driver), "GUI 自动化驱动缺失：" + driver);
+
+        List<String> primitives = List.of(
+                "getDeclaredField", "getDeclaredMethod", "getDeclaredFields", "getDeclaredMethods",
+                "getDeclaredConstructor", "setAccessible", "Class.forName");
+        Set<String> allowlist = Set.of(
+                "com/mhtextractor/config/AppConfigCopyTest.java",
+                "com/mhtextractor/app/EffectiveParamsServiceTest.java",
+                "com/mhtextractor/app/LayerBTest.java");
+
+        String driverCode = stripComments(Files.readString(driver, StandardCharsets.UTF_8));
+        List<String> driverHits = primitives.stream().filter(driverCode::contains).toList();
+        assertTrue(driverHits.isEmpty(),
+                "GUI 自动化驱动 AcceptanceDriver 出现反射原语：" + driverHits
+                        + " —— 驱动必须同包直访（P7 起生产控制器不再为测试开放状态面）");
+
+        List<String> mcReflectors = new ArrayList<>();
+        List<String> newReflectionUsers = new ArrayList<>();
+        try (Stream<Path> walk = Files.walk(testRoot)) {
+            for (Path p : walk.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
+                String rel = testRoot.relativize(p).toString().replace('\\', '/');
+                if (rel.endsWith("baseline/ArchitectureTest.java")) {
+                    continue;   // 自指豁免：本文件的字符串字面量就是度量工具（见 javadoc）
+                }
+                String code = stripComments(Files.readString(p, StandardCharsets.UTF_8));
+                List<String> used = primitives.stream().filter(code::contains).toList();
+                if (used.isEmpty()) {
+                    continue;
+                }
+                if (code.contains("MainController")) {
+                    mcReflectors.add(rel + "  ->  " + used);
+                }
+                if (!allowlist.contains(rel)) {
+                    newReflectionUsers.add(rel + "  ->  " + used);
+                }
+            }
+        }
+
+        assertTrue(mcReflectors.isEmpty(),
+                "测试源码对 MainController 的反射必须为 0（含私有成员 / 私有内部记录）：\n  "
+                        + String.join("\n  ", mcReflectors));
+        assertTrue(newReflectionUsers.isEmpty(),
+                "测试源码新增反射使用面（白名单外文件）：\n  " + String.join("\n  ", newReflectionUsers)
+                        + "\n 反射使用面已冻结在 3 个文件（AppConfigCopyTest / EffectiveParamsServiceTest / LayerBTest，"
+                        + "全部针对 AppConfig 或 JavaFX 类加载探测）。确需扩白名单时，先确认目标不是 MainController。");
+        System.out.println("[arch] 测试侧反射：MainController 目标 0 / 驱动原语 0 / 白名单外文件 0");
     }
 
     /** 允许引用 JavaFX 的包（视图层/外壳） */
@@ -700,7 +785,7 @@ class ArchitectureTest {
         Path guiPkg = Path.of("src", "main", "java", "com", "mhtextractor", "gui");
         List<String> ruleMethods = List.of(
                 "onParamsChanged", "onParamsChangedBatch", "onItemsRemoved", "onItemRemoved",
-                "onExtractionCompleted");
+                "onExtractionCompleted", "onShutdown");
 
         List<String> offenders = new ArrayList<>();
         try (Stream<Path> walk = Files.walk(guiPkg)) {
