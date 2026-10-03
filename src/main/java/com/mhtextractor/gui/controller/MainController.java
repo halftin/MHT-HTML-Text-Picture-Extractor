@@ -18,10 +18,8 @@ import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.TextExtractor;
 import com.mhtextractor.gui.component.ExtractOutcomeStyles;
 import com.mhtextractor.gui.component.GuiNotifications;
-import com.mhtextractor.gui.component.HtmlSourceViewer;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.WorkspaceFxAdapter;
-import com.mhtextractor.platform.BrowserLauncher;
 import com.mhtextractor.platform.FileOpener;
 import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.gui.util.JavaFxUtil;
@@ -39,7 +37,6 @@ import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
-import com.mhtextractor.util.HtmlExportBuilder;
 import com.mhtextractor.util.MhtImportPlanner;
 import com.mhtextractor.util.OutputUnitPlanner;
 import com.mhtextractor.util.ParamScope;
@@ -57,6 +54,7 @@ import javafx.fxml.FXMLLoader;
 import javafx.geometry.Bounds;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
+import javafx.scene.Node;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
@@ -346,8 +344,18 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     // ===== 右键菜单（13 项 = 9 动作 + 4 分隔线；Q9a 已整体外迁到 FileListContextMenu） =====
     /** 右键菜单：菜单项所有权 / 启用规则 / 动作转发 / 显示生命周期都在新类；本类只提供回调面 */
     FileListContextMenu contextMenu;
-    /** 浏览器查看页生成并发闸（防重复点击并发导出） */
-    private final AtomicBoolean browserExporting = new AtomicBoolean(false);
+    /** C1a：源查看/浏览器动作已外迁到 {@link SourceViewActions}（含浏览器查看页生成并发闸）；本类只保留转发面 */
+    private final SourceViewActions sourceViewActions = new SourceViewActions(new SourceViewActions.Host() {
+        @Override
+        public Node anchor() {
+            return refs.statusLabel();
+        }
+
+        @Override
+        public void setStatusText(String text) {
+            refs.statusLabel().setText(text);
+        }
+    });
     /** Q9a：FeatureExercise 按<b>字段访问</b>读它的 isDisable()，故保留同名字段指向新类里那一个 */
     MenuItem ctxClearParams;
     /** Q10：参数剪贴板（R7.1-R7.7）—— 复制快照 + 批量应用编排；路由与应用本体都是下方那两个方法 */
@@ -1027,8 +1035,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             @Override public void select(Object target) { onContextSelect(target); }
             @Override public void selectAll(Object target) { onContextSelectAll(target); }
             @Override public void openFolder(Object target) { onContextOpenFolder(target); }
-            @Override public void openInBrowser(Object target) { onContextOpenInBrowser(target); }
-            @Override public void viewSource(Object target) { onContextViewSource(target); }
+            @Override public void openInBrowser(Object target) { sourceViewActions.openInBrowser(target); }
+            @Override public void viewSource(Object target) { sourceViewActions.viewSource(target); }
             @Override public void params(Object target) { onContextParams(target); }
             @Override public void clearParams(Object target) { onContextClearParams(target); }
             @Override public void applyGlobal(Object target) { onContextApplyGlobal(target); }
@@ -1124,71 +1132,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             log.error(I18n.msg("log.maincontroller.21"), ex);
             GuiNotifications.openFolderFailed(refs.statusLabel());
         }
-    }
-
-    /** 在浏览器中查看（浏览器查看HTML需求）：导出 MHT 内嵌 HTML 后用系统默认浏览器打开渲染视图 */
-    private void onContextOpenInBrowser(Object target) {
-        if (target instanceof PreviewItem it && !it.removed) {
-            openHtmlInBrowser(it, false);
-        }
-    }
-
-    /** 在浏览器中查看源码（浏览器查看HTML需求）：用 view-source: 打开导出页面的源码视图 */
-    private void onContextViewSource(Object target) {
-        if (target instanceof PreviewItem it && !it.removed) {
-            openHtmlInBrowser(it, true);
-        }
-    }
-
-    /** 在系统默认浏览器中查看该 MHT 内嵌 HTML（sourceMode=true 走 view-source 源码视图） */
-    private void openHtmlInBrowser(PreviewItem it, boolean sourceMode) {
-        File f = new File(it.path);
-        if (!f.exists()) {
-            log.warn(I18n.msg("log.maincontroller.22", it.path));
-            GuiNotifications.fileMissing(refs.statusLabel(), it.path);
-            return;
-        }
-        if (!browserExporting.compareAndSet(false, true)) {
-            log.info(I18n.msg("log.maincontroller.23"));
-            return;
-        }
-        refs.statusLabel().setText(I18n.get("browser.generatingPage"));
-        Thread t = new Thread(() -> {
-            try {
-                MimeParser.ParsedMht parsed = SourceParsers.forPath(it.path).parse(it.path, false, () -> false, null, null);
-                if (parsed.getHtmlContent() == null) {
-                    throw new IllegalStateException(I18n.get("browser.exportUnparseable"));
-                }
-                HtmlExportBuilder.ExportResult r = HtmlExportBuilder.export(it.path, parsed);
-                if (!r.success()) {
-                    throw new IllegalStateException(r.error());
-                }
-                log.info(I18n.msg("log.maincontroller.24", r.htmlFile(), r.imageCount(), r.warnings().size()));
-                // 浏览器启动可能耗时（注册表探测 / CDP 端点等待最长约 15 秒），独立后台线程避免冻结界面
-                Thread launcher = new Thread(() -> {
-                    if (sourceMode) {
-                        // R2：源码不再交给外部浏览器，改为应用内左侧覆盖式查看器（禁用 WebView，R2.6）。
-                        HtmlSourceViewer.showFile(refs.statusLabel(), I18n.get("browser.viewerTitle"), r.htmlFile());
-                        return;
-                    }
-                    boolean ok = BrowserLauncher.openHtml(r.htmlFile());
-                    if (!ok) {
-                        log.warn(I18n.msg("log.maincontroller.25", r.htmlFile()));
-                        Platform.runLater(() -> GuiNotifications.browserLaunchFailed(refs.statusLabel(), r.htmlFile()));
-                    }
-                }, "html-browser-launch");
-                launcher.setDaemon(true);
-                launcher.start();
-            } catch (Exception e) {
-                log.error(I18n.msg("log.maincontroller.26", it.path), e);
-                Platform.runLater(() -> GuiNotifications.browserViewFailed(refs.statusLabel()));
-            } finally {
-                browserExporting.set(false);
-                Platform.runLater(() -> refs.statusLabel().setText(I18n.get("main.statusReady")));
-            }
-        }, "html-browser-export");
-        t.setDaemon(true);
-        t.start();
     }
 
     /** 设置提取参数（拍板 Q7/G6）：空白区域 → 强制全局参数；其余复用选中项路由（Q8 已选中该行） */
@@ -2274,7 +2217,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             return;
         }
         if (currentSelection() instanceof PreviewItem it && !it.removed) {
-            openHtmlInBrowser(it, true);
+            sourceViewActions.viewSource(it);
         }
     }
 
