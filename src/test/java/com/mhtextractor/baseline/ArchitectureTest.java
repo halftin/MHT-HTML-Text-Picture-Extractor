@@ -141,38 +141,58 @@ class ArchitectureTest {
     private static final int MAIN_CONTROLLER_MAX_LINES = 4370;
 
     /**
-     * E0.6 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限。
+     * 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限 ——
+     * <b>P7 起为 0</b>：生产控制器不再为测试开放任何状态面。
      *
-     * <p><b>这是什么</b>：把约 1140 行演练/测试代码外迁到 test sources 后，被驱动的成员必须从
-     * {@code private} 放宽到包级，否则同包的 {@code FeatureExercise} 无法访问。本次共放宽
-     * <b>86</b> 处（46 个状态/方法 + 39 个 {@code @FXML} 控件 + 1 个内部类 {@code PreviewListCell}）。
-     * 这是<b>已知且有意</b>的封装让步，用它换取"生产类不再承载测试脚手架"。</p>
+     * <p><b>这是什么</b>：E0.6 把约 1140 行演练/测试代码外迁到 test sources 后，被驱动的成员必须从
+     * {@code private} 放宽到包级，否则同包的 {@code FeatureExercise} 无法访问。当时共放宽
+     * <b>86</b> 处（46 个状态/方法 + 39 个 {@code @FXML} 控件 + 1 个内部类 {@code PreviewListCell}），
+     * 每处带一个 {@code /* test-support *​/} 标记，供本断言"只减不增"地度量。
+     * 那是"用已知且可度量的封装让步，换取生产类不再承载测试脚手架"的有意交易。</p>
      *
-     * <p><b>为什么单独立断言</b>：让步必须可度量、只减不增 —— 否则日后有人图省事继续放宽，
-     * 会悄悄把 MainController 变成"什么都公开"的类。Layer B（无头驱动 API）落地并退役
-     * {@code test.mode} 后，本常量应逐步降到 0。</p>
+     * <p><b>为什么归零</b>：让步的终局是"不再需要让步"。P7 把 44 处剩余标记全部摘除，做法不是
+     * 改成 {@code public}（那只会让状态面更宽），而是：</p>
+     * <ol>
+     *   <li><b>真正需要跨类协作的成员留在包级</b>（{@code ws} / {@code items} / {@code ITEM_VIEW} /
+     *       {@code performDrop} / {@code effectiveForObject}）—— 它们是
+     *       {@code WorkspaceFxAdapter} / {@code PreviewListCell} 这类<b>同包生产协作类</b>要用的，
+     *       属于"为生产放宽"而不是"为测试放宽"，所以不再带标记（标记的语义边界见下）。</li>
+     *   <li><b>其余 39 处收回 {@code private}</b>（{@code textParamsCache} / {@code parseToken} /
+     *       {@code running()} / {@code extractStats()} / {@code allVisibleItems()} … 全部可变状态与查询）。
+     *       测试侧改为经 <b>测试源集的反射桥</b>
+     *       {@code com.mhtextractor.gui.acceptance.MainViewTestBridge} 访问 ——
+     *       代价落在测试代码里，生产类一行也不为测试让步。</li>
+     * </ol>
      *
-     * <p><b>注意</b>：这些成员仍是<b>包级</b>（不是 public），包外不可见；且逐个带标记，
-     * 便于检索与回收。</p>
+     * <p><b>因此本断言现在的含义</b>：{@code MainController} 源码里<b>不允许出现该标记</b>。
+     * 它不再度量"曝光了多少"，而是直接禁止"再开一扇为测试的门"。要把测试支撑面挪到别的 GUI 类，
+     * 这道闸门不会拦（它只扫 {@code MainController} 这一个文件）—— 见下方"覆盖范围的边界"。</p>
      *
-     * <p><b>演进记录（步骤 1 阶段 A，2026-09-26）</b>：86 → <b>64</b>。
-     * 逐个核对 {@code FeatureExercise} 的引用后，有 <b>22 个 {@code @FXML} 控件字段从未被它引用</b>
-     * （并且全仓库其余源文件也零引用），因此改回 {@code private} 并摘除标记。
-     * 这些字段仍由 {@code FXMLLoader} 注入 —— 对 private 字段同样有效，GUI 自动化 30/30 未变。
-     * 剩下的 64 处才是"真的被测试夹具驱动"的暴露面。</p>
-     *
-     * <p><b>演进记录（步骤 1 阶段 B，2026-09-26）</b>：64 → <b>62</b>。
-     * 用"哑而稳"的审计脚本（`.claude-work/s1b-audit.js`：逐条取标记后的成员名，再数
-     * {@code FeatureExercise} 里的 {@code mc.<名>} 引用）复核全部 64 条，发现 <b>2 条标记已失效</b>：
+     * <p><b>演进记录</b>：</p>
      * <ul>
-     *   <li>{@code logTextArea} —— 类外零引用（{@code FeatureExercise} 里只 import 了类型，未取字段）；</li>
-     *   <li>{@code wrapper}（{@code PreviewListCell} 的私有字段）—— 类外零引用。</li>
+     *   <li>E0.6 起点：<b>86</b>。</li>
+     *   <li><b>步骤 1 阶段 A（2026-09-26）：86 → 64</b>。逐个核对 {@code FeatureExercise} 的引用后，
+     *       有 <b>22 个 {@code @FXML} 控件字段从未被它引用</b>（全仓库其余源文件也零引用），
+     *       因此改回 {@code private} 并摘除标记。这些字段仍由 {@code FXMLLoader} 注入 ——
+     *       对 private 字段同样有效，GUI 自动化 30/30 未变。</li>
+     *   <li><b>步骤 1 阶段 B（2026-09-26）：64 → 62</b>。用"哑而稳"的审计脚本
+     *       （{@code .claude-work/s1b-audit.js}：逐条取标记后的成员名，再数 {@code FeatureExercise} 里的
+     *       {@code mc.<名>} 引用）复核全部 64 条，发现 <b>2 条标记已失效</b>：
+     *       {@code logTextArea}（类外零引用）与 {@code wrapper}（{@code PreviewListCell} 的私有字段）。
+     *       同一轮还发现 {@code modeToggleGroup} 的标记已失效（它在前一批已改为 {@code private}）。</li>
+     *   <li><b>步骤 1 阶段 C（2026-09-26）：62 → 46</b>。把 {@code FeatureExercise} 里
+     *       {@code mc.<字段>} 的直接引用（125 处）改为 {@code Node.lookup("#fx:id")}，于是
+     *       <b>16 个 @FXML 字段</b>不再需要包级可见性，全部收回 {@code private} 并摘除标记。
+     *       为什么 lookup 可行（实测）：42 个 {@code fx:id} 中 41 个可解析，唯一例外
+     *       {@code modeToggleGroup} 是 {@code ToggleGroup} 而<b>非</b> {@code Node}（它也不在测试中使用）；
+     *       且 {@code lookup} 对 {@code visible=false} / {@code managed=false} / {@code disabled=true}
+     *       的节点同样有效。</li>
+     *   <li><b>步骤 3（2026-09-26）：46 → 44</b>（下降），但有 12 个成员被<b>有意放宽为包级且不加标记</b>
+     *       —— 见下方"标记的语义边界"。</li>
+     *   <li><b>P7（2026-10-02）：44 → 0</b>。见上"为什么归零"。同轮把 {@code PreviewListCell} 里
+     *       唯一一处同类标记（{@code statusLabel}）也摘除（该字段类外零引用，本就该是 {@code private}）——
+     *       它从来不在本断言的管辖范围内，见下。</li>
      * </ul>
-     * 两者都只在本类内使用，标记是 E0.6 遗留的过度放宽，故摘除；可见性未变（仍是包级，避免扩大改动面）。
-     * 同一轮还发现 {@code modeToggleGroup} 的标记已失效（它在前一批已改为 {@code private}）。</p>
-     *
-     * <p><b>演进记录（步骤 3，2026-09-26）</b>：46 → <b>44</b>（下降），但有 12 个成员被<b>有意放宽为包级
-     * 且不加标记</b> —— 这不是"绕过约束"，而是两类暴露面的区分，见下。</p>
      *
      * <p><b>⚠️ 标记的语义边界（步骤 3 明确）</b>：{@code /* test-support *​/} 标记的是
      * <b>"为测试夹具放宽的封装让步"</b>。步骤 3 把 430 行的 {@code PreviewListCell} 外迁为顶层类后，
@@ -181,32 +201,21 @@ class ArchitectureTest {
      * {@code onCellPressed} / {@code onCellDoubleClicked} / {@code onGroupCheckToggled} /
      * {@code isTextMode} / {@code unitIndex} / {@code cancelDrag}）。这些是
      * <b>生产类之间的同包协作</b>，<b>不是测试脚手架</b>，故<b>刻意不加标记</b> ——
-     * 否则会把"为测试放宽"与"为同包生产类放宽"混成一回事，让本计数失去意义。
-     * 代价是这 12 处封装让步<b>不受本断言约束</b>；若日后要约束它们，应另立断言。
-     * （{@code performDrop} 例外：它原本就带标记，故继续带 —— 标记只增不减地守恒。）</p>
+     * 否则会把"为测试放宽"与"为同包生产类放宽"混成一回事。P7 沿用同一口径：{@code ws} / {@code items} /
+     * {@code ITEM_VIEW} / {@code performDrop} / {@code effectiveForObject} 五个成员保留包级且不带标记。</p>
+     *
+     * <p><b>⚠️ 覆盖范围的边界</b>：本计数只覆盖 {@code MainController} 一个文件
+     * （实现就是对该文件文本做 {@code indexOf} 计数）。类内新增同名标记会被拦住；但把测试支撑面
+     * 挪到别的 GUI 类则<b>不会被拦</b> —— 谁要把暴露面搬家，请另立断言。P7 起
+     * {@code MainController} 的测试访问通道只有一条：测试源集的 {@code MainViewTestBridge}（反射），
+     * 它住在 {@code src/test/java}，不进生产 jar、不进 native 镜像。</p>
      *
      * <p><b>审计脚本自身的教训</b>：第一版审计脚本用"取行内最后一个标识符"来判定字段名，把
-     * {@code final Foo bar = new Foo();} 解析成了类型名 {@code Foo} —— 产生了一批**假阳性**
-     * （把实际被引用的成员报成"未被引用"）。改用**行首锚定的类型+名字**正则后 0 条 UNPARSED。
-     * 这与 `CLAUDE.md` 记录的"正则漏掉分号结尾的枚举常量"是同一类错误。</p>
-     *
-     * <p><b>演进记录（步骤 1 阶段 C，2026-09-26）</b>：62 → <b>46</b>。
-     * 把 {@code FeatureExercise} 里 {@code mc.<字段>} 的直接引用（125 处）改为
-     * {@code Node.lookup("#fx:id")}（宿主 {@code node(String)} / {@code node(String, Class)} 在
-     * **测试源集**，不占 MainController 行数），于是 <b>16 个 @FXML 字段</b>不再需要包级可见性，
-     * 全部收回 {@code private} 并摘除标记。</p>
-     *
-     * <p><b>为什么 lookup 可行</b>（实测，见 `docs/handoff/H20.md` §3.2）：42 个 {@code fx:id} 中
-     * 41 个可解析，唯一例外 {@code modeToggleGroup} 是 {@code ToggleGroup} 而**非** {@code Node}
-     * （它也不在本测试使用）；且 {@code lookup} 对 {@code visible=false} / {@code managed=false} /
-     * {@code disabled=true} 的节点**同样有效**，三阶段结果一致。</p>
-     *
-     * <p><b>剩余 46 处不能照此办理</b>：它们是**状态与方法**（{@code allVisibleItems} 31 次、
-     * {@code textParamsCache} 22 次、{@code topLevelGroups} 20 次 …）与 1 个内部类，属
-     * "读状态做断言 / 直接驱动内部方法"，需要另设测试支撑 API 或改为经 UI 观察，
-     * 是独立且更难的一项。</p>
+     * {@code final Foo bar = new Foo();} 解析成了类型名 {@code Foo} —— 产生了一批<b>假阳性</b>
+     * （把实际被引用的成员报成"未被引用"）。改用<b>行首锚定的类型+名字</b>正则后 0 条 UNPARSED。
+     * 这与 {@code CLAUDE.md} 记录的"正则漏掉分号结尾的枚举常量"是同一类错误。</p>
      */
-    private static final int TEST_SUPPORT_MARKER_MAX = 44;
+    private static final int TEST_SUPPORT_MARKER_MAX = 0;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {
@@ -219,11 +228,12 @@ class ArchitectureTest {
             idx += 1;
         }
         assertTrue(count <= TEST_SUPPORT_MARKER_MAX,
-                "MainController 的测试支撑暴露面增长：" + count + " > " + TEST_SUPPORT_MARKER_MAX
-                        + "。这些 private→包级 的放宽是为 E0.6 外迁测试代码而做的已知让步，只应减少；"
-                        + "若确需新增，请同时更新本常量并说明为何无法用公开 API 替代。");
+                "MainController 又出现了测试支撑暴露面：" + count + " > " + TEST_SUPPORT_MARKER_MAX
+                        + "。P7 起生产控制器不再为测试开放任何状态面（上限已归零）：测试要读的状态/控件"
+                        + "应经测试源集的 com.mhtextractor.gui.acceptance.MainViewTestBridge 反射访问，"
+                        + "或做成真正的公开行为（如 MainViewActions），不得再把 private 放宽成包级并打标记。");
         System.out.println("[arch] MainController 测试支撑暴露面 " + count + " / 上限 "
-                + TEST_SUPPORT_MARKER_MAX + "（Layer B 后应归零）");
+                + TEST_SUPPORT_MARKER_MAX + "（P7 起归零）");
     }
 
     /** 允许引用 JavaFX 的包（视图层/外壳） */

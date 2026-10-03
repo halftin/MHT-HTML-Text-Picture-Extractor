@@ -7,7 +7,6 @@ import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
 import com.mhtextractor.i18n.I18n;
 import javafx.application.Application;
-import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -27,14 +26,6 @@ import java.util.Objects;
 public class App extends Application {
 
     private static String customCssUrl;
-
-    /**
-     * 已加载的主控制器（E0.6：供反射挂钩把控制器交给测试侧 FeatureExercise）。
-     *
-     * <p>此前通过 {@code loader.getController()} 就地取用；现在挂钩是静态方法，故保存为字段。
-     * 正式运行（无 test.mode/agent.exit.delay）时该字段不被读取，属无害引用。</p>
-     */
-    private static Object CONTROLLER;
 
     @Override
     public void start(Stage primaryStage) throws IOException {
@@ -69,7 +60,8 @@ public class App extends Application {
         StackPane shell = new StackPane(overlay);
         Scene scene = new Scene(shell);
         NotificationHost.install(scene, shell);
-        CONTROLLER = loader.getController();
+        // 控制器由 FXMLLoader 装配（生产启动器<b>不</b>持有它的引用：P7 起没有任何测试模式分支，
+        // 也不再需要"把控制器交给测试侧"这条通路 —— 那道通路已移到测试源集的 gui.acceptance.TestMain）
 
         // 引入 AtlantaFX Nord Light 主题
         Application.setUserAgentStylesheet(new NordLight().getUserAgentStylesheet());
@@ -93,62 +85,10 @@ public class App extends Application {
         primaryStage.centerOnScreen();
         primaryStage.show();
 
-        // Tracing Agent 模式
-        // 会话 18 · E0.6：演练/自动化测试代码已外迁到 test sources 的
-        // com.mhtextractor.gui.controller.FeatureExercise，生产类不再承载测试脚手架。
-        // 由于 main 源码不可依赖 test 源码，这里用"反射挂钩"调用：生产代码只保留一个
-        // 类名常量与调用点（零编译期依赖），测试类由 test classpath 提供。
-        String d = System.getProperty("agent.exit.delay");
-        if (d != null) {
-            invokeFeatureExercise("exerciseAllFeatures");
-            new java.util.Timer(true).schedule(new java.util.TimerTask() {
-                public void run() { Platform.exit(); System.exit(0); }
-            }, Long.parseLong(d));
-        }
-        if ("true".equals(System.getProperty("test.mode"))) {
-            new java.util.Timer(true).schedule(new java.util.TimerTask() {
-                public void run() {
-                    // 自动化测试直接操作 JavaFX 控件，必须回到 FX 线程执行
-                    Platform.runLater(() -> {
-                        boolean success = invokeFeatureExercise("runAutomatedTests");
-                        Platform.exit();
-                        System.exit(success ? 0 : 1);
-                    });
-                }
-            }, 2000);
-        }
-    }
-
-    /**
-     * 反射调用测试侧的 UI 演练/自动化入口（E0.6）。
-     *
-     * <p><b>为什么用反射</b>：{@code FeatureExercise} 住在 {@code src/test/java}，而本文件在
-     * {@code src/main/java} —— main 不能编译期依赖 test。反射把该依赖降为<b>运行期字符串</b>，
-     * 同时让"生产类不再含测试脚手架"这一目标成立。</p>
-     *
-     * <p><b>契约</b>：目标方法必须是 {@code public static void} 且无参。
-     * 若测试类不在 classpath（如正式发行包），记 warn 并返回 false，不影响正常启动。</p>
-     *
-     * @return true = 调用成功；false = 类/方法缺失或抛错（已记录）
-     */
-    private static boolean invokeFeatureExercise(String method) {
-        try {
-            Class<?> c = Class.forName("com.mhtextractor.gui.controller.FeatureExercise");
-            // FeatureExercise 用组合持有控制器：构造参数为该包内可见的 MainController 类型
-            Class<?> mcType = Class.forName("com.mhtextractor.gui.controller.MainController");
-            Object driver = c.getConstructor(mcType).newInstance(CONTROLLER);
-            Object result = c.getMethod(method).invoke(driver);
-            // exerciseAllFeatures 返回 void（invoke 得 null）：视作成功；
-            // runAutomatedTests 返回 boolean：直接作为成败——防"框架级错误被测试体吞掉、方法正常返回、
-            // 进程仍 exit 0"的假绿（曾实测：结果文件写不出来时 ~2.4 秒静默退出、零产物零堆栈）。
-            return !(result instanceof Boolean) || (Boolean) result;
-        } catch (Throwable t) {
-            log.error(I18n.msg("log.app.02", method), t);
-            // test/agent 模式专用路径：控制台子系统镜像里 stderr 是最直接的信道，失败不能只进日志文件
-            System.err.println("[test-mode] invokeFeatureExercise(" + method + ") failed: " + t);
-            t.printStackTrace();
-            return false;
-        }
+        // P7（测试面收口）：本类**不再**有任何测试模式分支。
+        // 演练（原 -Dagent.exit.delay）与 GUI 自动化（原 -Dtest.mode=true）都由测试源集的
+        // com.mhtextractor.gui.acceptance.TestMain 承载 —— 它按与本方法逐行相同的装配起窗口，
+        // 只是多一层"起完窗口后驱动 FeatureExercise"的测试外壳。生产启动代码不再读任何测试开关。
     }
 
     /**

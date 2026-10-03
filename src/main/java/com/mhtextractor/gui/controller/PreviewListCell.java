@@ -55,7 +55,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
     private final Label badgeLabel = new Label();
     private final Label posLabel = new Label();
     private final Label nameLabel = new Label();
-    /* test-support */ final Label statusLabel = new Label();
+    private final Label statusLabel = new Label();
     private final Region topLine = new Region();
     private final Region bottomLine = new Region();
     private final Region intoOverlay = new Region();

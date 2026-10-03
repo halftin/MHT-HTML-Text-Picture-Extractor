@@ -212,7 +212,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 输出单元规划的字段视图（路径/来源目录/移除标记，阶段 8） */
-    /* test-support */ static final OutputUnitPlanner.ItemView<PreviewItem> ITEM_VIEW = new OutputUnitPlanner.ItemView<>() {
+    static final OutputUnitPlanner.ItemView<PreviewItem> ITEM_VIEW = new OutputUnitPlanner.ItemView<>() {
         @Override
         public String path(PreviewItem item) {
             return item.path;
@@ -294,27 +294,27 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     // ===== 状态 =====
     // 撤销栈（F4）：唯一栈由 app.WorkspaceModel 独占；结构类由模型 undo() 应用，参数 / 拖拽类由本类 popRecord() 后自行应用
     /** 工作区模型（Q4/P3）：**业务数据序的唯一所有者** —— 不再与 GUI 共享可变列表；成功命令会发布 WorkspaceChange */
-    /* test-support */ final WorkspaceModel ws = new WorkspaceModel();
+    final WorkspaceModel ws = new WorkspaceModel();
     /** 模型 → JavaFX 的投影层（Q4/P3）：显示序（ListView 绑定）由它独占维护，数据序只读投影由它提供。
      *  投影<b>时机</b>仍由本类显式给出；"为何不在每次变更上自动投影"见 {@link WorkspaceFxAdapter} 的类 javadoc。 */
     private final WorkspaceFxAdapter adapter = new WorkspaceFxAdapter(ws);
     /** 数据序只读投影：保留同名入口给 FeatureExercise（P7 才改造）；唯一写操作 clear() 转发为模型命令 */
-    /* test-support */ final List<Object> items = adapter.dataOrder();
+    final List<Object> items = adapter.dataOrder();
     /** 显示序：ListView 直接渲染的展平列表，按数据序实时重建（F5 显示序/数据序分离）—— adapter.displayItems() 的只读别名 */
     private final ObservableList<Object> displayItems = adapter.displayItems();
 
     /** 两套已确认提取参数缓存：null 表示该模式尚未确认过参数 */
-    /* test-support */ AppConfig textParamsCache;
-    /* test-support */ AppConfig imageParamsCache;
+    private AppConfig textParamsCache;
+    private AppConfig imageParamsCache;
 
     /** 工作区后台活动代次：预解析/换目录/换模式/开始提取时自增，取消旧任务 */
-    /* test-support */ int parseToken = 0;
+    private int parseToken = 0;
     /** 列表选择代次：切换选择时自增，取消过期的图片懒加载 */
     private int requestToken = 0;
-    /* test-support */ boolean imageLoadActive = false;
+    private boolean imageLoadActive = false;
     private PreviewItem loadingItem = null;
     /** 预览会话缓存（需求 2 会话 9）：存储层 + 四条生命周期规则；root = <java.io.tmpdir>/mht-extractor-preview（P6/P8，与 HtmlExportBuilder 的 mht-extractor-view 并列） */
-    /* test-support */ final PreviewCacheLifecycle previewCacheLifecycle = new PreviewCacheLifecycle(
+    private final PreviewCacheLifecycle previewCacheLifecycle = new PreviewCacheLifecycle(
             new PreviewCacheStore(Paths.get(System.getProperty("java.io.tmpdir"), "mht-extractor-preview")));
     /**
      * 工作区缓存失效服务（E2.2）：把原先散落在 12 处的"规则 (a)/(c)"调用收敛为具名操作，
@@ -391,16 +391,16 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     // ==================== 统一导入会话 ====================
     /** 当前导入会话：非 null = 导入进行中（用于禁用开始提取 + 恢复判定） */
-    /* test-support */ ImportSession importPending = null;
+    private ImportSession importPending = null;
     /** 外部导入拖拽进行中（与内部排序通道互斥；hasFiles() 判定） */
     private boolean importDragOver = false;
     /** 拖拽目标嵌套深度计数（DRAG_ENTERED_TARGET/DRAG_EXITED_TARGET 成对计数） */
-    /* test-support */ int importDragDepth = 0;
+    private int importDragDepth = 0;
     /** 外部导入拖拽的列表高亮样式类 */
     private static final String STYLE_LIST_IMPORT_HOVER = "list-import-hover";
 
     /** 导入会话（不可变） */
-    /* test-support */ record ImportSession(List<String> addresses, String sourceDesc, boolean fromDrag) {}
+    private record ImportSession(List<String> addresses, String sourceDesc, boolean fromDrag) {}
 
     /**
      * 导入会话协调器（Q2/P1）：后台线程生命周期、轮次派发、配额确认等待、模型命令、列表刷新与唯一收尾都在它里面。
@@ -416,7 +416,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 浏览器查看页生成并发闸（防重复点击并发导出） */
     private final AtomicBoolean browserExporting = new AtomicBoolean(false);
     /** Q9a：FeatureExercise 按<b>字段访问</b>读它的 isDisable()，故保留同名字段指向新类里那一个 */
-    /* test-support */ MenuItem ctxClearParams;
+    private MenuItem ctxClearParams;
     /** Q10：参数剪贴板（R7.1-R7.7）—— 复制快照 + 批量应用编排；路由与应用本体都是下方那两个方法 */
     private final ParamClipboard paramClipboard = new ParamClipboard(ws::push, this::paramScopeTarget, this::applyTargetParams);
 
@@ -559,7 +559,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 规则 (d)：关窗清空（§2.2/§2.6(6)）。有缓存 → 无按钮等待卡片 → 停后台活动 → 等在途写入（≤2s）→ 清空 → 清完自动关窗；
-     *  无缓存 → 直接放行。test.mode 跳过卡片。只清 PreviewCacheStore 的 root，绝不触碰 java.io.tmpdir 整体。 */
+     *  无缓存 → 直接放行。只清 PreviewCacheStore 的 root，绝不触碰 java.io.tmpdir 整体。
+     *
+     *  <p><b>P7：本方法不再读 {@code test.mode}</b>。此前有一条"自动化不等卡片"的旁路分支，使生产启动代码
+     *  与测试开关耦合；现在无论谁来关窗都走同一条生产路径。GUI 自动化改由测试源集的
+     *  {@code gui.acceptance.TestMain} 承载，收尾用 {@code Platform.exit()+System.exit()}，
+     *  不经过关窗处理器，因此那条旁路对它本来也不起作用。</p> */
     private void onWindowCloseRequest(WindowEvent e) {
         if (shutdownCacheCleared) {
             return;                                    // 已清空 → 放行关闭
@@ -579,11 +584,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         shutdownInProgress = true;
         cancelWorkspaceActivity();                     // 仍在 FX 线程调用：与旧实现同线程，保持 token 可见性语义
         Stage stage = (Stage) e.getSource();
-        if ("true".equals(System.getProperty("test.mode"))) {
-            clearPreviewCache();                       // 自动化不等卡片
-            stage.close();
-            return;
-        }
         // 会话 19：无按钮等待卡片 —— 清空期间不可交互（persistent），清完自动收卡片并自动关窗，无需点确定
         GuiNotifications.cacheClearing(statusLabel, previewCacheLifecycle.store().root(),
                 this::clearPreviewCache, stage::close);
@@ -624,7 +624,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
     }
 
-    /* test-support */ void saveGuiState() {
+    private void saveGuiState() {
         GuiState state = new GuiState();
         state.setImageModeEnabled(imageModeToggle.isSelected());
         state.setInputFolder(inputFolderField.getText());
@@ -699,14 +699,14 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 增量导入：统一入口（BC-1：改为递归扫描 + 自动建组） */
-    /* test-support */ void importFromFolder(String dir) {
+    private void importFromFolder(String dir) {
         importByPaths(List.of(dir), I18n.get("dir.label", "path", dir), false);
     }
 
     // ==================== 统一导入（拖拽 + 浏览共用入口） ====================
 
     /** 是否正在导入 */
-    /* test-support */ boolean isImporting() {
+    private boolean isImporting() {
         return importPending != null;
     }
 
@@ -717,7 +717,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * <p>本方法只留"拦截 + 确认展示 + 日志产出"；规范化/去重/建组/累计的规则在
      * {@link com.mhtextractor.app.WorkspaceImportService}，会话生命周期在 {@link ImportSessionCoordinator}。</p>
      */
-    /* test-support */ void importByPaths(List<String> addresses, String sourceDesc, boolean fromDrag) {
+    private void importByPaths(List<String> addresses, String sourceDesc, boolean fromDrag) {
         if (addresses == null || addresses.isEmpty()) {
             return;
         }
@@ -767,7 +767,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * 规则（去重/条目构造/累计/组名）在 {@link com.mhtextractor.app.WorkspaceImportService}，
      * 模型命令与刷新在 {@link ImportSessionCoordinator}。
      */
-    /* test-support */ void applyImportPlan(MhtImportPlanner.Plan plan) {
+    private void applyImportPlan(MhtImportPlanner.Plan plan) {
         importSessions.applyPlan(plan);
     }
 
@@ -838,7 +838,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 外部导入拖拽落点高亮（去抖：状态未变化不重复操作样式类） */
-    /* test-support */ void updateImportDropHighlight(boolean on) {
+    private void updateImportDropHighlight(boolean on) {
         if (on == importDragOver) {
             return;
         }
@@ -851,7 +851,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 硬复位（深度计数归零 + 清除高亮）：dragDropped/dragDone 无条件调用 */
-    /* test-support */ void clearImportDropHighlight() {
+    private void clearImportDropHighlight() {
         importDragDepth = 0;
         updateImportDropHighlight(false);
     }
@@ -901,7 +901,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 取消进行中的预解析/图片懒加载等后台工作区活动 */
-    /* test-support */ void cancelWorkspaceActivity() {
+    private void cancelWorkspaceActivity() {
         parseToken++;
         requestToken++;
         imageLoadActive = false;
@@ -938,7 +938,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 当前模式下某条目的生效参数（三层覆盖，条目独立参数需求拍板）：组参数 > 条目级参数 > 全局；均未确认 → null。
      *  解析唯一实现在 {@code app.EffectiveParamsService}（图片模式仍经 ParamScope.effectiveImageParams，与提取路径一致）
      *  上下文为快照：模式 + 两个全局已确认参数缓存（缓存可被确认/应用到全局/撤销整体替换） */
-    /* test-support */ AppConfig effectiveForObject(Object o) {
+    AppConfig effectiveForObject(Object o) {
         return effectiveParamsService.effectiveFor(o, effectiveContext());
     }
 
@@ -1089,7 +1089,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 写入某条目的条目级独立参数（条目独立参数需求）：不写全局，仅清缓存重解析该条目；入撤销栈（PARAM_SET） */
-    /* test-support */ void applyItemParams(PreviewItem item, boolean imageMode, AppConfig params) {
+    private void applyItemParams(PreviewItem item, boolean imageMode, AppConfig params) {
         AppConfig before = imageMode ? item.imageItemParams : item.textItemParams;
         if (imageMode) {
             item.imageItemParams = params;
@@ -1109,7 +1109,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 写入某模式的已确认参数缓存并刷新工作区（agent 演练/自动化测试也走此入口）；入撤销栈（PARAM_SET） */
-    /* test-support */ void applyConfirmedParams(boolean imageMode, AppConfig params) {
+    private void applyConfirmedParams(boolean imageMode, AppConfig params) {
         AppConfig before = imageMode ? imageParamsCache : textParamsCache;
         if (imageMode) {
             imageParamsCache = params;
@@ -1126,7 +1126,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 写入某组的已确认参数缓存（R8）：参数作用域仅限预览解析与显示，提取管线按组参数输出属阶段 8 */
-    /* test-support */ void applyGroupParams(GroupItem<PreviewItem> group, boolean imageMode, AppConfig params) {
+    private void applyGroupParams(GroupItem<PreviewItem> group, boolean imageMode, AppConfig params) {
         AppConfig before = imageMode ? group.getImageParamsCache() : group.getTextParamsCache();
         if (imageMode) {
             group.setImageParamsCache(params);
@@ -1202,7 +1202,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 菜单项禁用状态按右键目标类型刷新（Q9a：规则本体已搬到 {@link FileListContextMenu#updateState}） */
-    /* test-support */ void updateContextMenuState(Object target) {
+    private void updateContextMenuState(Object target) {
         contextMenu.updateState(target);
     }
 
@@ -1660,7 +1660,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         extractResultBanner.setManaged(false);
     }
 
-    /* test-support */ void refreshAfterParamsChanged() {
+    private void refreshAfterParamsChanged() {
         Object sel = currentSelection();
         updateBadgeHeader();
         updateOutputModeLabel(sel);
@@ -1770,7 +1770,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 以已确认参数（未确认时用默认参数）+ 主窗口 GUI 状态构建运行时提取配置 */
-    /* test-support */ AppConfig buildRuntimeConfig() {
+    private AppConfig buildRuntimeConfig() {
         AppConfig config = imageModeToggle.isSelected() ? imageParamsCache : textParamsCache;
         if (config == null) {
             config = new AppConfig();
@@ -1898,7 +1898,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * 单次提取的运行标记（测试支撑）：投影到协调器持有的唯一实例 ——
      * 解析回调据此让出进度条 / 状态栏，语义与搬迁前 {@code running} 字段一致。
      */
-    /* test-support */ AtomicBoolean running() {
+    private AtomicBoolean running() {
         return extractionCoordinator.running;
     }
 
@@ -1906,7 +1906,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * 最近一次提取的 partial/完整统计（测试支撑）：<b>只读</b>投影到协调器持有的唯一 holder ——
      * 写入只发生在 {@code ExtractionTaskCoordinator.run} 一处（服务返回值落一次）。
      */
-    /* test-support */ AtomicReference<BatchProcessor.ProcessStats> extractStats() {
+    private AtomicReference<BatchProcessor.ProcessStats> extractStats() {
         return extractionCoordinator.lastExtractStats;
     }
 
@@ -1934,7 +1934,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * 释放动画 → 父组变化项目重新预解析（生效参数切换，阶段 5 机制）。
      * cell 非空 = 真实 DnD 路径（含动画）；cell 为 null = 程序化演练路径（跳过动画）。
      */
-    /* test-support */ boolean performDrop(Object dragged, Object target, DropResolver.Zone zone,
+    boolean performDrop(Object dragged, Object target, DropResolver.Zone zone,
                                 PreviewListCell cell) {
         if (dragged == null || target == null || (target instanceof PreviewItem it && it.removed)) {
             return false;
@@ -2013,7 +2013,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 sceneBounds.getHeight());
     }
 
-    /* test-support */ PreviewListCell findCell(Object item) {
+    private PreviewListCell findCell(Object item) {
         for (javafx.scene.Node n : fileListView.lookupAll(".list-cell")) {
             if (n instanceof PreviewListCell c && c.getItem() == item) {
                 return c;
@@ -2190,12 +2190,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 顶层组列表（按数据序；供 agent 演练使用）—— 委托模型 */
-    /* test-support */ List<GroupItem<PreviewItem>> topLevelGroups() {
+    private List<GroupItem<PreviewItem>> topLevelGroups() {
         return ws.groups();
     }
 
     /** 组内有效成员（removed == false；供 agent 演练使用） */
-    /* test-support */ List<PreviewItem> visibleMembersOf(GroupItem<?> g) {
+    private List<PreviewItem> visibleMembersOf(GroupItem<?> g) {
         List<PreviewItem> out = new ArrayList<>();
         for (Object m : g.getMembers()) {
             if (m instanceof PreviewItem p && !p.removed) {
@@ -2387,13 +2387,13 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     // ==================== 显示序 / 数据序（F5） ====================
 
     /** 数据模型中的所有项目（含组内成员与已移除项）—— 委托 {@link WorkspaceModel#allItems()}（本类只读查询） */
-    /* test-support */ List<PreviewItem> allPreviewItems() {
+    private List<PreviewItem> allPreviewItems() {
         return ws.allItems();
     }
 
     /** 全部有效项目（removed == false，含组内成员）。按数据序遍历：折叠组的成员不在显示序中，
      *  若按显示序遍历会导致全选/提取名单/进度统计漏掉折叠组成员（冒烟测试发现，阶段 4 遗留） */
-    /* test-support */ List<PreviewItem> allVisibleItems() {
+    private List<PreviewItem> allVisibleItems() {
         return ws.allItems().stream().filter(i -> !i.removed).toList();
     }
 
@@ -2403,7 +2403,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 按数据序重建显示序（ListView 渲染展平列表）。动画期间的外部重建（换目录/模式切换等）先快进完成动画 */
-    /* test-support */ void rebuildDisplay() {
+    private void rebuildDisplay() {
         if (listAnimating && !suppressAnimRebuild) {
             finishExpandAnim();
         }
@@ -2430,7 +2430,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     // ==================== 移除 / 撤销（F2 / F4） ====================
 
     /** 可见文件数：removed 标记的项目在列表中完全隐藏，不参与任何计数（组条目不计入）—— 委托 {@link WorkspaceModel#visibleCount()} */
-    /* test-support */ long visibleCount() {
+    private long visibleCount() {
         return ws.visibleCount();
     }
 
@@ -2455,7 +2455,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
     }
 
-    /* test-support */ void updateListButtons() {
+    private void updateListButtons() {
         removeButton.setDisable(visibleCount() == 0);
         undoButton.setDisable(!ws.canUndo());
         boolean anyChecked = allVisibleItems().stream().anyMatch(i -> i.selected);
@@ -2475,7 +2475,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 开始按钮可用性的唯一派生函数 —— 所有禁用/恢复都必须经由此函数 */
-    /* test-support */ void updateStartButtonState() {
+    private void updateStartButtonState() {
         boolean anyMode = textModeToggle.isSelected() || imageModeToggle.isSelected();
         // R1.7：有未提交的参数草稿时不许开始提取（判定唯一来源是 ParamFormPane.isDirty()，
         // 由 ParamSidePanel.setDirtyListener 在编辑/提交/切目标时把本方法叫回来）。
@@ -2489,7 +2489,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      *    即原 {@code rebuildDisplay()} 加"仍在显示序则重选"那三行，规则逐字未改）；
      * ② <b>更新计数/按钮/选择等 UI 派生状态</b> —— 下面这些自己读模型/控件的派生刷新。
      */
-    /* test-support */ void refreshAfterListChange() {
+    private void refreshAfterListChange() {
         if (listAnimating && !suppressAnimRebuild) {
             finishExpandAnim();
         }
@@ -2575,7 +2575,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 隐藏式移除：结构变更（removed 标记 + 空组自动销毁 D11）与撤销记录由 {@link WorkspaceModel#removeItems} 负责；
      *  本类只做缓存规则 (c) 与选择/刷新收尾 */
-    /* test-support */ void removeItems(List<PreviewItem> targets) {
+    private void removeItems(List<PreviewItem> targets) {
         Object sel = fileListView.getSelectionModel().getSelectedItem();
         int selIndex = displayItems.indexOf(sel);
         ws.removeItems(targets);                              // 结构 + 撤销记录（模型是唯一实现）
@@ -2948,7 +2948,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * 下方行同步补位/让位（快照动画手法与拖拽一致）。200ms ease-out。
      * 动画期间列表项目不可交互（按钮可点但无效果）；快速连点/拖拽会话中直接忽略。
      */
-    /* test-support */ void toggleGroupExpanded(GroupItem<PreviewItem> g) {
+    private void toggleGroupExpanded(GroupItem<PreviewItem> g) {
         if (listAnimating || dragActive) {
             return;
         }
@@ -3178,7 +3178,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     /** 折叠/展开动画结束（正常完成或外部重建快进）：清理快照、恢复 cell、解锁 */
-    /* test-support */ void finishExpandAnim() {
+    private void finishExpandAnim() {
         if (collapseAnim != null) {
             collapseAnim.stop();
             collapseAnim = null;
@@ -3988,7 +3988,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         });
     }
 
-    /* test-support */ void updateProgressStatus(int token) {
+    private void updateProgressStatus(int token) {
         if (token != parseToken) {
             return;
         }
