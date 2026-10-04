@@ -48,7 +48,8 @@ import java.util.function.Consumer;
  *   <li>{@link #browserLaunchFailed} / {@link #browserViewFailed} → {@code GLOBE}（同上，同一用途）</li>
  *   <li>{@link #importFailed} → {@code FILE_IMPORT}；{@link #quotaConfirm} → {@code CLIPBOARD_LIST}</li>
  *   <li>{@link #driveRootConfirm} / {@link #cacheStepWarning} → {@code HDD}</li>
- *   <li>{@link #cacheClearing} → {@code BROOM}；{@link #paramDialogOpenFailed} / {@link #paramTargetConfirm} → {@code SLIDERS_H}</li>
+ *   <li>{@link #cacheClearing} → {@code BROOM}；{@link #paramDialogOpenFailed} / {@link #paramTargetConfirm} /
+ *       {@link #collapseDraftKept} / {@link #draftBlocksStart} → {@code SLIDERS_H}</li>
  *   <li>{@link #recursionDepthConfirm} → {@code SITEMAP}；{@link #removeAllConfirm} → {@code TRASH_ALT}</li>
  *   <li>{@link #removeGroupConfirm} / {@link #unnamedGroupConfirm} → {@code OBJECT_GROUP}；{@link #listEmpty} → {@code LIST}</li>
  *   <li>{@link #preconditionDenied} → 按级别：ERROR → {@code EXCLAMATION_CIRCLE}（居中卡片）、
@@ -109,6 +110,25 @@ public final class GuiNotifications {
     /** 当前模式参数未确认（或检测到模式切换）：居中确认卡片，确认后继续提取。 */
     public static void paramTargetConfirm(Node anchor, String message, Consumer<Boolean> onDecision) {
         NotificationHost.confirm(anchor, message, FontAwesomeSolid.SLIDERS_H, onDecision);
+    }
+
+    /** R1.8（步骤 4 · 决策 2.6 起降级为 toast）：收起侧边栏、草稿已保留 —— 文案指向右侧圆钮（非阻塞）。 */
+    public static void collapseDraftKept(Node anchor) {
+        NotificationHost.toastInfo(anchor, I18n.get("sidepanel.collapseDraftHint"), FontAwesomeSolid.SLIDERS_H);
+    }
+
+    /**
+     * R1.7（步骤 4 · 语义变更，决策 D）：点「开始提取」时存在未提交草稿的拦截提醒 ——
+     * 居中、只有一个「确定」按钮，文案 {@code sidepanel.draftBlocksStart}。
+     *
+     * <p>为什么走 {@link NotificationHost#error}：{@code NotificationHost} 现有入口里
+     * 只有 {@code error} 是"居中 + 单按钮"形态（{@code confirm} 恒有两钮，{@code busy} 零按钮）；
+     * 语义上是阻断说明而非错误，但卡片形态必须满足决策 D。它是<b>信息性</b>卡片：
+     * 不注册未答决策（{@code hasPendingDecision} 行为不变，与 R3.6「dirty 草稿不拦关窗」一致），
+     * 「确定」只关卡片。</p>
+     */
+    public static void draftBlocksStart(Node anchor) {
+        NotificationHost.error(anchor, I18n.get("sidepanel.draftBlocksStart"), FontAwesomeSolid.SLIDERS_H);
     }
 
     // ==================== 文件 / 文件夹 / 浏览器 ====================

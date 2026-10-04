@@ -378,10 +378,10 @@ public final class ParamDomainController {
     /** 开始按钮可用性的唯一派生函数 —— 所有禁用/恢复都必须经由此函数 */
     void updateStartButtonState() {
         boolean anyMode = host.anyModeSelected();
-        // R1.7：有未提交的参数草稿时不许开始提取（判定唯一来源是 ParamFormPane.isDirty()，
-        // 由 ParamSidePanel.setDirtyListener 在编辑/提交/切目标时把本方法叫回来）。
-        host.startButton().setDisable(!anyMode || host.visibleCount() == 0 || host.isImporting()
-                || ParamSidePanel.isDirty(host.anchor()));
+        // R1.7（步骤 4 · 决策 2.5 语义变更）：有未提交草稿时**不再禁用**开始按钮 ——
+        // 点开始时由 ExtractionTaskCoordinator 的草稿门（preStartGates 第一道）弹卡拦截
+        //（sidepanel.draftBlocksStart）。草稿状态通知仍会把本方法叫回来（其余条件兜底重算）。
+        host.startButton().setDisable(!anyMode || host.visibleCount() == 0 || host.isImporting());
     }
 
     /** 参数类撤销分支（C4）：{@link WorkspaceLifecycleController#onUndoClicked} 的 PARAM_SET / CLEAR_PARAMS /

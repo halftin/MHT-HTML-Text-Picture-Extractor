@@ -1,6 +1,7 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
 import com.mhtextractor.i18n.I18n;
@@ -37,15 +38,28 @@ import java.util.function.Consumer;
  * 全部消失，本类把它们<b>显式</b>补回来，且都只是"多问一次 {@link #isDirty()} 再决定"：</p>
  * <ul>
  *   <li><b>R1.6（切换目标确认卡）</b>：{@link #show} 里目标不同且当前 dirty 时先弹居中确认卡，
- *       确定 = 丢弃草稿并载入新目标，取消 = <b>目标与草稿都不变</b>（什么都不做）。</li>
- *   <li><b>R1.7（dirty 时禁用开始提取）</b>：本类只负责"草稿变了就通知一次"，
- *       真值判定仍是 {@code ParamFormPane.isDirty()}，按钮态由宿主的
- *       {@code MainController.updateStartButtonState()} 算（唯一派生函数）。</li>
- *   <li><b>R1.8（收起时 dirty 提示卡）</b>：{@link #collapse()} 见
- *       {@link #collapsing} 的自抑制说明。</li>
+ *       确定 = 丢弃草稿并载入新目标，取消 = <b>目标与草稿都不变</b>（什么都不做）。
+ *       步骤 4 · 决策 2.7/2.8：确认卡期间<b>保持展开、不预收起</b>，确认后宿主对已显示面板
+ *       <b>原地换内容</b>（无过渡动画）。</li>
+ *   <li><b>R1.7（步骤 4 · 决策 2.5 语义变更）</b>：草稿<b>不再禁用</b>开始按钮 ——
+ *       点开始时由 {@code ExtractionTaskCoordinator} 的草稿门弹卡拦截（{@code sidepanel.draftBlocksStart}）。
+ *       本类仍只负责"草稿变了就通知一次"，真值判定仍是 {@code ParamFormPane.isDirty()}。</li>
+ *   <li><b>R1.8（步骤 4 · 决策 2.6 降级为 toast）</b>：{@link #collapse()} 里 dirty 时不再弹
+ *       居中卡 —— 直接收起并显示右侧悬浮圆钮，toast 提示草稿已保留。</li>
  *   <li><b>R3.6（关窗语义）</b>：本类<b>不碰</b>关窗路径，也不碰
  *       {@code NotificationHost.hasPendingDecision(...)} 守卫 —— dirty 草稿不拦关窗（草稿随退出消失），
  *       R1.6 的确认卡<b>本身就是</b>"未答确认卡"，由既有守卫自动拦住关窗，无需新写守卫。</li>
+ * </ul>
+ *
+ * <h2>步骤 4 · 功能二：悬浮圆钮 + 会话生命周期（决策 2.4）</h2>
+ * <ul>
+ *   <li><b>折叠 = 会话继续</b>：{@link #collapse()} 收起后 {@code showReopen(RIGHT, this::expand)}
+ *       显示右侧圆钮；{@link #expand()} 不重跑 {@code load()}、不再问 R1.6（目标未变），
+ *       直接让宿主重新显示<b>同一个 pane 实例</b> ⇒ 草稿完整保留（决策 2.9：仍走滑入动画）。</li>
+ *   <li><b>会话结束</b>（取消 / 确定提交完成 / 切换目标确认丢弃旧目标）→ {@code hideReopen(RIGHT)}。
+ *       <b>取消 = 丢弃草稿</b>：按同一目标重新 {@code load()}（控件复位 + 基线重记）。</li>
+ *   <li><b>折叠态下再点「提取参数设置」</b>（决策 2.10）：直接展开并载入新目标；
+ *       旧草稿仍走 R1.6 确认（{@link #show} 的既有路径，无需特判）。</li>
  * </ul>
  */
 public final class ParamSidePanel {
@@ -59,6 +73,17 @@ public final class ParamSidePanel {
     /** 当前已载入的目标 / 模式（= 面板基线与草稿归属谁）；null = 还没载入过。 */
     private ParamScope.Target loadedTarget;
     private boolean loadedImageMode;
+    /**
+     * 当前<b>会话起点</b>的两份全局参数缓存（「取消」丢弃草稿时按同一目标重新载入会话初值）。
+     *
+     * <p>🚩 必须在<b>会话起点</b>重记，而不是只在 {@link #load} 记：同一目标干净重开时
+     * {@code load()} 不重跑（草稿状态机在 {@code ParamFormPane} 里延续），而宿主的两份缓存
+     * 可能已在这期间被提交更新 —— 若还拿旧 {@code load()} 时的缓存去复位，控件会被填成
+     * 用户<b>从未见过</b>的旧值（实测：取消后复位值恰好等于草稿值，"丢弃"形同虚设）。
+     * 会话起点 = {@link #load} 之后 / 干净的同目标重开（dirty 重开是会话继续，不重记）。</p>
+     */
+    private AppConfig sessionTextCache;
+    private AppConfig sessionImageCache;
 
     /** 宿主回调：确认时把采集到的参数交回去（由 {@code MainController} 接线）。 */
     private Consumer<AppConfig> onCommit;
@@ -68,17 +93,6 @@ public final class ParamSidePanel {
      * {@code updateStartButtonState()} 上；每窗口一个面板实例，故只接一次）。
      */
     private Runnable dirtyListener;
-
-    /**
-     * 收起流程的<b>自抑制</b>标记（R1.8）。
-     *
-     * <p>点了「稍后」后仍要在<b>不重新弹卡</b>的前提下真的收起，而"收起"的唯一入口是
-     * {@link #collapse()}（标题栏按钮与面板出口都走它）。若另开一条 {@code hideRight()} 旁路，
-     * 就成了"收起"的第二个实现点。故在第一次 {@code collapse()} 里置位，后续同一轮收起
-     * （包括 R1.8 卡片回调里的那次重入）自动跳过守卫 —— 与 {@code NotificationHost.confirm}
-     * 的 {@code pendingDecision} 兜底同一个思路：<b>守卫只管第一跳</b>。</p>
-     */
-    private boolean collapsing;
 
     /**
      * 取（首次调用则创建）该窗口的参数侧边栏。
@@ -162,8 +176,14 @@ public final class ParamSidePanel {
         boolean needLoad = loadedTarget == null
                 || !sameTarget(loadedTarget, target) || loadedImageMode != imageMode;
         if (!needLoad) {
-            // 同一目标重开：只更新出口并展开（**不** load ⇒ 保草稿）
+            // 同一目标重开：只更新出口并展开（**不** load ⇒ 保草稿；决策 2.9：仍走滑入动画）
             this.onCommit = commit;
+            if (!isDirty()) {
+                // 干净重开 = 新会话起点：重记复位源（此时宿主缓存就是面板当前值的那份；dirty 重开是会话继续，不重记）
+                this.sessionTextCache = textCache;
+                this.sessionImageCache = imageCache;
+            }
+            host.hideReopen(SidePanelHost.Side.RIGHT);
             host.showRight(pane, I18n.get("dialog.title"), this::collapse);
             return;
         }
@@ -185,9 +205,13 @@ public final class ParamSidePanel {
     private void load(ParamScope.Target target, boolean imageMode,
                       AppConfig textCache, AppConfig imageCache, Consumer<AppConfig> commit) {
         this.onCommit = commit;
+        this.sessionTextCache = textCache;
+        this.sessionImageCache = imageCache;
         pane.load(textCache, imageCache, imageMode, target);
         this.loadedTarget = target;
         this.loadedImageMode = imageMode;
+        host.hideReopen(SidePanelHost.Side.RIGHT);
+        // 决策 2.7/2.8：切换目标时面板保持展开 —— 宿主对已显示面板只做原地换内容（无过渡动画）
         host.showRight(pane, I18n.get("dialog.title"), this::collapse);
     }
 
@@ -229,57 +253,57 @@ public final class ParamSidePanel {
         }
     }
 
-    // ==================== 内部 ====================
+    // ==================== 会话生命周期（步骤 4 · 决策 2.4） ====================
 
     /**
-     * 面板出口（确认 / 取消）。
+     * 面板出口（确认 / 取消）—— 都是<b>会话结束</b>。
      *
      * <p>{@code ParamFormPane.onConfirm} 已经把本次编辑提交成新基线（{@link ParamFormPane#commitDraft()}），
-     * 所以这里只需要把采集结果交回宿主；取消则什么都不提交。</p>
+     * 所以「确定」只需把采集结果交回宿主；「取消」则<b>丢弃草稿</b>（决策 2.4）：按同一目标重新
+     * {@code load()} —— 控件复位到目标初值、基线重记。两者收尾都是收起面板 + 隐藏圆钮。</p>
      */
     private void onExit(boolean ok) {
-        if (ok && onCommit != null) {
-            onCommit.accept(pane.collect());
+        if (ok) {
+            if (onCommit != null) {
+                onCommit.accept(pane.collect());
+            }
+        } else if (loadedTarget != null) {
+            // 取消 = 结束（丢弃草稿，决策 2.4）：按会话起点的缓存重新载入同一目标 ——
+            // 控件复位到用户本次会话看到的初值、基线重记（与"切换目标确认丢弃"同一动作）
+            pane.load(sessionTextCache, sessionImageCache, loadedImageMode, loadedTarget);
         }
-        // R1.3：面板里的「确认」/「取消」都是"收起"入口；点主界面其它区域不会走到这里。
-        // R1.5：取消也<b>不</b>丢草稿 —— 下一个 show() 只要目标没变就不会 load()。
-        collapse();
+        endSession();
     }
 
-    private void collapse() {
-        if (collapsing) {
-            host.hideRight();                          // R1.8 卡片回调里的重入：守卫只管第一跳
-            return;
-        }
-        collapsing = true;
-        if (isDirty()) {
-            // R1.8：dirty 时离开编辑态先说明（居中卡片，与"移除全部"同型；两个按钮都不设 defaultButton）
-            NotificationHost.confirm(pane, I18n.get("sidepanel.collapseDraftHint"),
-                    FontAwesomeSolid.SLIDERS_H, ok -> {
-                        if (ok) {
-                            // 「确认并提交」：复用唯一的提交路径（#confirmButton → ParamFormPane.onConfirm
-                            // 先 commitDraft() 再走 closeHandler）—— 本类不另拼一套"提交"
-                            pane.confirmButton.fire();
-                        } else {
-                            // 「稍后」：收起并保留草稿（不 commitDraft、不 load，草稿随控件留在面板里）
-                            collapseNow();
-                        }
-                    });
-            return;
-        }
-        collapseNow();
+    /** 会话结束的收尾（取消 / 确定提交完成之后）；R1.3 的面板内「确认/取消」仍是"收起"入口。 */
+    private void endSession() {
+        host.hideRight();
+        host.hideReopen(SidePanelHost.Side.RIGHT);
     }
 
     /**
-     * 收起动作本体（{@link #collapse()} 的收尾，或 R1.8 的「稍后」分支）。
+     * 圆钮：重新展开<b>同一个 pane 实例</b>（状态机「点圆钮」行）。
      *
-     * <p>它不是"收起的第二个实现点"：真正的收起入口仍只有 {@link #collapse()} 一处 ——
-     * 这里只是"已经把该问的问完了"之后的同一个动作，顺手清掉 {@link #collapsing} 自抑制标记，
-     * 使下一次收起重新走一遍守卫。</p>
+     * <p>不重跑 {@code pane.load(...)}、不再问 R1.6（目标未变）⇒ 草稿完整保留；
+     * 宿主此时面板未显示 ⇒ 仍走滑入动画（决策 2.9）。</p>
      */
-    private void collapseNow() {
+    private void expand() {
+        host.hideReopen(SidePanelHost.Side.RIGHT);
+        host.showRight(pane, I18n.get("dialog.title"), this::collapse);
+    }
+
+    /**
+     * 折叠 = <b>会话继续</b>：收起面板并显示右侧悬浮圆钮（状态机「点收起」行）。
+     *
+     * <p>R1.8（步骤 4 · 决策 2.6）：dirty 时不再弹居中卡 —— 直接收起，toast 提示草稿已保留、
+     * 可用右侧圆钮继续编辑（文案 {@code sidepanel.collapseDraftHint}，已指向圆钮）。</p>
+     */
+    private void collapse() {
+        if (isDirty()) {
+            GuiNotifications.collapseDraftKept(pane);
+        }
         host.hideRight();
-        collapsing = false;
+        host.showReopen(SidePanelHost.Side.RIGHT, this::expand);
     }
 
     /**

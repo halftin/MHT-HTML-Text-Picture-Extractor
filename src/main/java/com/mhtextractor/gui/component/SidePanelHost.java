@@ -80,43 +80,67 @@ public final class SidePanelHost {
     /** 覆盖层 → 宿主。Weak 键：窗口关闭后不留引用（与 NotificationHost 同法）。 */
     private static final Map<Parent, SidePanelHost> HOSTS = new WeakHashMap<>();
 
+    /**
+     * 悬浮圆钮与主区<b>右边缘</b>的间距（步骤 4 · 决策 H 的校正值）。
+     *
+     * <p>圆钮必须不压住主界面右侧的垂直滚动条：右侧信息栏外缘是"主区右缘 − HBox 内边距 8 −
+     * VBox 内边距 16 = −24"，其文本区的滚动条再向内约 15px。44 = 24 + 15 + 5 呼吸，四档窗口
+     * 下都成立（由 {@code UiProbe -Dprobe.reopen=true} 断言钉住 —— 改这里先跑那条探针）。
+     * 左侧（预留）用同值镜像。</p>
+     */
+    private static final double REOPEN_EDGE_MARGIN = 44;
+
     private final StackPane overlay;
     /** 右侧面板（Q6a 的参数侧边栏；节点 id 保持 {@code sidePanel} 不变）。 */
-    private final Side right = new Side("sidePanel", "sidePanelCollapse",
-            Pos.CENTER_RIGHT, FontAwesomeSolid.ANGLE_DOUBLE_RIGHT, +1);
+    private final SideState right = new SideState("sidePanel", "sidePanelCollapse", "sidePanelReopen",
+            Pos.CENTER_RIGHT, FontAwesomeSolid.ANGLE_DOUBLE_RIGHT, FontAwesomeSolid.ANGLE_LEFT, +1);
     /** 左侧面板（Q8b 的 HTML 源码查看器，R2.1）。与右侧是两个独立节点（R3.1）。 */
-    private final Side left = new Side("sourceViewerPanel", "sourceViewerCollapse",
-            Pos.CENTER_LEFT, FontAwesomeSolid.ANGLE_DOUBLE_LEFT, -1);
+    private final SideState left = new SideState("sourceViewerPanel", "sourceViewerCollapse", "sidePanelReopen-left",
+            Pos.CENTER_LEFT, FontAwesomeSolid.ANGLE_DOUBLE_LEFT, FontAwesomeSolid.ANGLE_RIGHT, -1);
 
     private Duration slideDuration = SLIDE_DURATION;
+
+    /** 侧边栏两侧（步骤 4 · 决策 2.2：圆钮 API 按 side 参数化；本期只做右侧，左侧预留）。 */
+    public enum Side { LEFT, RIGHT }
 
     /**
      * 一侧面板的全部可变态。
      *
      * <p>{@code slideSign} 是这一侧"滑出方向"的符号：右侧面板在右侧，收起位置是
      * {@code +translateX}；左侧面板在左侧，收起位置是 {@code -translateX}（R3.4）。</p>
+     *
+     * <p>{@code reopen} 是这一侧的悬浮圆钮（步骤 4 · 功能二，决策 2.1/2.12）：覆盖层里的
+     * <b>真节点</b>（有尺寸、可命中），与侧边栏同层、在其之上；收起后由调用方经
+     * {@link SidePanelHost#showReopen(Side, Runnable)} 显示。图标是<b>单</b>箭头线条图标
+     * （收起按钮的双箭头刻意不用；决策 2.3：只有箭头、无目标名/角标）。</p>
      */
-    private static final class Side {
+    private static final class SideState {
         private final String panelId;
         private final String collapseId;
+        private final String reopenId;
         private final Pos alignment;
         private final FontAwesomeSolid icon;
+        private final FontAwesomeSolid reopenIcon;
         private final double slideSign;
 
         private final BorderPane panel = new BorderPane();
         private final Label titleLabel = new Label();
         private final Button collapseButton = new Button();
+        private final Button reopen = new Button();
 
         private TranslateTransition slide;
         /** 标题栏「收起」按钮的动作（null = 直接隐藏本侧）。 */
         private Runnable onCollapse;
         private boolean showing;
 
-        Side(String panelId, String collapseId, Pos alignment, FontAwesomeSolid icon, double slideSign) {
+        SideState(String panelId, String collapseId, String reopenId, Pos alignment,
+                  FontAwesomeSolid icon, FontAwesomeSolid reopenIcon, double slideSign) {
             this.panelId = panelId;
             this.collapseId = collapseId;
+            this.reopenId = reopenId;
             this.alignment = alignment;
             this.icon = icon;
+            this.reopenIcon = reopenIcon;
             this.slideSign = slideSign;
         }
     }
@@ -133,7 +157,7 @@ public final class SidePanelHost {
      * <p>收起按钮在<b>标题栏内侧</b>（两侧都是）：右侧面板的按钮贴右边缘（R1.2 的原样），
      * 左侧面板的按钮也贴右边缘、图标朝左（R2.1）—— 视觉上"往面板贴着的那条边收回去"。</p>
      */
-    private void initSide(Side side, boolean isLeft) {
+    private void initSide(SideState side, boolean isLeft) {
         side.panel.getStyleClass().add("side-panel");
         // 探针/自动化靠 id 找节点，不靠内部结构（见 tools/probes/SidePanelProbe.java）
         side.panel.setId(side.panelId);
@@ -156,6 +180,19 @@ public final class SidePanelHost {
             // 左侧面板的投影与分隔线要镜像（css 里的 .side-panel 是按右侧写的）
             side.panel.getStyleClass().add("side-panel-left");
         }
+
+        // 悬浮圆钮（步骤 4 · 功能二，决策 2.1/2.12）：右边缘垂直居中（Pos.CENTER_RIGHT 即垂直居中贴边）、
+        // 圆形、单箭头线条图标；与侧边栏同层（都是覆盖层的子节点）。启动默认与面板同态：隐藏。
+        side.reopen.setId(side.reopenId);
+        side.reopen.getStyleClass().add("side-panel-reopen");
+        side.reopen.setGraphic(new FontIcon(side.reopenIcon));
+        side.reopen.setTooltip(new Tooltip(I18n.get("sidepanel.reopen")));
+        side.reopen.setVisible(false);
+        StackPane.setAlignment(side.reopen, side.alignment);
+        // 右边缘间距见 REOPEN_EDGE_MARGIN（不得压住主界面滚动条）；左侧镜像（预留）
+        StackPane.setMargin(side.reopen, isLeft
+                ? new Insets(0, 0, 0, REOPEN_EDGE_MARGIN)
+                : new Insets(0, REOPEN_EDGE_MARGIN, 0, 0));
     }
 
     // ==================== 接线 ====================
@@ -182,7 +219,7 @@ public final class SidePanelHost {
         overlay.setClip(clip);
 
         SidePanelHost host = new SidePanelHost(overlay);
-        for (Side side : new Side[]{host.right, host.left}) {
+        for (SideState side : new SideState[]{host.right, host.left}) {
             StackPane.setAlignment(side.panel, side.alignment);
             // 宽度 = 主区 × 50%（R1.1）。pref 与 max 都要绑：StackPane 会把子节点拉到 max，
             // 只绑 pref 的话面板会被拉满整宽（实测：面板盖住整个主界面）。
@@ -191,6 +228,8 @@ public final class SidePanelHost {
             // R3.5：启动默认折叠
             side.panel.setVisible(false);
             overlay.getChildren().add(side.panel);
+            // 圆钮与面板同层（决策 2.12）；后加者在上，且与面板的可见态互斥，层序不影响命中
+            overlay.getChildren().add(side.reopen);
         }
 
         HOSTS.put(overlay, host);
@@ -288,6 +327,36 @@ public final class SidePanelHost {
         return right.panel;
     }
 
+    // ==================== 悬浮圆钮（步骤 4 · 功能二，决策 2.1/2.12） ====================
+
+    /**
+     * 显示该侧的悬浮圆钮并挂上「再展开」动作（收起侧边栏后由调用方调用）。
+     *
+     * <p>圆钮是覆盖层里的真节点（有尺寸、可命中），与侧边栏同层；重复显示只是换动作（幂等）。
+     * 本期只有右侧用它（{@code ParamSidePanel.collapse()}），左侧 API 已参数化但<b>预留</b>
+     * （决策 2.2/2.12）。</p>
+     */
+    public void showReopen(Side side, Runnable action) {
+        SideState s = state(side);
+        s.reopen.setOnAction(e -> action.run());
+        s.reopen.setVisible(true);
+    }
+
+    /** 隐藏该侧的悬浮圆钮（会话结束 / 面板展开时由调用方调用）。 */
+    public void hideReopen(Side side) {
+        state(side).reopen.setVisible(false);
+    }
+
+    /** 该侧圆钮当前是否显示（探针/断言用）。 */
+    public boolean isReopenShowing(Side side) {
+        return state(side).reopen.isVisible();
+    }
+
+    /** 该侧圆钮节点（探针/自动化驱动用；id 为 {@code #sidePanelReopen} / {@code #sidePanelReopen-left}）。 */
+    public Button reopenButton(Side side) {
+        return state(side).reopen;
+    }
+
     // ==================== 内部 ====================
 
     /**
@@ -313,11 +382,22 @@ public final class SidePanelHost {
         return (long) slideDuration.toMillis();
     }
 
-    private void show(Side side, Node content, String title, Runnable onCollapse) {
+    /** {@link Side} → 该侧的可变态（{@code null} 视为右侧之外的唯一另一侧，即左侧）。 */
+    private SideState state(Side side) {
+        return side == Side.RIGHT ? right : left;
+    }
+
+    private void show(SideState side, Node content, String title, Runnable onCollapse) {
         side.onCollapse = onCollapse;
         side.titleLabel.setText(title == null ? "" : title);
         if (content != null && side.panel.getCenter() != content) {
             side.panel.setCenter(content);
+        }
+        if (side.showing) {
+            // 步骤 4 · 决策 2.7/2.8：已显示则<b>原地换内容</b> —— 只换内容/标题/收起动作，
+            // 不重放滑入动画、不重置逻辑开合状态。这一处同时修好"切换目标"与"同目标重开"
+            // 两条重放路径（切换目标 = 保持展开 + 静默替换内容）。
+            return;
         }
         side.panel.setVisible(true);
         side.showing = true;
@@ -329,12 +409,12 @@ public final class SidePanelHost {
         slideTo(side, 0, false);
     }
 
-    private void hide(Side side) {
+    private void hide(SideState side) {
         side.showing = false;
         slideTo(side, side.slideSign * Math.max(side.panel.getWidth(), 0), true);
     }
 
-    private void collapseRequested(Side side) {
+    private void collapseRequested(SideState side) {
         if (side.onCollapse != null) {
             side.onCollapse.run();
         } else {
@@ -342,7 +422,7 @@ public final class SidePanelHost {
         }
     }
 
-    private void slideTo(Side side, double toX, boolean hideWhenFinished) {
+    private void slideTo(SideState side, double toX, boolean hideWhenFinished) {
         if (side.slide != null) {
             side.slide.stop();
             side.slide = null;

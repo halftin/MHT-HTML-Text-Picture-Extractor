@@ -194,8 +194,8 @@ public final class ExtractionTaskCoordinator {
      * {@code proceed}（<b>恰好一次</b>；异步确认卡在 FX 线程回调里交付）：
      * {@code proceed.accept(true)} 放行到下一道门（链空则启动），
      * {@code proceed.accept(false)} 中止本次启动 —— <b>后续门不再被询问</b>（串行：前一张卡
-     * 取消即 return，不回退到后一张）。后续步骤将按「草稿卡（步骤 4）→ 未命名组卡（步骤 3）」
-     * 的顺序插入此链。</p>
+     * 取消即 return，不回退到后一张）。生产链的顺序即优先级（决策 C）：
+     * <b>草稿门（步骤 4）→ 未命名组门（步骤 3）</b>，草稿卡先于未命名组卡。</p>
      */
     @FunctionalInterface
     public interface PreStartGate {
@@ -241,7 +241,8 @@ public final class ExtractionTaskCoordinator {
         this.extractionService = extractionService;
         this.host = host;
         if (host != null) {
-            preStartGates.add(new UnnamedGroupGate(host));   // 步骤 3 · 功能一：未命名组门（生产注册）
+            preStartGates.add(new DraftGate(host));        // 步骤 4 · 功能二：草稿门（决策 C：必须第一道）
+            preStartGates.add(new UnnamedGroupGate(host)); // 步骤 3 · 功能一：未命名组门（生产注册）
         }
     }
 
@@ -345,6 +346,41 @@ public final class ExtractionTaskCoordinator {
                     I18n.get("group.unnamedConfirm", "names",
                             String.join(I18n.get("list.nameSeparator"), names)),
                     proceed);
+        }
+    }
+
+    /**
+     * 步骤 4 · 功能二 —— 草稿门（需求 §1.2 / 决策 D / R1.7 语义变更）：启动提取前拦截
+     * 「未提交的参数草稿」。
+     *
+     * <p>判定唯一来源是 {@link ParamSidePanel#isDirty(Node)}（R1.7 旧禁用条件的同一接缝）；
+     * 命中时弹 {@code sidepanel.draftBlocksStart} 提醒卡 —— 决策 D：居中、只有一个「确定」。
+     * 卡片是<b>信息性阻断</b>（{@link NotificationHost#error} 形态，无确认回调），
+     * 故本门在展示后即交付 {@code proceed(false)}：链中止、不启动；「确定」只关卡片
+     * （微决策：等价 {@code proceed(false)}，不展开侧边栏、不改变焦点）。
+     * {@code NotificationHost.hasPendingDecision} 行为不变：信息卡不注册未答决策，
+     * 与 R3.6「dirty 草稿不拦关窗」一致。</p>
+     *
+     * <p><b>插入约定</b>：本门必须排在 {@link UnnamedGroupGate} <b>之前</b>（决策 C：
+     * 草稿卡 → 未命名组卡），由生产构造注册在第一道 —— 草稿未处理时用户看到的是草稿卡，
+     * 处理完草稿才会遇到未命名组卡。</p>
+     */
+    private static final class DraftGate implements PreStartGate {
+
+        private final Host host;
+
+        DraftGate(Host host) {
+            this.host = host;
+        }
+
+        @Override
+        public void ask(Consumer<Boolean> proceed) {
+            if (!ParamSidePanel.isDirty(host.statusLabel())) {
+                proceed.accept(true);
+                return;
+            }
+            GuiNotifications.draftBlocksStart(host.statusLabel());
+            proceed.accept(false);
         }
     }
 
@@ -485,7 +521,7 @@ public final class ExtractionTaskCoordinator {
      *   <li>图片模式额外校验（ZIP/CBZ 打包时确保输出目录存在，失败打 {@code log.maincontroller.30}）；</li>
      *   <li>R1.6 当前模式参数未确认 → 窗口内确认卡（区分「从未设置」与「检测到模式切换」两种文案），
      *       确认后进入顺序门（保留既有行为与位置，不属于本步改造范围）；</li>
-     *   <li>{@link #preStartGates} 顺序门（决策 C 落位；本步为空链，直接启动）；</li>
+     *   <li>{@link #preStartGates} 顺序门（生产链：草稿门 → 未命名组门，任一取消即整体中止）；</li>
      *   <li>{@link #startExtractionTask}。</li>
      * </ol>
      */

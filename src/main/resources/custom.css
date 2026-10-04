@@ -506,6 +506,34 @@
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.18), 18, 0, 4, 0);
 }
 
+/* 悬浮圆钮（步骤 4 · 功能二，决策 2.1）：侧边栏收起后停在右边缘垂直中部（几何位置在代码里
+   用 StackPane margin 钉住 —— 见 SidePanelHost.REOPEN_EDGE_MARGIN，不得压住主界面滚动条），
+   圆形、单箭头线条图标、可命中；显示层与侧边栏一致（覆盖层的子节点，决策 2.12）。 */
+.side-panel-reopen {
+    -fx-background-color: white;
+    -fx-background-radius: 50%;
+    -fx-border-color: #d5d5d5;
+    -fx-border-radius: 50%;
+    -fx-padding: 0;
+    -fx-min-width: 36px;
+    -fx-min-height: 36px;
+    -fx-pref-width: 36px;
+    -fx-pref-height: 36px;
+    -fx-max-width: 36px;
+    -fx-max-height: 36px;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.20), 10, 0, -2, 0);
+}
+
+.side-panel-reopen:hover {
+    -fx-background-color: #f0f0f0;
+}
+
+.side-panel-reopen .ikonli-font-icon {
+    -fx-icon-color: #555555;
+    -fx-icon-size: 15px;
+}
+
 /* ===== 应用内 HTML 源码查看器（Q8b / R2.7 + R2.8） =====
    逐行虚拟化的 ListView 放在横向 ScrollPane 里：行内容本身不软换行，
    靠把 ListView 的宽度撑到"最长行"来触发横向滚动（见 HtmlSourceViewer 的类注释）。 */

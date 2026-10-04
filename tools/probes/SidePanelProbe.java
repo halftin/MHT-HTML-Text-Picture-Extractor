@@ -24,6 +24,7 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.Label;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.PixelReader;
@@ -103,8 +104,12 @@ public class SidePanelProbe extends Application {
 
     /** Q6b：最近一次 markDirty() 之后「分离文件」开关应有的值（断言"提交真的应用了参数"时用）。 */
     private boolean lastToggleValue;
-    /** Q6b：R1.8「确认并提交」断言参数已应用时，期望的 isSeparateFiles 值。 */
-    private boolean committedSeparate;
+    /** 步骤 4：折叠前的草稿值（圆钮再展开/取消丢弃后必须按此对账）。 */
+    private boolean draftToggleWas;
+    /** 步骤 4：折叠前记下的 pane 实例 —— 断言圆钮重新展开的是同一个实例（草稿状态机保留）。 */
+    private ParamFormPane draftPane;
+    /** 步骤 4：右侧悬浮圆钮节点（#sidePanelReopen；收起后显示、点击再展开）。 */
+    private Button reopenButton;
 
     private Point2D leftPoint;
     private Point2D rightPoint;
@@ -114,7 +119,6 @@ public class SidePanelProbe extends Application {
     private Node rightPickOpen;
     private Node controlPickClosed;
 
-    private boolean draftToggleWas;
     private String guiStateKeysBefore;
     private String outDir;
 
@@ -126,6 +130,7 @@ public class SidePanelProbe extends Application {
         this.stage = primaryStage;
         I18n.setLocale(I18n.parseLocale(System.getProperty("probe.locale", "zh_CN")));
         Platform.setImplicitExit(false);
+        seedCleanInputFolder();
 
         outDir = new File(System.getProperty("probe.png", "shot.png")).getAbsoluteFile().getParent();
 
@@ -194,23 +199,34 @@ public class SidePanelProbe extends Application {
     /** 步骤链间隔：够 200ms 滑入动画播完，又不至于让探针跑太久。 */
     private static final long STEP_MS = 600;
 
-    /** Q6b 步骤链（R1.6/R1.7/R1.8/R3.6）；最后一步自己收尾。 */
+    /**
+     * Q6b/步骤 4 步骤链（R1.6/R1.7/R1.8/R3.6 + 功能二会话状态机 + 决策 C 门顺序 + 左侧回归）；
+     * 最后一步自己收尾。状态机 8 行逐行落成断言：
+     * 首次打开（checkCleanStartState）→ 改动（makeDirty/checkStartEnabledWhileDirty）→
+     * 收起（collapseWithDirty/checkToastAndReopenShown）→ 点圆钮（clickReopenButton/checkReopenKeptDraft）→
+     * 取消（cancelDiscardsDraft/checkCancelEndedSession）→ 确定（commitViaConfirm/checkUnnamedGateAfterCommit 的前置）→
+     * 切换+确认丢弃（confirmSwitch/checkTargetSwitchedAndClean）→ 切换+取消（cancelSwitch/checkTargetUnchanged）。
+     */
     private java.util.List<Runnable> q6bSteps() {
         return new ArrayList<>(List.of(
-                this::importFixtures, this::openParamOnNothing, this::checkCleanStartState,
-                this::makeDirty, this::checkStartButtonDisabled, this::commitViaConfirm,
-                this::checkStartButtonRestored, this::collapseAndOpenGroupA, this::makeDirty,
-                this::collapseWithDirty, this::checkCollapseHintCard, this::clickLater,
-                this::checkCollapsedKeepingDraft, this::makeDirty, this::collapseWithDirty,
-                this::clickSubmitOnCard, this::checkCollapsedAndCommitted, this::openGroupA,
+                this::importFixtures, this::waitForImport, this::checkImportDone,
+                this::openParamOnNothing, this::checkCleanStartState,
+                this::makeDirty, this::checkStartEnabledWhileDirty, this::clickStartWithDraft,
+                this::checkDraftBlocksCard, this::dismissDraftCard, this::checkCardDismissedOnly,
+                this::collapseWithDirty, this::checkToastAndReopenShown, this::clickReopenButton,
+                this::checkReopenKeptDraft, this::cancelDiscardsDraft, this::checkCancelEndedSession,
+                this::reopenAfterCancel, this::checkReopenAfterCancel,
+                this::makeGroupsAndDirtyForGateOrder, this::clickStartWithDraft,
+                this::checkDraftGatePrecedesUnnamedGate, this::dismissDraftCard,
+                this::commitViaConfirm, this::checkUnnamedGateAfterCommit, this::openGroupA,
                 this::checkTargetA, this::makeDirty, this::switchToGroupB, this::checkSwitchCard,
                 this::cancelSwitch, this::checkTargetUnchanged, this::makeDirty,
                 this::switchToGroupB, this::checkSwitchCard, this::confirmSwitch,
                 this::checkTargetSwitchedAndClean, this::switchToGlobalClean,
-                this::openGroupA, this::makeDirty, this::switchToGroupB, this::checkCardBlocksClose,
-                this::clickCardCancel, this::collapsePanelForCloseTests,
-                this::checkDirtyAllowsClose, this::resetDraftForCloseControl,
-                this::checkCleanAllowsClose, this::closeWindowForReal));
+                this::leftViewerRegression, this::openGroupA, this::makeDirty,
+                this::switchToGroupB, this::checkCardBlocksClose, this::clickCardCancel,
+                this::collapsePanelForCloseTests, this::checkDirtyAllowsClose,
+                this::resetDraftForCloseControl, this::checkCleanAllowsClose, this::closeWindowForReal));
     }
 
     /** 关窗控制组的前置：先把草稿提交干净（走唯一提交路径 #confirmButton），再让窗口重新显示。 */
@@ -253,6 +269,34 @@ public class SidePanelProbe extends Application {
 
     // ==================== steps ====================
 
+    /**
+     * 启动前播种：清空 gui-state.json 的 inputFolder。
+     *
+     * <p>🚩 为什么必须：{@code MainController.initialize → restoreGuiState} 会把上次的输入目录
+     * 写进目录框 → textProperty 监听器 → <b>异步自动导入</b>该目录。探针跑过一次之后
+     * （{@code clickStartWithDraft} 会持久化目录框内容），gui-state 里就带着 fixtures 目录，
+     * 下次启动 Q6a 中途列表被填充并自动选中条目 —— 探针"无选中 = GLOBAL 目标"的前提被环境污染
+     * （实测：reopen 时弹出 R1.6 切换卡、checkReopened 假失败）。空目录走
+     * {@code onInputFolderChanged} 的空值分支（只存状态、不导入），正好中性化。</p>
+     */
+    private void seedCleanInputFolder() {
+        try {
+            Path p = Path.of("logs", "gui-state.json");
+            if (!Files.exists(p)) {
+                return;
+            }
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode n = mapper.readTree(Files.readString(p));
+            if (n instanceof com.fasterxml.jackson.databind.node.ObjectNode obj) {
+                obj.put("inputFolder", "");
+                Files.writeString(p, mapper.writeValueAsString(obj));
+                System.out.println("seeded gui-state: inputFolder cleared (auto-import neutralized)");
+            }
+        } catch (Exception e) {
+            System.out.println("seedCleanInputFolder failed: " + e);
+        }
+    }
+
     private void selectTextMode() {
         ToggleButton textMode = (ToggleButton) scene.lookup("#textModeToggle");
         ToggleButton imageMode = (ToggleButton) scene.lookup("#imageModeToggle");
@@ -292,7 +336,12 @@ public class SidePanelProbe extends Application {
         panel = bp;
         pane = panel.getCenter() instanceof ParamFormPane p ? p : null;
         collapseButton = (Button) scene.lookup("#sidePanelCollapse");
+        reopenButton = (Button) scene.lookup("#sidePanelReopen");
         host = SidePanelHost.of(anchor);
+        check("step 4 the round button node exists with the fixed id #sidePanelReopen",
+                reopenButton != null);
+        check("step 4 the round button is HIDDEN while the panel is open (state machine row 1)",
+                reopenButton != null && !reopenButton.isVisible());
         check("panel content is a ParamFormPane (R1.10: same pane as the modal shell)", pane != null);
         check("collapse button exists with an icon graphic + tooltip (R1.2)",
                 collapseButton != null && collapseButton.getGraphic() != null
@@ -484,16 +533,13 @@ public class SidePanelProbe extends Application {
                 ParamSidePanel.isDirty(anchor));
         // Button.fire() 就是用户点这个按钮时触发的那个动作（FeatureExercise 也这么驱控件）
         collapseButton.fire();
-        // 🚩 Q6b/R1.8 起，"dirty 时点收起"不再直接收起，而是先弹提示卡：
-        // 本步的意图（收起入口确实能收起）没变，但要按新语义把卡回答掉。
-        check("R1.8 (Q6b) a DIRTY panel no longer collapses silently: the hint card comes up first"
-                        + " (pendingDecision=" + NotificationHost.hasPendingDecision(anchor) + ")",
-                NotificationHost.hasPendingDecision(anchor));
-        System.out.println("fired #sidePanelCollapse (dirty -> hint card, answering it with \"later\")");
-        if (!clickCardCancel()) {
-            check("R1.8 (Q6b) the hint card exposes a cancel button", false);
-        }
-        System.out.println("fired the hint card's cancel (control group: the collapse entry DOES collapse)");
+        // 🚩 步骤 4（决策 2.6）：dirty 时点收起**不再弹居中卡** —— toast 提示 + 直接收起 + 圆钮出现。
+        check("R1.8 (step 4) a DIRTY collapse no longer shows a centered card (pendingDecision="
+                        + NotificationHost.hasPendingDecision(anchor) + ")",
+                !cardShown() && !NotificationHost.hasPendingDecision(anchor));
+        check("R1.8 (step 4) the hint toast appears (exact collapseDraftHint message)",
+                findNotification(I18n.get("sidepanel.collapseDraftHint")) != null);
+        System.out.println("fired #sidePanelCollapse (dirty -> toast + collapse, no card)");
     }
 
     private void checkCollapsed() {
@@ -503,15 +549,23 @@ public class SidePanelProbe extends Application {
         check("R1.5 the draft survives the collapse (isDirty still true)", ParamSidePanel.isDirty(anchor));
         check("R1.5 the edited value survives the collapse",
                 ((ToggleSwitch) pane.lookup("#separateFilesCheck")).isSelected() == draftToggleWas);
+        check("step 4 the round button is VISIBLE after collapse (way back into the session)",
+                reopenVisible());
     }
 
     private void reopenPanel() {
         paramSettingsButton.fire();
-        System.out.println("fired #paramSettingsButton again (same target: nothing selected -> GLOBAL)");
+        System.out.println("fired #paramSettingsButton again (same target: nothing selected -> GLOBAL)"
+                + "  -> showing=" + host.isRightShowing() + " translateX=" + panel.getTranslateX()
+                + " visible=" + panel.isVisible() + " reopenVisible=" + reopenVisible()
+                + " buttonDisabled=" + paramSettingsButton.isDisabled()
+                + " cardShown=" + cardShown() + " pending=" + NotificationHost.hasPendingDecision(anchor)
+                + " loadedTarget=" + targetTag() + " dirty=" + ParamSidePanel.isDirty(anchor));
     }
 
     private void checkReopened() {
-        check("R1.5 the panel is visible again (translateX=0)",
+        check("R1.5 the panel is visible again (translateX=" + panel.getTranslateX()
+                        + " visible=" + panel.isVisible() + " showing=" + host.isRightShowing() + ")",
                 panel.isVisible() && Math.abs(panel.getTranslateX()) <= 0.01);
         check("R1.5 the reopened panel is the SAME ParamFormPane instance (draft state machine kept)",
                 panel.getCenter() == pane);
@@ -519,6 +573,7 @@ public class SidePanelProbe extends Application {
                 ParamSidePanel.isDirty(anchor));
         check("R1.5 the edited value is still there",
                 ((ToggleSwitch) pane.lookup("#separateFilesCheck")).isSelected() == draftToggleWas);
+        check("step 4 reopening via #paramSettingsButton hides the round button again", !reopenVisible());
 
         // ---- R3.5：侧边栏开合不落盘 ----
         String after = guiStateKeySet();
@@ -618,21 +673,41 @@ public class SidePanelProbe extends Application {
 
     /** R1.7 的驱动样本：11 个夹具平铺导入（无子目录 ⇒ 不建组，条目路由成全局目标）。 */
     private void importFixtures() {
+        fileListView.getSelectionModel().clearSelection();
+        // 🚩 走生产路径：设置输入目录框 → textProperty 监听器 → onInputFolderChanged → 异步导入。
+        // 顺带把目录框预先置成 FIXTURES_DIR：后面的 clickStartWithDraft 再 setText 同一值不会触发
+        // 变更事件，也就不会"先开一次导入会话 → 禁用开始按钮 → fire() 静默失效"。
+        // 不 sleep：导入是异步的（后台扫描 + FX 回调应用），而探针步骤跑在 FX 线程上，
+        // Thread.sleep 会挡住导入自己的回调（实测 visibleCount 恒 0）。等待交给后面的 tick。
+        javafx.scene.control.TextField in =
+                (javafx.scene.control.TextField) scene.lookup("#inputFolderField");
+        if (in != null) {
+            in.setText(FIXTURES_DIR);
+        }
+        System.out.println("Q6b: inputFolderField set to fixtures (async import via the production listener)");
+    }
+
+    /** 让出一个 tick 给异步导入完成（本步不碰任何状态，只为等导入的 FX 回调排空）。 */
+    private void waitForImport() {
+        System.out.println("Q6b: one tick for the async import to apply...");
+    }
+
+    private void checkImportDone() {
         check("Q6b can resolve #startButton", startButton != null);
         check("Q6b can resolve #fileListView", fileListView != null);
-        fileListView.getSelectionModel().clearSelection();
-        invoke(controller, "importFromFolder",
-                new Class<?>[]{String.class}, FIXTURES_DIR);
-        sleep(1500);
         System.out.println("Q6b: imported fixtures -> visibleCount=" + visibleCount()
                 + " groups=" + topLevelGroups().size());
         check("Q6b fixture import put items in the list (visibleCount>0)", visibleCount() > 0);
     }
 
-    /** 干净状态下开始按钮**可用**（R1.7 的对照基线；也证明"禁用"不是恒真）。 */
+    /** 干净状态下开始按钮**可用**（R1.7 步骤 4 的对照基线：禁用的只有其它条件，与草稿无关）。 */
     private void checkCleanStartState() {
-        check("R1.7 clean panel: #startButton is ENABLED (baseline for the dirty case)",
+        check("R1.7 (step 4) clean panel: #startButton is ENABLED (baseline for the dirty case)",
                 startButton != null && !startButton.isDisable());
+        check("step 4 state machine row 1 (first open): the round button is HIDDEN",
+                reopenButton != null && !reopenVisible());
+        check("step 4 state machine row 1 (first open): the panel is open with a clean baseline",
+                host.isRightShowing() && !ParamSidePanel.isDirty(anchor));
     }
 
     /**
@@ -679,12 +754,68 @@ public class SidePanelProbe extends Application {
     }
 
     /**
-     * R1.7 的核心：改完字段**立刻**禁用，不允许等到下一次无关刷新。
-     * 这里不做任何 refresh 调用 —— 唯一的触发就是控件自己的事件冒泡到面板。
+     * R1.7（步骤 4 · 决策 2.5 语义变更）：改完字段按钮**仍可点** ——
+     * 不再禁用（拦截从"按钮态"改成 ExtractionTaskCoordinator 的草稿门弹卡）。
      */
-    private void checkStartButtonDisabled() {
-        check("R1.7 editing a field disables #startButton IMMEDIATELY (no refresh call in between)",
-                startButton != null && startButton.isDisable());
+    private void checkStartEnabledWhileDirty() {
+        check("R1.7 (step 4) editing a field NO LONGER disables #startButton (button="
+                        + (startButton != null && !startButton.isDisable() ? "enabled" : "disabled") + ")",
+                startButton != null && !startButton.isDisable());
+        check("step 4 state machine row 2 (user edit): the round button stays hidden",
+                !reopenVisible());
+    }
+
+    /**
+     * 点「开始提取」的前置：deny 链在草稿门之前，输入/输出目录必须合法才能走到门
+     * （输入目录 = 夹具目录、输出目录 = 临时目录）；随后真的 fire #startButton。
+     */
+    private void clickStartWithDraft() {
+        javafx.scene.control.TextField in = (javafx.scene.control.TextField) scene.lookup("#inputFolderField");
+        javafx.scene.control.TextField out = (javafx.scene.control.TextField) scene.lookup("#outputFolderField");
+        check("step 4 pre: the input/output folder fields are reachable", in != null && out != null);
+        if (in != null) {
+            in.setText(FIXTURES_DIR);
+        }
+        if (out != null) {
+            out.setText(new File(System.getProperty("java.io.tmpdir"), "sidepanel-probe-out").getPath());
+        }
+        startButton.fire();
+    }
+
+    /** R1.7（步骤 4）：点开始时草稿未提交 → 居中提醒卡（决策 D：只有一个「确定」）。 */
+    private void checkDraftBlocksCard() {
+        check("R1.7 (step 4) starting with a dirty draft shows the centered blocking card (card="
+                + cardShown() + ")", cardShown());
+        String msg = cardMessage();
+        check("R1.7 (step 4) the card message is sidepanel.draftBlocksStart: " + msg.replace('\n', '|'),
+                I18n.get("sidepanel.draftBlocksStart").equals(msg));
+        List<Button> actions = modalPane.getContent() instanceof Notification n
+                ? n.getPrimaryActions() : List.of();
+        check("R1.7 (step 4) the card has exactly ONE button (decision D; buttons="
+                + actions.stream().map(Button::getText).toList() + ")", actions.size() == 1);
+        check("R1.7 (step 4) the card button does NOT set defaultButton",
+                actions.stream().noneMatch(Button::isDefaultButton));
+        check("R1.7 (step 4) the card is informational (no pending decision registered)",
+                !NotificationHost.hasPendingDecision(anchor));
+        check("R1.7 (step 4) no extraction started behind the card (running=" + extractionRunning() + ")",
+                !extractionRunning());
+        check("R1.7 (step 4) the panel stays OPEN and dirty behind the card",
+                host.isRightShowing() && ParamSidePanel.isDirty(anchor));
+    }
+
+    /** 点 R1.7 卡片的「确定」（唯一按钮）。 */
+    private void dismissDraftCard() {
+        check("R1.7 (step 4) the card exposes its single OK button", clickCardButton(0));
+    }
+
+    /** 微决策：「确定」只关卡片 —— 不展开/不收起侧边栏、不改变草稿、不启动提取。 */
+    private void checkCardDismissedOnly() {
+        check("R1.7 (step 4) OK only closes the card (panel still open, draft still dirty)",
+                !cardShown() && host.isRightShowing() && ParamSidePanel.isDirty(anchor));
+        check("R1.7 (step 4) OK did not start extraction (running=" + extractionRunning() + ")",
+                !extractionRunning());
+        check("R1.7 (step 4) the start button stays ENABLED (no state changed by the card)",
+                startButton != null && !startButton.isDisable());
     }
 
     private void commitViaConfirm() {
@@ -692,11 +823,6 @@ public class SidePanelProbe extends Application {
         if (confirm != null) {
             confirm.fire();
         }
-    }
-
-    private void checkStartButtonRestored() {
-        check("R1.7 confirming (commit) re-enables #startButton",
-                startButton != null && !startButton.isDisable());
     }
 
     private void openGroupA() {
@@ -712,82 +838,170 @@ public class SidePanelProbe extends Application {
                 host.isRightShowing() && targetTag().equals(expectGroupTag(0)) && !livePane().isDirty());
     }
 
-    // ---------- R1.8：收起时 dirty 提示卡 ----------
+    // ---------- 步骤 4：折叠 = 会话继续（toast + 圆钮）；R1.8 降级 ----------
 
     private void collapseWithDirty() {
         ToggleSwitch t = (ToggleSwitch) livePane().lookup("#separateFilesCheck");
-        committedSeparate = t != null && t.isSelected();   // 这一刻的值就是"确认并提交"后应有的值
+        draftToggleWas = t != null && t.isSelected();   // 折叠前的草稿值（圆钮再展开后必须原样还在）
+        draftPane = livePane();                          // 折叠前的 pane 实例（再展开必须是同一个）
         collapseButton.fire();
     }
 
-    private void checkCollapseHintCard() {
-        check("R1.8 collapsing with a dirty draft shows a centered card", cardShown());
-        String msg = cardMessage();
-        check("R1.8 the card says the draft was KEPT", msg.contains("草稿已保留")
-                || msg.contains("draft has been kept"));
-        check("R1.8 the card says extraction is blocked until submit",
-                msg.contains("提交前无法开始提取") || msg.contains("cannot start"));
-        check("R1.8 the card is an UNANSWERED decision (hasPendingDecision=true) "
-                + "-> the close gate sees it (R3.6 branch 2)", NotificationHost.hasPendingDecision(anchor));
-        // CLAUDE.md 的坑：通知里的按钮绝不能设 defaultButton（defaultButton 是场景级的，
-        // 会劫持整个主窗口的 ENTER —— Q6a 刚踩过同类坑）
-        List<Button> actions = modalPane.getContent() instanceof Notification n
-                ? n.getPrimaryActions() : List.of();
-        check("R1.8/R1.6 card buttons do NOT set defaultButton " + actions.stream()
-                        .map(b -> b.getText() + "=" + b.isDefaultButton()).toList(),
-                actions.size() >= 2 && actions.stream().noneMatch(Button::isDefaultButton));
-        System.out.println("Q6b: card msg = " + msg.replace('\n', '|'));
-    }
-
-    private void clickLater() {
-        check("R1.8 card exposes a cancel button (\"稍后\")", clickCardCancel());
-    }
-
-    private void checkCollapsedKeepingDraft() {
-        check("R1.8 \"later\": panel collapsed AND draft kept (isDirty still true)",
-                !host.isRightShowing() && ParamSidePanel.isDirty(anchor));
-        check("R1.8 \"later\" did NOT reset the pending decision bookkeeping (no card left)",
+    /** R1.8（步骤 4）：dirty 收起 → 无居中卡、toast 提示 + 面板收起 + 草稿保留 + 圆钮显示。 */
+    private void checkToastAndReopenShown() {
+        check("R1.8 (step 4) collapsing a dirty panel shows NO centered card (downgraded to toast)",
                 !cardShown() && !NotificationHost.hasPendingDecision(anchor));
+        Node toast = findNotification(I18n.get("sidepanel.collapseDraftHint"));
+        check("R1.8 (step 4) the hint toast appears with the exact round-button message",
+                toast != null);
+        check("R1.8 (step 4) the hint toast is a TOP-RIGHT toast above the overlay (shellIndexOf="
+                        + (toast == null ? -1 : shellIndexOf(toast)) + ")",
+                toast != null && shellIndexOf(toast) > 0);
+        check("R1.8 (step 4) panel collapsed AND draft kept (isDirty still true)",
+                !host.isRightShowing() && ParamSidePanel.isDirty(anchor));
+        check("R1.8 (step 4) the edited value survives the collapse",
+                ((ToggleSwitch) livePane().lookup("#separateFilesCheck")).isSelected() == draftToggleWas);
+        check("step 4 state machine row 3 (collapse): the round button is VISIBLE", reopenVisible());
+        check("step 4 the round button is a real node with size and a line icon",
+                reopenButton != null && reopenButton.getWidth() > 0 && reopenButton.getHeight() > 0
+                        && reopenButton.getGraphic() != null);
+        check("step 4 the round button tooltip is sidepanel.reopen",
+                reopenButton != null && reopenButton.getTooltip() != null
+                        && I18n.get("sidepanel.reopen").equals(reopenButton.getTooltip().getText()));
     }
 
-    private void clickSubmitOnCard() {
-        check("R1.8 card exposes an OK button (\"确认并提交\")", clickCardOk());
+    private void clickReopenButton() {
+        check("step 4 the typed accessor returns the #sidePanelReopen node (host.reopenButton(RIGHT))",
+                reopenButton != null && host != null
+                        && host.reopenButton(SidePanelHost.Side.RIGHT) == reopenButton);
+        Node picked = centerOf(reopenButton) == null ? null
+                : pick(scene.getRoot(), centerOf(reopenButton).getX(), centerOf(reopenButton).getY());
+        check("step 4 the round button is pickable at its center (picked " + describe(picked) + ")",
+                picked != null && isDescendantOf(picked, reopenButton));
+        if (reopenButton != null) {
+            reopenButton.fire();
+        }
     }
 
-    /** 「确认并提交」必须**真的应用参数**（等价于面板里的「确定」）。 */
-    private void checkCollapsedAndCommitted() {
-        check("R1.8 \"submit\": panel collapsed AND draft cleared (isDirty=false)",
-                !host.isRightShowing() && !ParamSidePanel.isDirty(anchor));
-        Boolean separate = committedSeparateFiles();
-        check("R1.8 \"submit\" APPLIED the parameters to the target's own params cache "
-                        + "(isSeparateFiles=" + separate + ", expected=" + committedSeparate + ")",
-                separate != null && separate == committedSeparate);
-        check("R1.7 after \"submit\" #startButton is enabled again (dirty cleared)",
-                startButton != null && !startButton.isDisable());
+    /** 状态机「点圆钮」行：滑入展开、同一 pane 实例、草稿原样保留、圆钮隐藏、不弹卡。 */
+    private void checkReopenKeptDraft() {
+        check("step 4 state machine row 4 (round button): the panel re-expands (visible, translateX=0)",
+                panel.isVisible() && host.isRightShowing() && Math.abs(panel.getTranslateX()) <= 0.01);
+        check("step 4 re-expanding uses the SAME pane instance (draft state machine kept)",
+                livePane() == draftPane);
+        check("step 4 the draft survives the round-button reopen (no load, isDirty still true)",
+                ParamSidePanel.isDirty(anchor));
+        check("step 4 the edited value survives the round-button reopen",
+                ((ToggleSwitch) livePane().lookup("#separateFilesCheck")).isSelected() == draftToggleWas);
+        check("step 4 the round button hides again while the panel is open", !reopenVisible());
+        check("step 4 no card was shown during reopen (R1.6 NOT re-asked; target unchanged)",
+                !cardShown());
     }
+
+    // ---------- 步骤 4：取消 = 会话结束（草稿丢弃） ----------
+
+    private void cancelDiscardsDraft() {
+        ToggleSwitch t = (ToggleSwitch) livePane().lookup("#separateFilesCheck");
+        draftToggleWas = t != null && t.isSelected();   // 取消前的草稿值（≠基线，取消后必须复位）
+        Button cancel = (Button) livePane().lookup("#cancelButton");
+        check("step 4 pre: the panel cancel button is reachable", cancel != null);
+        if (cancel != null) {
+            cancel.fire();
+        }
+    }
+
+    /** 状态机「点取消」行（决策 2.4）：会话结束 —— 收起、圆钮隐藏、草稿丢弃（控件复位到基线）。 */
+    private void checkCancelEndedSession() {
+        check("step 4 state machine row 5 (cancel): panel collapsed AND round button hidden",
+                !host.isRightShowing() && !reopenVisible());
+        check("step 4 CANCEL discards the draft (isDirty=false after reload)",
+                !ParamSidePanel.isDirty(anchor));
+        check("step 4 the discarded edits are reset to the target's baseline value",
+                ((ToggleSwitch) livePane().lookup("#separateFilesCheck")).isSelected() != draftToggleWas);
+    }
+
+    private void reopenAfterCancel() {
+        paramSettingsButton.fire();   // 同一目标（GLOBAL）重开：干净基线直接展开
+    }
+
+    private void checkReopenAfterCancel() {
+        check("step 4 reopening after cancel shows the clean baseline (discard persisted)",
+                host.isRightShowing() && !ParamSidePanel.isDirty(anchor) && !reopenVisible());
+    }
+
+    // ---------- 步骤 4：决策 C 门顺序（草稿门 → 未命名组门） ----------
 
     /**
-     * 读"当前目标自己的参数缓存"里的 {@code isSeparateFiles}。
-     *
-     * <p>🚩 不能只看 {@code MainController.textParamsCache}：参数按目标分三层（全局 / 组 / 条目），
-     * 组目标的「确认」写的是<b>该组</b>的 {@code textParamsCache}（见 {@code applyGroupParams}）。
-     * 只读全局缓存会把"确实应用了、只是应用到了组上"误判成失败。</p>
+     * 门顺序测试前置：造一个<b>手工</b>组（合并为组 → defaultNamed=true —— 未命名组门的唯一
+     * 触发样本；目录导入的组自带名字，不算"未命名"）+ 把面板改脏（草稿门会拦）。
      */
-    private Boolean committedSeparateFiles() {
-        Object params = null;
-        Object target = ParamSidePanel.of(anchor).loadedTarget();
-        if (target instanceof ParamScope.GroupTarget gt) {
-            params = invoke(gt.group(), "getTextParamsCache", new Class<?>[]{});
-        } else {
-            params = fieldDeep(controller, "paramDomain", "textParamsCache");
+    private void makeGroupsAndDirtyForGateOrder() {
+        // 与 FeatureExercise 的驱动方式同：勾选两个顶层条目 → updateListButtons → fire #groupButton
+        List<com.mhtextractor.model.PreviewItem> items = allVisibleItems().stream()
+                .filter(i -> i.parentGroup == null && !i.removed).toList();
+        check("step 4 gate-order pre: at least two top-level items to merge (items=" + items.size() + ")",
+                items.size() >= 2);
+        if (items.size() >= 2) {
+            for (com.mhtextractor.model.PreviewItem i : allVisibleItems()) {
+                i.setSelected(false);
+            }
+            items.get(0).setSelected(true);
+            items.get(1).setSelected(true);
+            invoke(controller, "updateListButtons", new Class<?>[]{});
+            javafx.scene.control.Button groupButton =
+                    (javafx.scene.control.Button) scene.lookup("#groupButton");
+            check("step 4 gate-order pre: the merge button is enabled",
+                    groupButton != null && !groupButton.isDisabled());
+            if (groupButton != null && !groupButton.isDisabled()) {
+                groupButton.fire();
+            }
         }
-        try {
-            return params == null ? null
-                    : (Boolean) params.getClass().getMethod("isSeparateFiles").invoke(params);
-        } catch (Exception e) {
-            System.out.println("      (reading the committed params failed: " + e + ")");
-            return null;
+        check("step 4 gate-order pre: a default-named manual group now exists",
+                manualGroupName() != null);
+        makeDirty();
+    }
+
+    /** 决策 C：草稿门在未命名组门之前 —— 两个门都命中时先看到草稿卡。 */
+    private void checkDraftGatePrecedesUnnamedGate() {
+        check("step 4 gate order (decision C): with a dirty draft AND a default-named group, "
+                        + "the DRAFT card comes first", cardShown()
+                && I18n.get("sidepanel.draftBlocksStart").equals(cardMessage()));
+        String expectedUnnamed = I18n.get("group.unnamedConfirm", "names", manualGroupName());
+        check("step 4 gate order: the unnamed-group card did NOT preempt the draft card",
+                !expectedUnnamed.equals(cardMessage()));
+    }
+
+    /** 草稿提交后（草稿门放行），未命名组门照常拦截 —— 证明顺序是串行、前者不吞后者。 */
+    private void checkUnnamedGateAfterCommit() {
+        startButton.fire();   // 链是 FX 同步的：deny → R1.6 参数卡 → 草稿门（已干净，放行）→ 未命名组门
+        String expected = I18n.get("group.unnamedConfirm", "names", manualGroupName());
+        check("step 4 gate order: after the draft is committed, the unnamed-group gate fires (card="
+                + cardShown() + ")", cardShown() && expected.equals(cardMessage()));
+        check("step 4 gate order: the unnamed card is a CONFIRM (pending decision registered)",
+                NotificationHost.hasPendingDecision(anchor));
+        check("step 4 gate order: cancel on the unnamed card", clickCardCancel());
+        check("step 4 gate order: canceling the unnamed card aborts extraction (running="
+                + extractionRunning() + ")", !extractionRunning());
+    }
+
+    /** 默认名（未命名）组的名字；没有 → null。 */
+    private String manualGroupName() {
+        for (Object g : topLevelGroups()) {
+            try {
+                if (Boolean.TRUE.equals(g.getClass().getMethod("isDefaultNamed").invoke(g))) {
+                    return groupName(g);
+                }
+            } catch (Exception ignored) {
+                // 继续找下一个
+            }
         }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<com.mhtextractor.model.PreviewItem> allVisibleItems() {
+        Object r = invoke(controller, "allVisibleItems", new Class<?>[]{});
+        return r instanceof List<?> l ? (List<com.mhtextractor.model.PreviewItem>) l : List.of();
     }
 
     // ---------- R1.6：切换目标确认卡 ----------
@@ -803,6 +1017,8 @@ public class SidePanelProbe extends Application {
         check("R1.6 the panel did NOT switch behind the card (target still " + expectGroupTag(0)
                         + ", actual=" + targetTag() + ")",
                 targetTag().equals(expectGroupTag(0)));
+        check("step 4 (decision 2.7) the panel STAYS OPEN during the R1.6 card (no pre-collapse)",
+                host.isRightShowing() && panel.isVisible());
     }
 
     private void cancelSwitch() {
@@ -813,8 +1029,10 @@ public class SidePanelProbe extends Application {
         check("R1.6 CANCEL: target unchanged (still " + expectGroupTag(0) + ", actual=" + targetTag() + ")",
                 targetTag().equals(expectGroupTag(0)));
         check("R1.6 CANCEL: draft unchanged (isDirty still true)", ParamSidePanel.isDirty(anchor));
-        check("R1.7 cancel switching does not re-enable #startButton (still dirty)",
-                startButton != null && startButton.isDisable());
+        check("R1.7 (step 4) cancel switching leaves #startButton enabled (draft no longer disables it)",
+                startButton != null && !startButton.isDisable());
+        check("step 4 (decision 2.7) state machine row 8 (switch + cancel): the panel stays open",
+                host.isRightShowing() && panel.isVisible() && !reopenVisible());
         check("R1.6 CANCEL: no card left and the panel stays open",
                 !cardShown() && host.isRightShowing());
     }
@@ -840,6 +1058,10 @@ public class SidePanelProbe extends Application {
 
     private void confirmSwitch() {
         check("R1.6 card exposes an OK button", clickCardOk());
+        // 决策 2.7/2.8：确认后才原地换内容 —— 同一帧内面板保持展开、translateX 不重放（无滑入动画）
+        check("step 4 (decision 2.7/2.8) after confirming the switch the panel stays open IN PLACE "
+                        + "(translateX=" + panel.getTranslateX() + ")", host.isRightShowing()
+                && panel.isVisible() && Math.abs(panel.getTranslateX()) <= 0.01);
     }
 
     private void checkTargetSwitchedAndClean() {
@@ -847,8 +1069,10 @@ public class SidePanelProbe extends Application {
                 + ", actual=" + targetTag() + ")", targetTag().equals(expectGroupTag(1)));
         check("R1.6 OK: draft discarded (load() re-baselined, isDirty=false)",
                 !ParamSidePanel.isDirty(anchor));
-        check("R1.7 after discarding the draft #startButton is enabled again",
-                startButton != null && !startButton.isDisable());
+        check("step 4 (decision 2.7) state machine row 7 (switch + confirm): the panel is STILL OPEN "
+                        + "after the in-place content replacement", host.isRightShowing()
+                && panel.isVisible() && Math.abs(panel.getTranslateX()) <= 0.01);
+        check("step 4 the round button stays hidden during an open-panel switch", !reopenVisible());
     }
 
     // ---------- R3.6：两条独立分支 ----------
@@ -1045,13 +1269,45 @@ public class SidePanelProbe extends Application {
         paramSettingsButton.fire();
     }
 
-    /** 收起本轮的 side panel（不给守卫添乱：此刻必须干净），造两个组，再选中组 A 打开。 */
-    private void collapseAndOpenGroupA() {
-        if (host.isRightShowing()) {
-            collapseButton.fire();
+    /**
+     * 硬边界回归：{@code SidePanelHost} 左右共用（左侧是 HTML 源码查看器）⇒
+     * 左侧收起/展开必须回归；左侧圆钮本期<b>预留</b>（决策 2.2：API 已按 side 参数化，不显示）。
+     */
+    private void leftViewerRegression() {
+        BorderPane dummy = new BorderPane(new Label("left-viewer-regression"));
+        host.showLeft(dummy, "viewer", null);
+        check("left regression: showLeft expands the left panel (logical state)", host.isLeftShowing());
+        check("left regression: the left panel holds the new content and is visible",
+                host.leftPanelNode().isVisible()
+                        && host.leftPanelNode() instanceof BorderPane lb && lb.getCenter() == dummy);
+        check("left regression: the right side is untouched (independent nodes, R3.1)",
+                host.isRightShowing());
+        host.hideLeft();
+        check("left regression: hideLeft collapses the left panel (logical state)", !host.isLeftShowing());
+        host.showLeft(dummy, "viewer", null);   // 折叠后再次展开仍走滑入（与右侧决策 2.9 同构）
+        check("left regression: showLeft re-expands after a fold", host.isLeftShowing());
+        check("left regression: no left round button yet (reserved, decision 2.2)",
+                !host.isReopenShowing(SidePanelHost.Side.LEFT)
+                        && !host.reopenButton(SidePanelHost.Side.LEFT).isVisible());
+        host.hideLeft();
+        check("left regression: left collapsed for the close tests", !host.isLeftShowing());
+    }
+
+    /** 圆钮当前是否显示（每次经 #sidePanelReopen 现查，不缓存可见态）。 */
+    private boolean reopenVisible() {
+        Node n = scene.lookup("#sidePanelReopen");
+        return n != null && n.isVisible();
+    }
+
+    /** 提取是否在跑（经 MainController.extractionCoordinator 的 running 标记；探针在默认包，反射读）。 */
+    private boolean extractionRunning() {
+        Object coord = field(controller, "extractionCoordinator");
+        Object running = coord == null ? null : field(coord, "running");
+        try {
+            return running != null && (Boolean) running.getClass().getMethod("get").invoke(running);
+        } catch (Exception e) {
+            return false;
         }
-        createFixtureGroups();
-        openGroupA();
     }
 
     /** 目标标签：全局 = "GLOBAL"，组 = "group:<组名>"，条目 = "item:<路径>"，未载入 = "null"。 */
