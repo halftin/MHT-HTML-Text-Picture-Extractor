@@ -182,7 +182,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 模型 → JavaFX 的投影层（Q4/P3）：显示序（ListView 绑定）由它独占维护，数据序只读投影由它提供。
      *  投影<b>时机</b>仍由本类显式给出；"为何不在每次变更上自动投影"见 {@link WorkspaceFxAdapter} 的类 javadoc。 */
     final WorkspaceFxAdapter adapter = new WorkspaceFxAdapter(ws);
-    /** 数据序只读投影：保留同名入口给 FeatureExercise（P7 才改造）；唯一写操作 clear() 转发为模型命令 */
+    /** 数据序只读投影（adapter.dataOrder() 的别名；同名入口供同包测试驱动读取，已由第 13 条不变式冻结）；唯一写操作 clear() 转发为模型命令 */
     final List<Object> items = adapter.dataOrder();
     /** 显示序：ListView 直接渲染的展平列表，按数据序实时重建（F5 显示序/数据序分离）—— adapter.displayItems() 的只读别名 */
     private final ObservableList<Object> displayItems = adapter.displayItems();
@@ -471,7 +471,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public Path cacheRoot() { return previewCacheLifecycle.store().root(); }
         @Override public void onShutdownClearCache() { workspaceParamService.clearAllCaches(); }
     });
-    /** Q9a：FeatureExercise 按<b>字段访问</b>读它的 isDisable()，故保留同名字段指向新类里那一个 */
+    /** Q9a：测试驱动按<b>字段访问</b>读它的 isDisable()（已由第 13 条不变式冻结），故保留同名字段指向新类里那一个 */
     MenuItem ctxClearParams;
     /**
      * 参数域协作者（步骤 1）：「两套已确认参数缓存 + 参数应用 + 参数撤销 + 参数变更后的派生刷新」

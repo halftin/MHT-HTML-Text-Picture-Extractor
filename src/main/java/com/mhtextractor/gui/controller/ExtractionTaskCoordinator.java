@@ -355,12 +355,14 @@ public final class ExtractionTaskCoordinator {
 
         @Override
         public void ask(Consumer<Boolean> proceed) {
-            List<String> names = new ArrayList<>();
+            List<GroupItem<PreviewItem>> groups = new ArrayList<>();
             for (Object o : host.dataOrder()) {
-                if (o instanceof GroupItem<?> g && g.isDefaultNamed()) {
-                    names.add(g.getName());
+                if (o instanceof GroupItem<?> g) {
+                    groups.add(ListInteractionController.asPreviewGroup(g));
                 }
             }
+            // 判定唯一来源 = app 层纯规则（本门只做展示；不再内联同名过滤）
+            List<String> names = ExtractionPreconditions.unnamedGroups(groups);
             if (names.isEmpty()) {
                 proceed.accept(true);
                 return;
