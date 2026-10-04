@@ -16,6 +16,7 @@ import java.util.TreeSet;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -989,5 +990,66 @@ class ArchitectureTest {
         } catch (IOException e) {
             fail("读取基线目录失败：" + e.getMessage());
         }
+    }
+
+    // ==================== 7. 测试访问面冻结（D2 · 第 13 条不变式） ====================
+
+    /** 测试访问面清单条目数上限（D2 实测 121）：只减不增；收紧访问面后同步下调。 */
+    private static final int TEST_ACCESS_SURFACE_MAX = 121;
+
+    /**
+     * 「测试访问面冻结」不变式（D2）：三条断言合取 + 驱动文件完整性守卫，失败信息分区列出。
+     * <ul>
+     *   <li>① 只防新增：发现集合 ⊆ 清单（键均为 通道+类/文件+成员 三列拼法，逐字节一致）；</li>
+     *   <li>② 防清单膨胀：清单条目数 ≤ {@value #TEST_ACCESS_SURFACE_MAX}（只减不增）；</li>
+     *   <li>③ 防陈旧/腐化：清单中未被发现的条目数 == 0；</li>
+     *   <li>④ 驱动文件完整性：{@code guiTestSourceClasses()} 与
+     *       {@code TestAccessSurface.DRIVER_CLASSES} 双向相等（新同包驱动不登记即失败）。</li>
+     * </ul>
+     */
+    @Test
+    void testAccessSurfaceIsFrozen() throws IOException {
+        Set<String> manifest = TestAccessSurface.loadManifest();
+        assertNotNull(manifest, "测试访问面清单缺失/读不到：" + TestAccessSurface.MANIFEST_PATH
+                + "\n  请运行：java -cp \"target/classes;target/test-classes\" "
+                + "com.mhtextractor.baseline.TestAccessSurface --write 重新生成");
+
+        Set<String> discovered = TestAccessSurface.discover();
+
+        TreeSet<String> added = new TreeSet<>(discovered);
+        added.removeAll(manifest);
+        TreeSet<String> stale = new TreeSet<>(manifest);
+        stale.removeAll(discovered);
+
+        Set<String> srcDrivers = TestAccessSurface.guiTestSourceClasses();
+        Set<String> declared = new TreeSet<>(TestAccessSurface.DRIVER_CLASSES);
+        TreeSet<String> unregistered = new TreeSet<>(srcDrivers);
+        unregistered.removeAll(declared);
+        TreeSet<String> phantom = new TreeSet<>(declared);
+        phantom.removeAll(srcDrivers);
+
+        assertTrue(added.isEmpty(),
+                "清单外的新增访问点（发现集合 ⊄ 清单）：\n  " + joinKeys(added)
+                        + "\n  处置：撤销该访问点，或显式登记进清单并同步下调 TEST_ACCESS_SURFACE_MAX（只减不增）");
+        assertTrue(manifest.size() <= TEST_ACCESS_SURFACE_MAX,
+                "清单条目数 " + manifest.size() + " 超过上限 " + TEST_ACCESS_SURFACE_MAX
+                        + "（只减不增；收紧后同步下调）");
+        assertTrue(stale.isEmpty(),
+                "清单里已不存在的条目（陈旧/腐化；防「删一条、加一条」）：\n  " + joinKeys(stale));
+        assertTrue(unregistered.isEmpty(),
+                "src/test/java 新增了未登记的 gui 驱动测试类（DRIVER_CLASSES 完整性守卫）：\n  "
+                        + String.join("\n  ", unregistered)
+                        + "\n  处置：登记进 TestAccessSurface.DRIVER_CLASSES");
+        assertTrue(phantom.isEmpty(),
+                "TestAccessSurface.DRIVER_CLASSES 登记了 src/test/java 中不存在的驱动类：\n  "
+                        + String.join("\n  ", phantom));
+
+        System.out.println("[arch] 测试访问面：清单 " + manifest.size() + " / 发现 " + discovered.size()
+                + " / 新增 " + added.size() + " / 陈旧 " + stale.size() + " / 驱动 " + srcDrivers.size());
+    }
+
+    /** 发现键（通道\t类/文件\t成员）转可读行（制表符转空格）。 */
+    private static String joinKeys(Set<String> keys) {
+        return String.join("\n  ", keys.stream().map(k -> k.replace('\t', ' ')).toList());
     }
 }

@@ -5,6 +5,7 @@ import java.io.DataInputStream;
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -71,8 +72,42 @@ public final class TestAccessSurface {
     private static final String CH_REFLECT = "reflect";
     private static final String CH_DYNAMIC = "reflect-dynamic";
 
-    /** 驱动类包前缀（任务书 2.0-3：src/test/java 下包名以 com.mhtextractor.gui 开头的测试类全部为驱动）。 */
+    /** 驱动源包前缀（guiTestSourceClasses 判定用：src/test/java 下包名以 com.mhtextractor.gui 开头的测试类全部为驱动）。 */
     private static final String DRIVER_PREFIX = "com.mhtextractor.gui.";
+
+    /**
+     * 显式驱动文件清单（用户 2026-10-04 裁决 A）：src/test/java 中包名以 com.mhtextractor.gui 开头的
+     * 全部测试类（18 个）。direct 通道只扫属于这些 top-level 驱动类的 .class（含 $嵌套/匿名）；
+     * 完整性守卫：{@link #guiTestSourceClasses()} 与此清单必须双向相等。
+     */
+    public static final List<String> DRIVER_CLASSES = List.of(
+            "com.mhtextractor.gui.WorkspaceFxAdapterTest",
+            "com.mhtextractor.gui.acceptance.TestMain",
+            "com.mhtextractor.gui.component.ExtractOutcomeStylesTest",
+            "com.mhtextractor.gui.component.GuiNotificationsIsSemanticFacadeOnlyTest",
+            "com.mhtextractor.gui.component.HtmlFindIndexTest",
+            "com.mhtextractor.gui.component.ParamTargetTextTest",
+            "com.mhtextractor.gui.controller.AcceptanceDriver",
+            "com.mhtextractor.gui.controller.AgentExercise",
+            "com.mhtextractor.gui.controller.ExtractionTaskCoordinatorCancelRaceTest",
+            "com.mhtextractor.gui.controller.ExtractionTaskCoordinatorGateTest",
+            "com.mhtextractor.gui.controller.ExtractionTaskCoordinatorRunChannelTest",
+            "com.mhtextractor.gui.controller.FeatureExercise",
+            "com.mhtextractor.gui.controller.FeatureExerciseSupport",
+            "com.mhtextractor.gui.controller.FileListContextMenuTest",
+            "com.mhtextractor.gui.controller.ImportSessionCoordinatorQuotaTest",
+            "com.mhtextractor.gui.controller.ParamClipboardTest",
+            "com.mhtextractor.gui.util.DragGeometryTest",
+            "com.mhtextractor.gui.util.ThumbnailFxBridgeTest");
+
+    /** 清单路径（相对仓库根）。 */
+    public static final String MANIFEST_PATH = "src/test/resources/test-access-surface.tsv";
+
+    /** fqn 去掉 $嵌套/匿名 后缀后的 top-level 类名。 */
+    private static String topLevel(String fqn) {
+        int d = fqn.indexOf('$');
+        return d < 0 ? fqn : fqn.substring(0, d);
+    }
 
     private static final int ACC_PUBLIC = 0x0001;
     private static final int ACC_PRIVATE = 0x0002;
@@ -1045,6 +1080,56 @@ public final class TestAccessSurface {
         return rows;
     }
 
+    /** 发现结果：已排序清单行 (通道, 第2列, 第3列, 理由)。 */
+    public record Surface(List<String[]> rows) {
+    }
+
+    /**
+     * 发现键集合（三通道合并）：键 = 通道 + "\t" + 第2列 + "\t" + 第3列，与清单逐字节一致
+     * （{@link #loadManifest()} 用同一拼法解析清单前 3 列）。静默执行（诊断输出丢弃）。
+     */
+    public static TreeSet<String> discover() throws IOException {
+        Surface s = collect(new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8));
+        TreeSet<String> keys = new TreeSet<>();
+        for (String[] r : s.rows) {
+            keys.add(r[0] + "\t" + r[1] + "\t" + r[2]);
+        }
+        return keys;
+    }
+
+    /** 清单键集合（同 discover 拼法）；清单不存在时返回 null。 */
+    public static TreeSet<String> loadManifest() throws IOException {
+        Map<String, String> rows = readManifest(Paths.get(MANIFEST_PATH));
+        return rows == null ? null : new TreeSet<>(rows.keySet());
+    }
+
+    /**
+     * src/test/java 中包名前缀 com.mhtextractor.gui 的测试类的 top-level 类名集合
+     * （= 包名 + 文件名去 .java；DRIVER_CLASSES 完整性守卫的实测侧）。
+     */
+    public static TreeSet<String> guiTestSourceClasses() throws IOException {
+        Path root = Paths.get("src/test/java");
+        TreeSet<String> out = new TreeSet<>();
+        try (Stream<Path> walk = Files.walk(root)) {
+            for (Path p : walk.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
+                String rel = root.relativize(p).toString().replace('\\', '/');
+                String text = Files.readString(p, StandardCharsets.UTF_8);
+                if (!text.isEmpty() && text.charAt(0) == '\ufeff') {
+                    text = text.substring(1);
+                }
+                SrcFile sf = SrcFile.parseSource(rel, text);
+                if (!(sf.pkg + ".").startsWith(DRIVER_PREFIX)) {
+                    continue;
+                }
+                String fn = rel.substring(rel.lastIndexOf('/') + 1);
+                if (fn.endsWith(".java")) {
+                    out.add(sf.pkg + "." + fn.substring(0, fn.length() - 5));
+                }
+            }
+        }
+        return out;
+    }
+
     // ==================== main ====================
 
     public static void main(String[] args) throws Exception {
@@ -1054,19 +1139,27 @@ public final class TestAccessSurface {
                 write = true;
             }
         }
-        Path repoRoot = Paths.get("").toAbsolutePath().normalize();
         PrintStream out = new PrintStream(new FileOutputStream(FileDescriptor.out), true,
                 StandardCharsets.UTF_8);
         out.println("== TestAccessSurface（D1 发现器）==");
-        out.println("仓库根: " + repoRoot + "   模式: " + (write ? "打印 + 写清单" : "只打印"));
+        out.println("仓库根: " + Paths.get("").toAbsolutePath().normalize() + "   模式: "
+                + (write ? "打印 + 写清单" : "只打印"));
+        Surface s = collect(out);
+        if (write) {
+            writeManifest(s.rows, out);
+        }
+    }
 
+    /** 采集三通道发现（打印诊断信息；返回已排序的清单行）。 */
+    public static Surface collect(PrintStream out) throws IOException {
+        Path repoRoot = Paths.get("").toAbsolutePath().normalize();
         Path prodDir = repoRoot.resolve("target/classes");
         if (!Files.isDirectory(prodDir)) {
-            out.println("[FATAL] target/classes 不存在 —— 请先运行：mvnw.cmd -q -DskipTests test-compile");
-            System.exit(2);
+            throw new IOException(
+                    "[FATAL] target/classes 不存在 —— 请先运行：mvnw.cmd -q -DskipTests test-compile");
         }
         Path testDir = repoRoot.resolve("target/test-classes");
-        Path manifestPath = repoRoot.resolve("src/test/resources/test-access-surface.tsv");
+        Path manifestPath = repoRoot.resolve(MANIFEST_PATH);
 
         // ---- 1. 生产成员库（字节码） ----
         Map<String, ProdMembers> prod = new TreeMap<>();
@@ -1163,7 +1256,7 @@ public final class TestAccessSurface {
                         out.println("    ! 解析失败 " + testDir.relativize(p) + " -> " + e);
                         continue;
                     }
-                    if (!cf.fqn.startsWith(DRIVER_PREFIX)) {
+                    if (!DRIVER_CLASSES.contains(topLevel(cf.fqn))) {
                         continue;
                     }
                     drivers.add(cf.fqn);
@@ -1248,21 +1341,11 @@ public final class TestAccessSurface {
             out.println("    " + u);
         }
 
-        // ---- 4. 驱动源文件对账（18 个显式驱动源 vs 编译产物） ----
-        Set<String> srcGuiTop = new TreeSet<>();
-        for (SrcFile s : srcs) {
-            if (!s.relPath.startsWith("src/test/java/") || !(s.pkg + ".").startsWith(DRIVER_PREFIX)) {
-                continue;
-            }
-            String fn = s.relPath.substring(s.relPath.lastIndexOf('/') + 1);
-            if (fn.endsWith(".java")) {
-                srcGuiTop.add(s.pkg + "." + fn.substring(0, fn.length() - 5));
-            }
-        }
+        // ---- 4. 驱动源文件对账（DRIVER_CLASSES 显式清单 vs 编译产物） ----
+        Set<String> srcGuiTop = guiTestSourceClasses();
         Set<String> driverTop = new TreeSet<>();
         for (String d : drivers) {
-            int d0 = d.indexOf('$');
-            driverTop.add(d0 < 0 ? d : d.substring(0, d0));
+            driverTop.add(topLevel(d));
         }
         Set<String> stale = new TreeSet<>(driverTop);
         stale.removeAll(srcGuiTop);
@@ -1291,7 +1374,7 @@ public final class TestAccessSurface {
         out.println("  发现集合合计: " + found.size() + "（direct " + direct.size() + " + reflect " + reflect.size()
                 + " + reflect-dynamic " + dynamic.size() + "）");
         if (manifest == null) {
-            out.println("  清单不存在（首次生成；" + (write ? "--write 已写入" : "加 --write 写入") + "）");
+            out.println("  清单不存在（首次生成；用 --write 写入）");
         } else {
             TreeSet<String> added = new TreeSet<>(found);
             added.removeAll(manifest.keySet());
@@ -1307,42 +1390,54 @@ public final class TestAccessSurface {
             }
         }
 
-        // ---- 6. 写清单 ----
-        if (write) {
-            List<String[]> rows = new ArrayList<>();
-            for (Map.Entry<String, TreeSet<String>> e : direct.entrySet()) {
-                String[] kv = e.getKey().split("\t", -1);
-                rows.add(new String[]{CH_DIRECT, kv[0], kv[1],
-                        "同包直访（驱动类字节码常量池引用）；驱动: " + String.join(", ",
-                                e.getValue().stream().map(TestAccessSurface::simpleName).toList())});
-            }
-            for (Map.Entry<String, TreeSet<String>> e : reflect.entrySet()) {
-                String[] kv = e.getKey().split("\t", -1);
-                rows.add(new String[]{CH_REFLECT, kv[0], kv[1], String.join(" | ", e.getValue())});
-            }
-            for (Map.Entry<String, TreeSet<String>> e : dynamic.entrySet()) {
-                String[] kv = e.getKey().split("\t", -1);
-                rows.add(new String[]{CH_DYNAMIC, kv[0], kv[1], String.join(" | ", e.getValue())});
-            }
-            rows.sort((a, b) -> {
-                int c = a[0].compareTo(b[0]);
-                if (c != 0) {
-                    return c;
-                }
-                c = a[1].compareTo(b[1]);
-                return c != 0 ? c : a[2].compareTo(b[2]);
-            });
-            StringBuilder sb = new StringBuilder(MANIFEST_HEADER);
-            for (String[] r : rows) {
-                sb.append(r[0]).append('\t').append(r[1]).append('\t').append(r[2]).append('\t')
-                        .append(r[3]).append('\n');
-            }
-            Files.writeString(manifestPath, sb.toString(), StandardCharsets.UTF_8);
-            out.println();
-            out.println("== 清单已写入 ==");
-            out.println("  " + manifestPath + "  行数: " + (rows.size() + MANIFEST_HEADER.lines().count())
-                    + "（数据行 " + rows.size() + "；direct " + direct.size() + " + reflect " + reflect.size()
-                    + " + reflect-dynamic " + dynamic.size() + "）");
+        return new Surface(buildRows(direct, reflect, dynamic));
+    }
+
+    /** 组装清单行并按 (通道, 第2列, 第3列) 字典序排序（确定性）。 */
+    private static List<String[]> buildRows(Map<String, TreeSet<String>> direct,
+                                            Map<String, TreeSet<String>> reflect,
+                                            Map<String, TreeSet<String>> dynamic) {
+        List<String[]> rows = new ArrayList<>();
+        for (Map.Entry<String, TreeSet<String>> e : direct.entrySet()) {
+            String[] kv = e.getKey().split("\t", -1);
+            rows.add(new String[]{CH_DIRECT, kv[0], kv[1],
+                    "同包直访（驱动类字节码常量池引用）；驱动: " + String.join(", ",
+                            e.getValue().stream().map(TestAccessSurface::simpleName).toList())});
         }
+        for (Map.Entry<String, TreeSet<String>> e : reflect.entrySet()) {
+            String[] kv = e.getKey().split("\t", -1);
+            rows.add(new String[]{CH_REFLECT, kv[0], kv[1], String.join(" | ", e.getValue())});
+        }
+        for (Map.Entry<String, TreeSet<String>> e : dynamic.entrySet()) {
+            String[] kv = e.getKey().split("\t", -1);
+            rows.add(new String[]{CH_DYNAMIC, kv[0], kv[1], String.join(" | ", e.getValue())});
+        }
+        rows.sort((a, b) -> {
+            int c = a[0].compareTo(b[0]);
+            if (c != 0) {
+                return c;
+            }
+            c = a[1].compareTo(b[1]);
+            return c != 0 ? c : a[2].compareTo(b[2]);
+        });
+        return rows;
+    }
+
+    /** 写清单（--write；UTF-8 无 BOM、LF）。 */
+    private static void writeManifest(List<String[]> rows, PrintStream out) throws IOException {
+        StringBuilder sb = new StringBuilder(MANIFEST_HEADER);
+        for (String[] r : rows) {
+            sb.append(r[0]).append('\t').append(r[1]).append('\t').append(r[2]).append('\t')
+                    .append(r[3]).append('\n');
+        }
+        Files.writeString(Paths.get(MANIFEST_PATH), sb.toString(), StandardCharsets.UTF_8);
+        long direct = rows.stream().filter(r -> r[0].equals(CH_DIRECT)).count();
+        long reflect = rows.stream().filter(r -> r[0].equals(CH_REFLECT)).count();
+        long dynamic = rows.stream().filter(r -> r[0].equals(CH_DYNAMIC)).count();
+        out.println();
+        out.println("== 清单已写入 ==");
+        out.println("  " + MANIFEST_PATH + "  行数: " + (rows.size() + MANIFEST_HEADER.lines().count())
+                + "（数据行 " + rows.size() + "；direct " + direct + " + reflect " + reflect
+                + " + reflect-dynamic " + dynamic + "）");
     }
 }
