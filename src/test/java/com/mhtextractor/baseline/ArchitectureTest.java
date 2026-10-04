@@ -720,6 +720,13 @@ class ArchitectureTest {
      * 该处理器是业务服务，缓存生命周期是它**注入的依赖**，规则 (b)"提取完成即删缓存"本就属于它的职责，
      * 且它在无头单测中被直接驱动（{@code ImageBatchProcessorTest}）。
      * 因此真正的不变式是"<b>GUI 不得直接调规则</b>"，而不是"全项目只许一个调用者"。</p>
+     *
+     * <p><b>为什么 {@code startupCleanup} 不是第七条具名规则</b>：它是规则 (d)（{@code onShutdown}
+     * "退出清空"）在<b>会话启动侧</b>的另一半 —— 清的是上一次会话未走完退出路径而留下的残留目录
+     * （P7/P11 崩溃恢复：无条件删 {@code .tmp} 写入中目录与缺 {@code .complete} 的孤儿目录）；
+     * 入口是会话生命周期接线（{@code MainViewInstaller.installPreviewCacheHooks}，与关窗清空处理器同处挂接），
+     * 而六条规则由参数/移除/提取完成这类业务事件触发；因此它不进 {@code ruleMethods} 断言，
+     * 也不需要 {@code WorkspaceParamService} 收口。</p>
      */
     @Test
     void guiLayerDoesNotInvokeCacheRulesDirectly() throws IOException {
