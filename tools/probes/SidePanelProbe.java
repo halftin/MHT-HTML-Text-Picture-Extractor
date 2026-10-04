@@ -979,6 +979,7 @@ public class SidePanelProbe extends Application {
                 + cardShown() + ")", cardShown() && expected.equals(cardMessage()));
         check("step 4 gate order: the unnamed card is a CONFIRM (pending decision registered)",
                 NotificationHost.hasPendingDecision(anchor));
+        snapshot("unnamed-group-card");
         check("step 4 gate order: cancel on the unnamed card", clickCardCancel());
         check("step 4 gate order: canceling the unnamed card aborts extraction (running="
                 + extractionRunning() + ")", !extractionRunning());
