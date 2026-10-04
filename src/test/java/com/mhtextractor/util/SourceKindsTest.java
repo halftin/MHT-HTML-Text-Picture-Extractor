@@ -75,4 +75,35 @@ class SourceKindsTest {
         assertThrows(UnsupportedOperationException.class,
                 () -> SourceKinds.htmlExtensions().add(".xhtml"), "返回集合必须不可变");
     }
+
+    // ==================== 侧车目录后缀（E3.1：三份 SIDECAR_SUFFIX 常量收敛进本类） ====================
+
+    @Test
+    void sidecarSuffixIsTheSingleLiteral() {
+        assertEquals("_files", SourceKinds.sidecarSuffix());
+    }
+
+    @Test
+    void sidecarDirNameIsBasePlusSuffix() {
+        assertEquals("page_files", SourceKinds.sidecarDirName("page"));
+        assertEquals("x_files", SourceKinds.sidecarDirName("x"));
+        assertEquals("_files", SourceKinds.sidecarDirName(""));
+        assertEquals("a.b_files", SourceKinds.sidecarDirName("a.b"));
+    }
+
+    @Test
+    void isSidecarDirNameIsCaseInsensitiveAndRequiresABase() {
+        assertTrue(SourceKinds.isSidecarDirName("page_files"));
+        assertTrue(SourceKinds.isSidecarDirName("PAGE_FILES"));
+        assertTrue(SourceKinds.isSidecarDirName("Page_Files"));
+        assertTrue(SourceKinds.isSidecarDirName("x_files"), "单字符基名也成立");
+        assertFalse(SourceKinds.isSidecarDirName("_files"), "_files 本身没有基名，不算侧车目录名");
+        assertFalse(SourceKinds.isSidecarDirName("_FILES"));
+        assertFalse(SourceKinds.isSidecarDirName("page_files "), "尾部空格不算（endsWith 判据）");
+        assertFalse(SourceKinds.isSidecarDirName("page_filesx"));
+        assertFalse(SourceKinds.isSidecarDirName("files"));
+        assertFalse(SourceKinds.isSidecarDirName("_file"), "长度等于后缀也不行");
+        assertFalse(SourceKinds.isSidecarDirName(""));
+        assertFalse(SourceKinds.isSidecarDirName(null));
+    }
 }

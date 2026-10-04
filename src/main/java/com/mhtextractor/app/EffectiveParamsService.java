@@ -2,6 +2,7 @@ package com.mhtextractor.app;
 
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.util.FingerprintEncoder;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.ParamScope;
 
@@ -203,25 +204,25 @@ public final class EffectiveParamsService {
         sb.append(c.isSeparateFiles() ? '1' : '0');
         // 文本提取
         sb.append(c.isEnableContentLimit() ? '1' : '0');
-        field(sb, c.getStartMarker());
-        field(sb, c.getEndMarker());
+        FingerprintEncoder.lengthPrefixed(sb, c.getStartMarker());
+        FingerprintEncoder.lengthPrefixed(sb, c.getEndMarker());
         sb.append(c.isUseRegex() ? '1' : '0');
         sb.append(c.isEnableTemplate() ? '1' : '0');
-        field(sb, c.getStartTemplate());
-        field(sb, c.getEndTemplate());
+        FingerprintEncoder.lengthPrefixed(sb, c.getStartTemplate());
+        FingerprintEncoder.lengthPrefixed(sb, c.getEndTemplate());
         sb.append(c.isAddChapterNumber() ? '1' : '0');
         sb.append(c.isAutoFixEncoding() ? '1' : '0');
         sb.append(c.isEnableTitleExtraction() ? '1' : '0');
-        field(sb, c.getTitleStartMarker());
-        field(sb, c.getTitleEndMarker());
+        FingerprintEncoder.lengthPrefixed(sb, c.getTitleStartMarker());
+        FingerprintEncoder.lengthPrefixed(sb, c.getTitleEndMarker());
         sb.append(c.isTitleUseRegex() ? '1' : '0');
         // 图片提取
         sb.append(c.isEnableNameExtraction() ? '1' : '0');
-        field(sb, c.getImageNameStartMarker());
-        field(sb, c.getImageNameEndMarker());
+        FingerprintEncoder.lengthPrefixed(sb, c.getImageNameStartMarker());
+        FingerprintEncoder.lengthPrefixed(sb, c.getImageNameEndMarker());
         sb.append(c.isEnableRegionExtraction() ? '1' : '0');
-        field(sb, c.getImageRegionStartMarker());
-        field(sb, c.getImageRegionEndMarker());
+        FingerprintEncoder.lengthPrefixed(sb, c.getImageRegionStartMarker());
+        FingerprintEncoder.lengthPrefixed(sb, c.getImageRegionEndMarker());
         sb.append(c.isEnableBatchRenaming() ? '1' : '0');
         sb.append(c.isEnableZipPackaging() ? '1' : '0');
         sb.append(c.isEnableCbzPackaging() ? '1' : '0');
@@ -229,15 +230,11 @@ public final class EffectiveParamsService {
         // 处理模式
         sb.append(c.isHighSpeedMemoryMode() ? '1' : '0');
         // 兼容旧版废弃字段（保留反序列化兼容；仍参与判定，避免"设置里看得见却不影响判定"）
-        field(sb, c.getNameLimitStart());
-        field(sb, c.getNameLimitEnd());
-        field(sb, c.getContentLimitStart());
-        field(sb, c.getContentLimitEnd());
+        FingerprintEncoder.lengthPrefixed(sb, c.getNameLimitStart());
+        FingerprintEncoder.lengthPrefixed(sb, c.getNameLimitEnd());
+        FingerprintEncoder.lengthPrefixed(sb, c.getContentLimitStart());
+        FingerprintEncoder.lengthPrefixed(sb, c.getContentLimitEnd());
         return sb.toString();
-    }
-
-    private static void field(StringBuilder sb, String value) {
-        sb.append(value == null ? -1 : value.length()).append(':').append(value == null ? "" : value);
     }
 
     /**

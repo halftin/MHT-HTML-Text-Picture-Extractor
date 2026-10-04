@@ -1,5 +1,6 @@
 package com.mhtextractor.gui.component;
 
+import com.mhtextractor.baseline.SourceScanUtils;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -63,8 +64,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * </ul>
  *
  * <p><b>⚠️ 本文档里的取舍</b>：本测试<b>不</b>声称覆盖"把 {@code Scene} 当字符串反射使用"这类绕法
- * （见 {@link #stripCommentsAndLiterals} 的说明）—— 那种写法在 JavaFX 里没有实际用途，
- * 而威胁模型是"有人图快复制一份实现"，复制一定会写标识符。</p>
+ * （见 {@link com.mhtextractor.baseline.SourceScanUtils#stripCommentsAndLiterals} 的说明）——
+ * 那种写法在 JavaFX 里没有实际用途，而威胁模型是"有人图快复制一份实现"，复制一定会写标识符。</p>
  */
 class GuiNotificationsIsSemanticFacadeOnlyTest {
 
@@ -134,7 +135,7 @@ class GuiNotificationsIsSemanticFacadeOnlyTest {
     void facadeSourceContainsNoneOfTheNotificationHostMechanisms() throws IOException {
         assertTrue(Files.exists(FACADE), "门面源码不存在：" + FACADE);
 
-        String facadeCode = stripCommentsAndLiterals(Files.readString(FACADE, StandardCharsets.UTF_8));
+        String facadeCode = SourceScanUtils.stripCommentsAndLiterals(Files.readString(FACADE, StandardCharsets.UTF_8));
 
         // ---- 断言 1：门面里一个都不许有 ----
         List<String> offenders = hits(facadeCode, FORBIDDEN_IN_FACADE);
@@ -152,7 +153,7 @@ class GuiNotificationsIsSemanticFacadeOnlyTest {
         Map<String, String> caughtBy = new LinkedHashMap<>();
         for (Path src : CONTROL_SOURCES) {
             assertTrue(Files.exists(src), "控制组源不存在：" + src);
-            String code = stripCommentsAndLiterals(Files.readString(src, StandardCharsets.UTF_8));
+            String code = SourceScanUtils.stripCommentsAndLiterals(Files.readString(src, StandardCharsets.UTF_8));
             for (String needle : FORBIDDEN_IN_FACADE) {
                 if (code.contains(needle)) {
                     caughtBy.putIfAbsent(needle, src.getFileName().toString());
@@ -193,16 +194,16 @@ class GuiNotificationsIsSemanticFacadeOnlyTest {
     @Test
     void iconDecisionLivesInExactlyOnePlace() throws IOException {
         Path controller = MAIN_SOURCES.resolve("com/mhtextractor/gui/controller/MainController.java");
-        String controllerCode = stripCommentsAndLiterals(Files.readString(controller, StandardCharsets.UTF_8));
+        String controllerCode = SourceScanUtils.stripCommentsAndLiterals(Files.readString(controller, StandardCharsets.UTF_8));
 
-        int controllerIcons = countOccurrences(controllerCode, "FontAwesomeSolid");
+        int controllerIcons = SourceScanUtils.countOccurrences(controllerCode, "FontAwesomeSolid");
         assertEquals(0, controllerIcons,
                 "MainController 里仍出现 FontAwesomeSolid（" + controllerIcons + " 处）。"
                         + "提醒图标必须由 GuiNotifications 选（Q13 的判据是『图标与键的决策只有一处』）；"
                         + "控制器侧只表达意图（GuiNotifications.importFailed(...) 之类）。\n"
                         + "若确有**非提醒**用途的图标，请在本测试里显式登记并说明它为什么不属于提醒。");
 
-        String facadeCode = stripCommentsAndLiterals(Files.readString(FACADE, StandardCharsets.UTF_8));
+        String facadeCode = SourceScanUtils.stripCommentsAndLiterals(Files.readString(FACADE, StandardCharsets.UTF_8));
         Set<String> facadeIcons = iconConstants(facadeCode);
         assertFalse(facadeIcons.isEmpty(),
                 "门面里一个 FontAwesomeSolid 常量都没找到 —— 提醒图标丢了（卡片会退化成默认中性图标）");
@@ -210,7 +211,7 @@ class GuiNotificationsIsSemanticFacadeOnlyTest {
         // 阳性对照：同一段提取逻辑必须在"确实带图标"的提醒调用点上抓到命中。
         assertTrue(Files.exists(ICON_SCAN_CONTROL), "图标扫描的对照源不存在：" + ICON_SCAN_CONTROL);
         Set<String> controlIcons = iconConstants(
-                stripCommentsAndLiterals(Files.readString(ICON_SCAN_CONTROL, StandardCharsets.UTF_8)));
+                SourceScanUtils.stripCommentsAndLiterals(Files.readString(ICON_SCAN_CONTROL, StandardCharsets.UTF_8)));
         assertTrue(controlIcons.size() >= ICON_SCAN_CONTROL_MIN_HITS,
                 "**控制组失败**：同一次扫描在 " + ICON_SCAN_CONTROL.getFileName() + " 上只命中 "
                         + controlIcons.size() + " 个 FontAwesomeSolid 常量（期望 ≥ "
@@ -218,7 +219,7 @@ class GuiNotificationsIsSemanticFacadeOnlyTest {
                         + "那么上面那条『MainController 0 命中』什么也证明不了。");
 
         // "图标搬到一处"而不是"图标被搬走"：门面必须真的还带着一大把用途图标。
-        Set<String> hostDefaults = iconConstants(stripCommentsAndLiterals(
+        Set<String> hostDefaults = iconConstants(SourceScanUtils.stripCommentsAndLiterals(
                 Files.readString(CONTROL_SOURCES.get(0), StandardCharsets.UTF_8)));
         assertTrue(facadeIcons.size() > hostDefaults.size(),
                 "门面里的图标常量（" + facadeIcons.size() + "）不比 NotificationHost 的默认图标（"
@@ -299,7 +300,7 @@ class GuiNotificationsIsSemanticFacadeOnlyTest {
                 }
                 """;
 
-        List<String> offenders = hits(stripCommentsAndLiterals(synthetic), FORBIDDEN_IN_FACADE);
+        List<String> offenders = hits(SourceScanUtils.stripCommentsAndLiterals(synthetic), FORBIDDEN_IN_FACADE);
         assertEquals(List.of(), offenders,
                 "**反控制组失败**：只在注释/字符串里提到禁用符号的假源码被判成了命中 " + offenders
                         + " —— 剥注释逻辑坏了。\n"
@@ -308,82 +309,11 @@ class GuiNotificationsIsSemanticFacadeOnlyTest {
                         + "那是『修注释而不是修装置』，本测试的存在意义正好相反。");
 
         // 同一次调用里反向确认剥注释没有把整个源码剥空（否则"0 命中"又是空转）。
-        String stripped = stripCommentsAndLiterals(synthetic);
+        String stripped = SourceScanUtils.stripCommentsAndLiterals(synthetic);
         assertTrue(stripped.contains("NotificationHost.toastInfo"),
                 "反控制组的假源码被剥注释逻辑剥空了（代码正文也没了）—— 装置坏了");
         System.out.println("[facade] 反控制组：仅注释/字符串含 7 个禁用符号的假源码 → 命中 "
                 + offenders.size() + "，且代码正文保留（" + stripped.strip().split("\n").length + " 行）");
-    }
-
-    private static int countOccurrences(String haystack, String needle) {
-        int n = 0;
-        int idx = 0;
-        while ((idx = haystack.indexOf(needle, idx)) >= 0) {
-            n++;
-            idx += needle.length();
-        }
-        return n;
-    }
-
-    /**
-     * 剥掉块注释、行注释与字符串/字符字面量（保留换行，保持行号可对应）。
-     *
-     * <p>与 {@code ArchitectureTest.stripComments} 同一手法，但多剥了字面量：
-     * 本断言查的是 {@code ModalPane} / {@code Scene} 这类<b>标识符</b>，
-     * 而门面 javadoc 里必然要写出它们（否则没人知道红线在哪）；
-     * 字符串字面量同理（例如 i18n 键或日志文案里出现这些词并不构成依赖）。</p>
-     *
-     * <p>⚠️ 已知取舍：字面量被剥掉后，"把 {@code Scene} 当字符串反射使用"这类绕法扫不到。
-     * 但那种写法在 JavaFX 里没有实际用途（要真拿到 {@code Scene} 就得 import/使用该类型，
-     * 那时它在代码里就是标识符），故不为此加复杂度；威胁模型是"有人图快复制一份实现"，
-     * 那种复制一定会写标识符。</p>
-     */
-    private static String stripCommentsAndLiterals(String src) {
-        StringBuilder out = new StringBuilder(src.length());
-        int i = 0;
-        while (i < src.length()) {
-            char ch = src.charAt(i);
-            char next = i + 1 < src.length() ? src.charAt(i + 1) : '\0';
-            if (ch == '/' && next == '/') {
-                while (i < src.length() && src.charAt(i) != '\n') {
-                    out.append(' ');
-                    i++;
-                }
-            } else if (ch == '/' && next == '*') {
-                out.append("  ");
-                i += 2;
-                while (i < src.length() && !(src.charAt(i) == '*' && i + 1 < src.length()
-                        && src.charAt(i + 1) == '/')) {
-                    out.append(src.charAt(i) == '\n' ? '\n' : ' ');
-                    i++;
-                }
-                if (i < src.length()) {
-                    out.append("  ");
-                    i += 2;
-                }
-            } else if (ch == '"' || ch == '\'') {
-                char quote = ch;
-                out.append(' ');
-                i++;
-                while (i < src.length() && src.charAt(i) != quote) {
-                    if (src.charAt(i) == '\\' && i + 1 < src.length()) {
-                        out.append("  ");
-                        i += 2;
-                        continue;
-                    }
-                    out.append(src.charAt(i) == '\n' ? '\n' : ' ');
-                    i++;
-                }
-                if (i < src.length()) {
-                    out.append(' ');
-                    i++;
-                }
-            } else {
-                out.append(ch);
-                i++;
-            }
-        }
-        return out.toString();
     }
 
     /**
@@ -401,7 +331,7 @@ class GuiNotificationsIsSemanticFacadeOnlyTest {
         Map<String, List<String>> coveredBy = new LinkedHashMap<>();
         for (Path src : CONTROL_SOURCES) {
             assertTrue(Files.exists(src), "控制组源不存在：" + src);
-            String code = stripCommentsAndLiterals(Files.readString(src, StandardCharsets.UTF_8));
+            String code = SourceScanUtils.stripCommentsAndLiterals(Files.readString(src, StandardCharsets.UTF_8));
             for (String needle : FORBIDDEN_IN_FACADE) {
                 if (code.contains(needle)) {
                     coveredBy.computeIfAbsent(needle, k -> new ArrayList<>())

@@ -49,8 +49,6 @@ public final class SourceFingerprint {
     /** 单文件参与"内容摘要"的体积上限（超过则退化为 名称+size+mtime 摘要），16 MiB */
     static final long MAX_BYTES_PER_FILE = 16L * 1024 * 1024;
 
-    private static final String SIDECAR_SUFFIX = "_files";
-
     private SourceFingerprint() {
     }
 
@@ -73,7 +71,7 @@ public final class SourceFingerprint {
             return EMPTY;
         }
         String base = SourceKinds.stripKnownExtension(source.getFileName().toString());
-        Path sidecar = dir.resolve(base + SIDECAR_SUFFIX);
+        Path sidecar = dir.resolve(SourceKinds.sidecarDirName(base));
         if (!Files.isDirectory(sidecar)) {
             return EMPTY;
         }

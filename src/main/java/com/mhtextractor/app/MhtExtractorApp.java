@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.stream.Stream;
 
 /**
@@ -142,10 +141,10 @@ public final class MhtExtractorApp {
             return false;
         }
         String name = dir.getFileName() == null ? "" : dir.getFileName().toString();
-        if (!name.toLowerCase(Locale.ROOT).endsWith("_files") || name.length() <= "_files".length()) {
+        if (!SourceKinds.isSidecarDirName(name)) {
             return false;
         }
-        String base = name.substring(0, name.length() - "_files".length());
+        String base = name.substring(0, name.length() - SourceKinds.sidecarSuffix().length());
         Path parent = dir.getParent();
         if (parent == null) {
             return false;

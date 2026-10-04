@@ -286,7 +286,7 @@ class ArchitectureTest {
                 "com/mhtextractor/app/LayerBTest.java",
                 "com/mhtextractor/app/WorkspaceModelTest.java");
 
-        String driverCode = stripComments(Files.readString(driver, StandardCharsets.UTF_8));
+        String driverCode = SourceScanUtils.stripComments(Files.readString(driver, StandardCharsets.UTF_8));
         List<String> driverHits = primitives.stream().filter(driverCode::contains).toList();
         assertTrue(driverHits.isEmpty(),
                 "GUI 自动化驱动 AcceptanceDriver 出现反射原语：" + driverHits
@@ -300,7 +300,7 @@ class ArchitectureTest {
                 if (rel.endsWith("baseline/ArchitectureTest.java")) {
                     continue;   // 自指豁免：本文件的字符串字面量就是度量工具（见 javadoc）
                 }
-                String code = stripComments(Files.readString(p, StandardCharsets.UTF_8));
+                String code = SourceScanUtils.stripComments(Files.readString(p, StandardCharsets.UTF_8));
                 List<String> used = primitives.stream().filter(code::contains).toList();
                 if (used.isEmpty()) {
                     continue;
@@ -490,7 +490,7 @@ class ArchitectureTest {
             try (Stream<Path> walk = Files.walk(dir)) {
                 for (Path p : walk.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
                     if (p.getFileName().toString().equals(self)) continue;
-                    String code = stripComments(Files.readString(p, StandardCharsets.UTF_8));
+                    String code = SourceScanUtils.stripComments(Files.readString(p, StandardCharsets.UTF_8));
                     int hit = code.indexOf(UI_FRAMEWORK_ROOT);
                     if (hit >= 0) {
                         String ctx = code.substring(Math.max(0, hit - 60), Math.min(code.length(), hit + 60))
@@ -503,59 +503,6 @@ class ArchitectureTest {
         }
         assertTrue(offenders.isEmpty(),
                 "无头测试包不得引用 JavaFX（注释除外）：\n  " + String.join("\n  ", offenders));
-    }
-
-    /** 极简注释剥离：块注释 → 空行占位；行注释 → 去尾。字符串字面量里的 javafx 仍会被捕获（保守）。 */
-    private static String stripComments(String src) {
-        StringBuilder out = new StringBuilder(src.length());
-        int i = 0;
-        boolean inLine = false;
-        boolean inBlock = false;
-        boolean inString = false;
-        while (i < src.length()) {
-            char ch = src.charAt(i);
-            char next = i + 1 < src.length() ? src.charAt(i + 1) : '\0';
-            if (inLine) {
-                if (ch == '\n') {
-                    inLine = false;
-                    out.append(ch);
-                } else {
-                    out.append(' ');
-                }
-            } else if (inBlock) {
-                if (ch == '*' && next == '/') {
-                    inBlock = false;
-                    out.append("  ");
-                    i += 2;
-                    continue;
-                }
-                out.append(ch == '\n' ? '\n' : ' ');
-            } else if (inString) {
-                out.append(ch);
-                if (ch == '\\') {
-                    if (i + 1 < src.length()) out.append(src.charAt(++i));
-                } else if (ch == '"') {
-                    inString = false;
-                }
-            } else if (ch == '/' && next == '/') {
-                inLine = true;
-                out.append("  ");
-                i += 2;
-                continue;
-            } else if (ch == '/' && next == '*') {
-                inBlock = true;
-                out.append("  ");
-                i += 2;
-                continue;
-            } else if (ch == '"') {
-                inString = true;
-                out.append(ch);
-            } else {
-                out.append(ch);
-            }
-            i++;
-        }
-        return out.toString();
     }
 
     // ==================== 4. 业务层不得产出 UI 文案（V3，先只做度量） ====================
@@ -580,7 +527,7 @@ class ArchitectureTest {
             try (Stream<Path> walk = Files.walk(dir)) {
                 for (Path p : walk.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
                     String text = stripLogCalls(Files.readString(p, StandardCharsets.UTF_8));
-                    int n = countOccurrences(text, "I18n.");
+                    int n = SourceScanUtils.countOccurrences(text, "I18n.");
                     if (n > 0) {
                         perFile.put(MAIN_SOURCES.relativize(p).toString().replace('\\', '/'), n);
                         count += n;
@@ -617,15 +564,6 @@ class ArchitectureTest {
                 "业务层 I18n 引用增长：" + count + " > " + currentBaseline
                         + "（E3.1 目标是把它们改为警告码，只减不增）");
         System.out.println("[arch] 业务层 I18n. 引用 " + count + " 处：" + perFile);
-    }
-
-    private static int countOccurrences(String haystack, String needle) {
-        int n = 0, idx = 0;
-        while ((idx = haystack.indexOf(needle, idx)) >= 0) {
-            n++;
-            idx += needle.length();
-        }
-        return n;
     }
 
     /**

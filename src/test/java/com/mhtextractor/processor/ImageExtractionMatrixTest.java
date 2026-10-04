@@ -1,5 +1,6 @@
 package com.mhtextractor.processor;
 
+import com.mhtextractor.baseline.SourceScanUtils;
 import com.mhtextractor.cache.PreviewCacheKey;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheMeta;
@@ -1006,7 +1007,7 @@ class ImageExtractionMatrixTest {
                         file + "：saveImages 内出现模式语义的 boolean 局部变量（模式分流）："
                                 + firstLineWith(body, bad));
             }
-            int ifs = countOccurrences(body, "if (") + countOccurrences(body, "if(");
+            int ifs = SourceScanUtils.countOccurrences(body, "if (") + SourceScanUtils.countOccurrences(body, "if(");
             assertTrue(ifs <= MAX_IF_IN_SAVE_IMAGES,
                     file + "：saveImages 内 if 语句 " + ifs + " 处，超过实测上界 "
                             + MAX_IF_IN_SAVE_IMAGES + "（这是「越写越长的布尔分支 writer」的前兆）");
@@ -1026,7 +1027,7 @@ class ImageExtractionMatrixTest {
         String fakeBody = methodBody(fake, "int saveImages(");
         assertTrue(fakeBody.contains("boolean mode"),
                 "控制组：假源码里的模式布尔局部变量必须被名字判据抓到");
-        assertTrue(countOccurrences(fakeBody, "if (") > MAX_IF_IN_SAVE_IMAGES,
+        assertTrue(SourceScanUtils.countOccurrences(fakeBody, "if (") > MAX_IF_IN_SAVE_IMAGES,
                 "控制组：假源码里的 4 处 if 必须超过上界 " + MAX_IF_IN_SAVE_IMAGES);
 
         // 结构性证据（人工复核用）：只打"方法/构造器签名"（含括号且以 ) ; 或 ) { 收尾）
@@ -1114,16 +1115,6 @@ class ImageExtractionMatrixTest {
             }
         }
         return "";
-    }
-
-    private static int countOccurrences(String haystack, String needle) {
-        int n = 0;
-        int idx = 0;
-        while ((idx = haystack.indexOf(needle, idx)) >= 0) {
-            n++;
-            idx += needle.length();
-        }
-        return n;
     }
 
     private static String firstLineWith(String text, String needle) {

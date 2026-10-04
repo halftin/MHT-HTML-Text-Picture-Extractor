@@ -1,5 +1,6 @@
 package com.mhtextractor.config;
 
+import com.mhtextractor.util.FingerprintEncoder;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
@@ -130,11 +131,11 @@ public class AppConfig {
     public String imageExtractionFingerprint() {
         StringBuilder sb = new StringBuilder();
         sb.append(enableNameExtraction ? '1' : '0');
-        appendFingerprintField(sb, imageNameStartMarker);
-        appendFingerprintField(sb, imageNameEndMarker);
+        FingerprintEncoder.lengthPrefixed(sb, imageNameStartMarker);
+        FingerprintEncoder.lengthPrefixed(sb, imageNameEndMarker);
         sb.append(enableRegionExtraction ? '1' : '0');
-        appendFingerprintField(sb, imageRegionStartMarker);
-        appendFingerprintField(sb, imageRegionEndMarker);
+        FingerprintEncoder.lengthPrefixed(sb, imageRegionStartMarker);
+        FingerprintEncoder.lengthPrefixed(sb, imageRegionEndMarker);
         sb.append(enableBatchRenaming ? '1' : '0');
         sb.append(singleOutputMode ? '1' : '0');
         try {
@@ -143,10 +144,6 @@ public class AppConfig {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 not available", e);
         }
-    }
-
-    private static void appendFingerprintField(StringBuilder sb, String value) {
-        sb.append(value == null ? -1 : value.length()).append(':').append(value == null ? "" : value);
     }
 
     // ==================== 提取参数深拷贝（R7.7） ====================

@@ -82,9 +82,6 @@ public class HtmlFolderParser implements SourceParser {
 
     private static final Logger logger = LoggerFactory.getLogger(HtmlFolderParser.class);
 
-    /** 侧车目录后缀（Chrome / Edge / Firefox "网页，完整" 的约定） */
-    private static final String SIDECAR_SUFFIX = "_files";
-
     /** 复用既有 debug 日志键（不属于本步新增，避免 log.* 计数变化） */
     private static final String LOG_PART_FAILED = "log.mimeparser.01";
 
@@ -234,7 +231,7 @@ public class HtmlFolderParser implements SourceParser {
             return null;
         }
         Path sidecar = htmlDir.resolve(
-                SourceKinds.stripKnownExtension(htmlName) + SIDECAR_SUFFIX).normalize();
+                SourceKinds.sidecarDirName(SourceKinds.stripKnownExtension(htmlName))).normalize();
         if (!parent.equals(htmlDir) && !parent.equals(sidecar)) {
             return null;                                   // ../ 逃逸或落入其它目录
         }

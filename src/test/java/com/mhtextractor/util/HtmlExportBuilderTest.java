@@ -1,5 +1,6 @@
 package com.mhtextractor.util;
 
+import com.mhtextractor.baseline.SourceScanUtils;
 import com.mhtextractor.core.MimeParser;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -63,16 +64,6 @@ class HtmlExportBuilderTest {
         }
     }
 
-    private static int countOccurrences(String s, String sub) {
-        int count = 0;
-        int idx = 0;
-        while ((idx = s.indexOf(sub, idx)) >= 0) {
-            count++;
-            idx += sub.length();
-        }
-        return count;
-    }
-
     // ==================== T1：charset 声明替换 ====================
 
     @Test
@@ -86,7 +77,7 @@ class HtmlExportBuilderTest {
         String out = Files.readString(r.htmlFile(), StandardCharsets.UTF_8);
         assertFalse(out.contains("gb2312"), "原编码声明必须被清除");
         assertTrue(out.contains("<meta charset=\"utf-8\">"));
-        assertEquals(1, countOccurrences(out, "<meta charset=\"utf-8\">"), "最终只保留一个 utf-8 声明");
+        assertEquals(1, SourceScanUtils.countOccurrences(out, "<meta charset=\"utf-8\">"), "最终只保留一个 utf-8 声明");
     }
 
     // ==================== T2：中文不乱码 + 无 BOM ====================
@@ -154,7 +145,7 @@ class HtmlExportBuilderTest {
                 + "</body></html>";
         HtmlExportBuilder.ExportResult r = exportTo(html, cidMap);
         String out = Files.readString(r.htmlFile(), StandardCharsets.UTF_8);
-        assertEquals(3, countOccurrences(out, "img/0001.png"), "3 处引用同一相对路径");
+        assertEquals(3, SourceScanUtils.countOccurrences(out, "img/0001.png"), "3 处引用同一相对路径");
         assertEquals(1, r.imageCount(), "同一 cid 只写一个图片文件");
         try (var s = Files.list(r.htmlFile().getParent().resolve("img"))) {
             assertEquals(1, s.count());

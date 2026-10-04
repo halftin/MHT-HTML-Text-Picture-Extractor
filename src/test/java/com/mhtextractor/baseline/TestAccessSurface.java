@@ -60,8 +60,9 @@ import java.util.stream.Stream;
 public final class TestAccessSurface {
 
     /**
-     * 双引号字符。用转义而非 {@code '"'} 字面量：ArchitectureTest 的 stripComments 是朴素实现
-     * （只认 {@code "} 切换字符串态），字符字面量里的裸引号会使其状态错位，导致本文件后续注释
+     * 双引号字符。用转义而非 {@code '"'} 字面量：E3.3 收敛的 {@code SourceScanUtils.stripComments}
+     * 虽已正确消费字符字面量，本文件仍保留转义写法自保 —— 本文件的扫描面还可能被其它朴素剥离器
+     * 处理，字符字面量里的裸引号会让"只认 {@code "} 切换字符串态"的实现状态错位，导致后续注释
      * 不被剥离（注释里的反射原语字样会漏进"代码"、误触既有反射白名单闸门）。
      */
     private static final char DQUOTE = '\u0022';

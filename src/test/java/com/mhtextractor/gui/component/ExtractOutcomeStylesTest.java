@@ -1,5 +1,6 @@
 package com.mhtextractor.gui.component;
 
+import com.mhtextractor.baseline.SourceScanUtils;
 import com.mhtextractor.util.ExtractOutcome;
 import org.junit.jupiter.api.Test;
 
@@ -210,7 +211,7 @@ class ExtractOutcomeStylesTest {
         // ---- 断言 1：两个搬迁来源都归零 ----
         for (Path src : List.of(CONTROLLER, CELL)) {
             assertTrue(Files.exists(src), "源码不存在：" + src);
-            String code = stripComments(Files.readString(src, StandardCharsets.UTF_8));
+            String code = SourceScanUtils.stripComments(Files.readString(src, StandardCharsets.UTF_8));
 
             List<String> styleHits = hits(code, PROGRESS_STYLE_NAMES);
             assertTrue(styleHits.isEmpty(),
@@ -225,7 +226,7 @@ class ExtractOutcomeStylesTest {
         }
 
         // ---- 断言 2（阳性对照 A）：新类自己必须命中全部 needls ----
-        String stylesCode = stripComments(Files.readString(STYLES, StandardCharsets.UTF_8));
+        String stylesCode = SourceScanUtils.stripComments(Files.readString(STYLES, StandardCharsets.UTF_8));
         List<String> allNeedles = new ArrayList<>(PROGRESS_STYLE_NAMES);
         allNeedles.addAll(OUTCOME_PAINT_NEEDLES);
         List<String> missing = new ArrayList<>();
@@ -322,59 +323,4 @@ class ExtractOutcomeStylesTest {
         return found;
     }
 
-    /**
-     * 剥掉块注释与行注释（<b>保留字符串字面量</b>），保留换行。
-     *
-     * <p>为什么与 {@code GuiNotificationsIsSemanticFacadeOnlyTest} 的版本不同：本测试要找的正是
-     * <b>字符串字面量</b>（画值 {@code "#4CAF50"}、类名 {@code "progress-preparse"}），
-     * 所以<b>不能</b>剥字面量；而中文注释里确实写着那些颜色名，所以<b>必须</b>剥注释。</p>
-     */
-    private static String stripComments(String src) {
-        StringBuilder out = new StringBuilder(src.length());
-        int i = 0;
-        while (i < src.length()) {
-            char ch = src.charAt(i);
-            char next = i + 1 < src.length() ? src.charAt(i + 1) : '\0';
-            if (ch == '/' && next == '/') {
-                while (i < src.length() && src.charAt(i) != '\n') {
-                    out.append(' ');
-                    i++;
-                }
-            } else if (ch == '/' && next == '*') {
-                out.append("  ");
-                i += 2;
-                while (i < src.length() && !(src.charAt(i) == '*' && i + 1 < src.length()
-                        && src.charAt(i + 1) == '/')) {
-                    out.append(src.charAt(i) == '\n' ? '\n' : ' ');
-                    i++;
-                }
-                if (i < src.length()) {
-                    out.append("  ");
-                    i += 2;
-                }
-            } else if (ch == '"' || ch == '\'') {
-                // 字面量整体保留（本测试的扫描目标就是字面量内容）
-                char quote = ch;
-                out.append(ch);
-                i++;
-                while (i < src.length()) {
-                    char c = src.charAt(i);
-                    out.append(c);
-                    i++;
-                    if (c == '\\' && i < src.length()) {
-                        out.append(src.charAt(i));
-                        i++;
-                        continue;
-                    }
-                    if (c == quote) {
-                        break;
-                    }
-                }
-            } else {
-                out.append(ch);
-                i++;
-            }
-        }
-        return out.toString();
-    }
 }

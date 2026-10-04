@@ -12,7 +12,6 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -37,9 +36,6 @@ public final class MhtImportPlanner {
     static final Comparator<File> BY_NAME =
             Comparator.comparing(File::getName, String.CASE_INSENSITIVE_ORDER)
                     .thenComparing(File::getName);
-
-    /** 浏览器"另存为（网页，完整）"的侧车目录后缀（R6.4，大小写不敏感匹配） */
-    static final String SIDECAR_SUFFIX = "_files";
 
     private MhtImportPlanner() {
     }
@@ -366,11 +362,10 @@ public final class MhtImportPlanner {
      */
     static boolean isSidecarDir(File dir) {
         String name = dir.getName();
-        if (name.length() <= SIDECAR_SUFFIX.length()
-                || !name.toLowerCase(Locale.ROOT).endsWith(SIDECAR_SUFFIX)) {
+        if (!SourceKinds.isSidecarDirName(name)) {
             return false;
         }
-        String base = name.substring(0, name.length() - SIDECAR_SUFFIX.length());
+        String base = name.substring(0, name.length() - SourceKinds.sidecarSuffix().length());
         File parent = dir.getParentFile();
         if (parent == null) {
             return false;

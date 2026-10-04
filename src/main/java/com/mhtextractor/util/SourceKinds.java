@@ -4,12 +4,15 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * 可导入来源的扩展名口径（R6.1 / R6.6）—— <b>全项目唯一实现点</b>。
+ * 可导入来源的<b>扩展名与侧车后缀</b>口径（R6.1 / R6.4 / R6.6）—— <b>全项目唯一入口</b>。
  *
  * <p>导入识别（{@code MhtImportPlanner} / {@code MhtExtractorApp.importPaths}）、解析器选择
  * （{@code core.SourceParsers}）与输出命名（{@link #stripKnownExtension}）三处必须用同一套
  * 扩展名集合，否则会出现"能导入但不认识扩展名（选不出解析器）""能提取但输出名带着扩展名"这类错位。
- * 本类的职责就是把这三处的口径收敛成一份可无头单测的纯函数。</p>
+ * 侧车目录后缀（{@link #sidecarSuffix}）同理：指纹（{@code cache.SourceFingerprint}）、解析器
+ * resolve（{@code core.HtmlFolderParser}）、导入排除（{@code MhtImportPlanner} /
+ * {@code MhtExtractorApp}）四处必须用同一份后缀口径。本类的职责就是把这两套口径收敛成
+ * 一份可无头单测的纯函数。</p>
  *
  * <h2>🚩 大小写口径（两个集合<b>刻意不同</b>，详见各路 javadoc）</h2>
  * <ul>
@@ -30,6 +33,8 @@ public final class SourceKinds {
     private static final String[] MHT_EXTS = {".mht", ".mhtml"};
     /** HTML 组：本步新增，大小写不敏感（用户拍板） */
     private static final String[] HTML_EXTS = {".html", ".htm"};
+    /** 浏览器"另存为（网页，完整）"的侧车目录后缀（R6.4，大小写不敏感匹配口径） */
+    private static final String SIDECAR_SUFFIX = "_files";
 
     private SourceKinds() {
     }
@@ -72,6 +77,33 @@ public final class SourceKinds {
      */
     public static List<String> htmlExtensions() {
         return List.of(HTML_EXTS);
+    }
+
+    // ==================== 侧车目录后缀（R6.4，本类第二套唯一口径） ====================
+
+    /**
+     * 侧车目录后缀字面量。仅用于"基名 + 后缀"拼接（{@link #sidecarDirName}）或按长度反推基名
+     * （{@code MhtImportPlanner.isSidecarDir} / {@code MhtExtractorApp.isInSidecarDir}）；
+     * 目录名判定请优先用 {@link #isSidecarDirName}，不要自行持有后缀字面量。
+     */
+    public static String sidecarSuffix() {
+        return SIDECAR_SUFFIX;
+    }
+
+    /**
+     * 目录名是否为浏览器"另存为"侧车目录名：以 {@code _files} 结尾（<b>大小写不敏感</b>）
+     * 且长度<b>大于</b>后缀（{@code _files} 本身不算 —— 没有基名）。null → false。
+     */
+    public static boolean isSidecarDirName(String name) {
+        if (name == null || name.length() <= SIDECAR_SUFFIX.length()) {
+            return false;
+        }
+        return name.toLowerCase(Locale.ROOT).endsWith(SIDECAR_SUFFIX);
+    }
+
+    /** 侧车目录名：基名 + 后缀（{@code "page" → "page_files"}） */
+    public static String sidecarDirName(String base) {
+        return base + SIDECAR_SUFFIX;
     }
 
     private static boolean hasAnySuffix(String fileName, String[] exts) {
