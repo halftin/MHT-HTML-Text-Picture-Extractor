@@ -549,7 +549,7 @@ public class SidePanelProbe extends Application {
     private void checkCommitted() {
         check("R1.9 confirming collapses the panel", !panel.isVisible() && !host.isRightShowing());
         check("R1.9 confirming clears the dirty flag (commitDraft ran)", !ParamSidePanel.isDirty(anchor));
-        Object params = field(controller, "textParamsCache");
+        Object params = fieldDeep(controller, "paramDomain", "textParamsCache");
         boolean separate = false;
         try {
             separate = (Boolean) params.getClass().getMethod("isSeparateFiles").invoke(params);
@@ -779,7 +779,7 @@ public class SidePanelProbe extends Application {
         if (target instanceof ParamScope.GroupTarget gt) {
             params = invoke(gt.group(), "getTextParamsCache", new Class<?>[]{});
         } else {
-            params = field(controller, "textParamsCache");
+            params = fieldDeep(controller, "paramDomain", "textParamsCache");
         }
         try {
             return params == null ? null
@@ -1252,6 +1252,20 @@ public class SidePanelProbe extends Application {
             return f.get(target);
         } catch (Exception e) {
             System.out.println("      (reflect " + name + " failed: " + e + ")");
+            return null;
+        }
+    }
+
+    /** 反射读主控制器参数域协作者里的包级字段（步骤 1：两套参数缓存搬进 ParamDomainController）。 */
+    private static Object fieldDeep(Object target, String owner, String name) {
+        try {
+            Object ownerObj = field(target, owner);
+            if (ownerObj == null) return null;
+            Field f = ownerObj.getClass().getDeclaredField(name);
+            f.setAccessible(true);
+            return f.get(ownerObj);
+        } catch (Exception e) {
+            System.out.println("      (reflect " + owner + "." + name + " failed: " + e + ")");
             return null;
         }
     }

@@ -250,17 +250,17 @@ public final class AcceptanceDriver {
          *  填写+提交+回调，10+ 调用点全量重写且脆弱 —— 测试已直驱同一份表单面板
          *  （ParamSidePanel.pane()），缺的只是"把确认结果应用到控制器"这最后一步）。 */
         public void applyConfirmedParams(boolean imageMode, AppConfig params) {
-            mc.applyConfirmedParams(imageMode, params);
+            mc.paramDomain.applyConfirmedParams(imageMode, params);
         }
 
         /** 写入某组的已确认参数缓存（包级；理由同 {@link #applyConfirmedParams}，组作用域手势更重）。 */
         public void applyGroupParams(GroupItem<PreviewItem> group, boolean imageMode, AppConfig params) {
-            mc.applyGroupParams(group, imageMode, params);
+            mc.paramDomain.applyGroupParams(group, imageMode, params);
         }
 
         /** 写入某条目的条目级独立参数（包级；理由同 {@link #applyConfirmedParams}）。 */
         public void applyItemParams(PreviewItem item, boolean imageMode, AppConfig params) {
-            mc.applyItemParams(item, imageMode, params);
+            mc.paramDomain.applyItemParams(item, imageMode, params);
         }
 
         /** 运行时提取配置构建（包级；纯函数 —— 把 GUI 状态与已确认缓存合成运行时配置，
@@ -293,12 +293,12 @@ public final class AcceptanceDriver {
 
         /** 参数变化后的统一刷新（包级；理由同 {@link #refreshAfterListChange}）。 */
         public void refreshAfterParamsChanged() {
-            mc.refreshAfterParamsChanged();
+            mc.paramDomain.refreshAfterParamsChanged();
         }
 
         /** 开始按钮可用性重算（包级；唯一派生函数，测试要直接驱动"模拟导入中 → 重算"断言）。 */
         public void updateStartButtonState() {
-            mc.updateStartButtonState();
+            mc.paramDomain.updateStartButtonState();
         }
 
         /** 进度条/状态栏刷新（包级；测试用 parseToken 精确驱动代次语义，手势不可控；C5 起经预解析协作者）。 */
@@ -350,22 +350,23 @@ public final class AcceptanceDriver {
         }
 
         /** 文本模式已确认参数缓存（包级字段；读可经 effectiveForObject 派生，但"置 null = 未确认"
-         *  无手势可表达 —— 没有用户流程会把缓存清回 null 而不带其它副作用）。 */
+         *  无手势可表达 —— 没有用户流程会把缓存清回 null 而不带其它副作用。步骤 1 起字段由
+         *  {@code ParamDomainController} 持有，这里经 {@code mc.paramDomain} 直访）。 */
         public AppConfig textParamsCache() {
-            return mc.textParamsCache;
+            return mc.paramDomain.textParamsCache;
         }
 
         public void textParamsCache(AppConfig v) {
-            mc.textParamsCache = v;
+            mc.paramDomain.textParamsCache = v;
         }
 
         /** 图片模式已确认参数缓存（包级字段；理由同 {@link #textParamsCache()}）。 */
         public AppConfig imageParamsCache() {
-            return mc.imageParamsCache;
+            return mc.paramDomain.imageParamsCache;
         }
 
         public void imageParamsCache(AppConfig v) {
-            mc.imageParamsCache = v;
+            mc.paramDomain.imageParamsCache = v;
         }
 
         /** 工作区后台活动代次（包级字段；内部计数器，无手势）。 */

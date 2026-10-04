@@ -25,8 +25,8 @@ import java.util.List;
  * removeGroupConfirm / listEmpty）、撤销记录语义、缓存规则 (a)/(c) 时机、关窗守卫
  * （NotificationHost.hasPendingDecision）与非 daemon 线程规则全部保持不变。
  *
- * <p>参数类撤销分支（PARAM_SET / CLEAR_PARAMS / APPLY_GLOBAL）留在控制器，经
- * {@link Host#applyParamUndo} 整体委派。本类含 JavaFX，属 gui 层。</p>
+ * <p>参数类撤销分支（PARAM_SET / CLEAR_PARAMS / APPLY_GLOBAL）已外迁到
+ * {@link ParamDomainController}（步骤 1），经 {@link Host#applyParamUndo} 整体委派。本类含 JavaFX，属 gui 层。</p>
  */
 @Slf4j
 public final class WorkspaceLifecycleController {
@@ -54,7 +54,7 @@ public final class WorkspaceLifecycleController {
         UndoManager.Record<PreviewItem> popRecord();
         void applyUndo(UndoManager.Record<PreviewItem> record);
         List<PreviewItem> applyUndoAffected();
-        // 参数类撤销整体委派（分支体留在 MainController）
+        // 参数类撤销整体委派（分支体在 ParamDomainController）
         void applyParamUndo(UndoManager.Record<PreviewItem> record);
         // 缓存规则收口（经 WorkspaceParamService；本类不得出现规则方法名，见 ArchitectureTest 不变式）
         void cacheRulesForRemovedItems(Iterable<PreviewItem> items);
@@ -279,7 +279,7 @@ public final class WorkspaceLifecycleController {
                     log.info(I18n.msg("log.maincontroller.52", record.group().getName(), record.items().size()));
                 }
                 case PARAM_SET, CLEAR_PARAMS, APPLY_GLOBAL ->
-                    // 参数类撤销分支体留在 MainController（applyParamUndo），这里整体委派
+                    // 参数类撤销分支体在 ParamDomainController（applyParamUndo），这里整体委派
                     host.applyParamUndo(record);
             }
         }
