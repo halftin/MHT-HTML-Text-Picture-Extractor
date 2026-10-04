@@ -96,8 +96,11 @@ public class AppConfig {
 
     // ==================== 图片提取参数指纹（需求 2 P2/P10，会话 7） ====================
 
+    /** 图片提取规则版本：改 AD_KEYWORDS / 去重口径等"提取出哪些图片"的规则时必须 +1（会让旧预览缓存一次性失效）。 */
+    private static final int IMAGE_EXTRACTION_RULES_VERSION = 1;
+
     /**
-     * 图片提取参数指纹：只含影响「提取出哪些图片、以什么名字、什么扩展名」的字段，
+     * 图片提取参数指纹：只含影响「提取出哪些图片、以什么名字、什么扩展名」的字段与规则版本，
      * 按固定顺序拼接后取 SHA-256（64 位十六进制）。缓存复用判定只比对本字符串（P10），
      * 不得持 AppConfig 引用或用 equals 比较（AppConfig 是 @Data 可变对象）。
      *
@@ -122,13 +125,24 @@ public class AppConfig {
      *       —— 与图片提取无关。</li>
      * </ul>
      *
-     * <p>广告过滤关键词为 {@code ImageExtractor.AD_KEYWORDS} 硬编码常量，AppConfig 无对应字段，
-     * 无需参与指纹；若将来参数化，必须加入本方法。</p>
+     * <p>广告过滤关键词为 {@code ImageExtractor.AD_KEYWORDS} 硬编码常量（本步不参数化），
+     * 但其<b>规则版本</b> {@code IMAGE_EXTRACTION_RULES_VERSION} 参与指纹 —— 改关键词清单 /
+     * 去重口径等「提取出哪些图片」的规则时必须 +1，让旧预览缓存一次性失效。</p>
      *
      * <p>顺序稳定：固定字段顺序 + 长度前缀编码（String 先写长度再写内容），
-     * 不依赖 Map/Set 迭代顺序；null 与空串可区分。</p>
+     * 不依赖 Map/Set 迭代顺序；null 与空串可区分。规则版本同样以长度前缀编码追加在末尾。</p>
      */
     public String imageExtractionFingerprint() {
+        return imageExtractionFingerprint(IMAGE_EXTRACTION_RULES_VERSION);
+    }
+
+    /**
+     * 指纹计算体（包级重载，E4.2）：规则版本作为显式参数。
+     * 供同包测试直接断言「版本变化 ⇒ 指纹变化」—— 若有人把版本从摘要输入里删掉，
+     * {@code AppConfigTest.fingerprintChangesWhenRulesVersionChanges} 会立刻变红
+     * （不做 golden hex 值钉死，避免版本正常递增时测试脆弱）。
+     */
+    String imageExtractionFingerprint(int rulesVersion) {
         StringBuilder sb = new StringBuilder();
         sb.append(enableNameExtraction ? '1' : '0');
         FingerprintEncoder.lengthPrefixed(sb, imageNameStartMarker);
@@ -138,6 +152,7 @@ public class AppConfig {
         FingerprintEncoder.lengthPrefixed(sb, imageRegionEndMarker);
         sb.append(enableBatchRenaming ? '1' : '0');
         sb.append(singleOutputMode ? '1' : '0');
+        FingerprintEncoder.lengthPrefixed(sb, Integer.toString(rulesVersion));
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(md.digest(sb.toString().getBytes(StandardCharsets.UTF_8)));

@@ -99,6 +99,21 @@ class AppConfigTest {
     }
 
     @Test
+    void fingerprintChangesWhenRulesVersionChanges() {
+        AppConfig c = base();
+        assertNotEquals(c.imageExtractionFingerprint(1), c.imageExtractionFingerprint(2),
+                "规则版本必须参与指纹：版本不同 ⇒ 缓存键不同（否则改 AD_KEYWORDS 等规则后旧缓存仍命中）");
+    }
+
+    @Test
+    void publicFingerprintUsesCurrentRulesVersion() {
+        AppConfig c = base();
+        // 1 = AppConfig.IMAGE_EXTRACTION_RULES_VERSION 当前值（private 常量，测试按项目惯例钉数值）
+        assertEquals(c.imageExtractionFingerprint(), c.imageExtractionFingerprint(1),
+                "公开指纹必须等于当前规则版本的指纹（版本常量变更时同步此钉值）");
+    }
+
+    @Test
     void fingerprintIgnoresIrrelevantFields() {
         String baseFp = base().imageExtractionFingerprint();
         List<Consumer<AppConfig>> mutations = fingerprintIrrelevantMutations();

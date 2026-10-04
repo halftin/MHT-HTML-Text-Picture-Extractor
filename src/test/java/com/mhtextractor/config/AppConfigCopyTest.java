@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
 import java.util.List;
 
 import com.mhtextractor.app.EffectiveParamsService;
@@ -17,8 +19,8 @@ import org.junit.jupiter.api.Test;
  * {@link AppConfig#copyExtractionParams()} 的字段级守护（Q10 / R7.7）。
  *
  * <p><b>为什么需要它</b>：深拷贝助手是"逐字段显式赋值"实现的（不用反射/序列化，保 native 镜像零元数据
- * 负担），因此<b>最容易出的错是漏字段或误带运行时字段</b>。本用例用反射把 {@code AppConfig} 的<b>每一个</b>
- * 字段都填成一个独特值，再逐字段核对副本：</p>
+ * 负担），因此<b>最容易出的错是漏字段或误带运行时字段</b>。本用例用反射把 {@code AppConfig} 的<b>每一个实例</b>
+ * 字段（静态常量除外，如 {@code IMAGE_EXTRACTION_RULES_VERSION}）都填成一个独特值，再逐字段核对副本：</p>
  * <ul>
  *   <li>提取参数字段（= 全部字段 − {@link EffectiveParamsService#runtimeOnlyFields()}）必须逐字段复制到；</li>
  *   <li>4 个 {@code @JsonIgnore} 运行时/GUI 字段（{@code inputFolder} / {@code outputFolder} /
@@ -71,8 +73,11 @@ class AppConfigCopyTest {
                 runtimeOnly, "运行时字段清单是 R7.7 口径的唯一来源");
 
         AppConfig src = new AppConfig();
-        Field[] fields = AppConfig.class.getDeclaredFields();
-        assertTrue(fields.length > 25, "装置自检：AppConfig 字段数应远多于 4（实际 " + fields.length + "）");
+        // 静态常量（如 IMAGE_EXTRACTION_RULES_VERSION）不是"可复制提取参数"，逐字段对账前先滤掉（E4.2）
+        Field[] fields = Arrays.stream(AppConfig.class.getDeclaredFields())
+                .filter(f -> !Modifier.isStatic(f.getModifiers()))
+                .toArray(Field[]::new);
+        assertTrue(fields.length > 25, "装置自检：AppConfig 实例字段数应远多于 4（实际 " + fields.length + "）");
         for (Field f : fields) {
             f.setAccessible(true);
             if (f.getType() == boolean.class) {
