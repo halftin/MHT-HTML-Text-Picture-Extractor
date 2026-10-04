@@ -11,6 +11,7 @@ import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.PerFileOverrides;
+import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.OutputUnitPlanner;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
@@ -239,6 +240,9 @@ public final class ExtractionTaskCoordinator {
     public ExtractionTaskCoordinator(WorkspaceExtractionService extractionService, Host host) {
         this.extractionService = extractionService;
         this.host = host;
+        if (host != null) {
+            preStartGates.add(new UnnamedGroupGate(host));   // 步骤 3 · 功能一：未命名组门（生产注册）
+        }
     }
 
     /** 启动前顺序门链（决策 C 的插拔点；只增不删，顺序即优先级）。 */
@@ -303,6 +307,44 @@ public final class ExtractionTaskCoordinator {
                     onFx.accept(stats);
                 }
             }));
+        }
+    }
+
+    /**
+     * 步骤 3 · 功能一 —— 未命名组门（需求 §1.1）：启动提取前拦截「从未被用户重命名过」的手工组。
+     *
+     * <p>规则在 app 层（{@link ExtractionPreconditions#unnamedGroups}，零 I18n），本门只做 GUI 侧
+     * 展示：组名按 locale 用 {@code list.nameSeparator}（zh「、」/ en「, 」）拼进
+     * {@code group.unnamedConfirm} 确认卡（决策 1.6：卡片列出具体组名；决策 1.7：多组聚合一次提示）；
+     * 确定 = 以默认名提取，取消 = 中止本次启动（决策 1.8：仅不提取，不做跳转/选中）。</p>
+     *
+     * <p><b>插入约定</b>：本门由生产构造注册（当前链尾）。步骤 4 的草稿门必须插在本门<b>之前</b>
+     * （草稿卡 → 未命名组卡），不得插到其后。</p>
+     */
+    private static final class UnnamedGroupGate implements PreStartGate {
+
+        private final Host host;
+
+        UnnamedGroupGate(Host host) {
+            this.host = host;
+        }
+
+        @Override
+        public void ask(Consumer<Boolean> proceed) {
+            List<String> names = new ArrayList<>();
+            for (Object o : host.dataOrder()) {
+                if (o instanceof GroupItem<?> g && g.isDefaultNamed()) {
+                    names.add(g.getName());
+                }
+            }
+            if (names.isEmpty()) {
+                proceed.accept(true);
+                return;
+            }
+            GuiNotifications.unnamedGroupConfirm(host.statusLabel(),
+                    I18n.get("group.unnamedConfirm", "names",
+                            String.join(I18n.get("list.nameSeparator"), names)),
+                    proceed);
         }
     }
 

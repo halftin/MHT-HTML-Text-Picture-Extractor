@@ -38,6 +38,12 @@ public class GroupItem<M> {
     private AppConfig textParamsCache;
     private AppConfig imageParamsCache;
 
+    /**
+     * 「从未被用户重命名过」的显式标记（步骤 3 · 功能一）：<b>手工建组</b>置 true；
+     * 用户提交改名后<b>永久</b>置 false（改回默认名也不再提醒）；导入自动建组保持默认 false。
+     */
+    private boolean defaultNamed;
+
     /** 组名变更监听器（懒初始化：大多数组不需要） */
     private List<ChangeListener> nameChangeListeners;
 
@@ -80,6 +86,16 @@ public class GroupItem<M> {
 
     public int getGroupNo() {
         return groupNo;
+    }
+
+    /** 是否为「从未被用户重命名过」的默认名组（提取前未命名组拦截的判定依据，步骤 3 · 功能一）。 */
+    public boolean isDefaultNamed() {
+        return defaultNamed;
+    }
+
+    /** 见 {@link #isDefaultNamed()}。置 true 的唯一路径是手工建组；用户提交改名后永久 false。 */
+    public void setDefaultNamed(boolean defaultNamed) {
+        this.defaultNamed = defaultNamed;
     }
 
     /** 组内成员列表（可变更；顺序即组内顺序）。零 JavaFX 依赖。 */

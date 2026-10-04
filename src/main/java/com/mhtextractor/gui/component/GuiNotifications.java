@@ -50,7 +50,7 @@ import java.util.function.Consumer;
  *   <li>{@link #driveRootConfirm} / {@link #cacheStepWarning} → {@code HDD}</li>
  *   <li>{@link #cacheClearing} → {@code BROOM}；{@link #paramDialogOpenFailed} / {@link #paramTargetConfirm} → {@code SLIDERS_H}</li>
  *   <li>{@link #recursionDepthConfirm} → {@code SITEMAP}；{@link #removeAllConfirm} → {@code TRASH_ALT}</li>
- *   <li>{@link #removeGroupConfirm} → {@code OBJECT_GROUP}；{@link #listEmpty} → {@code LIST}</li>
+ *   <li>{@link #removeGroupConfirm} / {@link #unnamedGroupConfirm} → {@code OBJECT_GROUP}；{@link #listEmpty} → {@code LIST}</li>
  *   <li>{@link #preconditionDenied} → 按级别：ERROR → {@code EXCLAMATION_CIRCLE}（居中卡片）、
  *       WARNING → {@code EXCLAMATION_TRIANGLE}（右上角 toast）</li>
  * </ul>
@@ -190,6 +190,11 @@ public final class GuiNotifications {
 
     /** 整组移除：居中确认卡片。 */
     public static void removeGroupConfirm(Node anchor, String message, Consumer<Boolean> onDecision) {
+        NotificationHost.confirm(anchor, message, FontAwesomeSolid.OBJECT_GROUP, onDecision);
+    }
+
+    /** 未命名组提取确认（步骤 3 · 功能一：确定 = 以默认名提取；取消 = 不提取）。与整组移除同族 {@code OBJECT_GROUP}。 */
+    public static void unnamedGroupConfirm(Node anchor, String message, Consumer<Boolean> onDecision) {
         NotificationHost.confirm(anchor, message, FontAwesomeSolid.OBJECT_GROUP, onDecision);
     }
 

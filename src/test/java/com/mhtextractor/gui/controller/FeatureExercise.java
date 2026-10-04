@@ -676,14 +676,19 @@ private void waitForImportDone() throws InterruptedException {
 
 // ==================== A2 配额卡场景的观察/驱动辅助（与 tools/probes/NotificationAcceptance 同口径） ====================
 
-/** 等待配额确认卡出现（{@code NotificationHost.hasPendingDecision} 是唯一可观察面；超时由调用方断言兜底） */
-private void waitForQuotaCard() throws InterruptedException {
+/** 等待确认卡出现（配额卡 / 未命名组卡同口径；{@code NotificationHost.hasPendingDecision} 是唯一可观察面） */
+private void waitForConfirmCard() throws InterruptedException {
     long deadline = System.currentTimeMillis() + 15000;
     while (!com.mhtextractor.gui.component.NotificationHost.hasPendingDecision(statusLabel())
             && System.currentTimeMillis() < deadline) {
         pumpFxEvents();
         Thread.sleep(20);
     }
+}
+
+/** 等待配额确认卡出现（A2 场景；超时由调用方断言兜底） */
+private void waitForQuotaCard() throws InterruptedException {
+    waitForConfirmCard();
 }
 
 /** 场景根里的居中模态层（宿主懒装/显式安装都保证场景根是 StackPane） */
@@ -1243,6 +1248,65 @@ public boolean runAutomatedTests() {
             if (units.size() < 2) { throw new IllegalStateException("输出单元数异常: " + units.size()); }
             out.println("[PASS] Output unit plan (" + units.size() + " units)"); p++;
         } catch (Exception e) { out.println("[FAIL] Output unit plan: " + e.getMessage()); f++; }
+
+        // 功能一（步骤 3）：未命名组门 —— 上一块留下的手工组（默认名）触发确认卡：
+        // ① 卡片列出具体组名；② 取消 → 不提取；③ 确定 → 以默认名提取；④ 用户改名 → 不再提醒
+        try { waitForImportDone();
+            List<GroupItem<PreviewItem>> unnamed = this.view.topLevelGroups().stream()
+                    .filter(g -> g.isDefaultNamed()).toList();
+            if (unnamed.size() != 1) {
+                throw new IllegalStateException("前置：应恰有 1 个未命名组，实际 " + unnamed.size());
+            }
+            String unnamedName = unnamed.get(0).getName();
+            outputFolderField().setText(new File(System.getProperty("java.io.tmpdir"),
+                    "mht-auto-output-gate").getPath()); Thread.sleep(200);
+            // ② 卡片出现且列出组名 → 取消 → 不提取
+            this.view.extractStats().set(null);
+            startButton().fire();
+            waitForConfirmCard();
+            String card = modalMessage();
+            if (!card.equals(I18n.get("group.unnamedConfirm", "names", unnamedName))
+                    || !card.contains(unnamedName)) {
+                throw new IllegalStateException("未命名组卡文案不符：" + card);
+            }
+            firePrimary(1);   // 取消
+            Thread.sleep(400); pumpFxEvents();
+            if (this.view.extractStats().get() != null || this.view.running().get()) {
+                throw new IllegalStateException("取消后不应启动提取");
+            }
+            // ③ 确定 → 以默认名提取（完成判据 = 新一轮 stats 落地；开始按钮在提取完成后不会被重新启用，
+            //    那是既有行为——既有提取用例的循环因此烧满 20 秒，此处不得把按钮状态当判据）
+            startButton().fire();
+            waitForConfirmCard();
+            firePrimary(0);   // 确定
+            long deadline = System.currentTimeMillis() + 20000;
+            while (System.currentTimeMillis() < deadline && this.view.extractStats().get() == null) {
+                pumpFxEvents();
+            }
+            if (this.view.extractStats().get() == null) {
+                throw new IllegalStateException("确定后提取未在时限内完成");
+            }
+            // ④ 用户改名 → 标记清除、卡片不再出现
+            listView().getSelectionModel().select(unnamed.get(0)); Thread.sleep(300);
+            groupNameField().setText(I18n.get("test.autoGroup")); Thread.sleep(300);
+            if (unnamed.get(0).isDefaultNamed()) { throw new IllegalStateException("用户改名后标记未清除"); }
+            BatchProcessor.ProcessStats before = this.view.extractStats().get();
+            // ③ 的提取禁用过开始按钮且完成路径不重新启用（既有行为）；重算同一派生函数后 fire 才真正生效
+            this.view.updateStartButtonState();
+            startButton().fire();
+            Thread.sleep(400); pumpFxEvents();
+            if (com.mhtextractor.gui.component.NotificationHost.hasPendingDecision(statusLabel())) {
+                throw new IllegalStateException("已改名组不应再弹确认卡");
+            }
+            long deadline2 = System.currentTimeMillis() + 20000;
+            while (System.currentTimeMillis() < deadline2 && this.view.extractStats().get() == before) {
+                pumpFxEvents();
+            }
+            if (this.view.extractStats().get() == before) {
+                throw new IllegalStateException("改名后提取未在时限内完成");
+            }
+            out.println("[PASS] Unnamed group gate (cancel / confirm / renamed)"); p++;
+        } catch (Exception e) { out.println("[FAIL] Unnamed group gate: " + e.getMessage()); f++; }
 
         try { inputFolderField().setText(textDir.toString()); Thread.sleep(200);
             out.println("[PASS] Set input folder"); p++;

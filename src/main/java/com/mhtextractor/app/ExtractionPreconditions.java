@@ -1,8 +1,12 @@
 package com.mhtextractor.app;
 
 import com.mhtextractor.i18n.ErrorCode;
+import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.util.GroupItem;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 提取前置校验（会话 18 · E4-2）—— 从 {@code MainController.onStartProcessing} 抽出的**纯决策逻辑**。
@@ -102,6 +106,32 @@ public final class ExtractionPreconditions {
             return null;
         }
         return totalItems == 0 ? ErrorCode.NO_MHT_FOUND : ErrorCode.KEEP_AT_LEAST_ONE;
+    }
+
+    // ==================== 未命名组规则（步骤 3 · 功能一） ====================
+
+    /**
+     * 未命名组判定：{@link GroupItem#isDefaultNamed()} 为 true（「从未被用户重命名过」）的组。
+     *
+     * <p>语义来源（需求 §1.1 决策 1.1–1.12）：手工建组即默认名；用户一旦<b>提交</b>过改名，
+     * 标记永久为 false（改回默认名也不再提醒）；导入自动建组恒为 false。撤销/重做恢复的组
+     * 保留其当时的标记（记录与快照持组<b>实例</b>引用，标记随对象走）。</p>
+     *
+     * <p>本规则只产<b>组名列表</b>，文案与展示全部留在 GUI 层（本类零 I18n 引用是架构硬约束）。</p>
+     *
+     * @param groups 顶层组列表（调用方从数据序投影中取出）
+     * @return 未命名组名列表（空 = 通过，无需提醒）
+     */
+    public static List<String> unnamedGroups(List<GroupItem<PreviewItem>> groups) {
+        List<String> names = new ArrayList<>();
+        if (groups != null) {
+            for (GroupItem<PreviewItem> g : groups) {
+                if (g.isDefaultNamed()) {
+                    names.add(g.getName());
+                }
+            }
+        }
+        return List.copyOf(names);
     }
 
     // ==================== 展示级别（把"该用 WARNING 还是 ERROR"也变成规则的一部分） ====================

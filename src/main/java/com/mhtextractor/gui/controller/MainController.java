@@ -1431,7 +1431,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (nameEditingGroup != g) {
             nameEditingGroup = g;
             lastValidGroupName = g.getName();
-            refs.groupNameField().setText(g.getName());
+            updatingGroupName = true; refs.groupNameField().setText(g.getName()); updatingGroupName = false;   // 程序化回填，不得误走 onGroupNameEdited 提交分支（步骤 3 标记）
         }
     }
 
@@ -1454,7 +1454,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             refs.groupNameField().setText(unique);
             updatingGroupName = false;
         }
-        g.setName(unique);
+        g.setName(unique); g.setDefaultNamed(false);   // 用户提交改名：永久退出「未命名组」提醒（步骤 3 · 功能一）
         lastValidGroupName = unique;
     }
 

@@ -368,6 +368,7 @@ public final class WorkspaceModel {
         int groupNo = nextGroupNo();
         String name = GroupStructure.uniqueGroupName(defaultNamePrefix + groupNo, groupNames());
         GroupItem<PreviewItem> g = new GroupItem<>(groupNo, name);
+        g.setDefaultNamed(true);   // 手工建组 = 「未命名组」：提取前拦截标记的唯一来源（步骤 3 · 功能一）
         g.getMembers().addAll(targets);
         for (PreviewItem t : targets) {
             t.parentGroup = g;
