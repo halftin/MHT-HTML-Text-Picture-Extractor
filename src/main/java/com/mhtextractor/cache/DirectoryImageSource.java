@@ -2,6 +2,7 @@ package com.mhtextractor.cache;
 
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.ImageSource;
+import com.mhtextractor.model.ExtractWarning;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -50,7 +51,7 @@ public class DirectoryImageSource implements ImageSource {
     }
 
     @Override
-    public List<String> warnings() {
+    public List<ExtractWarning> warnings() {
         return meta.warnings();
     }
 }

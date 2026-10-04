@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -33,7 +34,7 @@ class PreviewItemPreviewStateTest {
         item.cachedMeta = new PreviewCacheMeta(PreviewCacheMeta.FORMAT_VERSION,
                 new PreviewCacheMeta.Source(item.path, 1L, 2L, ""), "probe-fp", true,
                 List.of(new PreviewCacheMeta.ImageEntry("images/0001.png", "cid:x", "0001.png", "png", List.of())),
-                List.of("w1"));
+                List.of(new ExtractWarning("w1", Map.of())));
         item.status = PreviewItem.Status.READY;
         return item;
     }

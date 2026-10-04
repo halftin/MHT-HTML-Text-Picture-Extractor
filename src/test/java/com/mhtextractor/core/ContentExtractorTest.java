@@ -47,7 +47,7 @@ class ContentExtractorTest {
         assertNotNull(text);
         assertTrue(text.contains("正文内容第一段"), "正则不匹配时应回退到完整 HTML");
         assertFalse(extractor.getLastWarnings().isEmpty());
-        assertTrue(extractor.getLastWarnings().get(0).contains("内容限定标记未找到"));
+        assertEquals("core.areaMarkersNotFound", extractor.getLastWarnings().get(0).key());
     }
 
     @Test

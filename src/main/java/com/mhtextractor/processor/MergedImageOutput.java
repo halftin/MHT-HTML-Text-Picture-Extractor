@@ -4,6 +4,7 @@ import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.ImageSource;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.ExtractWarning;
 import com.mhtextractor.output.ImageWriter;
 import com.mhtextractor.util.FileUtils;
 import com.mhtextractor.util.SanitizeUtils;
@@ -11,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -29,10 +31,10 @@ final class MergedImageOutput implements ImageOutputStrategy {
     private final String mergedDir;
     private final String folderName;
     /** 合并目录命名警告（未取到标题时的回退提示）：由处理器并入首文件结果 */
-    private final String nameWarning;
+    private final ExtractWarning nameWarning;
     private final AtomicInteger globalIndex = new AtomicInteger(1);
 
-    private MergedImageOutput(String mergedDir, String folderName, String nameWarning) {
+    private MergedImageOutput(String mergedDir, String folderName, ExtractWarning nameWarning) {
         this.mergedDir = mergedDir;
         this.folderName = folderName;
         this.nameWarning = nameWarning;
@@ -49,7 +51,7 @@ final class MergedImageOutput implements ImageOutputStrategy {
                                     MimeParser.ParsedMht firstParsed,
                                     BatchProcessor.ProcessStats stats, String explicitName) {
         String folderName = explicitName;
-        String nameWarning = null;
+        ExtractWarning nameWarning = null;
         if (folderName != null && !folderName.isEmpty()) {
             folderName = SanitizeUtils.sanitize(folderName);
             if (folderName.isEmpty()) {
@@ -64,10 +66,11 @@ final class MergedImageOutput implements ImageOutputStrategy {
                 folderName = ImageBatchProcessor.determineDefaultFolderName(config.getInputFolder());
                 if (config.isEnableNameExtraction() && firstParsed != null
                         && firstParsed.getHtmlContent() != null) {
-                    nameWarning = I18n.get("extract.titleFallback", "name", folderName);
+                    nameWarning = new ExtractWarning("extract.titleFallback",
+                            Map.of("name", folderName));
                     stats.incrementWarn();
                     stats.addWarnDetail(I18n.get("extract.fileWarned",
-                            "file", mhtFiles.getFirst().getName(), "message", nameWarning));
+                            "file", mhtFiles.getFirst().getName(), "message", I18n.render(nameWarning)));
                     log.warn(I18n.msg("log.imagebatchprocessor.17", folderName));
                 }
             }
@@ -86,7 +89,7 @@ final class MergedImageOutput implements ImageOutputStrategy {
     }
 
     /** 合并目录命名警告（未取到标题）；无回退时为 {@code null} */
-    String nameWarning() {
+    ExtractWarning nameWarning() {
         return nameWarning;
     }
 

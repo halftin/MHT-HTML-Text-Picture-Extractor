@@ -2,6 +2,7 @@ package com.mhtextractor.util;
 
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.ExtractWarning;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
@@ -50,7 +51,7 @@ public final class HtmlExportBuilder {
 
     /** 导出结果（不抛异常，失败信息放 error） */
     public record ExportResult(boolean success, Path htmlFile, int imageCount,
-                               List<String> warnings, String error) {
+                               List<ExtractWarning> warnings, String error) {
         public static ExportResult failure(String msg) {
             return new ExportResult(false, null, 0, List.of(), msg);
         }
@@ -80,7 +81,7 @@ public final class HtmlExportBuilder {
             Path imgDir = dir.resolve(IMG_DIR_NAME);
             Files.createDirectories(imgDir);
 
-            List<String> warnings = new ArrayList<>();
+            List<ExtractWarning> warnings = new ArrayList<>();
             Map<String, byte[]> cidIndex = buildCidIndex(parsed.getCidMap());
             String rewritten = rewriteCidRefs(parsed.getHtmlContent(), cidIndex, imgDir, warnings);
             String finalHtml = forceUtf8Meta(rewritten);
@@ -201,7 +202,7 @@ public final class HtmlExportBuilder {
      * 命中的引用改写为相对路径，未命中的原样保留并计入 warnings。
      */
     private static String rewriteCidRefs(String html, Map<String, byte[]> cidIndex,
-                                         Path imgDir, List<String> warnings) throws IOException {
+                                         Path imgDir, List<ExtractWarning> warnings) throws IOException {
         LinkedHashSet<String> uniqueRefs = new LinkedHashSet<>();
         Matcher collect = CID_REF_PATTERN.matcher(html);
         while (collect.find()) {
@@ -229,7 +230,8 @@ public final class HtmlExportBuilder {
             if (rel != null) {
                 rewrite.appendReplacement(out, Matcher.quoteReplacement(rel));
             } else {
-                warnings.add(I18n.get("browser.unresolvedCid", "ref", rewrite.group(1)));
+                warnings.add(new ExtractWarning("browser.unresolvedCid",
+                        Map.of("ref", rewrite.group(1))));
                 rewrite.appendReplacement(out, Matcher.quoteReplacement(rewrite.group()));
             }
         }

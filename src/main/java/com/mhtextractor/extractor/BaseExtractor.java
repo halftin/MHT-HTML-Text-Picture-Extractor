@@ -1,6 +1,7 @@
 package com.mhtextractor.extractor;
 
 import com.mhtextractor.core.MimeParser;
+import com.mhtextractor.model.ExtractWarning;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,14 +13,14 @@ import java.util.List;
 public abstract class BaseExtractor implements WarningProvider {
 
     protected final MimeParser.ParsedMht parsedMht;
-    protected final List<String> lastWarnings = new ArrayList<>();
+    protected final List<ExtractWarning> lastWarnings = new ArrayList<>();
 
     public BaseExtractor(MimeParser.ParsedMht parsedMht) {
         this.parsedMht = parsedMht;
     }
 
     @Override
-    public List<String> getLastWarnings() {
+    public List<ExtractWarning> getLastWarnings() {
         return lastWarnings;
     }
 }

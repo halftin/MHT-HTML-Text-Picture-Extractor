@@ -1,5 +1,7 @@
 package com.mhtextractor.cache;
 
+import com.mhtextractor.model.ExtractWarning;
+
 import java.util.List;
 
 /**
@@ -9,7 +11,8 @@ import java.util.List;
  * source 三项 + <b>附属指纹</b>（R6.5，见 {@link Source}）。
  */
 public record PreviewCacheMeta(int formatVersion, Source source, String paramFingerprint,
-                               boolean imageMode, List<ImageEntry> images, List<String> warnings) {
+                               boolean imageMode, List<ImageEntry> images,
+                               List<ExtractWarning> warnings) {
 
     /**
      * 缓存格式版本：meta.json 结构或内容语义变化时递增，旧缓存自然失效
@@ -19,8 +22,15 @@ public record PreviewCacheMeta(int formatVersion, Source source, String paramFin
      * {@code sidecarFingerprint} 字段、键多了 {@link PreviewCacheKey#extraFingerprint()} 要素。
      * 不递增的话，R6 之前写下的、只按"四要素"命中的旧缓存目录会被新键误命中
      * （新键的附属指纹不参与旧 meta 的比对）⇒ 展示陈旧图片。</p>
+     *
+     * <p>2 → <b>3</b>（S5 / E4.1）。原因：{@code warnings} 由 {@code List<String>}（已解析文案，
+     * 语言取决于<b>写入时</b>的 locale，切换语言后缓存警告串味）改为结构化
+     * {@code List<ExtractWarning>}（码值 + 具名参数，语言中立，展示层按当前 locale 渲染）。
+     * 不递增的话，旧缓存里"语言固化的警告文案"要么被新 schema 当作对象反序列化失败
+     * （meta.json 不可读 ⇒ 依赖读失败自愈路径），要么继续携带错误语言的文案 ——
+     * 两者都违背"缓存语言中立"，故直接作废旧格式缓存。</p>
      */
-    public static final int FORMAT_VERSION = 2;
+    public static final int FORMAT_VERSION = 3;
 
     /**
      * 来源文件（P9）。{@code absolutePath}/{@code size}/{@code mtime} 三项对 MHT 与 HTML 一视同仁；
@@ -43,7 +53,7 @@ public record PreviewCacheMeta(int formatVersion, Source source, String paramFin
      * @param detectedExt  写入时按魔数检测到的扩展名（不含点；最终输出命名不依赖它）
      */
     public record ImageEntry(String file, String sourceId, String originalName,
-                             String detectedExt, List<String> warnings) {
+                             String detectedExt, List<ExtractWarning> warnings) {
         public ImageEntry {
             warnings = warnings == null ? List.of() : List.copyOf(warnings);
         }

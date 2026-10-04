@@ -10,6 +10,7 @@ import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.extractor.ImageSource;
 import com.mhtextractor.extractor.InMemoryImageSource;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.ExtractWarning;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.FileUtils;
 import com.mhtextractor.util.SanitizeUtils;
@@ -137,7 +138,7 @@ public class ImageBatchProcessor extends BatchProcessor {
         ImageInputStrategy inputs =
                 new PreloadedImageInput(preload.parsedList(), preload.loadFailures());
         ImageOutputStrategy outputs;
-        String mergedNameWarning = null;
+        ExtractWarning mergedNameWarning = null;
 
         if (config.isSingleOutputMode()) {
             // 与流式模式一致：仅当第一个文件本身解析成功才用其标题，否则回退默认目录名
@@ -173,7 +174,7 @@ public class ImageBatchProcessor extends BatchProcessor {
 
             MergedImageOutput merged = MergedImageOutput.create(config, outputFolder, mhtFiles,
                     firstParsed, stats, mergedOutputName);
-            String mergedNameWarning = merged.nameWarning();
+            ExtractWarning mergedNameWarning = merged.nameWarning();
             var inputs = new StreamingImageInput(mhtFiles, firstParsed,
                     index -> loadFile(mhtFiles, index), this::isCancelled);
             return processUnified(mhtFiles, outputFolder, inputs, merged, stats, 0.35, 0.25,
@@ -236,7 +237,7 @@ public class ImageBatchProcessor extends BatchProcessor {
     private ProcessStats processUnified(List<MhtFileInfo> mhtFiles, String outputFolder,
                                          ImageInputStrategy inputs, ImageOutputStrategy outputs,
                                          ProcessStats stats, double extractionBaseProgress,
-                                         double extractionRange, String mergedNameWarning) {
+                                         double extractionRange, ExtractWarning mergedNameWarning) {
         int total = mhtFiles.size();
         int totalImageCount = 0;
 
@@ -275,7 +276,7 @@ public class ImageBatchProcessor extends BatchProcessor {
 
                 ImageSource imageSource;
                 String extractedTitle = null;
-                List<String> fileWarnings;
+                List<ExtractWarning> fileWarnings;
 
                 if (hit != null) {
                     log.info(I18n.msg("log.imagebatchprocessor.22", name, hit.meta().images().size()));

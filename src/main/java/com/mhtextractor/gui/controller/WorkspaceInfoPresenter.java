@@ -2,6 +2,7 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.ExtractWarning;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.FileResult;
@@ -205,13 +206,15 @@ public final class WorkspaceInfoPresenter {
         log.info(I18n.msg("log.maincontroller.29", byPath.size()));
     }
 
-    /** 结果详情拼接：失败/跳过原因 + 警告，分号分隔；无内容返回 null */
+    /** 结果详情拼接：失败/跳过原因 + 警告（逐条按当前 locale 渲染），分号分隔；无内容返回 null */
     private String buildExtractDetail(FileResult r) {
         List<String> parts = new ArrayList<>();
         if (r.message() != null && !r.message().isEmpty()) {
             parts.add(r.message());
         }
-        parts.addAll(r.warnings());
+        for (ExtractWarning warning : r.warnings()) {
+            parts.add(I18n.render(warning));
+        }
         return parts.isEmpty() ? null : String.join(I18n.get("list.itemSeparator"), parts);
     }
 

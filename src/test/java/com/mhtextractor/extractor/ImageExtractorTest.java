@@ -75,7 +75,8 @@ class ImageExtractorTest {
         assertEquals(1, out.size());
         assertEquals("photo1", out.get(0).getFilename());
         assertEquals(2, ex.getLastWarnings().size());
-        assertTrue(ex.getLastWarnings().get(0).contains("ad_123"));
+        assertEquals("extract.adFiltered", ex.getLastWarnings().get(0).key());
+        assertEquals("ad_123", ex.getLastWarnings().get(0).args().get("name"));
     }
 
     // (c) 区域 HTML 解析失败：中止区域限定，不静默放行区域外图片，且有 warning
@@ -93,7 +94,7 @@ class ImageExtractorTest {
         List<ImageExtractor.ImageData> out = ex.extractImages();
         assertTrue(out.isEmpty());
         assertEquals(1, ex.getLastWarnings().size());
-        assertTrue(ex.getLastWarnings().get(0).contains("解析失败"));
+        assertEquals("extract.areaImageRefFailed", ex.getLastWarnings().get(0).key());
     }
 
     // 区域内确实没有 <img>（解析正常、引用为空）：不得回退为提取全部

@@ -124,10 +124,11 @@ class PreviewCacheKeyTest {
     // ==================== FORMAT_VERSION 必须递增（否则旧缓存被误命中） ====================
 
     @Test
-    void formatVersionHasBeenBumpedToTwo() {
-        assertEquals(2, PreviewCacheMeta.FORMAT_VERSION,
-                "R6.5：键语义变了（多了附属指纹、meta 多了 sidecarFingerprint 字段），"
-                        + "不递增会让 R6 之前写下的旧缓存被新键误命中");
+    void formatVersionHasBeenBumpedToThree() {
+        assertEquals(3, PreviewCacheMeta.FORMAT_VERSION,
+                "E4.1：warnings 由 List<String>（已解析文案，语言取决于写入时 locale）"
+                        + "改为结构化 List<ExtractWarning>（码值 + 具名参数，语言中立）。"
+                        + "不递增会让旧缓存携带错误语言的文案或反序列化失败");
     }
 
     // ==================== meta 往返：store 必须能由 meta 反推出一致的 key ====================

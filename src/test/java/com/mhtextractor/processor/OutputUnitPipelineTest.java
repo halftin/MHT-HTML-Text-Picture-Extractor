@@ -284,7 +284,7 @@ class OutputUnitPipelineTest {
         FileResult wr = s2.getFileResults().get(0);
         assertEquals(warn.toString(), wr.path());
         assertEquals(ExtractOutcome.SUCCESS_WARNED, wr.outcome());
-        assertTrue(wr.warnings().stream().anyMatch(w -> w.contains("起始标记未找到")));
+        assertTrue(wr.warnings().stream().anyMatch(w -> "core.startMarkerNotFound".equals(w.key())));
     }
 
     @Test

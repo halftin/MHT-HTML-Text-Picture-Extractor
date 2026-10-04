@@ -1,6 +1,7 @@
 package com.mhtextractor.cache;
 
 import com.mhtextractor.extractor.ImageExtractor;
+import com.mhtextractor.model.ExtractWarning;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -10,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -43,7 +45,7 @@ class PreviewCacheStoreTest {
         return new PreviewCacheMeta(key.formatVersion(),
                 new PreviewCacheMeta.Source(key.absolutePath(), key.size(), key.mtime(),
                         key.extraFingerprint()),
-                key.paramFingerprint(), true, images, List.of("w1"));
+                key.paramFingerprint(), true, images, List.of(new ExtractWarning("w1", Map.of())));
     }
 
     private PreviewCacheStore.ImagesWriter imagesWriter(byte[]... datas) {
@@ -69,7 +71,8 @@ class PreviewCacheStoreTest {
         byte[] d2 = "image-two".getBytes(StandardCharsets.UTF_8);
         List<PreviewCacheMeta.ImageEntry> images = List.of(
                 new PreviewCacheMeta.ImageEntry("images/0001.png", "cid:img1", "封面.png", "png", List.of()),
-                new PreviewCacheMeta.ImageEntry("images/0002.png", "cid:img2", null, "png", List.of("ad")));
+                new PreviewCacheMeta.ImageEntry("images/0002.png", "cid:img2", null, "png",
+                        List.of(new ExtractWarning("ad", Map.of()))));
 
         Path dir = store.write(key, metaFor(key, images), imagesWriter(d1, d2));
 
@@ -80,7 +83,7 @@ class PreviewCacheStoreTest {
         assertEquals(FP, meta.paramFingerprint());
         assertEquals(file.toAbsolutePath().normalize().toString(), meta.source().absolutePath());
         assertEquals(2, meta.images().size());
-        assertEquals(List.of("w1"), meta.warnings());
+        assertEquals(List.of(new ExtractWarning("w1", Map.of())), meta.warnings());
         assertArrayEquals(d1, Files.readAllBytes(dir.resolve("images/0001.png")));
         assertArrayEquals(d2, Files.readAllBytes(dir.resolve("images/0002.png")));
         assertTrue(Files.exists(dir.resolve(".complete")));
@@ -95,7 +98,7 @@ class PreviewCacheStoreTest {
         assertEquals("cid:img1", first.getContentId());
         assertArrayEquals(d1, first.getData());
         assertArrayEquals(d2, source.get(1).getData());
-        assertEquals(List.of("w1"), source.warnings());
+        assertEquals(List.of(new ExtractWarning("w1", Map.of())), source.warnings());
     }
 
     // ---------- (b) 四要素 + 格式版本任一不匹配 → 不命中 ----------

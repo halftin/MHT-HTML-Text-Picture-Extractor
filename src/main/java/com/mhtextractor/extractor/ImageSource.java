@@ -1,5 +1,7 @@
 package com.mhtextractor.extractor;
 
+import com.mhtextractor.model.ExtractWarning;
+
 import java.util.List;
 
 /**
@@ -14,7 +16,7 @@ public interface ImageSource {
     ImageExtractor.ImageData get(int index);
 
     /** 数据源自身的警告信息（默认无） */
-    default List<String> warnings() {
+    default List<ExtractWarning> warnings() {
         return List.of();
     }
 }

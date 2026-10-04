@@ -2,6 +2,7 @@ package com.mhtextractor.extractor;
 
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.ExtractWarning;
 import com.mhtextractor.util.HtmlUtils;
 import com.mhtextractor.util.SanitizeUtils;
 import lombok.Data;
@@ -94,9 +95,9 @@ public class ImageExtractor extends BaseExtractor {
 
         // 有区域限定：解析失败则中止该文件的区域限定提取，不静默放行区域外图片
         if (orderedImageRefs == null) {
-            String msg = I18n.get("extract.areaImageRefFailed");
-            logger.warn(I18n.msg("log.imageextractor.01", msg));
-            lastWarnings.add(msg);
+            ExtractWarning warning = new ExtractWarning("extract.areaImageRefFailed", Map.of());
+            logger.warn(I18n.msg("log.imageextractor.01", I18n.render(warning)));
+            lastWarnings.add(warning);
             if (progressCallback != null) progressCallback.accept(1.0);
             return Collections.emptyList();
         }
@@ -153,9 +154,9 @@ public class ImageExtractor extends BaseExtractor {
             String cid = info.getContentId();
             // 过滤广告图片（null/空标识符保留：无法判定为广告）
             if (isAdImage(cid)) {
-                String msg = I18n.get("extract.adFiltered", "name", cid);
-                logger.warn(I18n.msg("log.imageextractor.01", msg));
-                lastWarnings.add(msg);
+                ExtractWarning warning = new ExtractWarning("extract.adFiltered", Map.of("name", cid));
+                logger.warn(I18n.msg("log.imageextractor.01", I18n.render(warning)));
+                lastWarnings.add(warning);
                 continue;
             }
 
@@ -295,7 +296,7 @@ public class ImageExtractor extends BaseExtractor {
                 || contentLimitStart.isEmpty() || contentLimitEnd.isEmpty()) return html;
         String result = HtmlUtils.extractRegion(html, contentLimitStart, contentLimitEnd, lastWarnings);
         if (result == null) {
-            logger.warn(I18n.msg("log.imageextractor.01", lastWarnings.getLast()));
+            logger.warn(I18n.msg("log.imageextractor.01", I18n.render(lastWarnings.getLast())));
         }
         return result;
     }

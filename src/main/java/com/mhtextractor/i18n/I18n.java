@@ -1,5 +1,6 @@
 package com.mhtextractor.i18n;
 
+import com.mhtextractor.model.ExtractWarning;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -102,6 +103,22 @@ public final class I18n {
             return "!" + key + "!";
         }
         return render(key, template, args);
+    }
+
+    /**
+     * 渲染结构化警告（E4.1）：把 {@link ExtractWarning} 的具名参数摊平成
+     * {@link #get(String, Object...)} 的交替键值对形式。占位符按名匹配，
+     * Map 迭代顺序无关。缺键行为与 {@link #get} 一致（返回 {@code !key!} + log.error）。
+     */
+    public static String render(ExtractWarning warning) {
+        Map<String, String> args = warning.args();
+        Object[] flat = new Object[args.size() * 2];
+        int i = 0;
+        for (Map.Entry<String, String> e : args.entrySet()) {
+            flat[i++] = e.getKey();
+            flat[i++] = e.getValue();
+        }
+        return get(warning.key(), flat);
     }
 
     /**

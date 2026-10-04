@@ -3174,11 +3174,24 @@
      ]
     },
     {
+     "name": "<init>",
+     "parameterTypes": [
+      "java.lang.String",
+      "long",
+      "long",
+      "java.lang.String"
+     ]
+    },
+    {
      "name": "absolutePath",
      "parameterTypes": []
     },
     {
      "name": "mtime",
+     "parameterTypes": []
+    },
+    {
+     "name": "sidecarFingerprint",
      "parameterTypes": []
     },
     {
@@ -3292,6 +3305,41 @@
   },
   {
    "type": "javafx.scene.text.TextFlow"
+  },
+  {
+   "type": "com.mhtextractor.model.ExtractWarning",
+   "methods": [
+    {
+     "name": "<init>",
+     "parameterTypes": [
+      "java.lang.String",
+      "java.util.Map"
+     ]
+    },
+    {
+     "name": "args",
+     "parameterTypes": []
+    },
+    {
+     "name": "key",
+     "parameterTypes": []
+    }
+   ]
+  },
+  {
+   "type": "com.mhtextractor.model.ExtractWarning[]"
+  },
+  {
+   "type": "java.util.AbstractMap"
+  },
+  {
+   "type": "java.util.ImmutableCollections$AbstractImmutableMap"
+  },
+  {
+   "type": "java.util.ImmutableCollections$Map1"
+  },
+  {
+   "type": "java.util.ImmutableCollections$MapN"
   },
   {
    "type": "javafx.scene.web.WebView"

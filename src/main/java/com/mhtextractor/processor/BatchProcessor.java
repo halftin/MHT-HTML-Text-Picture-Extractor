@@ -3,6 +3,7 @@ package com.mhtextractor.processor;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.WarningProvider;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.ExtractWarning;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.FileUtils;
 import com.mhtextractor.util.SourceKinds;
@@ -104,11 +105,11 @@ public abstract class BatchProcessor {
         }
 
         /** 把警告并入指定路径的首条结果（SUCCESS 升级为 SUCCESS_WARNED）；无该路径记录则忽略 */
-        public void attachWarningTo(String path, String warning) {
+        public void attachWarningTo(String path, ExtractWarning warning) {
             for (int i = 0; i < fileResults.size(); i++) {
                 FileResult r = fileResults.get(i);
                 if (r.path().equals(path)) {
-                    List<String> w = new ArrayList<>(r.warnings());
+                    List<ExtractWarning> w = new ArrayList<>(r.warnings());
                     w.add(warning);
                     ExtractOutcome o = r.outcome() == ExtractOutcome.SUCCESS
                             ? ExtractOutcome.SUCCESS_WARNED : r.outcome();
@@ -263,9 +264,10 @@ public abstract class BatchProcessor {
      * 收集提取器的警告信息到统计对象
      */
     protected void reportExtractorWarnings(String fileName, WarningProvider extractor, ProcessStats stats) {
-        for (String warning : extractor.getLastWarnings()) {
+        for (ExtractWarning warning : extractor.getLastWarnings()) {
             stats.incrementWarn();
-            stats.addWarnDetail(I18n.get("extract.fileWarned", "file", fileName, "message", warning));
+            stats.addWarnDetail(I18n.get("extract.fileWarned", "file", fileName,
+                    "message", I18n.render(warning)));
         }
     }
 
@@ -274,7 +276,7 @@ public abstract class BatchProcessor {
      * message 为失败/跳过原因（成功时传 null）；warnings 为该文件全部警告。
      */
     protected void recordFileResult(ProcessStats stats, String path, ExtractOutcome outcome,
-                                    String message, List<String> warnings) {
+                                    String message, List<ExtractWarning> warnings) {
         if (outcome == ExtractOutcome.SUCCESS && !warnings.isEmpty()) {
             outcome = ExtractOutcome.SUCCESS_WARNED;
         }

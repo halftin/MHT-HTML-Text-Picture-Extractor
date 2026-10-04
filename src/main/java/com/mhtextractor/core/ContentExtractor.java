@@ -1,6 +1,7 @@
 package com.mhtextractor.core;
 
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.ExtractWarning;
 import com.mhtextractor.util.EncodingUtils;
 import com.mhtextractor.util.HtmlUtils;
 import lombok.Getter;
@@ -12,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,7 +25,7 @@ import java.util.regex.Pattern;
 public class ContentExtractor {
     private static final Logger logger = LoggerFactory.getLogger(ContentExtractor.class);
 
-    private final List<String> lastWarnings = new ArrayList<>();
+    private final List<ExtractWarning> lastWarnings = new ArrayList<>();
 
     /**
      * 从HTML内容中提取纯文本
@@ -108,9 +110,10 @@ public class ContentExtractor {
                 if (matcher.find()) {
                     return matcher.group(1);
                 } else {
-                    String msg = I18n.get("core.areaMarkersNotFound", "start", startMarker, "end", endMarker);
-                    logger.warn(I18n.msg("log.contentextractor.04", msg));
-                    lastWarnings.add(msg);
+                    ExtractWarning warning = new ExtractWarning("core.areaMarkersNotFound",
+                            Map.of("start", startMarker, "end", endMarker));
+                    logger.warn(I18n.msg("log.contentextractor.04", I18n.render(warning)));
+                    lastWarnings.add(warning);
                 }
             } else {
                 String result = HtmlUtils.extractRegion(html, startMarker, endMarker, lastWarnings);
@@ -120,9 +123,10 @@ public class ContentExtractor {
                 return html;
             }
         } catch (Exception e) {
-            String msg = I18n.get("core.areaExtractFailed", "reason", e.getMessage());
-            logger.warn(msg, e);
-            lastWarnings.add(msg);
+            ExtractWarning warning = new ExtractWarning("core.areaExtractFailed",
+                    Map.of("reason", String.valueOf(e.getMessage())));
+            logger.warn(I18n.render(warning), e);
+            lastWarnings.add(warning);
         }
         return html;
     }

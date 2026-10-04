@@ -6,6 +6,7 @@ import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.core.SourceParsers;
 import com.mhtextractor.extractor.TextExtractor;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.ExtractWarning;
 import com.mhtextractor.output.FileWriter;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.SanitizeUtils;
@@ -143,7 +144,7 @@ public class TextBatchProcessor extends BatchProcessor {
                 TextExtractor textExtractor = new TextExtractor(parsed);
                 String text = textExtractor.extractText(config.isAutoFixEncoding(),
                         config.getStartMarker(), config.getEndMarker(), config.isUseRegex());
-                List<String> fileWarnings = new ArrayList<>(textExtractor.getLastWarnings());
+                List<ExtractWarning> fileWarnings = new ArrayList<>(textExtractor.getLastWarnings());
                 reportExtractorWarnings(fileInfo.getName(), textExtractor, stats);
 
                 if (text == null || text.trim().isEmpty()) {
@@ -215,7 +216,7 @@ public class TextBatchProcessor extends BatchProcessor {
 
     private String buildChapterHeaderFromParsed(MimeParser.ParsedMht parsed, String fileName,
                                                 int chapterIndex, ProcessStats stats,
-                                                List<String> fileWarnings) {
+                                                List<ExtractWarning> fileWarnings) {
         String extractedTitle = null;
         boolean enableTitleExtract = config.isEnableTitleExtraction();
         String titleStart = config.getTitleStartMarker();
@@ -232,8 +233,8 @@ public class TextBatchProcessor extends BatchProcessor {
                     stats.incrementWarn();
                     stats.addWarnDetail(I18n.get("extract.fileWarnedNoTitle",
                             "file", fileName, "start", titleStart, "end", titleEnd));
-                    fileWarnings.add(I18n.get("extract.noTitleMarkers",
-                            "start", titleStart, "end", titleEnd));
+                    fileWarnings.add(new ExtractWarning("extract.noTitleMarkers",
+                            Map.of("start", titleStart, "end", String.valueOf(titleEnd))));
                     extractedTitle = null;
                 }
             } catch (Exception e) {
