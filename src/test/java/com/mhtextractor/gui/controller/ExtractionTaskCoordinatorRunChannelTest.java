@@ -1,8 +1,14 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.WorkspaceExtractionService;
+import com.mhtextractor.cache.PreviewCacheLifecycle;
+import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.processor.BatchProcessor;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -10,6 +16,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,6 +40,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * "先注册、后完成"的顺序关系由<b>调用顺序</b>直接表达（不是 sleep 抢时序），旧实现的缺陷
  * （onCancelled 直接读 {@code lastExtractStats} → null / 上一次运行的残留）由各用例的断言
  * 反向钉死：<b>worker 未完成时不得有任何回写、完成后恰好一次、载荷 == worker 返回的统计</b>。
+ *
+ * <p>⑦ 一节补上「三终态 UI 落地」（步骤 7 修复）：成功 / 失败 / 取消三个终态各自把
+ * 运行标记复位、停止按钮禁用、开始按钮按<b>注入的派生函数</b>重算 —— 经
+ * {@link ExtractionTaskCoordinator#landTerminalState} 驱动（零 JavaFX，与①②③同口径）。</p>
  */
 class ExtractionTaskCoordinatorRunChannelTest {
 
@@ -253,5 +264,98 @@ class ExtractionTaskCoordinatorRunChannelTest {
 
         assertEquals(1, drain(q), "通道应投递一次收尾动作");
         assertTrue(applied.isEmpty(), "null 统计不得触发 applyResults");
+    }
+
+    // ==================== ⑦ 三终态 UI 落地（成功 / 失败 / 取消各一例） ====================
+
+    @TempDir
+    Path tmp;
+
+    /** 记录终态落地动作的桩 UI（零 JavaFX）：{@code finished} 计数 = 停止按钮禁用动作数。 */
+    private static final class LandingUi implements ExtractionTaskCoordinator.ExtractionUi {
+        final List<BatchProcessor.ProcessStats> applied = new ArrayList<>();
+        int finished;
+
+        @Override public File sessionOutputFolder() { return new File("."); }
+        @Override public boolean openFolderAfterComplete() { return false; }
+        @Override public void setProgress(double value) { }
+        @Override public void setProgressBarOutcome(ExtractionTaskCoordinator.ExtractOutcomeStyle style) { }
+        @Override public void extractionStarted() { }
+        @Override public void applyResults(BatchProcessor.ProcessStats stats) { applied.add(stats); }
+        @Override public void setStatusText(String text) { }
+        @Override public void extractionFinished() { finished++; }
+    }
+
+    /** 3 参构造 + 注入派生函数计数（host 为 null：不注册顺序门，与 1/2 参构造同口径）。 */
+    private ExtractionTaskCoordinator coordinator(AtomicInteger derivedCalls) {
+        return new ExtractionTaskCoordinator(new WorkspaceExtractionService(
+                new PreviewCacheLifecycle(new PreviewCacheStore(tmp.resolve("cache")))), null,
+                derivedCalls::incrementAndGet);
+    }
+
+    /** ⑦-成功：onSucceeded 的落地 —— 运行标记复位、停止禁用恰一次、开始按派生函数重算恰一次（落地本身不回写统计）。 */
+    @Test
+    void successTerminalStateLandsRunningOffStopDisabledAndStartRecomputed() {
+        AtomicInteger derivedCalls = new AtomicInteger();
+        ExtractionTaskCoordinator c = coordinator(derivedCalls);
+        LandingUi ui = new LandingUi();
+        c.running.set(true);
+
+        c.landTerminalState(ui);
+
+        assertFalse(c.running.get(), "成功终态必须复位运行标记");
+        assertEquals(1, ui.finished, "成功终态必须禁用停止按钮恰一次");
+        assertEquals(1, derivedCalls.get(), "成功终态必须按派生函数重算开始按钮恰一次");
+        assertTrue(ui.applied.isEmpty(), "落地本身不得回写统计（回写是成功回调自身的动作）");
+    }
+
+    /** ⑦-失败：onFailed 的落地 —— 与成功同一落地函数；即使失败路径无统计可回写，按钮态与运行标记照样复位。 */
+    @Test
+    void failedTerminalStateLandsRunningOffStopDisabledAndStartRecomputed() {
+        AtomicInteger derivedCalls = new AtomicInteger();
+        ExtractionTaskCoordinator c = coordinator(derivedCalls);
+        LandingUi ui = new LandingUi();
+        c.running.set(true);
+
+        c.landTerminalState(ui);
+
+        assertFalse(c.running.get(), "失败终态必须复位运行标记");
+        assertEquals(1, ui.finished, "失败终态必须禁用停止按钮恰一次");
+        assertEquals(1, derivedCalls.get(), "失败终态必须按派生函数重算开始按钮恰一次");
+        assertTrue(ui.applied.isEmpty(), "失败路径没有统计可回写（落地不依赖统计）");
+    }
+
+    /** ⑦-取消：onCancelled 的落地 + B 阶段回写不回归 —— 落地在时点①立即发生（不等到 worker 退出）；
+     *  partial 回写仍恰一次、且只在 worker 完成（时点②）之后经派发器送达（时点③）。 */
+    @Test
+    void cancelTerminalStateLandsAndPartialWriteBackStillDeliveredOnceAfterWorker() throws Exception {
+        AtomicInteger derivedCalls = new AtomicInteger();
+        ExtractionTaskCoordinator c = coordinator(derivedCalls);
+        LandingUi ui = new LandingUi();
+        AtomicLong generation = new AtomicLong(1);
+        BlockingQueue<Runnable> q = new LinkedBlockingQueue<>();
+        ExtractionTaskCoordinator.RunChannel channel =
+                new ExtractionTaskCoordinator.RunChannel(1, q::add);
+        c.running.set(true);
+
+        // 时点①：onCancelled —— 落地立即发生（运行标记复位、停止禁用、开始重算）
+        c.landTerminalState(ui);
+        assertFalse(c.running.get(), "取消终态必须复位运行标记（不等到 worker 退出）");
+        assertEquals(1, ui.finished, "取消终态必须禁用停止按钮恰一次");
+        assertEquals(1, derivedCalls.get(), "取消终态必须按派生函数重算开始按钮恰一次");
+
+        // 取消回写仍在结果通道上挂"worker 完成后投递一次"（B 阶段口径不回退）
+        channel.deliverAfterWorkerFinished(generation::get, ui::applyResults);
+        assertNull(q.poll(QUIET_PROBE_MILLIS, TimeUnit.MILLISECONDS),
+                "worker 未完成时不得提前回写（落地与回写解耦）");
+
+        // 时点②：worker 停止并产出 partial → 时点③：派发器上恰好一次
+        BatchProcessor.ProcessStats partial = stats(2, 1, 0, 0);
+        channel.result.complete(partial);
+        assertEquals(1, drain(q), "取消回写应恰好投递一次");
+        assertEquals(List.of(partial), ui.applied, "回写载荷 == worker 返回的 partial");
+        assertEquals(1, ui.finished, "落地不得随回写重复（仍恰一次）");
+        assertEquals(1, derivedCalls.get(), "派生函数不得随回写重复调用");
+        assertFalse(c.running.get(), "回写不得复活运行标记");
     }
 }

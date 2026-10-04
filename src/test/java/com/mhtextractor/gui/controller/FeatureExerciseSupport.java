@@ -124,6 +124,7 @@ class FeatureExerciseSupport {
     protected javafx.scene.control.ProgressBar progressBar() { return node("progressBar", javafx.scene.control.ProgressBar.class); }
     protected javafx.scene.control.Label statusLabel() { return node("statusLabel", javafx.scene.control.Label.class); }
     protected javafx.scene.control.Button startButton() { return node("startButton", javafx.scene.control.Button.class); }
+    protected javafx.scene.control.Button stopButton() { return node("stopButton", javafx.scene.control.Button.class); }
     protected atlantafx.base.controls.ToggleSwitch openFolderAfterCompleteCheck() { return node("openFolderAfterCompleteCheck", atlantafx.base.controls.ToggleSwitch.class); }
 /** 测试专用：在 FX 线程上排空事件队列（进入嵌套事件循环，处理完当前已排队回调后返回）。
  *  runAutomatedTests 本身运行在 FX 线程，普通 sleep 会阻塞事件回调（如提取 onSucceeded）无法执行 */

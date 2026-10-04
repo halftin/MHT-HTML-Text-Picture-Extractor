@@ -258,7 +258,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 @Override public ProgressBar progressBar() { return refs.progressBar(); }
                 @Override public Button startButton() { return refs.startButton(); }
                 @Override public Button stopButton() { return refs.stopButton(); }
-            });
+            }, () -> this.paramDomain.updateStartButtonState());
     boolean updatingAdjustCheck = false;
 
     // ===== 分组状态（F5） =====

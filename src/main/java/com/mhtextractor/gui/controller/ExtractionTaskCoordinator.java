@@ -92,6 +92,13 @@ public final class ExtractionTaskCoordinator {
          */
         void extractionStarted();
 
+        /**
+         * 提取终态统一落地（成功 / 失败 / 取消三条路径各恰好一次，且只在陈旧守卫通过后调用）：
+         * 停止按钮禁用。开始按钮的重算由协调器注入的唯一派生函数负责（见
+         * {@link ExtractionTaskCoordinator#ExtractionTaskCoordinator(WorkspaceExtractionService, Host, Runnable)}）。
+         */
+        void extractionFinished();
+
         /** 结果一次性回写列表条目（{@code MainController.applyExtractResults}）。 */
         void applyResults(BatchProcessor.ProcessStats stats);
 
@@ -216,7 +223,7 @@ public final class ExtractionTaskCoordinator {
      * <p>🚨 <b>必须在 {@link #run} 的<b>第一行</b>置 true</b>：{@code MainController.updateProgressStatus}
      * 拿它当"提取期间进度条/状态栏归提取任务独占"的守卫。守卫<b>只认这个字段</b>——忘了置 true
      * （Q3/P2 真的漏过一次）会让守卫恒不生效，预解析完成回调随即把刚设好的满格条配色清成默认色，
-     * GUI 自动化两条提取配色断言会稳定变红。复位见 {@link #run} 的三个终态回调。</p>
+     * GUI 自动化两条提取配色断言会稳定变红。复位见 {@link #run} 的三个终态回调（经 {@link #landTerminalState}）。</p>
      */
     final AtomicBoolean running = new AtomicBoolean(false);
     /**
@@ -227,19 +234,35 @@ public final class ExtractionTaskCoordinator {
     private volatile Task<BatchProcessor.ProcessStats> currentTask;
     /** 每 run 递增的运行代数（<b>只在 FX 线程上读写</b>）：旧任务迟到的终态回调凭它识别自己是陈旧调用 */
     private long runGeneration;
+    /**
+     * 开始按钮可用性的唯一派生函数（生产 = {@code MainController} 注入 {@code paramDomain.updateStartButtonState}
+     * 的转发；判定条件只在那一份派生函数里，<b>不得在本类复制</b>）。三终态落地时调用一次；
+     * null = 历史兼容构造（无派生函数可重算，跳过）。
+     */
+    private final Runnable updateStartButtonState;
 
     /**
      * 只跑 {@link Task} 生命周期的构造（历史兼容：无编排宿主；{@link #begin()} 前必须换用
      * {@link #ExtractionTaskCoordinator(WorkspaceExtractionService, Host)}）。
      */
     public ExtractionTaskCoordinator(WorkspaceExtractionService extractionService) {
-        this(extractionService, null);
+        this(extractionService, null, null);
     }
 
-    /** 生产构造：编排宿主（{@code MainController} 的匿名 {@link Host}）随本类创建时注入。 */
+    /** 历史兼容构造：编排宿主（{@code MainController} 的匿名 {@link Host}）随本类创建时注入；派生函数为 null。 */
     public ExtractionTaskCoordinator(WorkspaceExtractionService extractionService, Host host) {
+        this(extractionService, host, null);
+    }
+
+    /**
+     * 生产构造：编排宿主 + 开始按钮唯一派生函数的重算入口（三终态落地时调用，见
+     * {@link #landTerminalState}）。宿主非 null 时注册顺序门（决策 C：草稿门 → 未命名组门）。
+     */
+    public ExtractionTaskCoordinator(WorkspaceExtractionService extractionService, Host host,
+                                     Runnable updateStartButtonState) {
         this.extractionService = extractionService;
         this.host = host;
+        this.updateStartButtonState = updateStartButtonState;
         if (host != null) {
             preStartGates.add(new DraftGate(host));        // 步骤 4 · 功能二：草稿门（决策 C：必须第一道）
             preStartGates.add(new UnnamedGroupGate(host)); // 步骤 3 · 功能一：未命名组门（生产注册）
@@ -427,8 +450,7 @@ public final class ExtractionTaskCoordinator {
             if (!channel.isCurrent(runGeneration)) {
                 return; // 陈旧任务的迟到回调：no-op（取消后立即再开新任务时不得污染新任务）
             }
-            running.set(false);
-            currentTask = null;
+            landTerminalState(ui);
             ui.setProgress(1.0);
             ui.setStatusText(I18n.get("extract.done"));
             BatchProcessor.ProcessStats stats = task.getValue();
@@ -448,8 +470,7 @@ public final class ExtractionTaskCoordinator {
             if (!channel.isCurrent(runGeneration)) {
                 return; // 陈旧任务的迟到回调：no-op
             }
-            running.set(false);
-            currentTask = null;
+            landTerminalState(ui);
             ui.setStatusText(I18n.get("extract.statusError"));
             Throwable ex = task.getException();
             log.error(I18n.msg("log.maincontroller.37"), ex);
@@ -461,6 +482,7 @@ public final class ExtractionTaskCoordinator {
             if (!channel.isCurrent(runGeneration)) {
                 return; // 陈旧任务的迟到回调：no-op（不得为旧 run 回写）
             }
+            landTerminalState(ui);
             // 拍板：中途取消回写已处理部分（未处理的保持原样）。
             // 时点①：取消请求 ≠ worker 已退出 —— 此刻不得读 lastExtractStats（null/残留旧值），
             // 只在结果通道上挂"worker 完成后投递一次"的回写，partial 到那时才存在。
@@ -482,6 +504,22 @@ public final class ExtractionTaskCoordinator {
     /** 供 UI 侧读取"最近一次提取统计"的唯一 holder（只读入口；写入只发生在 {@link #run} 内）。 */
     public AtomicReference<BatchProcessor.ProcessStats> extractStats() {
         return lastExtractStats;
+    }
+
+    /**
+     * 三终态（成功 / 失败 / 取消）共用的 UI 终态落地（必须在<b>陈旧守卫之后</b>、派发目标线程（FX）上调用）：
+     * 运行标记复位（解析回调据此让出进度条 / 状态栏）、在途任务清空、停止按钮禁用
+     * （{@link ExtractionUi#extractionFinished}）、开始按钮按唯一派生函数重算
+     * （注入的 {@code updateStartButtonState}；null = 历史兼容构造，跳过）。
+     * 包级可见：无头测试（{@code ExtractionTaskCoordinatorRunChannelTest} ⑦）逐终态驱动并断言落地契约。
+     */
+    void landTerminalState(ExtractionUi ui) {
+        running.set(false);
+        currentTask = null;
+        ui.extractionFinished();
+        if (updateStartButtonState != null) {
+            updateStartButtonState.run();
+        }
     }
 
     /** 提取完成后按勾选打开会话输出目录（只由成功回调触发）。 */
@@ -707,6 +745,11 @@ public final class ExtractionTaskCoordinator {
                 host.progressBar().setVisible(true);
                 host.progressBar().setProgress(0);
                 host.setProgressBarActivity(ExtractOutcomeStyles.PROGRESS_EXTRACT_SUCCESS);   // 提取中 = 开始提取按钮绿
+            }
+
+            @Override
+            public void extractionFinished() {
+                host.stopButton().setDisable(true);
             }
 
             @Override

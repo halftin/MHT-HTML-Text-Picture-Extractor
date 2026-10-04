@@ -262,4 +262,35 @@ class ExtractionTaskCoordinatorGateTest {
             c.cancel();
         }
     }
+
+    /** ④ 终态落地（成功路径，真实 {@code extractionUi} 生产组装）：空单元任务自然完成后 ——
+     *  运行标记复位、停止按钮禁用、开始按钮按注入的派生函数重算恰一次（需要真实 FX 事件循环）。 */
+    @Test
+    void naturalCompletionLandsTerminalUiState() throws Exception {
+        requireToolkit();
+        StubHost host = host();
+        java.util.concurrent.atomic.AtomicInteger derivedCalls = new java.util.concurrent.atomic.AtomicInteger();
+        ExtractionTaskCoordinator c = new ExtractionTaskCoordinator(new WorkspaceExtractionService(
+                new PreviewCacheLifecycle(new PreviewCacheStore(dir.resolve("cache")))), host,
+                derivedCalls::incrementAndGet);
+        try {
+            runOnFx(() -> {
+                host.statusLabel = new Label();
+                host.progressBar = new ProgressBar();
+                host.startButton = new Button();
+                host.stopButton = new Button();
+                c.begin();
+                assertTrue(c.running.get(), "启动路径必须置运行标记");
+                assertTrue(host.startButton.isDisabled(), "提取中开始按钮必须禁用");
+                assertFalse(host.stopButton.isDisabled(), "提取中停止按钮必须启用");
+            });
+
+            waitUntil("空单元任务完成 → 运行标记复位", () -> !c.running.get());
+            runOnFx(() -> { });   // 排空 FX：onSucceeded 收尾（落地 → 状态栏）全部执行完再断言
+            assertTrue(host.stopButton.isDisabled(), "成功后停止按钮必须禁用（终态落地）");
+            assertEquals(1, derivedCalls.get(), "成功后开始按钮必须按派生函数重算恰一次（终态落地）");
+        } finally {
+            c.cancel();
+        }
+    }
 }

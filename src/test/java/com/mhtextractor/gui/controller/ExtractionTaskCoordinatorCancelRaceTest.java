@@ -28,6 +28,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -76,6 +77,8 @@ class ExtractionTaskCoordinatorCancelRaceTest {
         final List<ExtractionTaskCoordinator.ExtractOutcomeStyle> outcomes =
                 Collections.synchronizedList(new ArrayList<>());
         final java.util.concurrent.atomic.AtomicInteger started = new java.util.concurrent.atomic.AtomicInteger(0);
+        /** 终态落地次数（步骤 7：停止禁用 + 开始按派生函数重算的动作，三终态各恰一次） */
+        final java.util.concurrent.atomic.AtomicInteger finished = new java.util.concurrent.atomic.AtomicInteger(0);
 
         @Override
         public File sessionOutputFolder() {
@@ -100,6 +103,11 @@ class ExtractionTaskCoordinatorCancelRaceTest {
         @Override
         public void extractionStarted() {
             started.incrementAndGet();
+        }
+
+        @Override
+        public void extractionFinished() {
+            finished.incrementAndGet();
         }
 
         @Override
@@ -293,6 +301,10 @@ class ExtractionTaskCoordinatorCancelRaceTest {
             drainFx();                       // 时点①：onCancelled 已先跑，worker 仍阻塞在闸门
             assertTrue(ui.applied.isEmpty(),
                     "onCancelled 已跑但 worker 未完成：不得回写（旧实现此刻读 holder 会拿到 null/残留）");
+            assertFalse(coordinator.running.get(),
+                    "onCancelled 必须落地运行标记复位（不等到 worker 退出）");
+            assertEquals(1, ui.finished.get(),
+                    "onCancelled 必须落地停止禁用 + 开始按派生函数重算恰一次");
 
             gate.open();                     // 时点②：放行 worker → 返回 partial
             waitUntil("取消后 worker 完成 → partial 回写", () -> !ui.applied.isEmpty());
@@ -300,6 +312,7 @@ class ExtractionTaskCoordinatorCancelRaceTest {
             assertEquals(1, ui.applied.size(), "partial 必须恰好回写一次（worker 完成后）");
             assertSame(coordinator.extractStats().get(), ui.applied.get(0),
                     "回写载荷 == worker 返回的统计（同一对象）");
+            assertEquals(1, ui.finished.get(), "落地不得随 partial 回写重复（仍恰一次）");
         } finally {
             gate.open();                     // 任何失败路径都放行 worker，防非 daemon 线程残留
         }
@@ -341,6 +354,8 @@ class ExtractionTaskCoordinatorCancelRaceTest {
             assertSame(coordinator.extractStats().get(), ui.applied.get(1),
                     "第二次回写必须是 run 2 的 partial，不得是 run 1 的残留统计");
             assertSame(run1Stats, ui.applied.get(0), "run 1 的成功回写不受影响");
+            assertEquals(2, ui.finished.get(), "两次终态（run 1 成功 + run 2 取消）各落地一次");
+            assertFalse(coordinator.running.get(), "取消终态必须复位运行标记");
         } finally {
             gate.open();
         }
@@ -387,6 +402,7 @@ class ExtractionTaskCoordinatorCancelRaceTest {
                     "旧 run 的迟到回调不得再回写：UI 只收到 run 0 与 run 2 的统计各一次");
             assertSame(run0Stats, ui.applied.get(0));
             assertSame(run2Stats, ui.applied.get(1), "最后一次回写是 run 2 的最终统计");
+            assertFalse(coordinator.running.get(), "run 2 终态必须复位运行标记");
         } finally {
             gate.open();
         }

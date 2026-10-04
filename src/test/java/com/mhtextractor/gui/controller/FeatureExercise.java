@@ -683,8 +683,8 @@ public boolean runAutomatedTests() {
             if (this.view.extractStats().get() != null || this.view.running().get()) {
                 throw new IllegalStateException("取消后不应启动提取");
             }
-            // ③ 确定 → 以默认名提取（完成判据 = 新一轮 stats 落地；开始按钮在提取完成后不会被重新启用，
-            //    那是既有行为——既有提取用例的循环因此烧满 20 秒，此处不得把按钮状态当判据）
+            // ③ 确定 → 以默认名提取（完成判据 = 新一轮 stats 落地；步骤 7 起完成路径会重新启用开始按钮，
+            //    既有提取用例的等待循环因此提前退出，此处仍不把按钮状态当判据）
             startButton().fire();
             waitForConfirmCard();
             firePrimary(0);   // 确定
@@ -700,7 +700,7 @@ public boolean runAutomatedTests() {
             groupNameField().setText(I18n.get("test.autoGroup")); Thread.sleep(300);
             if (unnamed.get(0).isDefaultNamed()) { throw new IllegalStateException("用户改名后标记未清除"); }
             BatchProcessor.ProcessStats before = this.view.extractStats().get();
-            // ③ 的提取禁用过开始按钮且完成路径不重新启用（既有行为）；重算同一派生函数后 fire 才真正生效
+            // ③ 的提取禁用过开始按钮，完成路径已会重新启用（步骤 7 终态落地）；此处重算同一派生函数仅作兜底
             this.view.updateStartButtonState();
             startButton().fire();
             Thread.sleep(400); pumpFxEvents();
@@ -769,6 +769,13 @@ public boolean runAutomatedTests() {
                     || !progressBar().getStyleClass().contains("progress-extract-success")) {
                 throw new IllegalStateException("全部成功后进度条应满格且为绿色");
             }
+            // 步骤 7：完成路径终态落地 —— 开始按钮重新启用、停止按钮禁用
+            if (startButton().isDisabled()) {
+                throw new IllegalStateException("文本提取完成后开始按钮应重新启用（终态落地）");
+            }
+            if (!stopButton().isDisabled()) {
+                throw new IllegalStateException("文本提取完成后停止按钮应禁用（终态落地）");
+            }
             out.println("[PASS] Text extraction started"); p++;
         } catch (Exception e) { out.println("[FAIL] Text extraction: " + e.getMessage()); f++; }
 
@@ -819,6 +826,13 @@ public boolean runAutomatedTests() {
                     || !progressBar().getStyleClass().contains("progress-extract-failed")) {
                 throw new IllegalStateException("存在失败条目时满格条应为浅红");
             }
+            // 步骤 7：完成路径终态落地 —— 开始按钮重新启用、停止按钮禁用
+            if (startButton().isDisabled()) {
+                throw new IllegalStateException("图片提取完成后开始按钮应重新启用（终态落地）");
+            }
+            if (!stopButton().isDisabled()) {
+                throw new IllegalStateException("图片提取完成后停止按钮应禁用（终态落地）");
+            }
             out.println("[PASS] Image extraction started"); p++;
         } catch (Exception e) { out.println("[FAIL] Image extraction: " + e.getMessage()); f++; }
 
@@ -862,6 +876,64 @@ public boolean runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Preview cache lifecycle: " + e.getMessage()); f++; }
         // 兜底清场（无论成败）：自动化测试经 System.exit 退出不走关窗处理器，避免缓存残留跨会话
         try { this.view.previewCacheLifecycle().onShutdown(() -> { }); } catch (Exception ignored) { }
+
+        // 步骤 7：取消路径的终态落地 —— 中途取消一次提取后开始按钮重新启用、停止按钮禁用、
+        // 运行标记复位；worker 完成后 partial 统计仍照常回写（extractStats 非 null 且含已完成文件）。
+        try { textModeToggle().setSelected(true); Thread.sleep(300);
+            if (!this.view.dataOrderIsEmpty()) {
+                this.view.clearDataOrder();
+                this.view.clearUndoStack();
+                this.view.refreshAfterListChange();
+            }
+            waitForImportDone();
+            java.nio.file.Path cancelDir = java.nio.file.Files.createTempDirectory("mht-auto-cancel");
+            for (int i = 1; i <= 40; i++) {
+                createSampleMht(cancelDir, String.format("c%02d.mht", i));
+            }
+            inputFolderField().setText(cancelDir.toString());
+            waitForImportDone();   // 40 个文件统一导入为异步：先排空，避免收尾回调在提取期间重算按钮状态
+            outputFolderField().setText(new File(System.getProperty("java.io.tmpdir"),
+                    "mht-auto-output-cancel").getPath());
+            this.view.extractStats().set(null);
+            startButton().fire();
+            // 等第一个文件完成（40 文件 → 首个完成的聚合进度 = 0.05，文件完成时 fireProgress 的
+            // subProgress = 1.0）再停：保证取消落在提取中途、partial 非空
+            long deadline = System.currentTimeMillis() + 20000;
+            while (System.currentTimeMillis() < deadline && this.view.extractStats().get() == null
+                    && progressBar().getProgress() < 0.02) {
+                pumpFxEvents();
+            }
+            if (this.view.extractStats().get() != null) {
+                throw new IllegalStateException("提取完成过快，无法测试中途取消");
+            }
+            if (progressBar().getProgress() < 0.02) {
+                throw new IllegalStateException("首个文件未在时限内完成（进度 " + progressBar().getProgress() + "）");
+            }
+            stopButton().fire();   // 停止 → onStopProcessing + onCancelled 落地；partial 回写等 worker 完成后送达
+            long cancelDeadline = System.currentTimeMillis() + 20000;
+            while (System.currentTimeMillis() < cancelDeadline && this.view.extractStats().get() == null) {
+                pumpFxEvents();
+            }
+            pumpFxEvents();
+            BatchProcessor.ProcessStats partial = this.view.extractStats().get();
+            if (partial == null) {
+                throw new IllegalStateException("取消后 worker 未产出 partial 统计（回写未生效）");
+            }
+            if (partial.getSuccessCount() < 1) {
+                throw new IllegalStateException("中途取消应有已完成文件的 partial 成功计数，实际 "
+                        + partial.getSuccessCount());
+            }
+            if (this.view.running().get()) {
+                throw new IllegalStateException("取消终态必须复位运行标记");
+            }
+            if (startButton().isDisabled()) {
+                throw new IllegalStateException("取消后开始按钮应重新启用（终态落地）");
+            }
+            if (!stopButton().isDisabled()) {
+                throw new IllegalStateException("取消后停止按钮应禁用（终态落地）");
+            }
+            out.println("[PASS] Cancel extraction terminal state"); p++;
+        } catch (Exception e) { out.println("[FAIL] Cancel extraction: " + e.getMessage()); f++; }
 
         // GUI 状态回写 locale（H13 行为变更 2 修复锁定）：saveGuiState 不得把 locale 清成 null
         try {
