@@ -182,7 +182,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     //    已随列表交互整体外迁到 ListInteractionController —— 本类不再有这些成员）
     // 口径：这是"<b>为生产协作</b>放宽"，与 PreviewListCell 用到的成员完全同类，
     // 因此<b>不打</b>那个 test-support 标记（它的语义是"为测试夹具让步"，见测试内注释）。
-    // 测试侧仍然只有一条通道：测试源集的 MainViewTestBridge（反射）。
+    // 测试侧仍然只有一条通道：测试源集的同包直访 AcceptanceDriver（零反射）。
 
     // ===== 状态 =====
     // 撤销栈（F4）：唯一栈由 app.WorkspaceModel 独占；结构类由模型 undo() 应用，参数 / 拖拽类由本类 popRecord() 后自行应用

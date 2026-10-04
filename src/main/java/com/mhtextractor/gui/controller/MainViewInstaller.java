@@ -34,7 +34,7 @@ import javafx.stage.Stage;
  */
 final class MainViewInstaller {
 
-    /** 被装配的控制器（同包协作；短名与 {@code MainViewTestBridge.View.mc} 一致）。 */
+    /** 被装配的控制器（同包协作；短名与测试源集驱动 {@code AcceptanceDriver.View.mc} 一致）。 */
     private final MainController mc;
     /** 42 个 {@code fx:id} 的节点引用（{@code initialize()} 期间由命名空间构造）。 */
     private final MainViewRefs refs;

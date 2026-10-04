@@ -101,9 +101,8 @@ public final class HtmlExportBuilder {
      * 页面文件名 = 源文件名（剥掉<b>已知来源扩展名</b>后清洗非法字符）+ .html：浏览器标签页显示该名称，
      * 而非笼统的 index.html。
      *
-     * <p>A1：剥离口径收敛到 {@link SourceKinds#stripKnownExtension}。此前用的是
-     * {@code FileUtils.getBaseName} 的"去掉最后一个点之后的一切"通用剥离，与"只剥已知扩展名"冲突
-     * （如 {@code output.v2} 会被剥成 {@code output}）。</p>
+     * <p>A1：剥离口径收敛到 {@link SourceKinds#stripKnownExtension}，不再用"去掉最后一个点之后的一切"
+     * 的通用剥离 —— 那种口径与"只剥已知扩展名"冲突（如 {@code output.v2} 会被剥成 {@code output}）。</p>
      */
     private static String pageName(String mhtPath) {
         String base = SanitizeUtils.sanitize(SourceKinds.stripKnownExtension(new File(mhtPath).getName()));

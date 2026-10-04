@@ -1,0 +1,23 @@
+{
+  "case": "html-template-vars",
+  "locale": "en",
+  "imageMode": false,
+  "mergedOutput": true,
+  "fixtures": ["html/plain/plain.html"],
+  "note": "HTML 源 + 模板变量：锁定 {filename} = 完整来源文件名（plain.html），即完整文件名契约（决策 A）",
+  "knownIssues": [],
+  "stats": {
+    "total": 1,
+    "success": 1,
+    "fail": 0,
+    "skip": 0,
+    "warn": 0,
+    "outcomes": ["plain.html=SUCCESS"]
+  },
+  "products": [
+    {"path": "merged.txt", "sha256": "846abb3cf8c631738e4aae8d312a38c0ba93040b5de3dde9fd08bb7701516352"}
+  ],
+  "contentDigests": {
+    "merged.txt": "ca3f9ead34625c107cbca40f2f4e61a61d10abe08c6ee10db4c66d3c7e5ce0a8"
+  }
+}

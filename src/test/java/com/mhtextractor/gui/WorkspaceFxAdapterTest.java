@@ -277,6 +277,10 @@ class WorkspaceFxAdapterTest {
         adapter.bindListView(listView);
         assertSame(adapter.displayItems(), listView.getItems(), "ListView 必须绑定 adapter 的显示序");
 
+        // 步骤 0 台账 1.4：绑定（投产接线点）后非 FX 线程调 project()/refresh() 必须抛 IllegalStateException；
+        // 绑定后 FX 线程调用不抛 —— 本方法后续所有 refresh() 都跑在 FX 线程上（外层 Platform.runLater）。
+        assertGuardThrowsOffFxThread(adapter);
+
         PreviewItem a = item("a"), b = item("b");
         model.addItems(List.of(a, b));
         adapter.refresh();
@@ -304,5 +308,41 @@ class WorkspaceFxAdapterTest {
         assertThrows(UnsupportedOperationException.class, () -> adapter.dataOrder().add(item("d")));
         assertProjectionMatchesModel(adapter, "ListView 绑定下投影后");
         assertSame(adapter.displayItems(), listView.getItems());
+    }
+
+    /** 绑定后非 FX 线程调 project()/refresh() 必须抛 IllegalStateException，且消息指明方法名 */
+    private static void assertGuardThrowsOffFxThread(WorkspaceFxAdapter adapter) {
+        for (String method : List.of("project", "refresh")) {
+            CountDownLatch done = new CountDownLatch(1);
+            AtomicReference<Throwable> thrown = new AtomicReference<>();
+            Thread off = new Thread(() -> {
+                try {
+                    if (method.equals("project")) {
+                        adapter.project();
+                    } else {
+                        adapter.refresh();
+                    }
+                } catch (Throwable t) {
+                    thrown.set(t);
+                } finally {
+                    done.countDown();
+                }
+            }, "off-fx-guard-" + method);
+            off.setDaemon(true);
+            off.start();
+            boolean finished;
+            try {
+                finished = done.await(30, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(method + "：等待非 FX 线程调用被中断", e);
+            }
+            assertTrue(finished, method + "：非 FX 线程调用应快速返回");
+            assertNotNull(thrown.get(), method + "：绑定后非 FX 线程调用必须抛异常");
+            assertTrue(thrown.get() instanceof IllegalStateException,
+                    method + "：必须抛 IllegalStateException，实际 " + thrown.get());
+            assertTrue(thrown.get().getMessage().contains(method),
+                    method + "：异常消息必须指明方法名，实际：" + thrown.get().getMessage());
+        }
     }
 }

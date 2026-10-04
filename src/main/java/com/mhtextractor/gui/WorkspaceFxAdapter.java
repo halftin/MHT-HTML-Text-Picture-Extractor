@@ -2,6 +2,7 @@ package com.mhtextractor.gui;
 
 import com.mhtextractor.app.WorkspaceChange;
 import com.mhtextractor.app.WorkspaceModel;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.scene.control.ListView;
@@ -45,9 +46,12 @@ import java.util.function.Consumer;
  * {@code rebuildDisplay()} / {@code refreshAfterListChange()} 一一对应 —— 于是行为逐字保持，
  * 而"谁写显示序"已经收口到本类。P4 把动画整块搬进来时，再打开"变更即投影"（那时不再有中间快照问题）。</p>
  *
- * <p><b>线程约定</b>：{@link #project()} / {@link #refresh()} / {@link #bindListView(ListView)} 的
- * 生产调用点全在 FX 线程（{@code initialize}、命令回调、{@code refreshAfterListChange}）；
- * 自动投影落地时要在此处补 FX 线程断言（见上）。</p>
+ * <p><b>线程约定（FX 线程守卫已落地）</b>：{@link #project()} / {@link #refresh()} /
+ * {@link #bindListView(ListView)} 的生产调用点全在 FX 线程（{@code initialize}、命令回调、
+ * {@code refreshAfterListChange}）。守卫在<b>投产接线点</b>生效：{@link #bindListView(ListView)}
+ * 校验自身在 FX 线程（绑定 ListView 是场景图写操作）并把守卫<b>打开</b>；此后
+ * {@link #project()} / {@link #refresh()} 在非 FX 线程调用即抛 {@link IllegalStateException}
+ * （消息指明方法名）。未接线（无头投影测试）不守卫 —— 测试不必起 FX toolkit。</p>
  */
 public final class WorkspaceFxAdapter {
 
@@ -95,6 +99,9 @@ public final class WorkspaceFxAdapter {
 
     /** 自上次投影以来模型是否发布过变更（订阅的可观察产物；P4 打开自动投影后用它做合并刷新） */
     private boolean stale = false;
+
+    /** bindListView 之后 project()/refresh() 的 FX 线程守卫开关（只有投产接线点置 true；未接线不守卫，无头投影测试不必起 toolkit） */
+    private boolean fxThreadGuarded = false;
 
     /**
      * @param model 被投影的模型（非 null）
@@ -163,6 +170,9 @@ public final class WorkspaceFxAdapter {
      * 因此"ListView 最终显示与模型一致"等价于"displayItems 与 {@code model.displayOrder()} 一致"。</p>
      */
     public void bindListView(ListView<Object> listView) {
+        if (!Platform.isFxApplicationThread()) {
+            throw new IllegalStateException("WorkspaceFxAdapter.bindListView 必须在 FX 线程调用（绑定 ListView 是场景图写操作）");
+        }
         listView.setItems(displayItems);
         bindSelection(new SelectionHost() {
             @Override
@@ -175,6 +185,7 @@ public final class WorkspaceFxAdapter {
                 listView.getSelectionModel().select(item);
             }
         });
+        fxThreadGuarded = true;
     }
 
     /** 退订（宿主窗口销毁时用；未订阅是 no-op） */
@@ -190,6 +201,7 @@ public final class WorkspaceFxAdapter {
      * 见类 javadoc 的取舍说明。</p>
      */
     public void project() {
+        assertFxThread("project");
         displayItems.setAll(model.displayOrder());
         stale = false;
     }
@@ -207,10 +219,22 @@ public final class WorkspaceFxAdapter {
      * "选中邻近项"由调用方的具名操作负责（如 {@code selectNearestVisible}），不在这里兜底。</p>
      */
     public void refresh() {
+        assertFxThread("refresh");
         Object sel = host.selectedItem();
         project();
         if (sel != null && displayItems.contains(sel)) {
             host.select(sel);
+        }
+    }
+
+    /**
+     * FX 线程守卫：仅当 {@link #bindListView(ListView)}（投产接线点）已打开守卫时生效。
+     * 未接线（无头投影测试）不守卫 —— 也让 {@code Platform.isFxApplicationThread()}（会尝试
+     * 初始化 toolkit）绝不在无头路径上被求值。
+     */
+    private void assertFxThread(String method) {
+        if (fxThreadGuarded && !Platform.isFxApplicationThread()) {
+            throw new IllegalStateException("WorkspaceFxAdapter." + method + " 必须在 FX 线程调用（已 bindListView）");
         }
     }
 

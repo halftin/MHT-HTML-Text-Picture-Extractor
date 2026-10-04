@@ -7,7 +7,7 @@ import java.util.Locale;
  * 可导入来源的扩展名口径（R6.1 / R6.6）—— <b>全项目唯一实现点</b>。
  *
  * <p>导入识别（{@code MhtImportPlanner} / {@code MhtExtractorApp.importPaths}）、解析器选择
- * （{@code core.SourceParsers}）与输出命名（{@code MainController.stripMhtExt}）三处必须用同一套
+ * （{@code core.SourceParsers}）与输出命名（{@link #stripKnownExtension}）三处必须用同一套
  * 扩展名集合，否则会出现"能导入但不认识扩展名（选不出解析器）""能提取但输出名带着扩展名"这类错位。
  * 本类的职责就是把这三处的口径收敛成一份可无头单测的纯函数。</p>
  *

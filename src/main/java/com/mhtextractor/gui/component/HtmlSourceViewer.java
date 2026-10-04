@@ -208,7 +208,7 @@ public final class HtmlSourceViewer {
      * {@code source-viewer-load} 线程上做，只有"把行模型交给 ListView"回 FX 线程。</p>
      *
      * <p>🚩 <b>可以从任意线程调用</b>：本方法刻意不要求调用方在 FX 线程上。真实调用点
-     * （{@code MainController.openHtmlInBrowser} 的 {@code html-browser-launch} 线程）就不在 FX 线程上
+     * （{@code SourceViewActions} 的 {@code html-browser-launch} 线程）就不在 FX 线程上
      * —— 那是原先"用外部浏览器打开"留下的线程模型（那里只有 IO/进程操作，不碰场景图），
      * 而查看器一上来就要 {@code showLeft} + {@code setCenter}。实测不加这层转派会抛
      * {@code IllegalStateException: Not on FX application thread}，而且因为抛在

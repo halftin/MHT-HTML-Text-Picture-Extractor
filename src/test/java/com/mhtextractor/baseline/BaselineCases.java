@@ -208,6 +208,16 @@ public final class BaselineCases {
                 h4, true, false, "HTML 名、侧车目录名、图片名全含中文的路径口径",
                 List.of()));
 
+        // ---------- HTML + 模板变量（决策 A：{filename} = 完整来源文件名，不剥扩展名） ----------
+        AppConfig h5 = new AppConfig();
+        h5.setEnableTemplate(true);
+        h5.setStartTemplate("=== {filename} @ {date} {time} ===\\n");
+        h5.setEndTemplate("\\n=== {filename} 结束 ===\\n");
+        out.add(new Case("html-template-vars", List.of("html/plain/plain.html"),
+                h5, false, true,
+                "HTML 源 + 模板变量：锁定 {filename} = 完整来源文件名（plain.html），即完整文件名契约（决策 A）",
+                List.of()));
+
         return out;
     }
 

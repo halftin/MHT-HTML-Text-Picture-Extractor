@@ -75,15 +75,6 @@ public class FileUtils {
     }
 
     /**
-     * 获取文件名（不含扩展名）
-     */
-    public static String getBaseName(File file) {
-        String name = file.getName();
-        int dotIndex = name.lastIndexOf('.');
-        return dotIndex > 0 ? name.substring(0, dotIndex) : name;
-    }
-
-    /**
      * 创建子目录（基于父目录和子目录名）
      */
     public static String createSubDirectory(String parentDir, String subDirName) {

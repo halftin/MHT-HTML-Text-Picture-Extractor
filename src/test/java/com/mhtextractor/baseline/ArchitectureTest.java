@@ -164,8 +164,8 @@ class ArchitectureTest {
      *       属于"为生产放宽"而不是"为测试放宽"，所以不再带标记（标记的语义边界见下）。</li>
      *   <li><b>其余 39 处收回 {@code private}</b>（{@code textParamsCache} / {@code parseToken} /
      *       {@code running()} / {@code extractStats()} / {@code allVisibleItems()} … 全部可变状态与查询）。
-     *       测试侧改为经 <b>测试源集的反射桥</b>
-     *       {@code com.mhtextractor.gui.acceptance.MainViewTestBridge} 访问 ——
+     *       测试侧改为经测试源集的驱动类访问 —— 该通道在 C3b 收敛为
+     *       {@code com.mhtextractor.gui.controller.AcceptanceDriver} 的<b>同包直访（零反射）</b> ——
      *       代价落在测试代码里，生产类一行也不为测试让步。</li>
      * </ol>
      *

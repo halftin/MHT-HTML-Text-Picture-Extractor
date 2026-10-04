@@ -35,7 +35,7 @@ import java.util.Objects;
  * <p>它是"这一个控制器的视图引用集合"，与 {@code MainController} 同包：</p>
  * <ul>
  *   <li>{@code MainController} 与同包生产协作类（{@code MainViewInstaller}）直接使用；</li>
- *   <li>测试侧的 {@code MainViewTestBridge} 与 {@code tools/probes} 探针要读同一批节点，
+ *   <li>测试源集的同包直访驱动（{@code AcceptanceDriver}）与 {@code tools/probes} 探针要读同一批节点，
  *       故本类是 {@code public}（访问器本身就是"生产行为"，不是为测试开放的状态面 ——
  *       它不含任何可变业务状态，只是命名空间的一张只读映射）。</li>
  * </ul>
