@@ -95,14 +95,22 @@ import java.util.WeakHashMap;
  * <h2>无草稿语义（R2.9）</h2>
  * <p>收起就是隐藏：没有提交/丢弃，也不落盘。</p>
  *
- * <h2>字符选择与复制（E1）</h2>
- * <p>在内容区按下拖动可做<b>字符级</b>选择（可跨 token、跨行），平台复制键（Ctrl/Cmd+C）
- * 把<b>原始源码</b>放进系统剪贴板。逻辑模型在 {@link HtmlTextSelection}（零 JavaFX）：
- * 这里只做"像素坐标 → (行, 列)"的换算与渲染。</p>
- * <p>选择高亮是每 cell 的<b>覆盖矩形</b>（{@code selPane} 里，折行后每视觉行一段），
- * <b>不重建</b>任何 {@code Text} 节点 —— 所以拖动期间重绘不会把"鼠标抓着的节点"摘出
- * 场景图（重建方案会让拖拽中途丢事件），大文件上也绝不按总行数建节点
- * （只画可见 cell，R2.7 判据不变）。</p>
+ * <h2>字符选择与复制（E1 + 步骤 5：单行选中观感）</h2>
+ * <p>在内容区按下拖动可做<b>字符级</b>选择，平台复制键（Ctrl/Cmd+C）把<b>原始源码</b>放进
+ * 系统剪贴板。逻辑模型在 {@link HtmlTextSelection}（零 JavaFX）：这里只做
+ * "像素坐标 → (行, 列)"的换算与渲染。</p>
+ * <p><b>决策 3.2 单行钳制</b>：选择只允许落在<b>一个逻辑行内</b>——拖动与 Shift 扩选都把
+ * 游标钳在锚点行（拖出行的上/左端 = 行首，下/右端 = 行尾）。钳制只发生在 view 层
+ * （{@link #clampToAnchorLine}）：{@link HtmlTextSelection} / {@link HtmlWrapMap} 的跨行
+ * 语义<b>保持不动</b>（查找与复制的既有能力不变）。</p>
+ * <p><b>决策 3.1 黑底白字 + 3.7 层序</b>：cell 的层序是
+ * {@code [命中高亮层, 选区背景层, TextFlow 字形层]}——选区黑底在查找命中的黄底<b>之上</b>、
+ * 在字形<b>之下</b>（不再盖字），被选区覆盖的 {@code Text} run 临时 {@code setFill(WHITE)}，
+ * 松手/滚动/重载时还原为基础色。选择高亮是每 cell 的<b>覆盖矩形</b>（折行后每视觉行一段，
+ * {@code HtmlWrapMap.segments}），<b>不重建</b>任何 {@code Text} 节点 —— 拖动期间重绘不会把
+ * "鼠标抓着的节点"摘出场景图（重建方案会让拖拽中途丢事件），大文件上也绝不按总行数建节点
+ * （只画可见 cell，R2.7 判据不变；代价由 {@link #selectionCellsPaintedInLastRepaint()} 实测，
+ * 决策 3.9）。</p>
  */
 @Slf4j
 public final class HtmlSourceViewer {
@@ -125,8 +133,11 @@ public final class HtmlSourceViewer {
     private static final double CONTENT_TAIL = 24;
     /** 量字符宽用的样本（等宽字体下 40 个 M 的布局宽除以 40 即单字宽）。 */
     private static final String SAMPLE_MEASURE = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
-    /** 选择高亮背景色（E1；浅蓝，与 {@code html-source-hit} 的 #ffe680 可并存）。 */
-    private static final String SELECTION_COLOR = "#cfe3ff";
+    /** 选择高亮背景色（决策 3.1：黑底白字，对齐日志 TextArea 的观感；白字由 cell 的
+     *  {@code applyRunFills} 负责）。 */
+    private static final Color SELECTION_FILL = Color.BLACK;
+    /** 查找命中高亮背景色（R5；黄底 —— 与 custom.css 的 {@code .html-source-hit} 同值）。 */
+    private static final Color HIT_FILL = Color.web("#ffe680");
 
     private final SidePanelHost host;
     private final ListView<Row> listView = new ListView<>();
@@ -178,6 +189,8 @@ public final class HtmlSourceViewer {
     private long repaintedLines;
     private int cellsBuilt;
     private int cellsBuiltInLastRefresh;
+    /** 最近一次选择重绘里真正被重画的 cell 数（决策 3.9 的"只处理可见 cell"硬约束判据）。 */
+    private int selCellsPaintedInLastRepaint;
 
     private HtmlSourceViewer(SidePanelHost host) {
         this.host = host;
@@ -333,6 +346,16 @@ public final class HtmlSourceViewer {
     public int cellsBuiltInLastRefresh() {
         return cellsBuiltInLastRefresh;
     }
+
+    /** 最近一次选择重绘里真正被重画的 cell 数（= 可见 cell 数；决策 3.9 的判据）。 */
+    public int selectionCellsPaintedInLastRepaint() {
+        return selCellsPaintedInLastRepaint;
+    }
+
+    /** 探针/测试接缝：{@link Text} 节点属性键 —— 逻辑列区间 {@code [start, end)}（{@code int[2]}）。 */
+    public static final String RUN_COLUMNS_KEY = "htmlSourceViewer.runColumns";
+    /** 探针/测试接缝：{@link Text} 节点属性键 —— 基础填充色（松手/滚动/重载时还原到它）。 */
+    public static final String RUN_BASE_FILL_KEY = "htmlSourceViewer.runBaseFill";
 
     /** 行号栏 + 间距的像素宽（R2.8 的对齐判据用）。 */
     public double gutterWidth() {
@@ -555,7 +578,10 @@ public final class HtmlSourceViewer {
         listView.addEventHandler(KeyEvent.KEY_PRESSED, this::onSelectionKey);
     }
 
-    /** 按下：锚点 = 命中的行 + 内容 x 折算的列（行号区列 clamp 到 0，行号不进选择）。 */
+    /**
+     * 按下：锚点 = 命中的行 + 内容 x 折算的列（行号区列 clamp 到 0，行号不进选择）。
+     * Shift+按下且有既有选择 → <b>扩选</b>（决策 3.5）：锚点不动，游标按 3.2 钳在锚点行内。
+     */
     private void onSelectionPressed(MouseEvent e) {
         if (!e.isPrimaryButtonDown()) {
             return;
@@ -565,12 +591,16 @@ public final class HtmlSourceViewer {
         if (p == null) {
             return;
         }
-        selAnchor = p;
-        selCaret = p;
+        if (e.isShiftDown() && selAnchor != null) {
+            selCaret = clampToAnchorLine(selAnchor, p);
+        } else {
+            selAnchor = p;
+            selCaret = p;
+        }
         repaintSelection();
     }
 
-    /** 拖动：游标跟着指针走（锚点不动）。 */
+    /** 拖动：游标跟着指针走（锚点不动；决策 3.2 —— 游标钳在锚点所在逻辑行内）。 */
     private void onSelectionDragged(MouseEvent e) {
         if (selAnchor == null || !e.isPrimaryButtonDown()) {
             return;
@@ -579,8 +609,27 @@ public final class HtmlSourceViewer {
         if (p == null) {
             return;   // 拖出所有可见行（如查找栏上）：保持当前游标
         }
-        selCaret = p;
+        selCaret = clampToAnchorLine(selAnchor, p);
         repaintSelection();
+    }
+
+    /**
+     * 决策 3.2 的单行钳制（只钳 view 层坐标，不动 {@link HtmlTextSelection} / {@link HtmlWrapMap}
+     * 的跨行语义 —— 纯函数保留跨行能力是有意的，查找/复制的既有能力不变）：游标只能落在
+     * 锚点所在逻辑行内 —— 指针在锚点行上方 → 行首（列 0），下方 → 行尾；同一行 → 列
+     * clamp 到 {@code [0, 行长]}（拖出左/右端即行首/行尾）。
+     */
+    private HtmlTextSelection.Pos clampToAnchorLine(HtmlTextSelection.Pos anchor, HtmlTextSelection.Pos p) {
+        String text = plainLines.get(anchor.line());
+        int col;
+        if (p.line() < anchor.line()) {
+            col = 0;
+        } else if (p.line() > anchor.line()) {
+            col = text.length();
+        } else {
+            col = Math.max(0, Math.min(p.col(), text.length()));
+        }
+        return new HtmlTextSelection.Pos(anchor.line(), col);
     }
 
     /** 松开：定稿；单击（锚点==游标）视为清空选择。 */
@@ -635,17 +684,21 @@ public final class HtmlSourceViewer {
     }
 
     /**
-     * 把选择画到<b>可见</b> cell 的覆盖矩形上：只动可见 cell 里的矩形属性，
+     * 把选择画到<b>可见</b> cell 上：只动可见 cell 里的矩形与 run 填充，
      * 不触碰 items 模型、不重建任何 {@code Text} 节点 —— 所以拖动期间调用也安全
      * （重建方案会把"鼠标抓着的节点"摘出场景图，拖拽中途丢事件），且代价只与
-     * 可见区域有关、与文件行数无关（R2.7 判据不变）。
+     * 可见区域有关、与文件行数无关（R2.7 判据不变；决策 3.9 的实测判据是
+     * {@link #selectionCellsPaintedInLastRepaint()}）。
      */
     private void repaintSelection() {
+        int painted = 0;
         for (Node n : listView.lookupAll(".list-cell")) {
             if (n instanceof SourceCell cell && !cell.isEmpty() && cell.getIndex() >= 0) {
                 cell.paintSelection(cell.getIndex());
+                painted++;
             }
         }
+        selCellsPaintedInLastRepaint = painted;
     }
 
     // ==================== 查找（R5） ====================
@@ -788,10 +841,12 @@ public final class HtmlSourceViewer {
         /** 一视觉行一个 {@link TextFlow}（软换行：cell 高度 = 视觉行数 × 行高）。 */
         private final VBox flows = new VBox();
         private final HBox box = new HBox();
-        /** 选择覆盖层（E1）：叠在内容上方的透明 Pane，折行后每视觉行一段矩形。 */
+        /** 查找命中层（R5）：最底层的透明 Pane，当前命中按折行切成黄色矩形（决策 3.7：命中在下）。 */
+        private final Pane hitPane = new Pane();
+        /** 选区背景层（决策 3.1/3.7）：中层，黑色矩形；在命中层之上、字形层之下（不再盖字）。 */
         private final Pane selPane = new Pane();
-        /** cell 内容 = 行（行号 + 视觉行流）上面叠选择层。 */
-        private final StackPane wrapper = new StackPane(box, selPane);
+        /** cell 内容 = [命中层, 选区层, 字形层（行号 + 视觉行流）]（层序即决策 3.7 的叠加次序）。 */
+        private final StackPane wrapper = new StackPane(hitPane, selPane, box);
 
         private SourceCell() {
             gutter.getStyleClass().add("html-source-gutter");
@@ -806,7 +861,8 @@ public final class HtmlSourceViewer {
             box.getStyleClass().add("html-source-row");
             box.setAlignment(Pos.TOP_LEFT);
             box.getChildren().addAll(gutter, flows);
-            // 覆盖层对鼠标完全透明：命中测试仍落到下面的 Text 上（与没有选择层时一致）
+            // 两个覆盖层对鼠标完全透明：命中测试仍落到下面的 Text 上（与没有覆盖层时一致）
+            hitPane.setMouseTransparent(true);
             selPane.setMouseTransparent(true);
             setText(null);
         }
@@ -832,35 +888,92 @@ public final class HtmlSourceViewer {
             gutter.setPrefWidth(gutterWidth());
             flows.getChildren().setAll(buildVisualRows(row));
             setGraphic(wrapper);
+            paintHit(row.number() - 1);
             paintSelection(row.number() - 1);
         }
 
         /**
          * 本行的选择段（与 {@code [0, 行长)} 的交集）按折行切成"每视觉行一段"，每段一个
-         * 覆盖矩形；无交集 → 一个矩形都不画。只动覆盖层的矩形、不重建文本节点
-         * （见 {@link HtmlSourceViewer#repaintSelection()}）。
+         * 黑色覆盖矩形（决策 3.1），画在选区层；再按<b>黑底白字</b>把选区内的 {@code Text}
+         * run 临时变白、其余还原基础色（松手/滚动/重载都走这里还原）。只动覆盖层与填充、
+         * 不重建文本节点（见 {@link HtmlSourceViewer#repaintSelection()}）。
          */
         private void paintSelection(int line) {
             HtmlTextSelection.Range r = HtmlSourceViewer.this.selectionRange();
             String text = line >= 0 && line < plainLines.size() ? plainLines.get(line) : null;
-            if (r == null || text == null || line < r.startLine() || line > r.endLine()) {
-                selPane.getChildren().clear();
+            int from = -1;
+            int to = -1;
+            if (r != null && text != null && line >= r.startLine() && line <= r.endLine()) {
+                from = line == r.startLine() ? r.startCol() : 0;
+                to = line == r.endLine() ? r.endCol() : text.length();
+            }
+            selPane.getChildren().clear();
+            if (from >= 0) {
+                int cols = wrapCols();
+                for (int[] seg : HtmlWrapMap.segments(text.length(), from, to, cols)) {
+                    selPane.getChildren().add(selectionRect(seg, cols));
+                }
+            }
+            applyRunFills(from, to);
+        }
+
+        /** 选区背景的一段矩形：黑色（决策 3.1），列位置与折行几何同 {@link #paintHit}。 */
+        private Rectangle selectionRect(int[] seg, int cols) {
+            int vRow = seg[0] / cols;
+            Rectangle rect = new Rectangle(0, 0, 0, 0);
+            rect.getStyleClass().add("html-source-selected");
+            rect.setFill(SELECTION_FILL);
+            rect.setX(gutterWidth() + (seg[0] - vRow * cols) * charWidth);
+            rect.setY(vRow * ROW_HEIGHT);
+            rect.setWidth((seg[1] - seg[0]) * charWidth);
+            rect.setHeight(ROW_HEIGHT);
+            return rect;
+        }
+
+        /**
+         * 当前命中的黄色矩形画到最底层的命中层（决策 3.7：查找命中在下、选区在上）——命中
+         * 样式不再包在字形流里（旧实现是 {@code TextFlow} 里的 {@code StackPane}，会盖在选区
+         * 黑底<b>之上</b>），改成与选区同一套折行几何的独立层。
+         */
+        private void paintHit(int line) {
+            hitPane.getChildren().clear();
+            int[] hit = line == currentHitLine() ? currentHitColumns() : null;
+            String text = line >= 0 && line < plainLines.size() ? plainLines.get(line) : null;
+            if (hit == null || text == null) {
                 return;
             }
-            int from = line == r.startLine() ? r.startCol() : 0;
-            int to = line == r.endLine() ? r.endCol() : text.length();
             int cols = wrapCols();
-            selPane.getChildren().clear();
-            for (int[] seg : HtmlWrapMap.segments(text.length(), from, to, cols)) {
+            for (int[] seg : HtmlWrapMap.segments(text.length(), hit[0], hit[1], cols)) {
                 int vRow = seg[0] / cols;
                 Rectangle rect = new Rectangle(0, 0, 0, 0);
-                rect.getStyleClass().add("html-source-selected");
-                rect.setFill(Color.web(SELECTION_COLOR));
+                rect.getStyleClass().add("html-source-hit");
+                rect.setFill(HIT_FILL);
                 rect.setX(gutterWidth() + (seg[0] - vRow * cols) * charWidth);
                 rect.setY(vRow * ROW_HEIGHT);
                 rect.setWidth((seg[1] - seg[0]) * charWidth);
                 rect.setHeight(ROW_HEIGHT);
-                selPane.getChildren().add(rect);
+                hitPane.getChildren().add(rect);
+            }
+        }
+
+        /**
+         * 黑底白字（决策 3.1）：把本 cell 的 {@code Text} run 先全部还原到<b>基础填充色</b>
+         * （构建时存在 {@link #RUN_BASE_FILL_KEY} 属性里），再把与选区 {@code [from, to)} 有交集的
+         * run 临时置白（列区间来自构建时存的 {@link #RUN_COLUMNS_KEY}）。{@code from < 0} = 无选择，
+         * 只做还原 —— 松手清空、cell 重建、文档重载后都不会残留白字。
+         */
+        private void applyRunFills(int from, int to) {
+            for (Node n : flows.lookupAll(".html-source-text")) {
+                if (!(n instanceof Text t)) {
+                    continue;
+                }
+                int[] cols = (int[]) t.getProperties().get(RUN_COLUMNS_KEY);
+                Color base = (Color) t.getProperties().get(RUN_BASE_FILL_KEY);
+                if (cols == null || base == null) {
+                    continue;
+                }
+                boolean inside = from >= 0 && cols[1] > from && cols[0] < to;
+                t.setFill(inside ? Color.WHITE : base);
             }
         }
 
@@ -897,8 +1010,9 @@ public final class HtmlSourceViewer {
 
         /**
          * 一行的 token 在逻辑列区间 {@code [from, to)} 内的切片（每视觉行调用一次）；
-         * 当前命中的那段在切片内仍换成带高亮背景的 {@link StackPane}（命中跨折行边界时
-         * 每个视觉行各出一段，样式不变、列号仍是<b>逻辑列</b>）。
+         * 当前命中的那段切片仍是普通 {@code Text}（命中高亮由最底层的 {@link #paintHit}
+         * 矩形负责），只多挂 {@code html-source-hit-text} 标记；列号仍是<b>逻辑列</b>
+         * （命中跨折行边界时每个视觉行各出一段）。
          */
         private List<Node> buildRowRuns(Row row, int from, int to, int[] hit) {
             List<Node> runs = new ArrayList<>();
@@ -913,62 +1027,62 @@ public final class HtmlSourceViewer {
                         int localStart = Math.max(0, hit[0] - s);
                         int localEnd = Math.min(slice.length(), hit[1] - s);
                         if (localStart > 0) {
-                            runs.add(textNode(t.kind(), slice.substring(0, localStart)));
+                            runs.add(textNode(t.kind(), slice.substring(0, localStart), s, s + localStart));
                         }
-                        runs.add(hitNode(t.kind(), slice.substring(localStart, localEnd)));
+                        runs.add(hitTextNode(t.kind(), slice.substring(localStart, localEnd),
+                                s + localStart, s + localEnd));
                         if (localEnd < slice.length()) {
-                            runs.add(textNode(t.kind(), slice.substring(localEnd)));
+                            runs.add(textNode(t.kind(), slice.substring(localEnd), s + localEnd, e));
                         }
                     } else {
-                        runs.add(textNode(t.kind(), slice));
+                        runs.add(textNode(t.kind(), slice, s, e));
                     }
                 }
                 col += len;
             }
             if (runs.isEmpty()) {
                 // 空行：给一个零宽节点，保证行高与其它行一致（页面上的 .lc 也是这个语义）
-                runs.add(textNode(HtmlSyntaxTokens.Kind.TEXT, ""));
+                runs.add(textNode(HtmlSyntaxTokens.Kind.TEXT, "", 0, 0));
             }
             return runs;
         }
 
         /** 普通 token → {@link Text}（颜色来自共用的配色表）。 */
-        private Text textNode(HtmlSyntaxTokens.Kind kind, String text) {
+        private Text textNode(HtmlSyntaxTokens.Kind kind, String text, int colStart, int colEnd) {
+            HtmlSyntaxPalette palette = HtmlSyntaxPalette.of(kind);
+            return styledText(kind, text,
+                    Color.web(palette == null ? HtmlSyntaxPalette.TEXT_COLOR : palette.color()),
+                    colStart, colEnd);
+        }
+
+        /**
+         * 命中片段：命中样式（黄底）已由最底层的命中层（{@link #paintHit}）负责，字形层里的
+         * 命中 {@code Text} 与普通 {@code Text} 一样直接排进 {@code TextFlow}（字体样式仍按原来的
+         * 类别给，否则命中的注释会丢掉斜体），填充用 {@code TEXT_COLOR}（黄底上深色字），
+         * 并挂 {@code html-source-hit-text} 标记供探针按节点断言"命中高亮确实落在这段文本上"。
+         */
+        private Text hitTextNode(HtmlSyntaxTokens.Kind kind, String text, int colStart, int colEnd) {
+            Text t = styledText(kind, text, Color.web(HtmlSyntaxPalette.TEXT_COLOR), colStart, colEnd);
+            t.getStyleClass().add("html-source-hit-text");
+            return t;
+        }
+
+        /** 拼一个 {@link Text}：字体/斜体/下划线来自 token 类别；逻辑列区间与基础填充存进节点属性。 */
+        private Text styledText(HtmlSyntaxTokens.Kind kind, String text, Color fill, int colStart, int colEnd) {
             Text node = new Text(text);
             node.getStyleClass().add("html-source-text");
             node.setFont(monoFont());
+            node.setFill(fill);
             HtmlSyntaxPalette palette = HtmlSyntaxPalette.of(kind);
-            node.setFill(Color.web(palette == null ? HtmlSyntaxPalette.TEXT_COLOR : palette.color()));
             if (palette != null && palette.italic()) {
                 node.setStyle("-fx-font-style: italic;");
             }
             if (palette != null && palette.underline()) {
                 node.setUnderline(true);
             }
+            node.getProperties().put(RUN_COLUMNS_KEY, new int[]{colStart, colEnd});
+            node.getProperties().put(RUN_BASE_FILL_KEY, node.getFill());
             return node;
-        }
-
-        /**
-         * 命中片段：{@link TextFlow} 没有背景色，所以在命中段外面包一层带背景的
-         * {@link StackPane}（样式 class {@code html-source-hit} 是命中样式的<b>唯一</b>
-         * 定义处）。字体样式仍按原来的类别给，否则命中的注释会丢掉斜体
-         * （在别处拼一份"命中时该长什么样"正是 R2.4 要消灭的第二份实现）。
-         */
-        private Node hitNode(HtmlSyntaxTokens.Kind kind, String text) {
-            Text t = new Text(text);
-            t.setFont(monoFont());
-            t.setFill(Color.web(HtmlSyntaxPalette.TEXT_COLOR));
-            t.getStyleClass().add("html-source-text");
-            HtmlSyntaxPalette palette = HtmlSyntaxPalette.of(kind);
-            if (palette != null && palette.italic()) {
-                t.setStyle("-fx-font-style: italic;");
-            }
-            if (palette != null && palette.underline()) {
-                t.setUnderline(true);
-            }
-            StackPane pane = new StackPane(t);
-            pane.getStyleClass().add("html-source-hit");
-            return pane;
         }
     }
 

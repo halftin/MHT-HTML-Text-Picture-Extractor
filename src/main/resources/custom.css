@@ -534,11 +534,12 @@
     -fx-icon-size: 15px;
 }
 
-/* ===== 应用内 HTML 源码查看器（Q8b / R2.7 + R2.8） =====
-   逐行虚拟化的 ListView 放在横向 ScrollPane 里：行内容本身不软换行，
-   靠把 ListView 的宽度撑到"最长行"来触发横向滚动（见 HtmlSourceViewer 的类注释）。 */
+/* ===== 应用内 HTML 源码查看器（Q8b / R2.7 + E2） =====
+   逐行虚拟化的 ListView 放在外层 ScrollPane 里：长行按字符网格软换行（E2），
+   外层 fitToWidth、永不横向滚动（见 HtmlSourceViewer 的类注释）。 */
 .html-source-viewer {
     -fx-background-color: white;
+    -fx-cursor: text; /* 决策 3.4：viewer/cell 用文本光标（行号栏单独保持默认） */
 }
 
 .html-source-viewer .list-view,
@@ -550,26 +551,35 @@
     -fx-background-color: white;
 }
 
+.html-source-viewer .list-view {
+    -fx-cursor: text; /* 决策 3.4 */
+}
+
 .html-source-viewer .list-view .list-cell {
     -fx-background-color: transparent;
     -fx-padding: 0;
+    -fx-cursor: text; /* 决策 3.4 */
 }
 
+/* 决策 3.6：ListView 的整行选中底色彻底关掉 —— 覆盖主题的 .list-cell:filled:selected 蓝条 */
 .html-source-viewer .list-view .list-cell:filled:selected {
-    -fx-background-color: #e8f0fe;
+    -fx-background-color: transparent;
 }
 
-/* 行号栏：右对齐 + 灰色（与 SourceViewPage 的 .ln 同一观感；颜色常量在 HtmlSyntaxPalette） */
+/* 行号栏：右对齐 + 灰色（与 SourceViewPage 的 .ln 同一观感；颜色常量在 HtmlSyntaxPalette）。
+   决策 3.4：行号栏保持默认光标（显式 default，抵消 cell 的 text 光标继承） */
 .html-source-gutter {
     -fx-background-color: #f7f7f7;
     -fx-border-color: #e5e5e5;
     -fx-border-width: 0 1 0 0;
     -fx-padding: 0 8px 0 4px;
+    -fx-cursor: default;
 }
 
-/* 命中高亮：命中样式的唯一定义处（HtmlSourceViewer 的 hitNode 挂这个 class） */
+/* 命中高亮：命中样式的唯一定义处 —— 现在挂在 cell 最底层命中层的矩形上
+   （HtmlSourceViewer.paintHit），黄色与代码里的 HIT_FILL 同值 */
 .html-source-hit {
-    -fx-background-color: #ffe680;
+    -fx-fill: #ffe680;
 }
 
 /* 底部查找栏（R5.1） */

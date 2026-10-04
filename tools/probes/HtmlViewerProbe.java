@@ -6,14 +6,17 @@ import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.platform.HtmlSyntaxTokens;
+import com.mhtextractor.platform.HtmlTextSelection;
 import com.mhtextractor.platform.HtmlWrapMap;
 import atlantafx.base.controls.ModalPane;
 import atlantafx.base.theme.NordLight;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.css.PseudoClass;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Bounds;
 import javafx.geometry.Point2D;
+import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -23,6 +26,7 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
+import javafx.scene.paint.Color;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.KeyCode;
@@ -31,7 +35,8 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.event.Event;
 import javafx.event.EventType;
-import javafx.scene.layout.BorderPane;import javafx.scene.layout.Region;
+import javafx.scene.layout.BorderPane;import javafx.scene.layout.Pane;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Rectangle;
@@ -86,8 +91,15 @@ import java.util.TimerTask;
  *       the highlight refresh touches only the active lines (far fewer than the line count);</li>
  *   <li>R2.9 collapsing hides the left panel without touching the right one.</li>
  *   <li>E1 character selection &amp; copy: mouse drag selects by (line, column), the platform
- *       copy key puts the raw source chars into the system clipboard (13 assertions, each one
- *       read back from the system clipboard and compared char-by-char).</li>
+ *       copy key puts the raw source chars into the system clipboard (each one read back from
+ *       the system clipboard and compared char-by-char);</li>
+ *   <li>step5 (功能三) selection look: the selection is clamped to ONE logical line (drag /
+ *       Shift-extension past a line edge hits 行首/行尾), the cell layers are
+ *       [hit layer, black selection layer, glyph layer] with the covered runs temporarily
+ *       WHITE and restored on release / scroll-rebuild, the row-selected background is off,
+ *       the TEXT cursor applies to viewer/cells but not the gutter, selection repaints touch
+ *       only visible cells on the 5000-line doc (决策 3.9), and window resize re-wraps while
+ *       the selection survives (PNGs of the selection are snapshotted for visual acceptance).</li>
  * </ol>
  *
  * <p>Exit code 0 = all assertions passed, 1 = at least one failed.</p>
@@ -130,6 +142,8 @@ public class HtmlViewerProbe extends Application {
     private String countAtFirstHit;
     private int firstHitLine;
     private int secondHitLine;
+    /** 台账 §4-1 的 resize 步骤：拉宽窗口前的折行列数（下一步断言"确实变宽了"用）。 */
+    private int step5ColsBefore;
 
     private Path bigFile;
     private Path longFile;
@@ -751,10 +765,13 @@ public class HtmlViewerProbe extends Application {
             this::checkFindWrapAround, this::checkFindNoHits,
             this::checkHighlightAndScroll, this::checkMinimalRepaint, this::checkFindBarBottom,
             this::checkSelectionAndCopy,
+            this::setupStep5SnapshotSelection,
+            this::snapshotStep5SelectionAndSetupLayers, this::snapshotStep5Layers,
             this::openLongLineSource,
             this::checkE2SoftWrap, this::checkE2WrapMapping,
             this::openCorpusSource, this::checkE2Corpus,
             this::openCorpusSourceNoTrailingNl, this::checkE2CorpusNoTrailingNl,
+            this::checkResizeStage, this::checkResizeRewrap, this::checkNoHscrollWithSelection,
             this::checkCollapseR29, this::checkGuiStateUnchanged,
             this::snapshotFinal, this::finish);
 
@@ -819,12 +836,12 @@ public class HtmlViewerProbe extends Application {
     // ---------- E1 字符选择与复制 ----------
 
     /**
-     * E1：选择/复制的 13 条断言，作为一步排在 E2 软换行断言之前（之后由
-     * {@link #openLongLineSource()} 切回长行源，E2 步骤接在后面）。
+     * E1：选择/复制的断言（#1..#13，含【需求变更】改写的跨行用例），作为一步排在 E2 软换行
+     * 断言之前（之后由 {@link #openLongLineSource()} 切回长行源，E2 步骤接在后面）。
      *
-     * <p>先用自己的小组装源码（{@link #showSource} 同步路径）验 #1..#11 与 #13，
-     * 再同步装上 5000 行大源码验 #12（虚拟化）；每条复制断言都从<b>系统剪贴板读回</b>
-     * 并<b>逐字符</b>比对。</p>
+     * <p>先用自己的小组装源码（{@link #showSource} 同步路径）验 #1..#11、步骤 5 的
+     * S1..S10 / S12 / S13 与 #13，再同步装上 5000 行大源码验 #12、决策 3.9 与 S11（虚拟化 /
+     * 滚动重建）；每条复制断言都从<b>系统剪贴板读回</b>并<b>逐字符</b>比对。</p>
      */
     private void checkSelectionAndCopy() {
         HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), selectionSource());
@@ -849,8 +866,8 @@ public class HtmlViewerProbe extends Application {
             double flowMinX = Double.NaN;
             if (diag instanceof javafx.scene.control.ListCell<?> lc
                     && lc.getGraphic() instanceof StackPane wrapper
-                    && wrapper.getChildren().size() >= 1
-                    && wrapper.getChildren().get(0) instanceof javafx.scene.layout.HBox hb
+                    && wrapper.getChildren().size() >= 3
+                    && wrapper.getChildren().get(2) instanceof javafx.scene.layout.HBox hb
                     && hb.getChildren().size() >= 2
                     && hb.getChildren().get(1) instanceof VBox vb
                     && !vb.getChildren().isEmpty()
@@ -880,31 +897,39 @@ public class HtmlViewerProbe extends Application {
                         + esc(clipboardString()) + ")",
                 charByChar("E1#1", expected1, clipboardString()));
 
-        // #2 跨语法 token（注释 → 标签 → 正文）→ 剪贴板 == 原始字符（无标记注入）
-        dragSelect(3, 0, 4, 21);
+        // #2 跨语法 token（标签 → 正文 → 标签）→ 剪贴板 == 原始字符（无标记注入）。
+        // 【需求变更】原 (3,0)→(4,21) 跨行（注释→标签→正文）；决策 3.2 后只允许行内选择，
+        // 改为行 4 整行。
+        dragSelect(4, 0, 4, viewer.lineText(4).length());
         copyViaKey();
-        String expected2 = viewer.lineText(3) + "\n" + viewer.lineText(4).substring(0, 21);
-        check("E1#2 cross-token (comment→tag→text) copy is the raw source chars (clipboard="
+        String expected2 = viewer.lineText(4);
+        check("E1#2 cross-token (tag→text→tag, single line) copy is the raw source chars (clipboard="
                         + esc(clipboardString()) + ")",
                 charByChar("E1#2", expected2, clipboardString()));
 
-        // #3 跨逻辑行 → LF 连接、含中间整行
+        // #3 向下拖到别的行 → 钳到锚点行的行尾。【需求变更】原为跨行 LF 连接复制；
+        // 决策 3.2 后跨行选择不存在，改为单行钳制断言（行尾 = 拖出行的下/右端）。
         dragSelect(3, 4, 5, 2);
         copyViaKey();
-        String expected3 = viewer.lineText(3).substring(4) + "\n" + viewer.lineText(4)
-                + "\n" + viewer.lineText(5).substring(0, 2);
-        check("E1#3 cross-line copy joins with LF and keeps the middle line whole (clipboard="
-                        + esc(clipboardString()) + ")",
-                charByChar("E1#3", expected3, clipboardString()));
+        HtmlTextSelection.Range r3 = viewer.selectionRange();
+        String expected3 = viewer.lineText(3).substring(4);
+        check("E1#3 dragging DOWN to another line clamps to the anchor line's end (range="
+                        + describeRange(r3) + ", clipboard=" + esc(clipboardString()) + ")",
+                r3 != null && r3.startLine() == 3 && r3.endLine() == 3
+                        && r3.startCol() == 4 && r3.endCol() == viewer.lineText(3).length()
+                        && charByChar("E1#3", expected3, clipboardString()));
 
-        // #4 范围内含空行 → 连续 LF 保留
+        // #4 向下拖过空行 → 仍钳到锚点行的行尾。【需求变更】原为"含空行的跨行连续 LF 复制"；
+        // 决策 3.2 后中间的空行不再参与选择。
         dragSelect(1, 2, 3, 8);
         copyViaKey();
-        String expected4 = viewer.lineText(1).substring(2) + "\n" + viewer.lineText(2)
-                + "\n" + viewer.lineText(3).substring(0, 8);
-        check("E1#4 an empty line inside the range keeps the consecutive LFs (clipboard="
-                        + esc(clipboardString()) + ")",
-                charByChar("E1#4", expected4, clipboardString()) && expected4.contains("\n\n"));
+        HtmlTextSelection.Range r4 = viewer.selectionRange();
+        String expected4 = viewer.lineText(1).substring(2);
+        check("E1#4 dragging DOWN past an empty line clamps to the anchor line's end (range="
+                        + describeRange(r4) + ", clipboard=" + esc(clipboardString()) + ")",
+                r4 != null && r4.startLine() == 1 && r4.endLine() == 1
+                        && r4.startCol() == 2 && r4.endCol() == viewer.lineText(1).length()
+                        && charByChar("E1#4", expected4, clipboardString()));
 
         // #5 行首缩进 + 行尾空格保留（行 1 = 4 个前导空格 + 4 个行尾空格）
         dragSelect(1, 0, 1, viewer.lineText(1).length());
@@ -960,7 +985,9 @@ public class HtmlViewerProbe extends Application {
                         + " after=" + viewer.hitCount() + ")",
                 hitsBefore > 0 && viewer.hitCount() == hitsBefore);
 
-        // #11 选择后语法高亮仍在 + html-source-selected 出现 + find 命中样式并存
+        // #11 选择后语法高亮仍在 + html-source-selected 出现 + find 命中样式并存。
+        // 【需求变更】原选择是跨行 (2,0)→(4,10)；决策 3.2 后改成行内选择 (4,3)→(4,21)。
+        dragSelect(4, 3, 4, 21);
         viewer.node().applyCss();
         viewer.node().layout();
         long textNodes = viewer.node().lookupAll(".html-source-text").size();
@@ -972,6 +999,215 @@ public class HtmlViewerProbe extends Application {
                         + " hitNodes=" + hitNodes + ")",
                 textNodes > 0 && selectedVisible > 0 && hitNodes > 0);
         snapshot("htmlviewer-selection");
+
+        // ---- 功能三（步骤 5）断言组：单行钳制 / 黑底白字 / 层序 / 游标 / 整行底色 / 3.9 ----
+
+        // S1 单行内拖动选择 → 选区范围精确且单行（3.10 的选中态截图在专用的
+        // setupStep5SnapshotSelection / snapshotStep5SelectionAndSetupLayers 两步拍，
+        // 与本步内的 #11 快照不在同一拍 —— 场景快照要跨脉冲才反映当前渲染）
+        HtmlTextSelection.Range r1 = viewer.selectionRange();
+        check("step5 S1 the selection range is exact and SINGLE-line (range=" + describeRange(r1) + ")",
+                r1 != null && r1.startLine() == 4 && r1.endLine() == 4
+                        && r1.startCol() == 3 && r1.endCol() == 21);
+
+        // S2 拖出行的左端 → 钳到行首（列 0）
+        dragSelect(4, 10, 4, -2);
+        copyViaApi();
+        HtmlTextSelection.Range r2 = viewer.selectionRange();
+        check("step5 S2 dragging past the line's LEFT edge clamps to 行首 (range="
+                        + describeRange(r2) + ")", r2 != null && r2.startLine() == 4 && r2.endLine() == 4
+                && r2.startCol() == 0 && r2.endCol() == 10);
+        check("step5 S2 the left-clamped copy is char-exact (clipboard=" + esc(clipboardString()) + ")",
+                charByChar("step5-S2", viewer.lineText(4).substring(0, 10), clipboardString()));
+        // S3 拖出行的右端 → 钳到行尾
+        dragSelect(4, 10, 4, viewer.lineText(4).length() + 5);
+        copyViaApi();
+        HtmlTextSelection.Range r3b = viewer.selectionRange();
+        check("step5 S3 dragging past the line's RIGHT edge clamps to 行尾 (range="
+                        + describeRange(r3b) + ")", r3b != null && r3b.startLine() == 4 && r3b.endLine() == 4
+                && r3b.startCol() == 10 && r3b.endCol() == viewer.lineText(4).length());
+        check("step5 S3 the right-clamped copy is char-exact (clipboard=" + esc(clipboardString()) + ")",
+                charByChar("step5-S3", viewer.lineText(4).substring(10), clipboardString()));
+        // S4 向下拖出锚点行 → 钳到行尾
+        dragSelect(4, 10, 6, 5);
+        copyViaApi();
+        HtmlTextSelection.Range r4b = viewer.selectionRange();
+        check("step5 S4 dragging DOWN out of the anchor line clamps to its end (range="
+                        + describeRange(r4b) + ")", r4b != null && r4b.startLine() == 4 && r4b.endLine() == 4
+                && r4b.startCol() == 10 && r4b.endCol() == viewer.lineText(4).length());
+        check("step5 S4 the down-clamped copy is char-exact (clipboard=" + esc(clipboardString()) + ")",
+                charByChar("step5-S4", viewer.lineText(4).substring(10), clipboardString()));
+        // S5 向上拖出锚点行 → 钳到行首
+        dragSelect(4, 10, 2, 5);
+        copyViaApi();
+        HtmlTextSelection.Range r5 = viewer.selectionRange();
+        check("step5 S5 dragging UP out of the anchor line clamps to its start (range="
+                        + describeRange(r5) + ")", r5 != null && r5.startLine() == 4 && r5.endLine() == 4
+                && r5.startCol() == 0 && r5.endCol() == 10);
+        check("step5 S5 the up-clamped copy is char-exact (clipboard=" + esc(clipboardString()) + ")",
+                charByChar("step5-S5", viewer.lineText(4).substring(0, 10), clipboardString()));
+        // S6 Shift 扩选：点在下方的行 → 扩到锚点行的行尾（决策 3.5，同样被 3.2 钳制）
+        dragSelect(4, 5, 4, 10);
+        shiftClick(6, 3);
+        copyViaApi();
+        HtmlTextSelection.Range r6 = viewer.selectionRange();
+        check("step5 S6 Shift-click BELOW the anchor line extends to the line end only (range="
+                        + describeRange(r6) + ")", r6 != null && r6.startLine() == 4 && r6.endLine() == 4
+                && r6.startCol() == 5 && r6.endCol() == viewer.lineText(4).length());
+        check("step5 S6 the Shift-down-clamped copy is char-exact (clipboard="
+                        + esc(clipboardString()) + ")",
+                charByChar("step5-S6", viewer.lineText(4).substring(5), clipboardString()));
+        // S7 Shift 扩选：点在上方的行 → 扩到锚点行的行首
+        dragSelect(4, 5, 4, 10);
+        shiftClick(2, 3);
+        copyViaApi();
+        HtmlTextSelection.Range r7 = viewer.selectionRange();
+        check("step5 S7 Shift-click ABOVE the anchor line extends to the line start only (range="
+                        + describeRange(r7) + ")", r7 != null && r7.startLine() == 4 && r7.endLine() == 4
+                && r7.startCol() == 0 && r7.endCol() == 5);
+        check("step5 S7 the Shift-up-clamped copy is char-exact (clipboard=" + esc(clipboardString()) + ")",
+                charByChar("step5-S7", viewer.lineText(4).substring(0, 5), clipboardString()));
+        // S8 层序（3.7）：命中黄底在最下、选区黑底在中、字形在最上 —— 选择盖住命中的一部分
+        dragSelect(3, 2, 3, 10);
+        viewer.node().applyCss();
+        viewer.node().layout();
+        Node cell3 = revealCellForLine(3);
+        List<String> layerKind = new ArrayList<>();
+        boolean layerOrder = false;
+        Color hitFill = null;
+        Color selFill = null;
+        if (cell3 instanceof javafx.scene.control.ListCell<?> lc
+                && lc.getGraphic() instanceof StackPane wrapper) {
+            List<Node> kids = wrapper.getChildren();
+            for (Node k : kids) {
+                layerKind.add(describe(k));
+            }
+            layerOrder = kids.size() == 3
+                    && kids.get(0) instanceof Pane hitLayer
+                    && hitLayer.lookupAll(".html-source-hit").size() > 0
+                    && kids.get(1) instanceof Pane selLayer
+                    && selLayer.lookupAll(".html-source-selected").size() > 0
+                    && kids.get(2) instanceof javafx.scene.layout.HBox;
+            if (kids.size() == 3 && kids.get(0) instanceof Pane hitLayer) {
+                for (Node n : hitLayer.getChildren()) {
+                    if (n instanceof Rectangle r8 && r8.isVisible()) {
+                        hitFill = (Color) r8.getFill();
+                        break;
+                    }
+                }
+            }
+            if (kids.size() == 3 && kids.get(1) instanceof Pane selLayer) {
+                for (Node n : selLayer.getChildren()) {
+                    if (n instanceof Rectangle r8 && r8.isVisible()) {
+                        selFill = (Color) r8.getFill();
+                        break;
+                    }
+                }
+            }
+        }
+        check("step5 S8 cell layers are [hit, selection, glyphs] (" + layerKind + ")", layerOrder);
+        check("step5 S8 the hit rect is yellow #ffe680 and the selection rect is BLACK ("
+                        + hex(hitFill) + " / " + hex(selFill) + ")",
+                hitFill != null && selFill != null
+                        && Math.abs(hitFill.getRed() - 1.0) < 0.01
+                        && Math.abs(hitFill.getGreen() - 0.9) < 0.01
+                        && Math.abs(hitFill.getBlue() - 0.5) < 0.01
+                        && selFill == Color.BLACK);
+        // S9 黑底白字：选区覆盖的 run 变白、其余保持基础色
+        boolean runRule = cell3 != null;
+        int whiteRuns3 = 0;
+        int baseRuns3 = 0;
+        if (cell3 != null) {
+            for (Node n : cell3.lookupAll(".html-source-text")) {
+                if (!(n instanceof javafx.scene.text.Text t)) {
+                    continue;
+                }
+                int[] cr = (int[]) t.getProperties().get(HtmlSourceViewer.RUN_COLUMNS_KEY);
+                Color base = (Color) t.getProperties().get(HtmlSourceViewer.RUN_BASE_FILL_KEY);
+                if (cr == null || base == null) {
+                    runRule = false;
+                    continue;
+                }
+                boolean inside = cr[1] > 2 && cr[0] < 10;
+                if (inside) {
+                    whiteRuns3++;
+                    runRule &= Color.WHITE.equals(t.getFill());
+                } else {
+                    baseRuns3++;
+                    runRule &= base.equals(t.getFill());
+                }
+            }
+        }
+        check("step5 S9 white-on-black: covered runs are WHITE and the rest keep their base fill "
+                        + "(white=" + whiteRuns3 + " base=" + baseRuns3 + ")",
+                runRule && whiteRuns3 > 0 && baseRuns3 > 0);
+        // S10 松手（单击清空选择）→ 全部 run 还原基础色
+        dragSelect(0, 0, 0, 0);
+        boolean restored = true;
+        int checkedRuns = 0;
+        for (Node n : viewer.node().lookupAll(".html-source-text")) {
+            if (!(n instanceof javafx.scene.text.Text t)) {
+                continue;
+            }
+            Color base = (Color) t.getProperties().get(HtmlSourceViewer.RUN_BASE_FILL_KEY);
+            if (base == null) {
+                restored = false;
+                continue;
+            }
+            checkedRuns++;
+            restored &= base.equals(t.getFill());
+        }
+        check("step5 S10 after the click clears the selection every run is restored to its base "
+                        + "fill (runs=" + checkedRuns + ")", restored && checkedRuns > 0);
+        // S12 游标（3.4）：viewer / list-view / cell = TEXT，行号栏保持默认
+        viewer.node().applyCss();
+        Node cellCursor = cellForLine(4);
+        Node gutterNode = cellCursor == null ? null : cellCursor.lookup(".html-source-gutter");
+        check("step5 S12 the viewer root has the TEXT cursor (" + viewer.node().getCursor() + ")",
+                viewer.node().getCursor() == Cursor.TEXT);
+        check("step5 S12 the ListView has the TEXT cursor (" + listView.getCursor() + ")",
+                listView.getCursor() == Cursor.TEXT);
+        check("step5 S12 a cell has the TEXT cursor ("
+                        + (cellCursor == null ? "no cell" : cellCursor.getCursor()) + ")",
+                cellCursor != null && cellCursor.getCursor() == Cursor.TEXT);
+        check("step5 S12 the gutter keeps the DEFAULT cursor ("
+                        + (gutterNode == null ? "no gutter" : gutterNode.getCursor()) + ")",
+                gutterNode != null && gutterNode.getCursor() == Cursor.DEFAULT);
+        // S13 整行选中底色（3.6）：强制 :selected 伪类，行背景仍透明（无任何不透明填充）
+        boolean rowBgOff = false;
+        String rowBgDesc = "no cell";
+        if (cellCursor instanceof javafx.scene.control.ListCell<?> lc) {
+            PseudoClass selected = PseudoClass.getPseudoClass("selected");
+            lc.pseudoClassStateChanged(selected, true);
+            viewer.node().applyCss();
+            javafx.scene.layout.Background bg = lc.getBackground();
+            if (bg == null) {
+                rowBgOff = true;
+                rowBgDesc = "null background";
+            } else {
+                boolean opaqueFill = false;
+                for (javafx.scene.layout.BackgroundFill f : bg.getFills()) {
+                    javafx.scene.paint.Paint p = f.getFill();
+                    if (p instanceof Color c && c.getOpacity() > 0.01) {
+                        opaqueFill = true;
+                        rowBgDesc = "opaque " + hex(c);
+                    }
+                }
+                if (!opaqueFill && !bg.getImages().isEmpty()) {
+                    opaqueFill = true;
+                    rowBgDesc = "background image";
+                }
+                rowBgOff = !opaqueFill;
+                if (rowBgDesc.equals("no cell")) {
+                    rowBgDesc = rowBgOff ? "all fills transparent" : "opaque";
+                }
+            }
+            lc.pseudoClassStateChanged(selected, false);
+            viewer.node().applyCss();
+        }
+        System.out.println("step5 S13 forced-selected cell background -> " + rowBgDesc);
+        check("step5 S13 forcing :selected on a cell keeps the row background transparent (bg: "
+                        + rowBgDesc + ")", rowBgOff);
 
         // #13 选择不改变行模型（lineCount / lineText 不变）
         boolean modelSame = viewer.lineCount() == linesBefore;
@@ -986,12 +1222,50 @@ public class HtmlViewerProbe extends Application {
         HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), bigSource());
         viewer.node().applyCss();
         viewer.node().layout();
-        dragSelect(2, 5, 4, 30);
+        dragSelect(2, 5, 2, 30);
         int cells = viewer.node().lookupAll(".list-cell").size();
         int rowsBig = viewer.lineCount();
         System.out.println("E1#12 big source after selection: lines=" + rowsBig + " cells=" + cells);
         check("E1#12 on the " + rowsBig + "-line source a selection keeps virtualization (cells="
                         + cells + " << lines)", cells > 0 && cells * 10 < rowsBig);
+        // 决策 3.9（竖向虚拟化硬约束）：选择重绘只动可见 cell —— 实测计数，与文件行数无关
+        int selPainted = viewer.selectionCellsPaintedInLastRepaint();
+        System.out.println("step5 3.9 selection repaint cells: " + selPainted + " of " + rowsBig);
+        check("step5 3.9 the selection repaint touched only visible cells (" + selPainted
+                        + " << " + rowsBig + ")", selPainted > 0 && selPainted * 10 < rowsBig);
+        // S11 滚动到远处再回来：cell 重建后白字只落在选区上（黑底白字的"滚动还原"）
+        listView.scrollTo(BIG_LINES / 2);
+        viewer.node().applyCss();
+        viewer.node().layout();
+        listView.scrollTo(2);
+        Node cellRebuilt = revealCellForLine(2);
+        boolean rebuildOk = cellRebuilt != null;
+        int whiteRuns = 0;
+        int baseRuns = 0;
+        if (cellRebuilt != null) {
+            for (Node n : cellRebuilt.lookupAll(".html-source-text")) {
+                if (!(n instanceof javafx.scene.text.Text t)) {
+                    continue;
+                }
+                int[] cr = (int[]) t.getProperties().get(HtmlSourceViewer.RUN_COLUMNS_KEY);
+                Color base = (Color) t.getProperties().get(HtmlSourceViewer.RUN_BASE_FILL_KEY);
+                if (cr == null || base == null) {
+                    rebuildOk = false;
+                    continue;
+                }
+                boolean inside = cr[1] > 5 && cr[0] < 30;
+                if (inside) {
+                    whiteRuns++;
+                    rebuildOk &= Color.WHITE.equals(t.getFill());
+                } else {
+                    baseRuns++;
+                    rebuildOk &= base.equals(t.getFill());
+                }
+            }
+        }
+        check("step5 S11 after scrolling away and back the white runs sit exactly on the "
+                        + "selection (white=" + whiteRuns + " base=" + baseRuns + ")",
+                rebuildOk && whiteRuns > 0 && baseRuns > 0);
     }
 
     /** E1 用的小组装源码：行首缩进、行尾空格、空行、注释、标签、正文（坐标见各断言）。 */
@@ -1044,9 +1318,29 @@ public class HtmlViewerProbe extends Application {
 
     private static void fireMouse(EventType<MouseEvent> type, Node target,
                                   double sceneX, double sceneY, boolean primary) {
+        fireMouse(type, target, sceneX, sceneY, primary, false);
+    }
+
+    private static void fireMouse(EventType<MouseEvent> type, Node target,
+                                  double sceneX, double sceneY, boolean primary, boolean shift) {
         Event.fireEvent(target, new MouseEvent(type, sceneX, sceneY, sceneX, sceneY,
-                MouseButton.PRIMARY, 1, false, false, false, false,
+                MouseButton.PRIMARY, 1, shift, false, false, false,
                 primary, false, false, false, false, true, null));
+    }
+
+    /** Shift+单击（决策 3.5 的扩选路径）：按在 (line, col)，同一位置松开（Shift 保持按下）。 */
+    private void shiftClick(int line, int col) {
+        Node cell = revealCellForLine(line);
+        if (cell == null) {
+            check("shiftClick could not reveal line " + line, false);
+            return;
+        }
+        Bounds b = cell.localToScene(cell.getBoundsInLocal());
+        double contentX = b.getMinX() + viewer.gutterWidth();
+        double y = b.getMinY() + b.getHeight() / 2;
+        double x = contentX + col * viewer.charWidth();
+        fireMouse(MouseEvent.MOUSE_PRESSED, cell, x, y, true, true);
+        fireMouse(MouseEvent.MOUSE_RELEASED, listView, x, y, false, true);
     }
 
     /** 平台复制键（Windows 下 = Ctrl+C，经 {@code KeyEvent.isShortcutDown()} 判定）。 */
@@ -1055,9 +1349,23 @@ public class HtmlViewerProbe extends Application {
                 false, true, false, false));
     }
 
-    /** 经查看器的公开 API 复制（与按键路径对照用）。 */
+    /**
+     * 经查看器的公开 API 复制（与按键路径对照用）。Windows 的系统剪贴板在连续快速写入时会
+     * 偶发"忙"：{@code setContent} 被静默丢弃、读回为 null（本机实测踩到过一次，同样的选择
+     * 下一次运行就通过）。这里在读回为 null 时重试最多 5 次 —— 生产 {@code copySelection}
+     * 未被改动，重试只是探针的读回校验，断言口径不变。
+     */
     private void copyViaApi() {
         viewer.copySelection();
+        for (int i = 0; i < 5 && clipboardString() == null; i++) {
+            try {
+                Thread.sleep(15);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            viewer.copySelection();
+        }
     }
 
     private static void setClipboard(String s) {
@@ -1114,6 +1422,52 @@ public class HtmlViewerProbe extends Application {
             case ' ' -> "·";
             default -> String.valueOf(c);
         };
+    }
+
+    /** 选择范围的单行可读描述（断言证据打印用）。 */
+    private static String describeRange(HtmlTextSelection.Range r) {
+        return r == null ? "null"
+                : "(" + r.startLine() + "," + r.startCol() + ")-(" + r.endLine() + "," + r.endCol() + ")";
+    }
+
+    /** Color → #rrggbb（断言证据打印用）。 */
+    private static String hex(Color c) {
+        if (c == null) {
+            return "null";
+        }
+        return String.format("#%02x%02x%02x",
+                Math.round(c.getRed() * 255), Math.round(c.getGreen() * 255), Math.round(c.getBlue() * 255));
+    }
+
+    // ---------- 步骤 5：3.10 的选中态截图（跨脉冲两拍，与 e2 快照同一套路） ----------
+
+    /**
+     * 3.10 选中态截图（第 1 拍）：装回小文档并做单行选区 [3,21)，本拍结束 —— 场景快照
+     * 只反映<b>上一拍</b>定稿的渲染（同一步内连拍会得到逐字节相同的旧帧，实测踩过），
+     * 所以把"摆状态"与"按快门"拆成两个步骤。
+     */
+    private void setupStep5SnapshotSelection() {
+        HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), selectionSource());
+        viewer.node().applyCss();
+        viewer.node().layout();
+        dragSelect(4, 3, 4, 21);
+        viewer.node().applyCss();
+        viewer.node().layout();
+    }
+
+    /** 3.10 选中态截图（第 2 拍）：拍下上一拍定稿的黑底白字选区；同拍备好"选区盖命中"的层序状态。 */
+    private void snapshotStep5SelectionAndSetupLayers() {
+        snapshot("htmlviewer-step5-selection");
+        viewer.queryField().setText(SEARCH_TOKEN);
+        viewer.findButtons().get(0).fire();
+        dragSelect(3, 2, 3, 10);
+        viewer.node().applyCss();
+        viewer.node().layout();
+    }
+
+    /** 3.10 层序截图（第 3 拍）：拍下"黑底选区压在黄色查找命中上"的层序状态。 */
+    private void snapshotStep5Layers() {
+        snapshot("htmlviewer-step5-layers");
     }
 
     // ---------- E2 软换行 + 折行 ↔ 逻辑偏移映射（取代 R2.8 横向滚动） ----------
@@ -1184,8 +1538,8 @@ public class HtmlViewerProbe extends Application {
         Bounds secondFlow = null;
         if (cell instanceof javafx.scene.control.ListCell<?> lc
                 && lc.getGraphic() instanceof StackPane wrapper
-                && !wrapper.getChildren().isEmpty()
-                && wrapper.getChildren().get(0) instanceof javafx.scene.layout.HBox hb
+                && wrapper.getChildren().size() >= 3
+                && wrapper.getChildren().get(2) instanceof javafx.scene.layout.HBox hb
                 && hb.getChildren().size() == 2
                 && hb.getChildren().get(0) instanceof Label gutterLabel
                 && hb.getChildren().get(1) instanceof VBox vb && vb.getChildren().size() >= 2) {
@@ -1339,18 +1693,27 @@ public class HtmlViewerProbe extends Application {
         check("E2 corpus: every lineText is char-exact (CRLF/CR normalized to LF, tabs / leading "
                         + "/ trailing spaces / consecutive empty lines / trailing empty line kept)",
                 allSame);
-        // 整篇复制：逻辑范围 (0,0) → (9,0)，逐字符 = 语料归一化全文（末尾空行 → 结尾 LF）
-        dragVisual(0, 0, 0, 9, 0, 0);
+        // 【需求变更】决策 3.2：跨行拖选被钳制在锚点行内 —— 原"整篇复制 (0,0)→(9,0)"
+        // 与"跨连续空行 + 制表符行的复制 (2,0)→(4,19)"不再是可达行为；改为逐行整行复制
+        // 证语料逐字符 + 两个单行钳制断言（空行锚点 / 向下拖出）。
+        dragVisual(4, 0, 0, 4, 0, 19);
         copyViaApi();
-        check("E2 corpus: whole-doc copy is char-exact and ends with the trailing empty line's LF "
-                        + "(clipboard=" + esc(clipboardString()) + ")",
-                charByChar("E2-corpus-whole", String.join("\n", expected), clipboardString()));
-        // 跨连续空行 + 制表符行的复制
+        check("E2 corpus: the tab line copies char-exact (tabs and spaces kept) (clipboard="
+                        + esc(clipboardString()) + ")",
+                charByChar("E2-corpus-tab-line", "    <p title=\"a\tb\">", clipboardString()));
+        // 从空行锚点拖到别的行 → 空选择不产复制（单行口径：空行的行首=行尾=列 0）
+        setClipboard("SENTINEL-E2-EMPTY-DRAG");
         dragVisual(2, 0, 0, 4, 0, 19);
         copyViaApi();
-        check("E2 corpus: a copy spanning consecutive empty lines and the tab line is char-exact "
+        check("E2 corpus: dragging FROM an empty line to another line yields no selection "
                         + "(clipboard=" + esc(clipboardString()) + ")",
-                charByChar("E2-corpus-empties-tab", "\n\n    <p title=\"a\tb\">", clipboardString()));
+                "SENTINEL-E2-EMPTY-DRAG".equals(clipboardString()));
+        // 从制表符行第 3 列向下拖 → 钳到该行行尾（单行选择）
+        dragVisual(4, 0, 3, 5, 0, 7);
+        copyViaApi();
+        check("E2 corpus: dragging DOWN from the tab line clamps to its line end (clipboard="
+                        + esc(clipboardString()) + ")",
+                charByChar("E2-corpus-clamp-down", "    <p title=\"a\tb\">".substring(3), clipboardString()));
         // 行尾空格行整行复制
         dragVisual(8, 0, 0, 8, 0, 16);
         copyViaApi();
@@ -1390,13 +1753,134 @@ public class HtmlViewerProbe extends Application {
                         + viewer.lineCount(), viewer.lineCount() == 9);
         check("E2 corpus (no trailing NL): the last line keeps its trailing spaces (len="
                         + viewer.lineText(8).length() + ")", viewer.lineText(8).length() == 16);
-        dragVisual(0, 0, 0, 8, 0, 16);
+        // 【需求变更】决策 3.2：原"整篇复制 (0,0)→(8,16)"不再是可达行为；改为——
+        // 从末行第 5 列向上拖 → 钳到该行行首 [0,5)，再整行复制末行证"末尾无 LF"。
+        dragVisual(8, 0, 5, 5, 0, 3);
         copyViaApi();
-        String expected = HtmlSyntaxTokens.normalizeNewlines(corpusBody());
-        check("E2 corpus (no trailing NL): whole-doc copy is char-exact and does NOT end with LF "
-                        + "(clipboard len=" + (clipboardString() == null ? -1 : clipboardString().length())
-                        + " vs " + expected.length() + ")",
-                charByChar("E2-corpus-no-nl", expected, clipboardString()));
+        check("E2 corpus (no trailing NL): dragging UP from the last line clamps to its line "
+                        + "start (clipboard=" + esc(clipboardString()) + ")",
+                charByChar("E2-corpus-up-clamp", viewer.lineText(8).substring(0, 5), clipboardString()));
+        dragVisual(8, 0, 0, 8, 0, 16);
+        copyViaApi();
+        check("E2 corpus (no trailing NL): the last line copies char-exact and does NOT end "
+                        + "with LF (clipboard len="
+                        + (clipboardString() == null ? -1 : clipboardString().length()) + ")",
+                charByChar("E2-corpus-last-line", viewer.lineText(8), clipboardString())
+                        && !clipboardString().endsWith("\n"));
+    }
+
+    // ---------- 步骤 5：台账 §4 升级为必补的两条（均按单行选区口径） ----------
+
+    /**
+     * 台账 §4-1（前半）：在小窗口做单行选区并复制取证，然后<b>拉宽窗口</b>触发折行重切。
+     *
+     * <p>resize 后的几何断言放在下一步（{@link #checkResizeRewrap}）：窗口尺寸经由原生 peer
+     * 异步回传，且视口变化触发的 {@code refresh} 排在 runLater 里，下一步才看得见重建结果。</p>
+     */
+    private void checkResizeStage() {
+        HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), longSource());
+        viewer.node().applyCss();
+        viewer.node().layout();
+        step5ColsBefore = viewer.wrapCols();
+        int vrowsBefore = HtmlWrapMap.visualRowCount(viewer.lineText(1).length(), step5ColsBefore);
+        // 单行选区 [0,5)：resize 前后复制都必须逐字符相同（单行口径）
+        dragVisual(1, 0, 0, 1, 0, 5);
+        copyViaApi();
+        check("step5 resize: pre-resize single-line selection copies char-exact (clipboard="
+                        + esc(clipboardString()) + ")",
+                charByChar("step5-resize-pre", viewer.lineText(1).substring(0, 5), clipboardString()));
+        stage.setWidth(1500);
+        scene.getRoot().applyCss();
+        scene.getRoot().layout();
+        viewer.node().applyCss();
+        viewer.node().layout();
+        System.out.println("step5 resize requested: colsBefore=" + step5ColsBefore
+                + " vrowsBefore=" + vrowsBefore + " colsNow=" + viewer.wrapCols()
+                + " stageWidth=" + stage.getWidth());
+    }
+
+    /** 台账 §4-1（后半）：折行已重切 —— cell 重建、单行选区原样保留、复制不变；随后还原窗口尺寸。 */
+    private void checkResizeRewrap() {
+        scene.getRoot().applyCss();
+        scene.getRoot().layout();
+        viewer.node().applyCss();
+        viewer.node().layout();
+        int cols = viewer.wrapCols();
+        int len1 = viewer.lineText(1).length();
+        int vrows = HtmlWrapMap.visualRowCount(len1, cols);
+        Node cell = revealCellForLine(1);
+        long flows = cell == null ? -1 : cell.lookupAll(".html-source-line").size();
+        Bounds cb = cell == null ? null : cell.localToScene(cell.getBoundsInLocal());
+        System.out.println("step5 resize rewrap: cols=" + cols + " (before " + step5ColsBefore
+                + ") vrows=" + vrows + " flowsInCell=" + flows
+                + " cellHeight=" + fmt(cb == null ? -1 : cb.getHeight()));
+        check("step5 resize: wrapCols grew with the wider window (" + step5ColsBefore + " -> "
+                        + cols + ")", cols > step5ColsBefore);
+        check("step5 resize: the long line re-wrapped onto the NEW grid (flows " + flows
+                        + " == " + vrows + ")", flows == vrows);
+        check("step5 resize: the cell height matches the new wrap count ("
+                        + fmt(cb == null ? -1 : cb.getHeight()) + " vs "
+                        + fmt(vrows * viewer.rowHeight()) + ")",
+                cell != null && cb != null && Math.abs(cb.getHeight() - vrows * viewer.rowHeight()) <= TOL);
+        HtmlTextSelection.Range r = viewer.selectionRange();
+        check("step5 resize: the selection survived the re-wrap and stays single-line (range="
+                        + describeRange(r) + ")",
+                r != null && r.startLine() == 1 && r.endLine() == 1
+                        && r.startCol() == 0 && r.endCol() == 5);
+        copyViaApi();
+        check("step5 resize: the copy after re-wrap is still char-exact (clipboard="
+                        + esc(clipboardString()) + ")",
+                charByChar("step5-resize-copy", viewer.lineText(1).substring(0, 5), clipboardString()));
+        long selRects = cell == null ? 0 : cell.lookupAll(".html-source-selected").size();
+        check("step5 resize: the selection rects repainted on the new grid (rects=" + selRects + ")",
+                selRects >= 1);
+        // 还原窗口尺寸（后续步骤依赖 1280×800 的几何）
+        stage.setWidth(1280);
+        stage.setHeight(800);
+        scene.getRoot().applyCss();
+        scene.getRoot().layout();
+        viewer.node().applyCss();
+        viewer.node().layout();
+    }
+
+    /**
+     * 台账 §4-2（横向滚动叠加选择，单行口径）：长行 + 选区时无横向滚动、选区矩形不出视口、
+     * 跨折行的单行复制仍逐字符正确。
+     */
+    private void checkNoHscrollWithSelection() {
+        viewer.node().applyCss();
+        viewer.node().layout();
+        int cols = viewer.wrapCols();
+        int len1 = viewer.lineText(1).length();
+        int fromCol = Math.max(0, cols - 3);
+        int toCol = Math.min(len1, cols + 5);
+        dragVisual(1, 0, fromCol, 1, 1, toCol - cols);
+        viewer.node().applyCss();
+        viewer.node().layout();
+        check("step5 hscroll: hbar stays NEVER with a selection on the long line ("
+                        + scroller.getHbarPolicy() + ")",
+                scroller.getHbarPolicy() == ScrollPane.ScrollBarPolicy.NEVER);
+        check("step5 hscroll: hvalue stays at 0 (selection rendering introduced no horizontal "
+                        + "scroll; hvalue=" + fmt(scroller.getHvalue()) + ")", scroller.getHvalue() <= 0.001);
+        Node cell = revealCellForLine(1);
+        double viewportRight = scroller.localToScene(scroller.getBoundsInLocal()).getMaxX();
+        boolean rectsInside = cell != null;
+        int rects = 0;
+        if (cell != null) {
+            for (Node n : cell.lookupAll(".html-source-selected")) {
+                if (!(n instanceof Rectangle r2) || !r2.isVisible()) {
+                    continue;
+                }
+                rects++;
+                rectsInside &= r2.localToScene(r2.getBoundsInLocal()).getMaxX() <= viewportRight + 1;
+            }
+        }
+        check("step5 hscroll: every selection rect stays inside the viewport (rects=" + rects
+                        + ", inside=" + rectsInside + ")", rectsInside && rects >= 1);
+        copyViaApi();
+        check("step5 hscroll: the cross-wrap single-line copy is still char-exact (clipboard len="
+                        + (clipboardString() == null ? -1 : clipboardString().length()) + ")",
+                charByChar("step5-hscroll-copy", viewer.lineText(1).substring(fromCol, toCol), clipboardString()));
     }
 
     /** 视觉行坐标的拖选：视觉行号是逻辑行<b>内部</b>的折行行号，视觉列是该折行内的列。 */
@@ -1561,7 +2045,7 @@ public class HtmlViewerProbe extends Application {
                 + " highlighted=\"" + String.join("\",\"", highlighted) + "\""
                 + " cell=" + describe(cell) + " visible=" + isEffectivelyVisible(cell));
         check("R5.4 the current hit is highlighted at the NODE level (found " + highlighted.size()
-                        + " .html-source-hit inside the hit line's cell: " + highlighted + ")",
+                        + " .html-source-hit-text runs inside the hit line's cell: " + highlighted + ")",
                 highlighted.size() == 1 && SEARCH_TOKEN.equalsIgnoreCase(highlighted.get(0)));
         check("R5.4 the highlighted text is a substring of its line: "
                         + String.valueOf(hitLineText).trim(),
@@ -1720,15 +2204,20 @@ public class HtmlViewerProbe extends Application {
         return cell;
     }
 
-    /** 某 cell 内部的命中高亮文本（命中样式的节点级证据）。 */
+    /**
+     * 某 cell 内部的命中高亮文本（命中样式的节点级证据）。
+     *
+     * <p>【需求变更】步骤 5 起命中高亮不再是字形流里包背景的 {@code StackPane}
+     * （决策 3.7 的层序要求它沉到选区之下），黄底改画在最底层命中层的矩形上，字形层里的
+     * 命中片段改挂 {@code html-source-hit-text} 标记 —— 本助手按新口径取。</p>
+     */
     private static List<String> hitTextsWithin(Node cell) {
         List<String> out = new ArrayList<>();
         if (cell == null) {
             return out;
         }
-        for (Node n : cell.lookupAll(".html-source-hit")) {
-            if (n instanceof javafx.scene.layout.StackPane sp && sp.getChildren().size() == 1
-                    && sp.getChildren().get(0) instanceof javafx.scene.text.Text t) {
+        for (Node n : cell.lookupAll(".html-source-hit-text")) {
+            if (n instanceof javafx.scene.text.Text t) {
                 out.add(t.getText());
             }
         }
@@ -1916,8 +2405,10 @@ public class HtmlViewerProbe extends Application {
                 pr.getPixels(0, y, w, 1, javafx.scene.image.PixelFormat.getIntArgbInstance(), row, 0, w);
                 bi.setRGB(0, y, w, 1, row, 0, w);
             }
-            ImageIO.write(bi, "png", new File(outDir, name + "-"
-                    + String.valueOf(I18n.currentLocale()).replaceAll("[^A-Za-z0-9_]", "") + ".png"));
+            File file = new File(outDir, name + "-"
+                    + String.valueOf(I18n.currentLocale()).replaceAll("[^A-Za-z0-9_]", "") + ".png");
+            ImageIO.write(bi, "png", file);
+            System.out.println("snapshot -> " + file.getAbsolutePath());
         } catch (Exception e) {
             System.out.println("snapshot(" + name + ") failed: " + e);
         }
