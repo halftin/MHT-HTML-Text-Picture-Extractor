@@ -1,0 +1,124 @@
+# 测试访问面清单（只减不增）。列：通道 <TAB> 生产类/文件 <TAB> 成员/方法 <TAB> 理由
+# 通道取值：direct（驱动类字节码常量池直访，第 2 列=生产类 FQN） | reflect（静态具名反射，第 2 列=生产类 FQN）
+#   reflect-dynamic（成员名无法静态解析的反射点，按 文件+方法 登记，第 2 列=源文件相对路径）
+direct	com.mhtextractor.gui.component.HtmlFindIndex	EMPTY	同包直访（驱动类字节码常量池引用）；驱动: HtmlFindIndexTest
+direct	com.mhtextractor.gui.component.HtmlFindIndex	build	同包直访（驱动类字节码常量池引用）；驱动: HtmlFindIndexTest
+direct	com.mhtextractor.gui.component.HtmlFindIndex	get	同包直访（驱动类字节码常量池引用）；驱动: HtmlFindIndexTest
+direct	com.mhtextractor.gui.component.HtmlFindIndex	isEmpty	同包直访（驱动类字节码常量池引用）；驱动: HtmlFindIndexTest
+direct	com.mhtextractor.gui.component.HtmlFindIndex	size	同包直访（驱动类字节码常量池引用）；驱动: HtmlFindIndexTest
+direct	com.mhtextractor.gui.component.HtmlSourceViewer	plainText	同包直访（驱动类字节码常量池引用）；驱动: HtmlFindIndexTest
+direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator	buildRuntimeConfig	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator	landTerminalState	同包直访（驱动类字节码常量池引用）；驱动: ExtractionTaskCoordinatorRunChannelTest
+direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator	running	同包直访（驱动类字节码常量池引用）；驱动: ExtractionTaskCoordinatorCancelRaceTest, ExtractionTaskCoordinatorGateTest, ExtractionTaskCoordinatorRunChannelTest
+direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator$RunChannel	<init>	同包直访（驱动类字节码常量池引用）；驱动: ExtractionTaskCoordinatorRunChannelTest
+direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator$RunChannel	deliverAfterWorkerFinished	同包直访（驱动类字节码常量池引用）；驱动: ExtractionTaskCoordinatorRunChannelTest
+direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator$RunChannel	isCurrent	同包直访（驱动类字节码常量池引用）；驱动: ExtractionTaskCoordinatorRunChannelTest
+direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator$RunChannel	result	同包直访（驱动类字节码常量池引用）；驱动: ExtractionTaskCoordinatorRunChannelTest
+direct	com.mhtextractor.gui.controller.FileListContextMenu	pickFrom	同包直访（驱动类字节码常量池引用）；驱动: FileListContextMenuTest
+direct	com.mhtextractor.gui.controller.GroupCommandController	finishExpandAnim	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.GroupCommandController	toggleGroupExpanded	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.ImportSessionCoordinator	<init>	同包直访（驱动类字节码常量池引用）；驱动: FeatureExercise, ImportSessionCoordinatorQuotaTest
+direct	com.mhtextractor.gui.controller.ListInteractionController	findCell	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.ListInteractionController	setCheckedSilently	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	ITEM_VIEW	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	applyImportPlan	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	cancelWorkspaceActivity	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	clearImportDropHighlight	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	ctxClearParams	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	effectiveForObject	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	extractStats	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	extractionCoordinator	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	groupCommand	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	importByPaths	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	importDragDepth	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	importPending	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	isImporting	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	listInteraction	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	onInputFolderChanged	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	paramDomain	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	parseToken	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	preparseController	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	previewCacheLifecycle	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	previewLoader	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	rebuildDisplay	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	refreshAfterListChange	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	refs	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	running	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	saveGuiState	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	updateContextMenuState	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	updateImportDropHighlight	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	updateListButtons	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController	ws	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.MainController$ImportSession	<init>	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.ParamDomainController	applyConfirmedParams	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.ParamDomainController	applyGroupParams	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.ParamDomainController	applyItemParams	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.ParamDomainController	imageParamsCache	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.ParamDomainController	refreshAfterParamsChanged	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.ParamDomainController	textParamsCache	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.ParamDomainController	updateStartButtonState	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.ParamFormPane	addChapterNumberCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	autoFixEncodingCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	cancelButton	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	configComboBox	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	confirmButton	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	enableLimitCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	enableTemplateCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	enableTitleExtractCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	endMarkerField	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	endTemplateField	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imageCbzCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imageNameEndField	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imageNameExtractCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imageNamePane	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imageNameStartField	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imageOutputModePane	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imagePerformancePane	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imageProcessPane	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imageRegionEndField	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imageRegionExtractCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imageRegionPane	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imageRegionStartField	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imageRenameCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	imageZipCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	separateFilesCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	singleOutputCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	startMarkerField	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	startTemplateField	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	textContentLimitPane	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	textOutputModePane	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	textTemplatePane	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	textTitlePane	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	titleEndMarkerField	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	titleStartMarkerField	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	titleUseRegexCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise
+direct	com.mhtextractor.gui.controller.ParamFormPane	useRegexCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
+direct	com.mhtextractor.gui.controller.ParamSidePanel	pane	同包直访（驱动类字节码常量池引用）；驱动: FeatureExerciseSupport
+direct	com.mhtextractor.gui.controller.PreparseController	updateProgressStatus	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+direct	com.mhtextractor.gui.controller.PreviewLoader	imageLoadActive	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
+reflect	com.mhtextractor.config.AppConfig	imageModeEnabled	src/test/java/com/mhtextractor/app/EffectiveParamsServiceTest.java:474 getDeclaredField("imageModeEnabled")
+reflect	com.mhtextractor.gui.controller.FileListContextMenu	actions	tools/probes/ContextMenuProbe.java:143 getDeclaredField("actions")
+reflect	com.mhtextractor.gui.controller.FileListContextMenu	pickFrom(1)	tools/probes/ContextMenuProbe.java:228 getDeclaredMethod("pickFrom")
+reflect	com.mhtextractor.gui.controller.FileListContextMenu	target	tools/probes/ContextMenuProbe.java:416 getDeclaredField("target")
+reflect	com.mhtextractor.gui.controller.MainController	contextMenu	tools/probes/ContextMenuProbe.java:140 getDeclaredField("contextMenu")
+reflect	com.mhtextractor.gui.controller.MainController	hasIndependentParams(1)	tools/probes/ContextMenuProbe.java:275 getDeclaredMethod("hasIndependentParams")
+reflect	com.mhtextractor.gui.controller.MainController	refs	tools/probes/MainViewRefsProbe.java:255 getDeclaredField("refs")
+reflect	com.mhtextractor.gui.controller.MainController	updateContextMenuState(1)	tools/probes/ContextMenuProbe.java:248 getDeclaredMethod("updateContextMenuState") | tools/probes/ContextMenuProbe.java:425 getDeclaredMethod("updateContextMenuState")
+reflect-dynamic	src/test/java/com/mhtextractor/app/EffectiveParamsServiceTest.java	signatureCoversEveryAppConfigFieldExceptRuntimeOnly	src/test/java/com/mhtextractor/app/EffectiveParamsServiceTest.java:440 getDeclaredFields()
+reflect-dynamic	src/test/java/com/mhtextractor/config/AppConfigCopyTest.java	copyCoversEveryExtractionFieldAndNeverCarriesRuntimeFields	src/test/java/com/mhtextractor/config/AppConfigCopyTest.java:74 getDeclaredFields()
+reflect-dynamic	tools/probes/ContextMenuProbe.java	callNoArg	tools/probes/ContextMenuProbe.java:451 getDeclaredMethod(变量)
+reflect-dynamic	tools/probes/ContextMenuProbe.java	fieldOf	tools/probes/ContextMenuProbe.java:434 getDeclaredField(变量)
+reflect-dynamic	tools/probes/ContextMenuProbe.java	node	tools/probes/ContextMenuProbe.java:442 getMethod(变量)
+reflect-dynamic	tools/probes/HtmlViewerProbe.java	invoke	tools/probes/HtmlViewerProbe.java:545 getDeclaredMethod(变量)
+reflect-dynamic	tools/probes/HtmlViewerProbe.java	invokeOn	tools/probes/HtmlViewerProbe.java:561 getMethod(变量)
+reflect-dynamic	tools/probes/MainViewRefsProbe.java	start	tools/probes/MainViewRefsProbe.java:145 getDeclaredMethods()
+reflect-dynamic	tools/probes/SidePanelProbe.java	checkCommitted	tools/probes/SidePanelProbe.java:610 getMethod("isSeparateFiles")
+reflect-dynamic	tools/probes/SidePanelProbe.java	checkReopened	tools/probes/SidePanelProbe.java:584 getDeclaredFields()
+reflect-dynamic	tools/probes/SidePanelProbe.java	extractionRunning	tools/probes/SidePanelProbe.java:1308 getMethod("get")
+reflect-dynamic	tools/probes/SidePanelProbe.java	field	tools/probes/SidePanelProbe.java:1507 getDeclaredField(变量)
+reflect-dynamic	tools/probes/SidePanelProbe.java	fieldDeep	tools/probes/SidePanelProbe.java:1521 getDeclaredField(变量)
+reflect-dynamic	tools/probes/SidePanelProbe.java	groupName	tools/probes/SidePanelProbe.java:1348 getMethod("getName")
+reflect-dynamic	tools/probes/SidePanelProbe.java	invoke	tools/probes/SidePanelProbe.java:1408 getDeclaredMethod(变量)
+reflect-dynamic	tools/probes/SidePanelProbe.java	invokeOn	tools/probes/SidePanelProbe.java:1257 getMethod(变量)
+reflect-dynamic	tools/probes/SidePanelProbe.java	invokeStatic	tools/probes/SidePanelProbe.java:1425 getDeclaredMethod(变量)
+reflect-dynamic	tools/probes/SidePanelProbe.java	manualGroupName	tools/probes/SidePanelProbe.java:992 getMethod("isDefaultNamed")
