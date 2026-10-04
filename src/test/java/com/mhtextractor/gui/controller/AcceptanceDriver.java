@@ -263,10 +263,11 @@ public final class AcceptanceDriver {
             mc.paramDomain.applyItemParams(item, imageMode, params);
         }
 
-        /** 运行时提取配置构建（包级；纯函数 —— 把 GUI 状态与已确认缓存合成运行时配置，
-         *  无手势可观察，在驱动里重实现会复制生产逻辑、等价性脆弱）。 */
+        /** 运行时提取配置构建（步骤 2 起本体在 {@code ExtractionTaskCoordinator}，
+         *  经包级字段 {@code MainController.extractionCoordinator} 直访；纯函数 —— 把 GUI 状态
+         *  与已确认缓存合成运行时配置，无手势可观察，在驱动里重实现会复制生产逻辑、等价性脆弱）。 */
         public AppConfig buildRuntimeConfig() {
-            return mc.buildRuntimeConfig();
+            return mc.extractionCoordinator.buildRuntimeConfig();
         }
 
         /**

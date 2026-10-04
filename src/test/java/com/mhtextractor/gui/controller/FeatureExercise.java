@@ -674,6 +674,55 @@ private void waitForImportDone() throws InterruptedException {
     }
 }
 
+// ==================== A2 配额卡场景的观察/驱动辅助（与 tools/probes/NotificationAcceptance 同口径） ====================
+
+/** 等待配额确认卡出现（{@code NotificationHost.hasPendingDecision} 是唯一可观察面；超时由调用方断言兜底） */
+private void waitForQuotaCard() throws InterruptedException {
+    long deadline = System.currentTimeMillis() + 15000;
+    while (!com.mhtextractor.gui.component.NotificationHost.hasPendingDecision(statusLabel())
+            && System.currentTimeMillis() < deadline) {
+        pumpFxEvents();
+        Thread.sleep(20);
+    }
+}
+
+/** 场景根里的居中模态层（宿主懒装/显式安装都保证场景根是 StackPane） */
+private atlantafx.base.controls.ModalPane modalPane() {
+    for (javafx.scene.Node n : ((StackPane) listView().getScene().getRoot()).getChildren()) {
+        if (n instanceof atlantafx.base.controls.ModalPane mp) {
+            return mp;
+        }
+    }
+    throw new IllegalStateException("场景根里找不到 ModalPane");
+}
+
+/** 居中卡片本体（确认卡 = {@code Notification}） */
+private atlantafx.base.controls.Notification modalContent() {
+    javafx.scene.Node content = modalPane().getContent();
+    if (content instanceof atlantafx.base.controls.Notification ntf) {
+        return ntf;
+    }
+    throw new IllegalStateException("模态内容不是 Notification: " + content);
+}
+
+/** 卡片文案（原始 message 字符串，不受换行/省略号影响） */
+private String modalMessage() {
+    return modalContent().getMessage();
+}
+
+/** 按下卡片的第 index 个主按钮（0 = 确定/继续 → true；1 = 取消/停止 → false） */
+private void firePrimary(int index) {
+    Button b = modalContent().getPrimaryActions().get(index);
+    b.fire();
+}
+
+/** 与生产 {@code ImportSessionCoordinator.awaitQuotaConfirm} 相同的拼装口径（同键同参），断言随 locale 走 */
+private String quotaCardText(int maxGroups, int maxFiles, int filesKept, int groupsKept) {
+    return I18n.get("import.quotaReached", "groups", maxGroups, "files", maxFiles)
+            + I18n.get("import.quotaContinue")
+            + I18n.get("import.quotaStop", "files", filesKept, "groups", groupsKept);
+}
+
 /** 自动化测试：依次执行所有功能并记录结果到文件（test.mode=true 触发）。
  *  返回 true = 至少 1 项断言执行且 0 失败；false = 框架级错误或存在失败断言（供 App 映射为进程退出码）。
  *  结果写 logs/test-results.txt：logs 目录由本方法自行创建（不再依赖 logback 启动时创建 logs 的副作用——
@@ -1394,6 +1443,65 @@ public boolean runAutomatedTests() {
             }
             out.println("[PASS] Re-import after remove restores items"); p++;
         } catch (Exception e) { out.println("[FAIL] Re-import after remove: " + e.getMessage()); f++; }
+
+        // A2（台账 1.3；决策 F）：GUI 配额确认卡场景 —— 真实 ImportSessionCoordinator（包级注入构造：
+        // 派发器 = 真实 Platform::runLater，配额 = 2 组 / 3 文件，不必造 200 个组的夹具）+ 真实
+        // MainController 的 ImportUi（confirmQuotaReached → GuiNotifications.quotaConfirm），
+        // 在真实 FX 线程上驱动。与无头 ImportSessionCoordinatorQuotaTest 的分工：无头测试用延迟
+        // 派发器确定性复现"卡在 apply 落地前构造"的竞态（桩 UI 收卡）；本场景补上"真实卡片渲染 +
+        // 真实按钮回答 + 计数含触发轮 + 关窗守卫无残留"这条 GUI 可观察面。
+        try { textModeToggle().setSelected(true); Thread.sleep(200);
+            if (com.mhtextractor.gui.component.NotificationHost.hasPendingDecision(statusLabel())) {
+                throw new IllegalStateException("场景前置失败：存在未答的提醒卡");
+            }
+            if (!this.view.dataOrderIsEmpty()) {
+                this.view.clearDataOrder();
+                this.view.clearUndoStack();
+                this.view.refreshAfterListChange();
+            }
+            waitForImportDone();
+            java.nio.file.Path qRoot = java.nio.file.Files.createTempDirectory("mht-auto-quota");
+            createSampleMht(qRoot, "top1.mht");
+            createSampleMht(qRoot, "top2.mht");
+            for (String s : List.of("d1", "d2", "d3", "d4")) {
+                createSampleMht(java.nio.file.Files.createDirectories(qRoot.resolve(s)), "in.mht");
+            }
+            ImportSessionCoordinator quotaSessions =
+                    new ImportSessionCoordinator(this.view.model(), this.mc, Platform::runLater, 2, 3);
+            quotaSessions.start(List.of(qRoot.toString()), I18n.get("test.autoReimport"), false);
+            // 卡 1 = 轮 1（顶层 2 文件 + d1）= 3 文件 / 1 组（文件配额打满）；计数必须含触发卡的那一轮
+            waitForQuotaCard();
+            if (!com.mhtextractor.gui.component.NotificationHost.hasPendingDecision(statusLabel())) {
+                throw new IllegalStateException("① 配额卡未出现（NotificationHost 不可观察）");
+            }
+            if (!modalMessage().equals(quotaCardText(2, 3, 3, 1))) {
+                throw new IllegalStateException("② 卡 1 文案不符：\"" + modalMessage() + "\"");
+            }
+            if (this.view.visibleCount() != 3 || this.view.topLevelGroups().size() != 1) {
+                throw new IllegalStateException("卡 1 弹出时模型应为 3 文件/1 组，实际 "
+                        + this.view.visibleCount() + "/" + this.view.topLevelGroups().size());
+            }
+            firePrimary(0);   // 「继续」= true：放行扫描线程扫下一轮
+            // 卡 2 = 轮 2 = 5 文件 / 3 组（组配额打满）
+            waitForQuotaCard();
+            if (!modalMessage().equals(quotaCardText(2, 3, 5, 3))) {
+                throw new IllegalStateException("② 卡 2 文案不符：\"" + modalMessage() + "\"");
+            }
+            if (this.view.visibleCount() != 5 || this.view.topLevelGroups().size() != 3) {
+                throw new IllegalStateException("继续后只扫下一轮：模型应为 5 文件/3 组，实际 "
+                        + this.view.visibleCount() + "/" + this.view.topLevelGroups().size());
+            }
+            firePrimary(1);   // 「停止」= false：中止导入，轮 3 永不落地
+            waitForImportDone();
+            if (this.view.visibleCount() != 5 || this.view.topLevelGroups().size() != 3) {
+                throw new IllegalStateException("③ 停止后应保留已导入两轮（5 文件/3 组），实际 "
+                        + this.view.visibleCount() + "/" + this.view.topLevelGroups().size());
+            }
+            if (com.mhtextractor.gui.component.NotificationHost.hasPendingDecision(statusLabel())) {
+                throw new IllegalStateException("④ 卡片收尾后仍有未答决定（关窗守卫会受影响）");
+            }
+            out.println("[PASS] Import quota confirm card (A2)"); p++;
+        } catch (Exception e) { out.println("[FAIL] Import quota card: " + e.getMessage()); f++; }
 
         out.println(); out.println("=== RESULTS: " + p + " passed, " + f + " failed ===");
         out.flush();

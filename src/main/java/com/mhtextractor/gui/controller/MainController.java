@@ -1,6 +1,5 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.ExtractionPreconditions;
 import com.mhtextractor.app.PreviewService;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.app.WorkspaceImportService;
@@ -18,7 +17,6 @@ import com.mhtextractor.gui.util.JavaFxUtil;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.processor.BatchProcessor;
-import com.mhtextractor.processor.PerFileOverrides;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
@@ -51,17 +49,12 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -228,14 +221,44 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     private final WorkspaceExtractionService extractionService =
             new WorkspaceExtractionService(previewCacheLifecycle);
     /**
-     * 提取任务协调器（Q3 / P2）：JavaFX {@code Task} 生命周期与 UI 回调的宿主。
+     * 提取任务协调器（Q3 / P2；步骤 2 起兼作提取启动编排收口）：JavaFX {@code Task} 生命周期与
+     * UI 回调的宿主，{@link ExtractionTaskCoordinator#begin()} 从 {@code onStartProcessing} 接下
+     * deny 链 → R1.6 参数未确认卡 → 顺序门 → 启动的整条编排。
      * <b>partial 统计（原 {@code lastExtractStats}）、运行标记（原 {@code running}）与在途任务
      * （原 {@code currentTask}）三个提取状态字段都已归它持有</b>——本类不再有第二份可变 holder：
      * 写入只发生在协调器一处（服务返回值落一次），取消回调只读它。测试支撑访问经
-     * {@link #extractStats()} 与 {@link #running()}。
+     * {@link #extractStats()} 与 {@link #running()}；驱动面（{@code AcceptanceDriver}）直访
+     * 本字段读 {@code buildRuntimeConfig()}（与 {@code refs} 同一口径：为协作放宽可见性，
+     * 不带 test-support 标记）。
      */
-    private final ExtractionTaskCoordinator extractionCoordinator =
-            new ExtractionTaskCoordinator(extractionService);
+    final ExtractionTaskCoordinator extractionCoordinator =
+            new ExtractionTaskCoordinator(extractionService, new ExtractionTaskCoordinator.Host() {
+                @Override public boolean isAnimating() { return groupCommand.isAnimating(); }
+                @Override public String inputFolder() { return refs.inputFolderField().getText(); }
+                @Override public String outputFolder() { return refs.outputFolderField().getText(); }
+                @Override public int itemCount() { return items.size(); }
+                @Override public long visibleCount() { return MainController.this.visibleCount(); }
+                @Override public boolean imageMode() { return refs.imageModeToggle().isSelected(); }
+                @Override public boolean openFolderAfterComplete() { return refs.openFolderAfterCompleteCheck().isSelected(); }
+                @Override public AppConfig textParamsCache() { return paramDomain.textParamsCache; }
+                @Override public AppConfig imageParamsCache() { return paramDomain.imageParamsCache; }
+                @Override public boolean currentModeConfirmed() { return MainController.this.currentModeConfirmed(); }
+                @Override public boolean otherModeConfirmed() {
+                    return refs.imageModeToggle().isSelected() ? paramDomain.textParamsCache != null : paramDomain.imageParamsCache != null;
+                }
+                @Override public AppConfig currentModeParamsOrDefaults() { return MainController.this.currentParamsOrDefaults(); }
+                @Override public List<Object> dataOrder() { return items; }
+                @Override public OutputUnitPlanner.ItemView<PreviewItem> itemView() { return ITEM_VIEW; }
+                @Override public List<PreviewItem> allVisibleItems() { return MainController.this.allVisibleItems(); }
+                @Override public void cancelWorkspaceActivity() { MainController.this.cancelWorkspaceActivity(); }
+                @Override public Label statusLabel() { return refs.statusLabel(); }
+                @Override public void setStatusText(String text) { refs.statusLabel().setText(text); }
+                @Override public void setProgressBarActivity(String styleClass) { MainController.this.setProgressBarActivity(styleClass); }
+                @Override public void applyExtractResults(BatchProcessor.ProcessStats stats) { infoPresenter.applyExtractResults(stats); }
+                @Override public ProgressBar progressBar() { return refs.progressBar(); }
+                @Override public Button startButton() { return refs.startButton(); }
+                @Override public Button stopButton() { return refs.stopButton(); }
+            });
     boolean updatingAdjustCheck = false;
 
     // ===== 分组状态（F5） =====
@@ -1175,186 +1198,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     @FXML
     private void onStartProcessing() {
-        if (groupCommand.isAnimating()) {
-            return;
-        }
-        String inputFolder = refs.inputFolderField().getText();
-        String outputFolder = refs.outputFolderField().getText();
-
-        // 会话 18 · E4-3：前置校验**规则**（含"该用 WARNING 还是 ERROR"）已抽到
-        // ExtractionPreconditions（零 JavaFX、有独立单测）。
-        // 逐条委托以保持原判定**顺序**；级别由规则给出，UI 只负责展示。
-        // 刻意不调用聚合形态 validate(Facts)：那会把顺序与级别压平，属行为变更。
-        var denial = ExtractionPreconditions.deny(ExtractionPreconditions.blankInput(inputFolder));
-        if (denial == null) {
-            denial = ExtractionPreconditions.deny(ExtractionPreconditions.blankOutput(outputFolder));
-        }
-        if (denial == null) {
-            denial = ExtractionPreconditions.deny(ExtractionPreconditions.inputNotDirectory(inputFolder));
-        }
-        if (denial == null) {
-            denial = ExtractionPreconditions.deny(ExtractionPreconditions.noExtractableItems(
-                    items.size(), (int) visibleCount()));
-        }
-        if (denial != null) {
-            // 会话 19：ERROR 走居中错误卡片（必须确认），WARNING 走右上角 toast（非阻塞）
-            GuiNotifications.preconditionDenied(refs.statusLabel(), denial);
-            return;
-        }
-
-        boolean imageMode = refs.imageModeToggle().isSelected();
-
-        // 图片模式额外校验
-        if (imageMode) {
-            AppConfig params = currentParamsOrDefaults();
-            if (params.isEnableZipPackaging() || params.isEnableCbzPackaging()) {
-                File outRoot = new File(outputFolder);
-                if (!outRoot.isDirectory() && !outRoot.mkdirs() && !outRoot.isDirectory()) {
-                    log.warn(I18n.msg("log.maincontroller.30", outputFolder));
-                }
-            }
-        }
-
-        // 当前模式参数未确认 → 提醒（区分"从未设置"与"检测到模式切换"两种文案；会话 19：回调式确认）
-        boolean otherConfirmed = imageMode ? paramDomain.textParamsCache != null : paramDomain.imageParamsCache != null;
-        if (!currentModeConfirmed()) {
-            String msg = otherConfirmed
-                    ? I18n.get("extract.confirmModeSwitch")
-                    : I18n.get("extract.confirmParamsUnset");
-            GuiNotifications.paramTargetConfirm(refs.statusLabel(), msg, ok -> {
-                if (ok) {
-                    startExtractionTask();
-                }
-            });
-            return;
-        }
-
-        startExtractionTask();
-    }
-
-    /** 以已确认参数（未确认时用默认参数）+ 主窗口 GUI 状态构建运行时提取配置 */
-    AppConfig buildRuntimeConfig() {
-        AppConfig config = refs.imageModeToggle().isSelected() ? paramDomain.imageParamsCache : paramDomain.textParamsCache;
-        if (config == null) {
-            config = new AppConfig();
-        }
-        config.setInputFolder(refs.inputFolderField().getText());
-        config.setOutputFolder(refs.outputFolderField().getText());
-        config.setImageModeEnabled(refs.imageModeToggle().isSelected());
-        config.setOpenFolderAfterComplete(refs.openFolderAfterCompleteCheck().isSelected());
-        return config;
-    }
-
-    private Map<String, PerFileOverrides> overrides() {
-        Map<String, PerFileOverrides> map = new LinkedHashMap<>();
-        for (PreviewItem item : allVisibleItems()) {
-            map.put(item.path, new PerFileOverrides(item.chapterEnabled));
-        }
-        return map;
-    }
-
-    /**
-     * 执行正式提取任务（6.4/6.8：按输出单元拆分批次——未分组按来源 + 各组；
-     * 进度跨单元聚合、取消传播、stats 汇总、单元失败不中断整体）
-     */
-    private void startExtractionTask() {
-        // 取消工作区后台活动，避免与提取任务争用进度条/状态栏
-        cancelWorkspaceActivity();
-        boolean imageMode = refs.imageModeToggle().isSelected();
-
-        // 生成时间戳会话目录，隔离每次提取运行
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern(I18n.get("params.datetimeFormat")));
-        String sessionOutputFolder = new File(refs.outputFolderField().getText(), timestamp).getPath();
-        if (!new File(sessionOutputFolder).mkdirs()) {
-            log.warn(I18n.msg("log.maincontroller.31", sessionOutputFolder));
-        }
-        log.info(I18n.msg("log.maincontroller.32", sessionOutputFolder));
-
-        // 构建输出单元计划（FX 线程快照；单元参数补充运行时 GUI 字段）
-        List<OutputUnitPlanner.OutputUnit> units = OutputUnitPlanner.plan(
-                items, ITEM_VIEW, imageMode, paramDomain.textParamsCache, paramDomain.imageParamsCache, sessionOutputFolder);
-        for (OutputUnitPlanner.OutputUnit unit : units) {
-            AppConfig params = unit.getParams();
-            params.setInputFolder(refs.inputFolderField().getText());
-            params.setOutputFolder(refs.outputFolderField().getText());
-            params.setImageModeEnabled(imageMode);
-            params.setOpenFolderAfterComplete(refs.openFolderAfterCompleteCheck().isSelected());
-        }
-        log.info(I18n.msg("log.maincontroller.33", units.stream()
-                .map(u -> I18n.get("extract.groupFileCount", "group", u.label(),
-                        "count", u.fileCount())).toList()));
-        Map<String, PerFileOverrides> overrides = overrides();
-
-        extractionCoordinator.run(
-                new WorkspaceExtractionService.ExtractionRequest(sessionOutputFolder, units, overrides, imageMode,
-                        recursionDecision()),
-                refs.statusLabel(),
-                extractionUi(sessionOutputFolder, refs.openFolderAfterCompleteCheck().isSelected()));
-    }
-
-    /**
-     * 递归深度超限回调：窗口内居中确认（会话 19）。等待方是提取后台线程，不冻结界面 ——
-     * {@code Platform.runLater} 把确认卡排到 FX 线程，本线程 {@code future.join()} 等结果。
-     */
-    private java.util.function.Supplier<Boolean> recursionDecision() {
-        return () -> {
-            CompletableFuture<Boolean> future = new CompletableFuture<>();
-            String msg = I18n.get("alert.recursionDepthHeader") + "\n"
-                    + I18n.get("alert.recursionDepthContent")
-                    + I18n.get("alert.recursionDepthContinue")
-                    + I18n.get("alert.recursionDepthSkip");
-            Platform.runLater(() -> GuiNotifications.recursionDepthConfirm(refs.statusLabel(), msg, future::complete));
-            return future.join();
-        };
-    }
-
-    /** 提取任务的界面收尾动作（Q3 / P2）：只有控件状态与列表回写，与搬迁前三个回调逐条对应。 */
-    private ExtractionTaskCoordinator.ExtractionUi extractionUi(String sessionOutputFolder,
-                                                               boolean openFolderAfterComplete) {
-        return new ExtractionTaskCoordinator.ExtractionUi() {
-            @Override
-            public File sessionOutputFolder() {
-                return new File(sessionOutputFolder);
-            }
-
-            @Override
-            public boolean openFolderAfterComplete() {
-                return openFolderAfterComplete;
-            }
-
-            @Override
-            public void setProgress(double value) {
-                refs.progressBar().setProgress(value);
-            }
-
-            @Override
-            public void setProgressBarOutcome(ExtractionTaskCoordinator.ExtractOutcomeStyle style) {
-                setProgressBarActivity(switch (style) {
-                    case FAILED -> ExtractOutcomeStyles.PROGRESS_EXTRACT_FAILED;
-                    case WARNED -> ExtractOutcomeStyles.PROGRESS_EXTRACT_WARNED;
-                    case SUCCESS -> ExtractOutcomeStyles.PROGRESS_EXTRACT_SUCCESS;
-                });
-            }
-
-            @Override
-            public void extractionStarted() {
-                refs.startButton().setDisable(true);
-                refs.stopButton().setDisable(false);
-                refs.progressBar().setVisible(true);
-                refs.progressBar().setProgress(0);
-                setProgressBarActivity(ExtractOutcomeStyles.PROGRESS_EXTRACT_SUCCESS);   // 提取中 = 开始提取按钮绿
-            }
-
-            @Override
-            public void applyResults(BatchProcessor.ProcessStats stats) {
-                infoPresenter.applyExtractResults(stats);
-            }
-
-            @Override
-            public void setStatusText(String text) {
-                refs.statusLabel().setText(text);
-            }
-        };
+        // deny 链 → 图片模式额外校验 → R1.6 参数未确认卡 → 顺序门 → 启动：
+        // 编排本体已整体外迁到 ExtractionTaskCoordinator.begin()（步骤 2，台账 1.1-②），
+        // 此处仅 FXML 入口薄转发。顺序、日志键与文案键一律不变。
+        extractionCoordinator.begin();
     }
 
     /**
