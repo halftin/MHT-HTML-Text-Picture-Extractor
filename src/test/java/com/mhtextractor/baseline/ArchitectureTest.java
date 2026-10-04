@@ -261,7 +261,8 @@ class ArchitectureTest {
      *       文件级近似是刻意的：跨行构造目标（先取 {@code MainController.class} 再反射）也逃不掉，
      *       且 C3b 后实测所有含反射原语的文件剥注释后均无 {@code MainController} 代码引用。</li>
      *   <li><b>反射使用面冻结</b>：全部测试源码中，含反射原语的文件必须落在下面的白名单内
-     *       （当前 3 个文件、8 处，全部针对 {@code AppConfig} 或 JavaFX 类加载探测，与 MainController 无关）。
+     *       （当前 4 个文件、10 处，针对 {@code AppConfig} / JavaFX 类加载探测 /
+     *       WorkspaceModelTest 读取私有撤销栈，均与 MainController 无关）。
      *       新文件要引入反射必须显式扩白名单 —— 扩之前先想清楚是否真的需要、目标是不是 MainController。</li>
      * </ol>
      *
@@ -282,7 +283,8 @@ class ArchitectureTest {
         Set<String> allowlist = Set.of(
                 "com/mhtextractor/config/AppConfigCopyTest.java",
                 "com/mhtextractor/app/EffectiveParamsServiceTest.java",
-                "com/mhtextractor/app/LayerBTest.java");
+                "com/mhtextractor/app/LayerBTest.java",
+                "com/mhtextractor/app/WorkspaceModelTest.java");
 
         String driverCode = stripComments(Files.readString(driver, StandardCharsets.UTF_8));
         List<String> driverHits = primitives.stream().filter(driverCode::contains).toList();
@@ -317,8 +319,8 @@ class ArchitectureTest {
                         + String.join("\n  ", mcReflectors));
         assertTrue(newReflectionUsers.isEmpty(),
                 "测试源码新增反射使用面（白名单外文件）：\n  " + String.join("\n  ", newReflectionUsers)
-                        + "\n 反射使用面已冻结在 3 个文件（AppConfigCopyTest / EffectiveParamsServiceTest / LayerBTest，"
-                        + "全部针对 AppConfig 或 JavaFX 类加载探测）。确需扩白名单时，先确认目标不是 MainController。");
+                        + "\n 反射使用面已冻结在 4 个文件（AppConfigCopyTest / EffectiveParamsServiceTest / LayerBTest / WorkspaceModelTest，"
+                        + "针对 AppConfig / JavaFX 类加载探测 / WorkspaceModel 私有撤销栈读取）。确需扩白名单时，先确认目标不是 MainController。");
         System.out.println("[arch] 测试侧反射：MainController 目标 0 / 驱动原语 0 / 白名单外文件 0");
     }
 
@@ -994,8 +996,8 @@ class ArchitectureTest {
 
     // ==================== 7. 测试访问面冻结（D2 · 第 13 条不变式） ====================
 
-    /** 测试访问面清单条目数上限（D2 实测 121）：只减不增；收紧访问面后同步下调。 */
-    private static final int TEST_ACCESS_SURFACE_MAX = 121;
+    /** 测试访问面清单条目数上限：2026-10-05 S2（E2.1/E2.2）一次性上调至 124，此后只减不增。 */
+    private static final int TEST_ACCESS_SURFACE_MAX = 124;
 
     /**
      * 「测试访问面冻结」不变式（D2）：三条断言合取 + 驱动文件完整性守卫，失败信息分区列出。

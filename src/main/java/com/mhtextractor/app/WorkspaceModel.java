@@ -999,14 +999,4 @@ public final class WorkspaceModel {
         }
         return out;
     }
-
-    /**
-     * 测试支撑：压入一条"本模型尚未支持"的撤销记录，用于验证
-     * {@link #undo()} 对未支持类型的行为（返回 false 且原样压回）。
-     *
-     * <p>仅包级可见，生产路径不应调用。</p>
-     */
-    void pushUnsupportedForTest() {
-        undoManager.push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of()));
-    }
 }

@@ -210,7 +210,7 @@ public final class HtmlSourceViewer {
      * @param title  标题栏文本（调用方给：platform 层不产本地化文案）
      * @param html   原始 HTML 源码文本（可含 {@code \r\n}）
      */
-    public static void showSource(Node anchor, String title, String html) {
+    static void showSource(Node anchor, String title, String html) {
         onFxThread(() -> hostOf(anchor).showSourceNow(title, html));
     }
 
@@ -245,14 +245,14 @@ public final class HtmlSourceViewer {
     }
 
     /** 左侧面板当前是否由本查看器占据且已展开（守卫与探针用）。 */
-    public static boolean isShowing(Node anchor) {
+    static boolean isShowing(Node anchor) {
         SidePanelHost h = SidePanelHost.of(anchor);
         HtmlSourceViewer v = h == null ? null : VIEWERS.get(h);
         return v != null && h.isLeftShowing();
     }
 
     /** 由锚点定位（首次调用则创建）该窗口的查看器；宿主未安装 → 抛异常（不静默吞掉）。 */
-    public static HtmlSourceViewer hostOf(Node anchor) {
+    static HtmlSourceViewer hostOf(Node anchor) {
         SidePanelHost sidePanelHost = SidePanelHost.of(anchor);
         if (sidePanelHost == null) {
             throw new IllegalStateException("SidePanelHost 未安装：见 App.start() 的 SidePanelHost.install(root)");
@@ -260,15 +260,15 @@ public final class HtmlSourceViewer {
         return VIEWERS.computeIfAbsent(sidePanelHost, HtmlSourceViewer::new);
     }
 
-    // ==================== 探针 / 自动化接缝 ====================
+    // ==================== 探针 / 自动化接缝（E2.1 起收窄为包级：tools/probes 经反射观测） ====================
 
     /** 查看器根节点（左侧面板的内容）；类型是 {@link Parent} 以便调用方直接 {@code layout()}。 */
-    public Parent node() {
+    Parent node() {
         return root;
     }
 
     /** 总行数。 */
-    public int lineCount() {
+    int lineCount() {
         return rows.size();
     }
 
@@ -279,47 +279,47 @@ public final class HtmlSourceViewer {
      * 这一次的结果（实测踩过：真实入口的断言读到的是上一步的 5006 行）。判据应当是
      * "这一次载入的序号比调用前更大"。</p>
      */
-    public long loadCount() {
+    long loadCount() {
         return loadCount;
     }
 
     /** 查找输入框（R5.2）。 */
-    public TextField queryField() {
+    TextField queryField() {
         return queryField;
     }
 
     /** 计数标签（R5.3："第 n / 共 m 处"）。 */
-    public Label countLabel() {
+    Label countLabel() {
         return countLabel;
     }
 
     /** 查找栏节点（R5.1：它挂在查看器底部）。 */
-    public Node findBar() {
+    Node findBar() {
         return findBar;
     }
 
     /** 查找栏里的四个线条图标按钮：{@code [查, 上一个, 下一个, 关闭]}（顺序固定）。 */
-    public List<Button> findButtons() {
+    List<Button> findButtons() {
         return List.of(findButton, prevButton, nextButton, closeFindButton);
     }
 
     /** 命中总数（R5.3 的 m）。 */
-    public int hitCount() {
+    int hitCount() {
         return hits.size();
     }
 
     /** 当前命中序号（1 基；0 = 无命中）。 */
-    public int currentHitNumber() {
+    int currentHitNumber() {
         return hitIndex + 1;
     }
 
     /** 当前命中的行下标（-1 = 无）。 */
-    public int currentHitLine() {
+    int currentHitLine() {
         return hitIndex >= 0 && hitIndex < hits.size() ? hits.get(hitIndex).line() : -1;
     }
 
     /** 当前命中的行内区间 {@code [start, end)}；无命中 → {@code null}。 */
-    public int[] currentHitColumns() {
+    int[] currentHitColumns() {
         if (hitIndex < 0 || hitIndex >= hits.size()) {
             return null;
         }
@@ -328,12 +328,12 @@ public final class HtmlSourceViewer {
     }
 
     /** 因命中变化而发生的定点重绘次数。 */
-    public long repaintCount() {
+    long repaintCount() {
         return repaints;
     }
 
     /** 累计被指名重绘的行数（判据：远小于总行数）。 */
-    public long repaintedLineCount() {
+    long repaintedLineCount() {
         return repaintedLines;
     }
 
@@ -343,73 +343,73 @@ public final class HtmlSourceViewer {
      * <p>这是"不整表刷新"的实测证据：整表 {@code setAll}/{@code refresh} 会让它随总行数增长，
      * 定点重绘应当只与可见区域同阶。</p>
      */
-    public int cellsBuiltInLastRefresh() {
+    int cellsBuiltInLastRefresh() {
         return cellsBuiltInLastRefresh;
     }
 
     /** 最近一次选择重绘里真正被重画的 cell 数（= 可见 cell 数；决策 3.9 的判据）。 */
-    public int selectionCellsPaintedInLastRepaint() {
+    int selectionCellsPaintedInLastRepaint() {
         return selCellsPaintedInLastRepaint;
     }
 
     /** 探针/测试接缝：{@link Text} 节点属性键 —— 逻辑列区间 {@code [start, end)}（{@code int[2]}）。 */
-    public static final String RUN_COLUMNS_KEY = "htmlSourceViewer.runColumns";
+    static final String RUN_COLUMNS_KEY = "htmlSourceViewer.runColumns";
     /** 探针/测试接缝：{@link Text} 节点属性键 —— 基础填充色（松手/滚动/重载时还原到它）。 */
-    public static final String RUN_BASE_FILL_KEY = "htmlSourceViewer.runBaseFill";
+    static final String RUN_BASE_FILL_KEY = "htmlSourceViewer.runBaseFill";
 
     /** 行号栏 + 间距的像素宽（R2.8 的对齐判据用）。 */
-    public double gutterWidth() {
+    double gutterWidth() {
         return digits * charWidth + GUTTER_GAP;
     }
 
     /** 行号栏的位数（= 总行数的位数；R2.8 说行号列宽度必须固定，就是它钉的）。 */
-    public int gutterDigits() {
+    int gutterDigits() {
         return digits;
     }
 
     /** 行号栏与内容之间的固定间距（探针按 {@code digits × charWidth + 本值} 复算行号列宽）。 */
-    public double gutterGap() {
+    double gutterGap() {
         return GUTTER_GAP;
     }
 
     /** 单字符像素宽（探针核对"不软换行"时按字符数折算用）。 */
-    public double charWidth() {
+    double charWidth() {
         return charWidth;
     }
 
     /** 内层 {@code ListView}（虚拟化判据：{@code lookupAll(".list-cell")} 的实测节点数）。 */
-    public ListView<?> listView() {
+    ListView<?> listView() {
         return listView;
     }
 
     /** 外层横向滚动容器（R2.8）。 */
-    public ScrollPane scroller() {
+    ScrollPane scroller() {
         return scroller;
     }
 
     /** 内容视口的像素宽（E2 起语义改为<b>视口宽</b>：软换行后内容不再比视口宽）。 */
-    public double contentPixelWidth() {
+    double contentPixelWidth() {
         return scroller.getViewportBounds().getWidth();
     }
 
     /** 单视觉行的像素高（E2：折行后 cell 高度 = 视觉行数 × 本值；探针的几何判据用）。 */
-    public double rowHeight() {
+    double rowHeight() {
         return ROW_HEIGHT;
     }
 
     /** 当前每视觉行的逻辑列数（视口宽 ÷ 单字符宽；软换行的几何基准，渲染与选择共用）。 */
-    public int wrapCols() {
+    int wrapCols() {
         double contentW = scroller.getViewportBounds().getWidth() - gutterWidth() - CONTENT_TAIL;
         return HtmlWrapMap.colsPerRow(contentW, charWidth);
     }
 
     /** 以纯文本取某行的内容。 */
-    public String lineText(int index) {
+    String lineText(int index) {
         return index >= 0 && index < rows.size() ? plainText(rows.get(index).tokens()) : null;
     }
 
     /** 当前字符选择范围（起止已归一化）；无选择 / 空选择 → {@code null}。 */
-    public HtmlTextSelection.Range selectionRange() {
+    HtmlTextSelection.Range selectionRange() {
         if (selAnchor == null || selCaret == null) {
             return null;
         }
@@ -418,7 +418,7 @@ public final class HtmlSourceViewer {
     }
 
     /** 把当前选择复制进系统剪贴板（空选择 → 不动剪贴板、不抛异常）。 */
-    public void copySelection() {
+    void copySelection() {
         HtmlTextSelection.Range r = selectionRange();
         if (r == null) {
             return;

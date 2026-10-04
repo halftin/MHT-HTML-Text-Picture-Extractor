@@ -344,7 +344,7 @@ public class HtmlViewerProbe extends Application {
         openStartNanos = System.nanoTime();
         HtmlSourceViewer.showFile(anchor, I18n.get("browser.viewerTitle"), longFile);
         openMillis = (System.nanoTime() - openStartNanos) / 1_000_000;
-        viewer = HtmlSourceViewer.hostOf(anchor);
+        viewer = hostOf(anchor);
         System.out.println("HtmlSourceViewer.showFile returned in " + openMillis
                 + " ms (FX thread not blocked by the file read)");
     }
@@ -353,8 +353,8 @@ public class HtmlViewerProbe extends Application {
         leftPanel = scene.lookup("#sourceViewerPanel");
         rightPanel = scene.lookup("#sidePanel");
         Button collapse = (Button) scene.lookup("#sourceViewerCollapse");
-        scroller = viewer.scroller();
-        listView = viewer.listView();
+        scroller = vScroller(viewer);
+        listView = vList(viewer);
 
         check("R2.1 the left panel node exists (#sourceViewerPanel)", leftPanel instanceof BorderPane);
         check("R2.1 the left panel is visible right after showFile", leftPanel != null && leftPanel.isVisible());
@@ -369,8 +369,8 @@ public class HtmlViewerProbe extends Application {
                 leftPanel.getLayoutBounds().getWidth(), overlay.getWidth(), TOL),
                 Math.abs(leftPanel.getLayoutBounds().getWidth() - overlay.getWidth() * 0.5) <= TOL);
 
-        check("R2.1 the viewer is hosted in the left panel (center == viewer.node())",
-                leftPanel instanceof BorderPane bp && bp.getCenter() == viewer.node());
+        check("R2.1 the viewer is hosted in the left panel (center == vNode(viewer))",
+                leftPanel instanceof BorderPane bp && bp.getCenter() == vNode(viewer));
         check("R2.1 the collapse button is a line icon (FontIcon graphic) with a tooltip",
                 collapse != null && collapse.getGraphic() instanceof FontIcon
                         && collapse.getTooltip() != null);
@@ -414,7 +414,7 @@ public class HtmlViewerProbe extends Application {
                         + "(selected " + before + " -> " + textModeToggle.isSelected() + ")",
                 textModeToggle.isSelected() != before);
         List<String> hijackers = new ArrayList<>();
-        for (Button b : viewer.findButtons()) {
+        for (Button b : vFindButtons(viewer)) {
             if (b.isDefaultButton()) {
                 hijackers.add(b.getId());
             }
@@ -566,6 +566,131 @@ public class HtmlViewerProbe extends Application {
         }
     }
 
+    // ---- E2.1：HtmlSourceViewer 观测面收窄为包级后，探针统一经 invoke/invokeOn 反射观测 ----
+    // 静态入口与常量读取需要两个新原语（invokeStatic / staticString）；按选项 D 登记进
+    // test-access-surface.tsv（reflect-dynamic 通道，按 文件+方法 计）。
+
+    /** 反射调用静态方法（包级/私有均可；E2.1 起查看器的静态入口不再 public）。 */
+    private static Object invokeStatic(Class<?> owner, String name, Class<?>[] types, Object... args) {
+        try {
+            java.lang.reflect.Method m = owner.getDeclaredMethod(name, types);
+            m.setAccessible(true);
+            return m.invoke(null, args);
+        } catch (Exception e) {
+            System.out.println("      (invokeStatic " + owner.getSimpleName() + "." + name + " failed: " + e + ")");
+            return null;
+        }
+    }
+
+    /** 反射读取静态 String 常量（E2.1 起查看器的属性键常量不再 public）。 */
+    private static String staticString(Class<?> owner, String name) {
+        try {
+            java.lang.reflect.Field f = owner.getDeclaredField(name);
+            f.setAccessible(true);
+            return (String) f.get(null);
+        } catch (Exception e) {
+            System.out.println("      (staticString " + owner.getSimpleName() + "." + name + " failed: " + e + ")");
+            return null;
+        }
+    }
+
+    /** 查看器的包级静态入口 showSource（反射转发，签名与生产一致）。 */
+    private static void showSource(Node anchor, String title, String html) {
+        invokeStatic(HtmlSourceViewer.class, "showSource",
+                new Class<?>[]{Node.class, String.class, String.class}, anchor, title, html);
+    }
+
+    /** 查看器的包级静态查询 isShowing（反射转发）。 */
+    private static boolean isShowing(Node anchor) {
+        Boolean b = (Boolean) invokeStatic(HtmlSourceViewer.class, "isShowing",
+                new Class<?>[]{Node.class}, anchor);
+        return b != null && b;
+    }
+
+    /** 查看器的包级静态定位 hostOf（反射转发）。 */
+    private static HtmlSourceViewer hostOf(Node anchor) {
+        return (HtmlSourceViewer) invokeStatic(HtmlSourceViewer.class, "hostOf",
+                new Class<?>[]{Node.class}, anchor);
+    }
+
+    /** 查看器包级常量 RUN_COLUMNS_KEY / RUN_BASE_FILL_KEY 的反射读（各缓存一次）。 */
+    private static String runColumnsKey;
+    private static String runBaseFillKey;
+
+    private static String runColumnsKey() {
+        if (runColumnsKey == null) {
+            runColumnsKey = staticString(HtmlSourceViewer.class, "RUN_COLUMNS_KEY");
+        }
+        return runColumnsKey;
+    }
+
+    private static String runBaseFillKey() {
+        if (runBaseFillKey == null) {
+            runBaseFillKey = staticString(HtmlSourceViewer.class, "RUN_BASE_FILL_KEY");
+        }
+        return runBaseFillKey;
+    }
+
+    // ---- 包级实例成员的类型化反射转发 ----
+
+    private static Parent vNode(HtmlSourceViewer v) {
+        return (Parent) invoke(v, "node", new Class<?>[0]);
+    }
+
+    private static int vInt(HtmlSourceViewer v, String name) {
+        return ((Number) invoke(v, name, new Class<?>[0])).intValue();
+    }
+
+    private static long vLong(HtmlSourceViewer v, String name) {
+        return ((Number) invoke(v, name, new Class<?>[0])).longValue();
+    }
+
+    private static double vDbl(HtmlSourceViewer v, String name) {
+        return ((Number) invoke(v, name, new Class<?>[0])).doubleValue();
+    }
+
+    private static String vLine(HtmlSourceViewer v, int index) {
+        return (String) invoke(v, "lineText", new Class<?>[]{int.class}, index);
+    }
+
+    private static TextField vQuery(HtmlSourceViewer v) {
+        return (TextField) invoke(v, "queryField", new Class<?>[0]);
+    }
+
+    private static Label vCountLabel(HtmlSourceViewer v) {
+        return (Label) invoke(v, "countLabel", new Class<?>[0]);
+    }
+
+    private static Node vFindBar(HtmlSourceViewer v) {
+        return (Node) invoke(v, "findBar", new Class<?>[0]);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Button> vFindButtons(HtmlSourceViewer v) {
+        return (List<Button>) invoke(v, "findButtons", new Class<?>[0]);
+    }
+
+    private static int[] vHitCols(HtmlSourceViewer v) {
+        return (int[]) invoke(v, "currentHitColumns", new Class<?>[0]);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ListView<?> vList(HtmlSourceViewer v) {
+        return (ListView<?>) invoke(v, "listView", new Class<?>[0]);
+    }
+
+    private static ScrollPane vScroller(HtmlSourceViewer v) {
+        return (ScrollPane) invoke(v, "scroller", new Class<?>[0]);
+    }
+
+    private static HtmlTextSelection.Range vRange(HtmlSourceViewer v) {
+        return (HtmlTextSelection.Range) invoke(v, "selectionRange", new Class<?>[0]);
+    }
+
+    private static void vCopy(HtmlSourceViewer v) {
+        invoke(v, "copySelection", new Class<?>[0]);
+    }
+
     private static void sleepMs(long ms) {
         try {
             Thread.sleep(ms);
@@ -635,15 +760,15 @@ public class HtmlViewerProbe extends Application {
             nextStep();
             return;
         }
-        long before = viewer.loadCount();
+        long before = vLong(viewer, "loadCount");
         viewSource.fire();
         awaitCondition("unparseable fixture", 8_000, this::errorCardShown, expired -> {
             System.out.println("R2 control group (" + name + "): loadCount " + before + " -> "
-                    + viewer.loadCount() + " errorCard=" + errorCardShown()
+                    + vLong(viewer, "loadCount") + " errorCard=" + errorCardShown()
                     + " (timedOut=" + expired + ")");
             check("R2 control group: the unparseable item does NOT load anything into the viewer "
-                            + "(loadCount " + before + " -> " + viewer.loadCount() + ")",
-                    viewer.loadCount() == before);
+                            + "(loadCount " + before + " -> " + vLong(viewer, "loadCount") + ")",
+                    vLong(viewer, "loadCount") == before);
             check("R2 control group: the failure is reported as an in-app error card, not silently",
                     errorCardShown());
             dismissModal();
@@ -669,7 +794,7 @@ public class HtmlViewerProbe extends Application {
         }
         check("R2 #viewSourceButton is enabled for a selected item", !viewSource.isDisable());
         // 记下"调用前的载入序号"：光看 lineCount>0 会把上一步的内容当成这一步的结果（实测踩过）
-        long loadBefore = viewer.loadCount();
+        long loadBefore = vLong(viewer, "loadCount");
         viewSource.fire();
         awaitViewerContent("real entry point", loadBefore);
     }
@@ -697,7 +822,7 @@ public class HtmlViewerProbe extends Application {
     /** 等查看器载入到"这一次"的内容（用载入序号判定，不用"行数 > 0"）。 */
     private void awaitViewerContent(String label, long loadBefore) {
         awaitCondition(label, 20_000,
-                () -> HtmlSourceViewer.isShowing(anchor) && viewer.loadCount() > loadBefore,
+                () -> isShowing(anchor) && vLong(viewer, "loadCount") > loadBefore,
                 expired -> {
                     try {
                         checkR2RealEntryPoint(label, !expired, loadBefore);
@@ -711,17 +836,17 @@ public class HtmlViewerProbe extends Application {
     }
 
     private void checkR2RealEntryPoint(String label, boolean ready, long loadBefore) {
-        String firstLine = viewer.lineText(0);
-        System.out.println("R2 " + label + ": showing=" + HtmlSourceViewer.isShowing(anchor)
-                + " loadCount " + loadBefore + " -> " + viewer.loadCount()
-                + " lineCount=" + viewer.lineCount()
+        String firstLine = vLine(viewer, 0);
+        System.out.println("R2 " + label + ": showing=" + isShowing(anchor)
+                + " loadCount " + loadBefore + " -> " + vLong(viewer, "loadCount")
+                + " lineCount=" + vInt(viewer, "lineCount")
                 + " firstLine=" + String.valueOf(firstLine).trim());
         check("R2 the real 「查看HTML源码」 entry opened the IN-APP left viewer (" + label + ", ready="
                 + ready + ")", ready);
         check("R2 that entry really loaded NEW content (loadCount " + loadBefore + " -> "
-                + viewer.loadCount() + ")", viewer.loadCount() > loadBefore);
+                + vLong(viewer, "loadCount") + ")", vLong(viewer, "loadCount") > loadBefore);
         check("R2 the viewer is the left panel's content (not a browser tab)",
-                leftPanel instanceof BorderPane bp && bp.getCenter() == viewer.node());
+                leftPanel instanceof BorderPane bp && bp.getCenter() == vNode(viewer));
         check("R2 the loaded source really is the fixture's HTML (line 0 contains '<'): "
                         + String.valueOf(firstLine).trim(),
                 firstLine != null && firstLine.contains("<"));
@@ -776,7 +901,7 @@ public class HtmlViewerProbe extends Application {
             this::snapshotFinal, this::finish);
 
     /**
-     * 等到 {@code viewer.lineCount() == expected} 再回到步骤驱动；超时则如实打印并继续。
+     * 等到查看器行数 == expected 再回到步骤驱动；超时则如实打印并继续。
      *
      * <p>两个都踩过的坑：</p>
      * <ul>
@@ -794,14 +919,14 @@ public class HtmlViewerProbe extends Application {
             @Override
             public void run() {
                 Platform.runLater(() -> {
-                    boolean ok = viewer.lineCount() == expected;
+                    boolean ok = vInt(viewer, "lineCount") == expected;
                     if (!ok && System.currentTimeMillis() <= deadline) {
                         return;   // 还没好，等下一拍
                     }
                     cancel();
                     loadMillis = (System.nanoTime() - loadStartNanos) / 1_000_000;
                     System.out.println("awaitLines(" + label + "): " + (ok ? "ready" : "TIMED OUT")
-                            + " lineCount=" + viewer.lineCount() + " expected=" + expected
+                            + " lineCount=" + vInt(viewer, "lineCount") + " expected=" + expected
                             + " after " + loadMillis + " ms");
                     then.run();
                 });
@@ -816,11 +941,11 @@ public class HtmlViewerProbe extends Application {
      * 节点一次性建好"，这个数会等于行数。所以"远小于行数"就是虚拟化，不是"感觉很快"。</p>
      */
     private void checkR27Virtualization() {
-        viewer.node().applyCss();
-        viewer.node().layout();
-        int cells = viewer.node().lookupAll(".list-cell").size();
-        int texts = viewer.node().lookupAll(".html-source-text").size();
-        int rows = viewer.lineCount();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
+        int cells = vNode(viewer).lookupAll(".list-cell").size();
+        int texts = vNode(viewer).lookupAll(".html-source-text").size();
+        int rows = vInt(viewer, "lineCount");
         System.out.println("R2.7 big source: lines=" + rows + " cells=" + cells
                 + " textNodes=" + texts + " load=" + loadMillis + " ms");
         check("R2.7 the " + BIG_LINES + "-line source loaded within " + LOAD_TIMEOUT_MS
@@ -844,18 +969,18 @@ public class HtmlViewerProbe extends Application {
      * 滚动重建）；每条复制断言都从<b>系统剪贴板读回</b>并<b>逐字符</b>比对。</p>
      */
     private void checkSelectionAndCopy() {
-        HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), selectionSource());
-        viewer.node().applyCss();
-        viewer.node().layout();
-        System.out.println("E1 selection source: lines=" + viewer.lineCount());
-        for (int i = 0; i < viewer.lineCount(); i++) {
-            System.out.println("    [" + i + "] <" + esc(viewer.lineText(i)) + ">");
+        showSource(anchor, I18n.get("browser.viewerTitle"), selectionSource());
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
+        System.out.println("E1 selection source: lines=" + vInt(viewer, "lineCount"));
+        for (int i = 0; i < vInt(viewer, "lineCount"); i++) {
+            System.out.println("    [" + i + "] <" + esc(vLine(viewer, i)) + ">");
         }
         // 坐标几何诊断：cell 边界 / 行号栏 / 内容流 / 第一个 Text 的场景 x，四个应逐级衔接
         Node diag = revealCellForLine(4);
         if (diag != null) {
             Bounds cb = diag.localToScene(diag.getBoundsInLocal());
-            double derived = cb.getMinX() + viewer.gutterWidth();
+            double derived = cb.getMinX() + vDbl(viewer, "gutterWidth");
             double textMinX = Double.NaN;
             for (Node n : diag.lookupAll(".html-source-text")) {
                 if (n instanceof javafx.scene.text.Text t && !t.getText().isEmpty()) {
@@ -875,7 +1000,7 @@ public class HtmlViewerProbe extends Application {
                 flowMinX = tf.localToScene(tf.getBoundsInLocal()).getMinX();
             }
             System.out.println("E1 geometry: cellMinX=" + fmt(cb.getMinX())
-                    + " gutterWidth=" + fmt(viewer.gutterWidth())
+                    + " gutterWidth=" + fmt(vDbl(viewer, "gutterWidth"))
                     + " derivedContentX=" + fmt(derived)
                     + " firstTextSceneMinX=" + fmt(textMinX)
                     + " flowBoundsSceneMinX=" + fmt(flowMinX)
@@ -883,16 +1008,16 @@ public class HtmlViewerProbe extends Application {
                     + " flowDelta=" + fmt(flowMinX - derived));
         }
         // #13 的行模型快照（断言前先记下）
-        int linesBefore = viewer.lineCount();
+        int linesBefore = vInt(viewer, "lineCount");
         List<String> modelBefore = new ArrayList<>();
         for (int i = 0; i < linesBefore; i++) {
-            modelBefore.add(viewer.lineText(i));
+            modelBefore.add(vLine(viewer, i));
         }
 
         // #1 单行内拖选 → 剪贴板 == 原始子串（API 复制路径，逐字符）
         dragSelect(4, 3, 4, 21);
         copyViaApi();
-        String expected1 = viewer.lineText(4).substring(3, 21);
+        String expected1 = vLine(viewer, 4).substring(3, 21);
         check("E1#1 single-line drag copies the exact source substring (clipboard="
                         + esc(clipboardString()) + ")",
                 charByChar("E1#1", expected1, clipboardString()));
@@ -900,9 +1025,9 @@ public class HtmlViewerProbe extends Application {
         // #2 跨语法 token（标签 → 正文 → 标签）→ 剪贴板 == 原始字符（无标记注入）。
         // 【需求变更】原 (3,0)→(4,21) 跨行（注释→标签→正文）；决策 3.2 后只允许行内选择，
         // 改为行 4 整行。
-        dragSelect(4, 0, 4, viewer.lineText(4).length());
+        dragSelect(4, 0, 4, vLine(viewer, 4).length());
         copyViaKey();
-        String expected2 = viewer.lineText(4);
+        String expected2 = vLine(viewer, 4);
         check("E1#2 cross-token (tag→text→tag, single line) copy is the raw source chars (clipboard="
                         + esc(clipboardString()) + ")",
                 charByChar("E1#2", expected2, clipboardString()));
@@ -911,45 +1036,45 @@ public class HtmlViewerProbe extends Application {
         // 决策 3.2 后跨行选择不存在，改为单行钳制断言（行尾 = 拖出行的下/右端）。
         dragSelect(3, 4, 5, 2);
         copyViaKey();
-        HtmlTextSelection.Range r3 = viewer.selectionRange();
-        String expected3 = viewer.lineText(3).substring(4);
+        HtmlTextSelection.Range r3 = vRange(viewer);
+        String expected3 = vLine(viewer, 3).substring(4);
         check("E1#3 dragging DOWN to another line clamps to the anchor line's end (range="
                         + describeRange(r3) + ", clipboard=" + esc(clipboardString()) + ")",
                 r3 != null && r3.startLine() == 3 && r3.endLine() == 3
-                        && r3.startCol() == 4 && r3.endCol() == viewer.lineText(3).length()
+                        && r3.startCol() == 4 && r3.endCol() == vLine(viewer, 3).length()
                         && charByChar("E1#3", expected3, clipboardString()));
 
         // #4 向下拖过空行 → 仍钳到锚点行的行尾。【需求变更】原为"含空行的跨行连续 LF 复制"；
         // 决策 3.2 后中间的空行不再参与选择。
         dragSelect(1, 2, 3, 8);
         copyViaKey();
-        HtmlTextSelection.Range r4 = viewer.selectionRange();
-        String expected4 = viewer.lineText(1).substring(2);
+        HtmlTextSelection.Range r4 = vRange(viewer);
+        String expected4 = vLine(viewer, 1).substring(2);
         check("E1#4 dragging DOWN past an empty line clamps to the anchor line's end (range="
                         + describeRange(r4) + ", clipboard=" + esc(clipboardString()) + ")",
                 r4 != null && r4.startLine() == 1 && r4.endLine() == 1
-                        && r4.startCol() == 2 && r4.endCol() == viewer.lineText(1).length()
+                        && r4.startCol() == 2 && r4.endCol() == vLine(viewer, 1).length()
                         && charByChar("E1#4", expected4, clipboardString()));
 
         // #5 行首缩进 + 行尾空格保留（行 1 = 4 个前导空格 + 4 个行尾空格）
-        dragSelect(1, 0, 1, viewer.lineText(1).length());
+        dragSelect(1, 0, 1, vLine(viewer, 1).length());
         copyViaKey();
         check("E1#5 indent and trailing spaces survive char-by-char (clipboard="
                         + esc(clipboardString()) + ")",
-                charByChar("E1#5", viewer.lineText(1), clipboardString()));
+                charByChar("E1#5", vLine(viewer, 1), clipboardString()));
 
         // #6 复制文本不含行号（逐字符 equals 已证；再加反向断言：不以行号字符串开头）
         String clip6 = clipboardString();
         String first6 = clip6 == null || clip6.isEmpty() ? "(empty)" : escChar(clip6.charAt(0));
         check("E1#6 the copy contains no gutter line number (starts with '" + first6
                         + "', not the line number '2')",
-                charByChar("E1#6", viewer.lineText(1), clip6) && clip6 != null && !clip6.startsWith("2"));
+                charByChar("E1#6", vLine(viewer, 1), clip6) && clip6 != null && !clip6.startsWith("2"));
 
         // #7 平台复制键（Ctrl/Cmd+C）触发复制（与 #1 的 API 路径对照：这里只有按键；
         // 哨兵与落地校验在 copyViaKey 内完成，读回必为本次按键的结果）
         dragSelect(4, 5, 4, 10);
         copyViaKey();
-        String expected7 = viewer.lineText(4).substring(5, 10);
+        String expected7 = vLine(viewer, 4).substring(5, 10);
         check("E1#7 the platform copy key (Ctrl/Cmd+C) copies the selection (clipboard="
                         + esc(clipboardString()) + ")",
                 charByChar("E1#7", expected7, clipboardString()));
@@ -972,29 +1097,29 @@ public class HtmlViewerProbe extends Application {
         // #9 在 gutter 上按下拖动 → 列 clamp 到内容区，行号不进复制
         dragSelectFromGutter(4, 21);
         copyViaApi();
-        String expected9 = viewer.lineText(4).substring(0, 21);
+        String expected9 = vLine(viewer, 4).substring(0, 21);
         check("E1#9 a drag starting in the gutter does not copy line numbers (clipboard="
                         + esc(clipboardString()) + ")",
                 charByChar("E1#9", expected9, clipboardString()));
 
         // #10 选择后 find 命中数不变（查找未被破坏）
-        viewer.queryField().setText(SEARCH_TOKEN);
-        viewer.findButtons().get(0).fire();
-        int hitsBefore = viewer.hitCount();
+        vQuery(viewer).setText(SEARCH_TOKEN);
+        vFindButtons(viewer).get(0).fire();
+        int hitsBefore = vInt(viewer, "hitCount");
         dragSelect(2, 0, 4, 10);
         check("E1#10 find hits are unchanged by a selection (before=" + hitsBefore
-                        + " after=" + viewer.hitCount() + ")",
-                hitsBefore > 0 && viewer.hitCount() == hitsBefore);
+                        + " after=" + vInt(viewer, "hitCount") + ")",
+                hitsBefore > 0 && vInt(viewer, "hitCount") == hitsBefore);
 
         // #11 选择后语法高亮仍在 + html-source-selected 出现 + find 命中样式并存。
         // 【需求变更】原选择是跨行 (2,0)→(4,10)；决策 3.2 后改成行内选择 (4,3)→(4,21)。
         dragSelect(4, 3, 4, 21);
-        viewer.node().applyCss();
-        viewer.node().layout();
-        long textNodes = viewer.node().lookupAll(".html-source-text").size();
-        long selectedVisible = viewer.node().lookupAll(".html-source-selected").stream()
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
+        long textNodes = vNode(viewer).lookupAll(".html-source-text").size();
+        long selectedVisible = vNode(viewer).lookupAll(".html-source-selected").stream()
                 .filter(Node::isVisible).count();
-        long hitNodes = viewer.node().lookupAll(".html-source-hit").size();
+        long hitNodes = vNode(viewer).lookupAll(".html-source-hit").size();
         check("E1#11 syntax highlight survives and the selection class shows while the find hit "
                         + "coexists (textNodes=" + textNodes + " selectedVisible=" + selectedVisible
                         + " hitNodes=" + hitNodes + ")",
@@ -1006,7 +1131,7 @@ public class HtmlViewerProbe extends Application {
         // S1 单行内拖动选择 → 选区范围精确且单行（3.10 的选中态截图在专用的
         // setupStep5SnapshotSelection / snapshotStep5SelectionAndSetupLayers 两步拍，
         // 与本步内的 #11 快照不在同一拍 —— 场景快照要跨脉冲才反映当前渲染）
-        HtmlTextSelection.Range r1 = viewer.selectionRange();
+        HtmlTextSelection.Range r1 = vRange(viewer);
         check("step5 S1 the selection range is exact and SINGLE-line (range=" + describeRange(r1) + ")",
                 r1 != null && r1.startLine() == 4 && r1.endLine() == 4
                         && r1.startCol() == 3 && r1.endCol() == 21);
@@ -1014,64 +1139,64 @@ public class HtmlViewerProbe extends Application {
         // S2 拖出行的左端 → 钳到行首（列 0）
         dragSelect(4, 10, 4, -2);
         copyViaApi();
-        HtmlTextSelection.Range r2 = viewer.selectionRange();
+        HtmlTextSelection.Range r2 = vRange(viewer);
         check("step5 S2 dragging past the line's LEFT edge clamps to 行首 (range="
                         + describeRange(r2) + ")", r2 != null && r2.startLine() == 4 && r2.endLine() == 4
                 && r2.startCol() == 0 && r2.endCol() == 10);
         check("step5 S2 the left-clamped copy is char-exact (clipboard=" + esc(clipboardString()) + ")",
-                charByChar("step5-S2", viewer.lineText(4).substring(0, 10), clipboardString()));
+                charByChar("step5-S2", vLine(viewer, 4).substring(0, 10), clipboardString()));
         // S3 拖出行的右端 → 钳到行尾
-        dragSelect(4, 10, 4, viewer.lineText(4).length() + 5);
+        dragSelect(4, 10, 4, vLine(viewer, 4).length() + 5);
         copyViaApi();
-        HtmlTextSelection.Range r3b = viewer.selectionRange();
+        HtmlTextSelection.Range r3b = vRange(viewer);
         check("step5 S3 dragging past the line's RIGHT edge clamps to 行尾 (range="
                         + describeRange(r3b) + ")", r3b != null && r3b.startLine() == 4 && r3b.endLine() == 4
-                && r3b.startCol() == 10 && r3b.endCol() == viewer.lineText(4).length());
+                && r3b.startCol() == 10 && r3b.endCol() == vLine(viewer, 4).length());
         check("step5 S3 the right-clamped copy is char-exact (clipboard=" + esc(clipboardString()) + ")",
-                charByChar("step5-S3", viewer.lineText(4).substring(10), clipboardString()));
+                charByChar("step5-S3", vLine(viewer, 4).substring(10), clipboardString()));
         // S4 向下拖出锚点行 → 钳到行尾
         dragSelect(4, 10, 6, 5);
         copyViaApi();
-        HtmlTextSelection.Range r4b = viewer.selectionRange();
+        HtmlTextSelection.Range r4b = vRange(viewer);
         check("step5 S4 dragging DOWN out of the anchor line clamps to its end (range="
                         + describeRange(r4b) + ")", r4b != null && r4b.startLine() == 4 && r4b.endLine() == 4
-                && r4b.startCol() == 10 && r4b.endCol() == viewer.lineText(4).length());
+                && r4b.startCol() == 10 && r4b.endCol() == vLine(viewer, 4).length());
         check("step5 S4 the down-clamped copy is char-exact (clipboard=" + esc(clipboardString()) + ")",
-                charByChar("step5-S4", viewer.lineText(4).substring(10), clipboardString()));
+                charByChar("step5-S4", vLine(viewer, 4).substring(10), clipboardString()));
         // S5 向上拖出锚点行 → 钳到行首
         dragSelect(4, 10, 2, 5);
         copyViaApi();
-        HtmlTextSelection.Range r5 = viewer.selectionRange();
+        HtmlTextSelection.Range r5 = vRange(viewer);
         check("step5 S5 dragging UP out of the anchor line clamps to its start (range="
                         + describeRange(r5) + ")", r5 != null && r5.startLine() == 4 && r5.endLine() == 4
                 && r5.startCol() == 0 && r5.endCol() == 10);
         check("step5 S5 the up-clamped copy is char-exact (clipboard=" + esc(clipboardString()) + ")",
-                charByChar("step5-S5", viewer.lineText(4).substring(0, 10), clipboardString()));
+                charByChar("step5-S5", vLine(viewer, 4).substring(0, 10), clipboardString()));
         // S6 Shift 扩选：点在下方的行 → 扩到锚点行的行尾（决策 3.5，同样被 3.2 钳制）
         dragSelect(4, 5, 4, 10);
         shiftClick(6, 3);
         copyViaApi();
-        HtmlTextSelection.Range r6 = viewer.selectionRange();
+        HtmlTextSelection.Range r6 = vRange(viewer);
         check("step5 S6 Shift-click BELOW the anchor line extends to the line end only (range="
                         + describeRange(r6) + ")", r6 != null && r6.startLine() == 4 && r6.endLine() == 4
-                && r6.startCol() == 5 && r6.endCol() == viewer.lineText(4).length());
+                && r6.startCol() == 5 && r6.endCol() == vLine(viewer, 4).length());
         check("step5 S6 the Shift-down-clamped copy is char-exact (clipboard="
                         + esc(clipboardString()) + ")",
-                charByChar("step5-S6", viewer.lineText(4).substring(5), clipboardString()));
+                charByChar("step5-S6", vLine(viewer, 4).substring(5), clipboardString()));
         // S7 Shift 扩选：点在上方的行 → 扩到锚点行的行首
         dragSelect(4, 5, 4, 10);
         shiftClick(2, 3);
         copyViaApi();
-        HtmlTextSelection.Range r7 = viewer.selectionRange();
+        HtmlTextSelection.Range r7 = vRange(viewer);
         check("step5 S7 Shift-click ABOVE the anchor line extends to the line start only (range="
                         + describeRange(r7) + ")", r7 != null && r7.startLine() == 4 && r7.endLine() == 4
                 && r7.startCol() == 0 && r7.endCol() == 5);
         check("step5 S7 the Shift-up-clamped copy is char-exact (clipboard=" + esc(clipboardString()) + ")",
-                charByChar("step5-S7", viewer.lineText(4).substring(0, 5), clipboardString()));
+                charByChar("step5-S7", vLine(viewer, 4).substring(0, 5), clipboardString()));
         // S8 层序（3.7）：命中黄底在最下、选区黑底在中、字形在最上 —— 选择盖住命中的一部分
         dragSelect(3, 2, 3, 10);
-        viewer.node().applyCss();
-        viewer.node().layout();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
         Node cell3 = revealCellForLine(3);
         List<String> layerKind = new ArrayList<>();
         boolean layerOrder = false;
@@ -1123,8 +1248,8 @@ public class HtmlViewerProbe extends Application {
                 if (!(n instanceof javafx.scene.text.Text t)) {
                     continue;
                 }
-                int[] cr = (int[]) t.getProperties().get(HtmlSourceViewer.RUN_COLUMNS_KEY);
-                Color base = (Color) t.getProperties().get(HtmlSourceViewer.RUN_BASE_FILL_KEY);
+                int[] cr = (int[]) t.getProperties().get(runColumnsKey());
+                Color base = (Color) t.getProperties().get(runBaseFillKey());
                 if (cr == null || base == null) {
                     runRule = false;
                     continue;
@@ -1146,11 +1271,11 @@ public class HtmlViewerProbe extends Application {
         dragSelect(0, 0, 0, 0);
         boolean restored = true;
         int checkedRuns = 0;
-        for (Node n : viewer.node().lookupAll(".html-source-text")) {
+        for (Node n : vNode(viewer).lookupAll(".html-source-text")) {
             if (!(n instanceof javafx.scene.text.Text t)) {
                 continue;
             }
-            Color base = (Color) t.getProperties().get(HtmlSourceViewer.RUN_BASE_FILL_KEY);
+            Color base = (Color) t.getProperties().get(runBaseFillKey());
             if (base == null) {
                 restored = false;
                 continue;
@@ -1161,11 +1286,11 @@ public class HtmlViewerProbe extends Application {
         check("step5 S10 after the click clears the selection every run is restored to its base "
                         + "fill (runs=" + checkedRuns + ")", restored && checkedRuns > 0);
         // S12 游标（3.4）：viewer / list-view / cell = TEXT，行号栏保持默认
-        viewer.node().applyCss();
+        vNode(viewer).applyCss();
         Node cellCursor = cellForLine(4);
         Node gutterNode = cellCursor == null ? null : cellCursor.lookup(".html-source-gutter");
-        check("step5 S12 the viewer root has the TEXT cursor (" + viewer.node().getCursor() + ")",
-                viewer.node().getCursor() == Cursor.TEXT);
+        check("step5 S12 the viewer root has the TEXT cursor (" + vNode(viewer).getCursor() + ")",
+                vNode(viewer).getCursor() == Cursor.TEXT);
         check("step5 S12 the ListView has the TEXT cursor (" + listView.getCursor() + ")",
                 listView.getCursor() == Cursor.TEXT);
         check("step5 S12 a cell has the TEXT cursor ("
@@ -1180,7 +1305,7 @@ public class HtmlViewerProbe extends Application {
         if (cellCursor instanceof javafx.scene.control.ListCell<?> lc) {
             PseudoClass selected = PseudoClass.getPseudoClass("selected");
             lc.pseudoClassStateChanged(selected, true);
-            viewer.node().applyCss();
+            vNode(viewer).applyCss();
             javafx.scene.layout.Background bg = lc.getBackground();
             if (bg == null) {
                 rowBgOff = true;
@@ -1204,40 +1329,40 @@ public class HtmlViewerProbe extends Application {
                 }
             }
             lc.pseudoClassStateChanged(selected, false);
-            viewer.node().applyCss();
+            vNode(viewer).applyCss();
         }
         System.out.println("step5 S13 forced-selected cell background -> " + rowBgDesc);
         check("step5 S13 forcing :selected on a cell keeps the row background transparent (bg: "
                         + rowBgDesc + ")", rowBgOff);
 
         // #13 选择不改变行模型（lineCount / lineText 不变）
-        boolean modelSame = viewer.lineCount() == linesBefore;
+        boolean modelSame = vInt(viewer, "lineCount") == linesBefore;
         for (int i = 0; modelSame && i < linesBefore; i++) {
-            modelSame = viewer.lineText(i).equals(modelBefore.get(i));
+            modelSame = vLine(viewer, i).equals(modelBefore.get(i));
         }
-        check("E1#13 selection never changes the line model (lines=" + viewer.lineCount()
+        check("E1#13 selection never changes the line model (lines=" + vInt(viewer, "lineCount")
                         + " vs " + linesBefore + ", every lineText identical=" + modelSame + ")",
                 modelSame);
 
         // #12 5000 行大文件上选择后 .list-cell 数仍远小于行数（虚拟化保持）
-        HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), bigSource());
-        viewer.node().applyCss();
-        viewer.node().layout();
+        showSource(anchor, I18n.get("browser.viewerTitle"), bigSource());
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
         dragSelect(2, 5, 2, 30);
-        int cells = viewer.node().lookupAll(".list-cell").size();
-        int rowsBig = viewer.lineCount();
+        int cells = vNode(viewer).lookupAll(".list-cell").size();
+        int rowsBig = vInt(viewer, "lineCount");
         System.out.println("E1#12 big source after selection: lines=" + rowsBig + " cells=" + cells);
         check("E1#12 on the " + rowsBig + "-line source a selection keeps virtualization (cells="
                         + cells + " << lines)", cells > 0 && cells * 10 < rowsBig);
         // 决策 3.9（竖向虚拟化硬约束）：选择重绘只动可见 cell —— 实测计数，与文件行数无关
-        int selPainted = viewer.selectionCellsPaintedInLastRepaint();
+        int selPainted = vInt(viewer, "selectionCellsPaintedInLastRepaint");
         System.out.println("step5 3.9 selection repaint cells: " + selPainted + " of " + rowsBig);
         check("step5 3.9 the selection repaint touched only visible cells (" + selPainted
                         + " << " + rowsBig + ")", selPainted > 0 && selPainted * 10 < rowsBig);
         // S11 滚动到远处再回来：cell 重建后白字只落在选区上（黑底白字的"滚动还原"）
         listView.scrollTo(BIG_LINES / 2);
-        viewer.node().applyCss();
-        viewer.node().layout();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
         listView.scrollTo(2);
         Node cellRebuilt = revealCellForLine(2);
         boolean rebuildOk = cellRebuilt != null;
@@ -1248,8 +1373,8 @@ public class HtmlViewerProbe extends Application {
                 if (!(n instanceof javafx.scene.text.Text t)) {
                     continue;
                 }
-                int[] cr = (int[]) t.getProperties().get(HtmlSourceViewer.RUN_COLUMNS_KEY);
-                Color base = (Color) t.getProperties().get(HtmlSourceViewer.RUN_BASE_FILL_KEY);
+                int[] cr = (int[]) t.getProperties().get(runColumnsKey());
+                Color base = (Color) t.getProperties().get(runBaseFillKey());
                 if (cr == null || base == null) {
                     rebuildOk = false;
                     continue;
@@ -1288,8 +1413,8 @@ public class HtmlViewerProbe extends Application {
             return;
         }
         Bounds b = cell.localToScene(cell.getBoundsInLocal());
-        double contentX = b.getMinX() + viewer.gutterWidth();
-        double cw = viewer.charWidth();
+        double contentX = b.getMinX() + vDbl(viewer, "gutterWidth");
+        double cw = vDbl(viewer, "charWidth");
         double y = b.getMinY() + b.getHeight() / 2;
         fireMouse(MouseEvent.MOUSE_PRESSED, cell, contentX + fromCol * cw, y, true);
         Node cell2 = revealCellForLine(toLine);
@@ -1309,9 +1434,9 @@ public class HtmlViewerProbe extends Application {
             return;
         }
         Bounds b = cell.localToScene(cell.getBoundsInLocal());
-        double contentX = b.getMinX() + viewer.gutterWidth();
+        double contentX = b.getMinX() + vDbl(viewer, "gutterWidth");
         double y = b.getMinY() + b.getHeight() / 2;
-        double cw = viewer.charWidth();
+        double cw = vDbl(viewer, "charWidth");
         fireMouse(MouseEvent.MOUSE_PRESSED, cell, b.getMinX() + 2, y, true);
         fireMouse(MouseEvent.MOUSE_DRAGGED, listView, contentX + toCol * cw, y, true);
         fireMouse(MouseEvent.MOUSE_RELEASED, listView, contentX + toCol * cw, y, false);
@@ -1337,9 +1462,9 @@ public class HtmlViewerProbe extends Application {
             return;
         }
         Bounds b = cell.localToScene(cell.getBoundsInLocal());
-        double contentX = b.getMinX() + viewer.gutterWidth();
+        double contentX = b.getMinX() + vDbl(viewer, "gutterWidth");
         double y = b.getMinY() + b.getHeight() / 2;
-        double x = contentX + col * viewer.charWidth();
+        double x = contentX + col * vDbl(viewer, "charWidth");
         fireMouse(MouseEvent.MOUSE_PRESSED, cell, x, y, true, true);
         fireMouse(MouseEvent.MOUSE_RELEASED, listView, x, y, false, true);
     }
@@ -1376,7 +1501,7 @@ public class HtmlViewerProbe extends Application {
     /** 经查看器公开 API 的原始复制（无哨兵校验）。E2「空选择不覆盖剪贴板」这类语义走本方法，
      *  其余复制断言走 {@link #copyViaApi()}。 */
     private void copyViaApiRaw() {
-        viewer.copySelection();
+        vCopy(viewer);
     }
 
     /**
@@ -1557,22 +1682,22 @@ public class HtmlViewerProbe extends Application {
      * 所以把"摆状态"与"按快门"拆成两个步骤。
      */
     private void setupStep5SnapshotSelection() {
-        HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), selectionSource());
-        viewer.node().applyCss();
-        viewer.node().layout();
+        showSource(anchor, I18n.get("browser.viewerTitle"), selectionSource());
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
         dragSelect(4, 3, 4, 21);
-        viewer.node().applyCss();
-        viewer.node().layout();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
     }
 
     /** 3.10 选中态截图（第 2 拍）：拍下上一拍定稿的黑底白字选区；同拍备好"选区盖命中"的层序状态。 */
     private void snapshotStep5SelectionAndSetupLayers() {
         snapshot("htmlviewer-step5-selection");
-        viewer.queryField().setText(SEARCH_TOKEN);
-        viewer.findButtons().get(0).fire();
+        vQuery(viewer).setText(SEARCH_TOKEN);
+        vFindButtons(viewer).get(0).fire();
         dragSelect(3, 2, 3, 10);
-        viewer.node().applyCss();
-        viewer.node().layout();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
     }
 
     /** 3.10 层序截图（第 3 拍）：拍下"黑底选区压在黄色查找命中上"的层序状态。 */
@@ -1584,26 +1709,26 @@ public class HtmlViewerProbe extends Application {
 
     private void openLongLineSource() {
         // showSource 是同步路径（tokenize 在调用线程上），返回时行模型已就位
-        HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), longSource());
-        viewer.node().applyCss();
-        viewer.node().layout();
-        System.out.println("E2 long line: contentPixelWidth=" + fmt(viewer.contentPixelWidth())
-                + " wrapCols=" + viewer.wrapCols()
-                + " charWidth=" + fmt(viewer.charWidth())
-                + " gutter=" + fmt(viewer.gutterWidth())
-                + " rowHeight=" + fmt(viewer.rowHeight())
-                + " longLine chars=" + viewer.lineText(1).length());
+        showSource(anchor, I18n.get("browser.viewerTitle"), longSource());
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
+        System.out.println("E2 long line: contentPixelWidth=" + fmt(vDbl(viewer, "contentPixelWidth"))
+                + " wrapCols=" + vInt(viewer, "wrapCols")
+                + " charWidth=" + fmt(vDbl(viewer, "charWidth"))
+                + " gutter=" + fmt(vDbl(viewer, "gutterWidth"))
+                + " rowHeight=" + fmt(vDbl(viewer, "rowHeight"))
+                + " longLine chars=" + vLine(viewer, 1).length());
     }
 
     /** E2 软换行呈现：长行折成多视觉行、无横向滚动、行号只一次且与首折行对齐、cell 高度随折行增长。 */
     private void checkE2SoftWrap() {
         double viewport = scroller.getViewportBounds().getWidth();
-        int cols = viewer.wrapCols();
-        int longLen = viewer.lineText(1).length();
+        int cols = vInt(viewer, "wrapCols");
+        int longLen = vLine(viewer, 1).length();
         int visualRows = HtmlWrapMap.visualRowCount(longLen, cols);
         check("E2 soft wrap: contentPixelWidth() is now the viewport width ("
-                        + fmt(viewer.contentPixelWidth()) + " ~ " + fmt(viewport) + ")",
-                viewport > 0 && Math.abs(viewer.contentPixelWidth() - viewport) <= TOL);
+                        + fmt(vDbl(viewer, "contentPixelWidth")) + " ~ " + fmt(viewport) + ")",
+                viewport > 0 && Math.abs(vDbl(viewer, "contentPixelWidth") - viewport) <= TOL);
         // 判据是"用户不可能水平滚动"：无横向滚动条 + hvalue 停在 0（本环境 hmax 恒报 1.0 的
         // 1px 退化余量，基线（内容 15445px 宽、真横向滚动）时 hmax 也是 1.0 —— 不拿它当判据）
         check("E2 soft wrap: no horizontal scrolling (hbarPolicy=" + scroller.getHbarPolicy()
@@ -1614,18 +1739,18 @@ public class HtmlViewerProbe extends Application {
                         + fmt(listView.getPrefWidth()) + " <= viewport=" + fmt(viewport) + ")",
                 listView.getPrefWidth() <= viewport + 1);
         check("E2 soft wrap: the logical line model is unchanged (lineCount stays 4): "
-                        + viewer.lineCount(), viewer.lineCount() == 4);
+                        + vInt(viewer, "lineCount"), vInt(viewer, "lineCount") == 4);
         // 行号对齐的机械判据（沿用 R2.8 的口径）：行号列宽 == 位数 × 单字宽 + 固定间距，位数取自总行数
-        double expectedGutter = viewer.gutterDigits() * viewer.charWidth() + viewer.gutterGap();
-        System.out.println("E2 gutter=" + fmt(viewer.gutterWidth()) + " expected=" + fmt(expectedGutter)
-                + " digits=" + viewer.gutterDigits() + " charWidth=" + fmt(viewer.charWidth())
-                + " totalLines=" + viewer.lineCount());
+        double expectedGutter = vInt(viewer, "gutterDigits") * vDbl(viewer, "charWidth") + vDbl(viewer, "gutterGap");
+        System.out.println("E2 gutter=" + fmt(vDbl(viewer, "gutterWidth")) + " expected=" + fmt(expectedGutter)
+                + " digits=" + vInt(viewer, "gutterDigits") + " charWidth=" + fmt(vDbl(viewer, "charWidth"))
+                + " totalLines=" + vInt(viewer, "lineCount"));
         check("E2 soft wrap: the gutter width is exactly digits × charWidth + gap ("
-                        + fmt(viewer.gutterWidth()) + " vs " + fmt(expectedGutter) + ")",
-                Math.abs(viewer.gutterWidth() - expectedGutter) < 0.001 && viewer.gutterDigits() >= 1);
+                        + fmt(vDbl(viewer, "gutterWidth")) + " vs " + fmt(expectedGutter) + ")",
+                Math.abs(vDbl(viewer, "gutterWidth") - expectedGutter) < 0.001 && vInt(viewer, "gutterDigits") >= 1);
         check("E2 soft wrap: the gutter digit count comes from the total line count (digits="
-                        + viewer.gutterDigits() + ", lines=" + viewer.lineCount() + ")",
-                viewer.gutterDigits() == String.valueOf(viewer.lineCount()).length());
+                        + vInt(viewer, "gutterDigits") + ", lines=" + vInt(viewer, "lineCount") + ")",
+                vInt(viewer, "gutterDigits") == String.valueOf(vInt(viewer, "lineCount")).length());
         // 长行 cell：高度 = 视觉行数 × 行高；内部一视觉行一个 TextFlow、行号恰好一个
         Node cell = revealCellForLine(1);
         Bounds cb = cell == null ? null : cell.localToScene(cell.getBoundsInLocal());
@@ -1633,9 +1758,9 @@ public class HtmlViewerProbe extends Application {
                         + cols + ", longLen=" + longLen + ", visualRows=" + visualRows + ")",
                 visualRows > 1);
         check("E2 soft wrap: the long line cell exists and its height grew to the visual-row count ("
-                        + fmt(cb == null ? -1 : cb.getHeight()) + " px vs " + fmt(visualRows * viewer.rowHeight()) + ")",
+                        + fmt(cb == null ? -1 : cb.getHeight()) + " px vs " + fmt(visualRows * vDbl(viewer, "rowHeight")) + ")",
                 cell != null && cb != null
-                        && Math.abs(cb.getHeight() - visualRows * viewer.rowHeight()) <= TOL);
+                        && Math.abs(cb.getHeight() - visualRows * vDbl(viewer, "rowHeight")) <= TOL);
         long flowsInCell = cell == null ? -1 : cell.lookupAll(".html-source-line").size();
         check("E2 soft wrap: the cell renders one TextFlow per visual row (" + flowsInCell
                         + " == " + visualRows + ")", flowsInCell == visualRows);
@@ -1662,8 +1787,8 @@ public class HtmlViewerProbe extends Application {
                 gb != null && firstFlow != null
                         && Math.abs(centerY(gb) - centerY(firstFlow)) <= 4);
         check("E2 soft wrap: the gutter spans exactly one visual row height (" + fmt(height(gb))
-                        + " vs " + fmt(viewer.rowHeight()) + ")",
-                gb != null && Math.abs(height(gb) - viewer.rowHeight()) <= 2);
+                        + " vs " + fmt(vDbl(viewer, "rowHeight")) + ")",
+                gb != null && Math.abs(height(gb) - vDbl(viewer, "rowHeight")) <= 2);
         check("E2 soft wrap: following visual rows are spacer-indented to the same content start "
                         + "(2nd row minX " + fmt(minX(secondFlow)) + " == 1st row minX " + fmt(minX(firstFlow)) + ")",
                 secondFlow != null && firstFlow != null
@@ -1672,12 +1797,12 @@ public class HtmlViewerProbe extends Application {
         String reassembled = reassembledText(cell);
         check("E2 soft wrap: the wrapped visual rows reassemble the whole logical line char-by-char "
                         + "(len " + reassembled.length() + " vs " + longLen + ")",
-                reassembled.equals(viewer.lineText(1)));
+                reassembled.equals(vLine(viewer, 1)));
         // 无横向滚动后纵向 scrollTo(最后一行) 直接可见（旧判据"横向推到行尾"的取代）
-        listView.scrollTo(viewer.lineCount() - 1);
-        viewer.node().applyCss();
-        viewer.node().layout();
-        Node lastCell = cellForLine(viewer.lineCount() - 1);
+        listView.scrollTo(vInt(viewer, "lineCount") - 1);
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
+        Node lastCell = cellForLine(vInt(viewer, "lineCount") - 1);
         check("E2 soft wrap: vertical scrollTo(last line) brings the last line's cell into the "
                         + "viewport (cell=" + describe(lastCell) + ")", lastCell != null);
         check("E2 soft wrap: the viewport width is a real positive number ("
@@ -1688,14 +1813,14 @@ public class HtmlViewerProbe extends Application {
 
     /** E2 折行 ↔ 逻辑偏移映射：跨折行拖选 / 高亮分段 / 命中仍按逻辑列。 */
     private void checkE2WrapMapping() {
-        int cols = viewer.wrapCols();
-        int longLen = viewer.lineText(1).length();
+        int cols = vInt(viewer, "wrapCols");
+        int longLen = vLine(viewer, 1).length();
         // 1) 跨折行边界的拖选（视觉行 0 尾 → 视觉行 1 首）→ 复制逐字符 = 逻辑子串
         int fromCol = Math.max(0, cols - 3);
         int toCol = Math.min(longLen, cols + 5);
         dragVisual(1, 0, fromCol, 1, 1, toCol - cols);
         copyViaApi();
-        String expected = viewer.lineText(1).substring(fromCol, toCol);
+        String expected = vLine(viewer, 1).substring(fromCol, toCol);
         check("E2 wrap mapping: a drag across the wrap boundary copies the exact logical range "
                         + "(clipboard=" + esc(clipboardString()) + ")",
                 charByChar("E2-wrap-cross-boundary", expected, clipboardString()));
@@ -1710,7 +1835,7 @@ public class HtmlViewerProbe extends Application {
             }
         }
         boolean spansRows = selYs.size() >= 2
-                && selYs.get(selYs.size() - 1) - selYs.get(0) >= viewer.rowHeight() - 1;
+                && selYs.get(selYs.size() - 1) - selYs.get(0) >= vDbl(viewer, "rowHeight") - 1;
         check("E2 wrap mapping: the selection highlight spans visual rows (rects=" + selYs.size()
                         + ", y span=" + (selYs.size() >= 2 ? fmt(selYs.get(selYs.size() - 1) - selYs.get(0)) : "n/a") + ")",
                 spansRows);
@@ -1720,18 +1845,18 @@ public class HtmlViewerProbe extends Application {
         int lastRowStart = lastVRow * cols;
         dragVisual(1, lastVRow, longLen - lastRowStart - 4, 1, lastVRow, longLen - lastRowStart);
         copyViaApi();
-        String expectedTail = viewer.lineText(1).substring(longLen - 4);
+        String expectedTail = vLine(viewer, 1).substring(longLen - 4);
         check("E2 wrap mapping: selecting the tail of the last visual row copies the line end "
                         + "(clipboard=" + esc(clipboardString()) + ")",
                 charByChar("E2-wrap-tail", expectedTail, clipboardString()));
         // 4) 查找命中仍按逻辑列：查 "END"（位于长行后部、逻辑列远超 wrapCols）
-        viewer.queryField().setText("END");
-        viewer.findButtons().get(0).fire();
-        int[] hitCols = viewer.currentHitColumns();
-        int hitLine = viewer.currentHitLine();
+        vQuery(viewer).setText("END");
+        vFindButtons(viewer).get(0).fire();
+        int[] hitCols = vHitCols(viewer);
+        int hitLine = vInt(viewer, "currentHitLine");
         System.out.println("E2 wrap mapping find: query=END hitLine=" + hitLine
                 + " hitCols=" + java.util.Arrays.toString(hitCols)
-                + " wrapCols=" + cols + " hitCount=" + viewer.hitCount());
+                + " wrapCols=" + cols + " hitCount=" + vInt(viewer, "hitCount"));
         check("E2 wrap mapping: find columns stay LOGICAL on a wrapped line (hitCols="
                         + java.util.Arrays.toString(hitCols) + ", endCol > wrapCols=" + cols + ")",
                 hitLine == 1 && hitCols != null && hitCols.length == 2 && hitCols[1] > cols);
@@ -1749,15 +1874,15 @@ public class HtmlViewerProbe extends Application {
         }
         Bounds cb2 = hitCell == null ? null : hitCell.localToScene(hitCell.getBoundsInLocal());
         check("E2 wrap mapping: the hit highlight sits on a LATER visual row (hitMinY "
-                        + fmt(hitMinY) + " vs first-row bottom " + fmt(cb2 == null ? Double.NaN : cb2.getMinY() + viewer.rowHeight()) + ")",
-                hitCell != null && cb2 != null && hitMinY >= cb2.getMinY() + viewer.rowHeight() - 1);
+                        + fmt(hitMinY) + " vs first-row bottom " + fmt(cb2 == null ? Double.NaN : cb2.getMinY() + vDbl(viewer, "rowHeight")) + ")",
+                hitCell != null && cb2 != null && hitMinY >= cb2.getMinY() + vDbl(viewer, "rowHeight") - 1);
         // 5) 复制内容仍不含行号/装饰（跨折行选择已逐字符比对；这里补一条行号反向断言）
         dragVisual(1, 0, 0, 1, 0, 2);
         copyViaApi();
         String clip = clipboardString();
         check("E2 wrap mapping: the copy contains no gutter line number (clipboard starts with '"
                         + (clip == null || clip.isEmpty() ? "(empty)" : escChar(clip.charAt(0))) + "', line number is '2')",
-                charByChar("E2-wrap-no-gutter", viewer.lineText(1).substring(0, 2), clip)
+                charByChar("E2-wrap-no-gutter", vLine(viewer, 1).substring(0, 2), clip)
                         && clip != null && !clip.startsWith("2"));
     }
 
@@ -1778,14 +1903,14 @@ public class HtmlViewerProbe extends Application {
     }
 
     private void openCorpusSource() {
-        HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), corpusBody() + "\n");
-        viewer.node().applyCss();
-        viewer.node().layout();
-        System.out.println("E2 corpus (trailing NL): lines=" + viewer.lineCount()
-                + " wrapCols=" + viewer.wrapCols());
-        for (int i = 0; i < viewer.lineCount(); i++) {
-            System.out.println("    [" + i + "] len=" + viewer.lineText(i).length()
-                    + " <" + esc(viewer.lineText(i)) + ">");
+        showSource(anchor, I18n.get("browser.viewerTitle"), corpusBody() + "\n");
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
+        System.out.println("E2 corpus (trailing NL): lines=" + vInt(viewer, "lineCount")
+                + " wrapCols=" + vInt(viewer, "wrapCols"));
+        for (int i = 0; i < vInt(viewer, "lineCount"); i++) {
+            System.out.println("    [" + i + "] len=" + vLine(viewer, i).length()
+                    + " <" + esc(vLine(viewer, i)) + ">");
         }
     }
 
@@ -1794,11 +1919,11 @@ public class HtmlViewerProbe extends Application {
                 "<html>", "  <body>", "", "",
                 "    <p title=\"a\tb\">", "<!-- cross", "line comment -->",
                 "<!-- " + "LONG-".repeat(40) + " -->", "<div>trailing   ", ""};
-        check("E2 corpus: lineCount == 1 + newlines (10 lines: " + viewer.lineCount() + ")",
-                viewer.lineCount() == expected.length);
-        boolean allSame = viewer.lineCount() == expected.length;
+        check("E2 corpus: lineCount == 1 + newlines (10 lines: " + vInt(viewer, "lineCount") + ")",
+                vInt(viewer, "lineCount") == expected.length);
+        boolean allSame = vInt(viewer, "lineCount") == expected.length;
         for (int i = 0; allSame && i < expected.length; i++) {
-            allSame = viewer.lineText(i).equals(expected[i]);
+            allSame = vLine(viewer, i).equals(expected[i]);
         }
         check("E2 corpus: every lineText is char-exact (CRLF/CR normalized to LF, tabs / leading "
                         + "/ trailing spaces / consecutive empty lines / trailing empty line kept)",
@@ -1832,8 +1957,8 @@ public class HtmlViewerProbe extends Application {
                         + esc(clipboardString()) + ")",
                 charByChar("E2-corpus-trailing", "<div>trailing   ", clipboardString()));
         // 超长行（209 字符）整行复制：跨多个折行逐字符
-        int cols = viewer.wrapCols();
-        String longLine = viewer.lineText(7);
+        int cols = vInt(viewer, "wrapCols");
+        String longLine = vLine(viewer, 7);
         int lastVRow = HtmlWrapMap.visualRowCount(longLine.length(), cols) - 1;
         int lastRowStart = lastVRow * cols;
         dragVisual(7, 0, 0, 7, lastVRow, longLine.length() - lastRowStart);
@@ -1853,31 +1978,31 @@ public class HtmlViewerProbe extends Application {
     }
 
     private void openCorpusSourceNoTrailingNl() {
-        HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), corpusBody());
-        viewer.node().applyCss();
-        viewer.node().layout();
-        System.out.println("E2 corpus (no trailing NL): lines=" + viewer.lineCount()
-                + " lastLine=" + esc(viewer.lineText(viewer.lineCount() - 1)));
+        showSource(anchor, I18n.get("browser.viewerTitle"), corpusBody());
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
+        System.out.println("E2 corpus (no trailing NL): lines=" + vInt(viewer, "lineCount")
+                + " lastLine=" + esc(vLine(viewer, vInt(viewer, "lineCount") - 1)));
     }
 
     private void checkE2CorpusNoTrailingNl() {
         check("E2 corpus (no trailing NL): lineCount == 9 (no trailing empty line): "
-                        + viewer.lineCount(), viewer.lineCount() == 9);
+                        + vInt(viewer, "lineCount"), vInt(viewer, "lineCount") == 9);
         check("E2 corpus (no trailing NL): the last line keeps its trailing spaces (len="
-                        + viewer.lineText(8).length() + ")", viewer.lineText(8).length() == 16);
+                        + vLine(viewer, 8).length() + ")", vLine(viewer, 8).length() == 16);
         // 【需求变更】决策 3.2：原"整篇复制 (0,0)→(8,16)"不再是可达行为；改为——
         // 从末行第 5 列向上拖 → 钳到该行行首 [0,5)，再整行复制末行证"末尾无 LF"。
         dragVisual(8, 0, 5, 5, 0, 3);
         copyViaApi();
         check("E2 corpus (no trailing NL): dragging UP from the last line clamps to its line "
                         + "start (clipboard=" + esc(clipboardString()) + ")",
-                charByChar("E2-corpus-up-clamp", viewer.lineText(8).substring(0, 5), clipboardString()));
+                charByChar("E2-corpus-up-clamp", vLine(viewer, 8).substring(0, 5), clipboardString()));
         dragVisual(8, 0, 0, 8, 0, 16);
         copyViaApi();
         check("E2 corpus (no trailing NL): the last line copies char-exact and does NOT end "
                         + "with LF (clipboard len="
                         + (clipboardString() == null ? -1 : clipboardString().length()) + ")",
-                charByChar("E2-corpus-last-line", viewer.lineText(8), clipboardString())
+                charByChar("E2-corpus-last-line", vLine(viewer, 8), clipboardString())
                         && !clipboardString().endsWith("\n"));
     }
 
@@ -1890,24 +2015,24 @@ public class HtmlViewerProbe extends Application {
      * 异步回传，且视口变化触发的 {@code refresh} 排在 runLater 里，下一步才看得见重建结果。</p>
      */
     private void checkResizeStage() {
-        HtmlSourceViewer.showSource(anchor, I18n.get("browser.viewerTitle"), longSource());
-        viewer.node().applyCss();
-        viewer.node().layout();
-        step5ColsBefore = viewer.wrapCols();
-        int vrowsBefore = HtmlWrapMap.visualRowCount(viewer.lineText(1).length(), step5ColsBefore);
+        showSource(anchor, I18n.get("browser.viewerTitle"), longSource());
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
+        step5ColsBefore = vInt(viewer, "wrapCols");
+        int vrowsBefore = HtmlWrapMap.visualRowCount(vLine(viewer, 1).length(), step5ColsBefore);
         // 单行选区 [0,5)：resize 前后复制都必须逐字符相同（单行口径）
         dragVisual(1, 0, 0, 1, 0, 5);
         copyViaApi();
         check("step5 resize: pre-resize single-line selection copies char-exact (clipboard="
                         + esc(clipboardString()) + ")",
-                charByChar("step5-resize-pre", viewer.lineText(1).substring(0, 5), clipboardString()));
+                charByChar("step5-resize-pre", vLine(viewer, 1).substring(0, 5), clipboardString()));
         stage.setWidth(1500);
         scene.getRoot().applyCss();
         scene.getRoot().layout();
-        viewer.node().applyCss();
-        viewer.node().layout();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
         System.out.println("step5 resize requested: colsBefore=" + step5ColsBefore
-                + " vrowsBefore=" + vrowsBefore + " colsNow=" + viewer.wrapCols()
+                + " vrowsBefore=" + vrowsBefore + " colsNow=" + vInt(viewer, "wrapCols")
                 + " stageWidth=" + stage.getWidth());
     }
 
@@ -1915,10 +2040,10 @@ public class HtmlViewerProbe extends Application {
     private void checkResizeRewrap() {
         scene.getRoot().applyCss();
         scene.getRoot().layout();
-        viewer.node().applyCss();
-        viewer.node().layout();
-        int cols = viewer.wrapCols();
-        int len1 = viewer.lineText(1).length();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
+        int cols = vInt(viewer, "wrapCols");
+        int len1 = vLine(viewer, 1).length();
         int vrows = HtmlWrapMap.visualRowCount(len1, cols);
         Node cell = revealCellForLine(1);
         long flows = cell == null ? -1 : cell.lookupAll(".html-source-line").size();
@@ -1932,9 +2057,9 @@ public class HtmlViewerProbe extends Application {
                         + " == " + vrows + ")", flows == vrows);
         check("step5 resize: the cell height matches the new wrap count ("
                         + fmt(cb == null ? -1 : cb.getHeight()) + " vs "
-                        + fmt(vrows * viewer.rowHeight()) + ")",
-                cell != null && cb != null && Math.abs(cb.getHeight() - vrows * viewer.rowHeight()) <= TOL);
-        HtmlTextSelection.Range r = viewer.selectionRange();
+                        + fmt(vrows * vDbl(viewer, "rowHeight")) + ")",
+                cell != null && cb != null && Math.abs(cb.getHeight() - vrows * vDbl(viewer, "rowHeight")) <= TOL);
+        HtmlTextSelection.Range r = vRange(viewer);
         check("step5 resize: the selection survived the re-wrap and stays single-line (range="
                         + describeRange(r) + ")",
                 r != null && r.startLine() == 1 && r.endLine() == 1
@@ -1942,7 +2067,7 @@ public class HtmlViewerProbe extends Application {
         copyViaApi();
         check("step5 resize: the copy after re-wrap is still char-exact (clipboard="
                         + esc(clipboardString()) + ")",
-                charByChar("step5-resize-copy", viewer.lineText(1).substring(0, 5), clipboardString()));
+                charByChar("step5-resize-copy", vLine(viewer, 1).substring(0, 5), clipboardString()));
         long selRects = cell == null ? 0 : cell.lookupAll(".html-source-selected").size();
         check("step5 resize: the selection rects repainted on the new grid (rects=" + selRects + ")",
                 selRects >= 1);
@@ -1951,8 +2076,8 @@ public class HtmlViewerProbe extends Application {
         stage.setHeight(800);
         scene.getRoot().applyCss();
         scene.getRoot().layout();
-        viewer.node().applyCss();
-        viewer.node().layout();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
     }
 
     /**
@@ -1960,15 +2085,15 @@ public class HtmlViewerProbe extends Application {
      * 跨折行的单行复制仍逐字符正确。
      */
     private void checkNoHscrollWithSelection() {
-        viewer.node().applyCss();
-        viewer.node().layout();
-        int cols = viewer.wrapCols();
-        int len1 = viewer.lineText(1).length();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
+        int cols = vInt(viewer, "wrapCols");
+        int len1 = vLine(viewer, 1).length();
         int fromCol = Math.max(0, cols - 3);
         int toCol = Math.min(len1, cols + 5);
         dragVisual(1, 0, fromCol, 1, 1, toCol - cols);
-        viewer.node().applyCss();
-        viewer.node().layout();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
         check("step5 hscroll: hbar stays NEVER with a selection on the long line ("
                         + scroller.getHbarPolicy() + ")",
                 scroller.getHbarPolicy() == ScrollPane.ScrollBarPolicy.NEVER);
@@ -1992,7 +2117,7 @@ public class HtmlViewerProbe extends Application {
         copyViaApi();
         check("step5 hscroll: the cross-wrap single-line copy is still char-exact (clipboard len="
                         + (clipboardString() == null ? -1 : clipboardString().length()) + ")",
-                charByChar("step5-hscroll-copy", viewer.lineText(1).substring(fromCol, toCol), clipboardString()));
+                charByChar("step5-hscroll-copy", vLine(viewer, 1).substring(fromCol, toCol), clipboardString()));
     }
 
     /** 视觉行坐标的拖选：视觉行号是逻辑行<b>内部</b>的折行行号，视觉列是该折行内的列。 */
@@ -2003,14 +2128,14 @@ public class HtmlViewerProbe extends Application {
             return;
         }
         Bounds b = cell.localToScene(cell.getBoundsInLocal());
-        double contentX = b.getMinX() + viewer.gutterWidth();
-        double cw = viewer.charWidth();
-        double y = b.getMinY() + (fromVRow + 0.5) * viewer.rowHeight();
+        double contentX = b.getMinX() + vDbl(viewer, "gutterWidth");
+        double cw = vDbl(viewer, "charWidth");
+        double y = b.getMinY() + (fromVRow + 0.5) * vDbl(viewer, "rowHeight");
         fireMouse(MouseEvent.MOUSE_PRESSED, cell, contentX + fromVCol * cw, y, true);
         Node cell2 = revealCellForLine(toLine);
         if (cell2 != null) {
             Bounds b2 = cell2.localToScene(cell2.getBoundsInLocal());
-            y = b2.getMinY() + (toVRow + 0.5) * viewer.rowHeight();
+            y = b2.getMinY() + (toVRow + 0.5) * vDbl(viewer, "rowHeight");
         }
         double x = contentX + toVCol * cw;
         fireMouse(MouseEvent.MOUSE_DRAGGED, listView, x, y, true);
@@ -2046,8 +2171,8 @@ public class HtmlViewerProbe extends Application {
 
     private void checkFindBarShape() {
         check("R5.1 the find bar is at the BOTTOM of the viewer (BorderPane bottom == findBar)",
-                viewer.node() instanceof BorderPane bp && bp.getBottom() == viewer.findBar());
-        List<Button> buttons = viewer.findButtons();
+                vNode(viewer) instanceof BorderPane bp && bp.getBottom() == vFindBar(viewer));
+        List<Button> buttons = vFindButtons(viewer);
         List<String> icons = new ArrayList<>();
         for (Button b : buttons) {
             icons.add(b.getGraphic() instanceof FontIcon fi ? String.valueOf(fi.getIconCode()) : "none");
@@ -2063,96 +2188,96 @@ public class HtmlViewerProbe extends Application {
                         && iconOf(buttons.get(1)) == FontAwesomeSolid.ANGLE_UP
                         && iconOf(buttons.get(2)) == FontAwesomeSolid.ANGLE_DOWN
                         && iconOf(buttons.get(3)) == FontAwesomeSolid.TIMES);
-        check("R5.1 the find bar is visible", viewer.findBar().isVisible());
+        check("R5.1 the find bar is visible", vFindBar(viewer).isVisible());
         check("R5.2 the query field is reachable and empty at start",
-                viewer.queryField() != null && viewer.queryField().getText().isEmpty());
+                vQuery(viewer) != null && vQuery(viewer).getText().isEmpty());
     }
 
     /** 输入一个必然命中的词 → 计数 1 / m。 */
     private void checkFindCount() {
-        viewer.queryField().setText(SEARCH_TOKEN);
-        viewer.findButtons().get(0).fire();
-        int total = viewer.hitCount();
-        countAtFirstHit = viewer.countLabel().getText();
-        firstHitLine = viewer.currentHitLine();
+        vQuery(viewer).setText(SEARCH_TOKEN);
+        vFindButtons(viewer).get(0).fire();
+        int total = vInt(viewer, "hitCount");
+        countAtFirstHit = vCountLabel(viewer).getText();
+        firstHitLine = vInt(viewer, "currentHitLine");
         System.out.println("R5.3 query=\"" + SEARCH_TOKEN + "\" -> count=\"" + countAtFirstHit
                 + "\" hits=" + total + " currentLine=" + firstHitLine);
         check("R5.3 a guaranteed-hit query produces hits (m=" + total + " > 0)", total > 0);
         check("R5.3 the counter shows \"1 / m\": " + countAtFirstHit,
                 countAtFirstHit.contains("1") && countAtFirstHit.contains(String.valueOf(total)));
-        check("R5.4 the first hit is on a real line (line " + firstHitLine + " of " + viewer.lineCount() + ")",
-                firstHitLine > 0 && firstHitLine < viewer.lineCount());
+        check("R5.4 the first hit is on a real line (line " + firstHitLine + " of " + vInt(viewer, "lineCount") + ")",
+                firstHitLine > 0 && firstHitLine < vInt(viewer, "lineCount"));
     }
 
     private void checkFindNavigate() {
-        viewer.findButtons().get(2).fire();   // next (ANGLE_DOWN)
-        secondHitLine = viewer.currentHitLine();
-        int second = viewer.currentHitNumber();
-        System.out.println("R5.4 next -> " + viewer.countLabel().getText()
+        vFindButtons(viewer).get(2).fire();   // next (ANGLE_DOWN)
+        secondHitLine = vInt(viewer, "currentHitLine");
+        int second = vInt(viewer, "currentHitNumber");
+        System.out.println("R5.4 next -> " + vCountLabel(viewer).getText()
                 + " currentLine=" + secondHitLine);
         check("R5.4 next advances the counter to 2 / m (was " + countAtFirstHit + ", now "
-                        + viewer.countLabel().getText() + ")", second == 2);
+                        + vCountLabel(viewer).getText() + ")", second == 2);
         check("R5.4 next moved to a different line (" + firstHitLine + " -> " + secondHitLine + ")",
                 secondHitLine != firstHitLine);
-        viewer.findButtons().get(1).fire();   // prev (ANGLE_UP)
-        check("R5.4 prev goes back to 1 / m (now " + viewer.countLabel().getText() + ")",
-                viewer.currentHitNumber() == 1);
-        check("R5.4 prev restored the first hit line (" + viewer.currentHitLine() + ")",
-                viewer.currentHitLine() == firstHitLine);
+        vFindButtons(viewer).get(1).fire();   // prev (ANGLE_UP)
+        check("R5.4 prev goes back to 1 / m (now " + vCountLabel(viewer).getText() + ")",
+                vInt(viewer, "currentHitNumber") == 1);
+        check("R5.4 prev restored the first hit line (" + vInt(viewer, "currentHitLine") + ")",
+                vInt(viewer, "currentHitLine") == firstHitLine);
     }
 
     /** 到头再下一个 → 回到 1（循环）。 */
     private void checkFindWrapAround() {
-        int total = viewer.hitCount();
+        int total = vInt(viewer, "hitCount");
         for (int i = 0; i < total; i++) {
-            viewer.findButtons().get(2).fire();
+            vFindButtons(viewer).get(2).fire();
         }
         System.out.println("R5.4 after " + total + " \"next\" clicks -> "
-                + viewer.countLabel().getText());
+                + vCountLabel(viewer).getText());
         check("R5.4 next WRAPS AROUND: after m clicks the counter is back to 1 / m ("
-                        + viewer.countLabel().getText() + ")",
-                viewer.currentHitNumber() == 1);
-        viewer.findButtons().get(1).fire();
-        check("R5.4 prev also wraps (1 -> m): " + viewer.countLabel().getText(),
-                viewer.currentHitNumber() == total);
-        viewer.findButtons().get(2).fire();
-        check("R5.4 next from m wraps back to 1: " + viewer.countLabel().getText(),
-                viewer.currentHitNumber() == 1);
+                        + vCountLabel(viewer).getText() + ")",
+                vInt(viewer, "currentHitNumber") == 1);
+        vFindButtons(viewer).get(1).fire();
+        check("R5.4 prev also wraps (1 -> m): " + vCountLabel(viewer).getText(),
+                vInt(viewer, "currentHitNumber") == total);
+        vFindButtons(viewer).get(2).fire();
+        check("R5.4 next from m wraps back to 1: " + vCountLabel(viewer).getText(),
+                vInt(viewer, "currentHitNumber") == 1);
     }
 
     /** 必然不命中的词 → 计数 0、不报错（无异常、无错误卡）。 */
     private void checkFindNoHits() {
         modalPane.hide();
-        viewer.queryField().setText("zzz-this-token-cannot-exist-zzz");
+        vQuery(viewer).setText("zzz-this-token-cannot-exist-zzz");
         String verdict;
         try {
-            viewer.findButtons().get(0).fire();
-            viewer.findButtons().get(2).fire();
-            viewer.findButtons().get(1).fire();
+            vFindButtons(viewer).get(0).fire();
+            vFindButtons(viewer).get(2).fire();
+            vFindButtons(viewer).get(1).fire();
             verdict = "no exception";
         } catch (Throwable ex) {
             verdict = "threw " + ex;
         }
-        System.out.println("R5.4 no-hit query -> count=\"" + viewer.countLabel().getText()
-                + "\" hits=" + viewer.hitCount() + " verdict=" + verdict
+        System.out.println("R5.4 no-hit query -> count=\"" + vCountLabel(viewer).getText()
+                + "\" hits=" + vInt(viewer, "hitCount") + " verdict=" + verdict
                 + " modalDisplay=" + modalPane.isDisplay());
         check("R5.4 a query with no hits raises nothing (" + verdict + ")", "no exception".equals(verdict));
-        check("R5.4 the counter shows 0 for no hits: " + viewer.countLabel().getText(),
-                viewer.hitCount() == 0 && viewer.countLabel().getText().contains("0"));
+        check("R5.4 the counter shows 0 for no hits: " + vCountLabel(viewer).getText(),
+                vInt(viewer, "hitCount") == 0 && vCountLabel(viewer).getText().contains("0"));
         check("R5.4 no error card was raised by the empty result (modal=" + modalPane.isDisplay() + ")",
                 !modalPane.isDisplay());
         check("R5.4 navigation with no hits is a no-op, not a crash (current="
-                + viewer.currentHitNumber() + ")", viewer.currentHitNumber() == 0);
+                + vInt(viewer, "currentHitNumber") + ")", vInt(viewer, "currentHitNumber") == 0);
     }
 
     /** R5.4：命中高亮（节点级）+ 滚动到可见。 */
     private void checkHighlightAndScroll() {
-        viewer.queryField().setText(SEARCH_TOKEN);
-        viewer.findButtons().get(0).fire();
-        int line = viewer.currentHitLine();
+        vQuery(viewer).setText(SEARCH_TOKEN);
+        vFindButtons(viewer).get(0).fire();
+        int line = vInt(viewer, "currentHitLine");
         Node cell = revealCellForLine(line);
         List<String> highlighted = hitTextsWithin(cell);
-        String hitLineText = viewer.lineText(line);
+        String hitLineText = vLine(viewer, line);
         System.out.println("R5.4 highlight: currentLine=" + line
                 + " highlighted=\"" + String.join("\",\"", highlighted) + "\""
                 + " cell=" + describe(cell) + " visible=" + isEffectivelyVisible(cell));
@@ -2177,33 +2302,33 @@ public class HtmlViewerProbe extends Application {
      */
     private void checkMinimalRepaint() {
         // 造一次"远距离跳转"：命中从第 1 处走到最后一处，新旧两行相距很远
-        viewer.queryField().setText(SEARCH_TOKEN);
-        viewer.findButtons().get(0).fire();
-        viewer.node().applyCss();
-        viewer.node().layout();
-        int cellsBefore = viewer.cellsBuiltInLastRefresh();
-        viewer.findButtons().get(1).fire();       // prev -> 循环到最后一处（最远的一行）
-        viewer.node().applyCss();
-        viewer.node().layout();
-        int cellsBuilt = viewer.cellsBuiltInLastRefresh();
-        int rows = viewer.lineCount();
+        vQuery(viewer).setText(SEARCH_TOKEN);
+        vFindButtons(viewer).get(0).fire();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
+        int cellsBefore = vInt(viewer, "cellsBuiltInLastRefresh");
+        vFindButtons(viewer).get(1).fire();       // prev -> 循环到最后一处（最远的一行）
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
+        int cellsBuilt = vInt(viewer, "cellsBuiltInLastRefresh");
+        int rows = vInt(viewer, "lineCount");
         System.out.println("R5 focused repaint: cellsBuiltInLastRefresh=" + cellsBuilt
                 + " (search itself: " + cellsBefore + ")"
-                + " repaints=" + viewer.repaintCount()
-                + " namedLines=" + viewer.repaintedLineCount() + " totalLines=" + rows);
+                + " repaints=" + vLong(viewer, "repaintCount")
+                + " namedLines=" + vLong(viewer, "repaintedLineCount") + " totalLines=" + rows);
         check("R5 moving the hit rebuilds only a handful of cells (" + cellsBuilt
                         + ") instead of all " + rows + " rows", cellsBuilt > 0 && cellsBuilt < 200);
         check("R5 that is far below the line count (" + cellsBuilt + " << " + rows + ")",
                 cellsBuilt * 10 < rows);
         check("R5 the repaint went through the find path, not a table-wide refresh (repaints="
-                + viewer.repaintCount() + ")", viewer.repaintCount() > 0);
+                + vLong(viewer, "repaintCount") + ")", vLong(viewer, "repaintCount") > 0);
     }
 
     /** R5.1：查找栏在查看器底部（几何上就在内层视口下方）。 */
     private void checkFindBarBottom() {
-        Bounds bar = viewer.findBar().localToScene(viewer.findBar().getBoundsInLocal());
+        Bounds bar = vFindBar(viewer).localToScene(vFindBar(viewer).getBoundsInLocal());
         Bounds viewport = scroller.localToScene(scroller.getBoundsInLocal());
-        Bounds viewerBounds = viewer.node().localToScene(viewer.node().getBoundsInLocal());
+        Bounds viewerBounds = vNode(viewer).localToScene(vNode(viewer).getBoundsInLocal());
         System.out.println(String.format("R5.1 geometry: findBar y=[%.0f..%.0f] viewport y=[%.0f..%.0f] viewer y=[%.0f..%.0f]",
                 bar.getMinY(), bar.getMaxY(), viewport.getMinY(), viewport.getMaxY(),
                 viewerBounds.getMinY(), viewerBounds.getMaxY()));
@@ -2219,8 +2344,8 @@ public class HtmlViewerProbe extends Application {
     /** R2.9：收起即隐藏；右侧行为不受影响（此前已单独验过）。 */
     private void checkCollapseR29() {
         host.leftCollapseButton().fire();
-        viewer.node().applyCss();
-        viewer.node().layout();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
         System.out.println("R2.9 after collapse: leftVisible=" + leftPanel.isVisible()
                 + " leftShowing=" + host.isLeftShowing()
                 + " rightVisible=" + rightPanel.isVisible() + " rightShowing=" + host.isRightShowing());
@@ -2230,7 +2355,7 @@ public class HtmlViewerProbe extends Application {
         check("R2.9 collapsing the viewer does not touch the right panel",
                 !host.isRightShowing() && !rightPanel.isVisible());
         check("R2.9 there is no draft/commit semantics: reopening just shows the same node",
-                viewer.node() == ((BorderPane) leftPanel).getCenter());
+                vNode(viewer) == ((BorderPane) leftPanel).getCenter());
     }
 
     private void checkGuiStateUnchanged() {
@@ -2288,7 +2413,7 @@ public class HtmlViewerProbe extends Application {
 
     /** 场景里第 {@code row} 行（0 基）对应的 cell（虚拟化下只有可见区域才有）。 */
     private Node cellForLine(int row) {
-        for (Node n : viewer.node().lookupAll(".list-cell")) {
+        for (Node n : vNode(viewer).lookupAll(".list-cell")) {
             if (n instanceof javafx.scene.control.ListCell<?> lc && !lc.isEmpty()
                     && lc.getIndex() == row) {
                 return n;
@@ -2304,13 +2429,13 @@ public class HtmlViewerProbe extends Application {
      * 必须显式 {@code applyCss+layout} 才能真正把那个 cell 建出来 —— 否则查到的是空。</p>
      */
     private Node revealCellForLine(int row) {
-        viewer.node().applyCss();
-        viewer.node().layout();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
         Node cell = cellForLine(row);
         if (cell == null) {
-            viewer.listView().scrollTo(row);
-            viewer.node().applyCss();
-            viewer.node().layout();
+            vList(viewer).scrollTo(row);
+            vNode(viewer).applyCss();
+            vNode(viewer).layout();
             cell = cellForLine(row);
         }
         return cell;

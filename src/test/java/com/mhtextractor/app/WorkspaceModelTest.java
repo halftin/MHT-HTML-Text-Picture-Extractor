@@ -31,6 +31,21 @@ class WorkspaceModelTest {
         return new PreviewItem("C:/x/" + name, name, LocalDateTime.now(), "C:/x");
     }
 
+    /**
+     * E2.2：反射读取模型的私有撤销栈（生产侧已删除 {@code pushUnsupportedForTest}
+     * 测试支撑方法；本访问点按选项 D 登记进 test-access-surface.tsv）。
+     */
+    @SuppressWarnings("unchecked")
+    private static UndoManager<PreviewItem> undoManagerOf(WorkspaceModel m) {
+        try {
+            java.lang.reflect.Field f = WorkspaceModel.class.getDeclaredField("undoManager");
+            f.setAccessible(true);
+            return (UndoManager<PreviewItem>) f.get(m);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("undoManager 反射读取失败", e);
+        }
+    }
+
     // ==================== 构造 / 自持存储 / 查询快照 ====================
 
     /**
@@ -191,7 +206,7 @@ class WorkspaceModelTest {
         assertEquals(0, m.removeItems(List.of()), "空移除是 no-op");
         assertEquals(0, m.removeGroup(new GroupItem<>(98, "不在顶层")));
         assertFalse(m.applyResolvedDrop(null).changed(), "空操作拖放是 no-op");
-        m.pushUnsupportedForTest();
+        undoManagerOf(m).push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of()));
         assertFalse(m.undo(), "不支持的撤销类型：弹出后原样压回");
 
         assertTrue(seen.isEmpty(), "失败 / no-op 命令不得发布变更，实际发布了：" + seen);
@@ -525,7 +540,7 @@ class WorkspaceModelTest {
         WorkspaceModel m = new WorkspaceModel();
         m.addItems(List.of(item("a.mht")));
         // 手动压入一条参数类记录（本模型尚未实现）
-        m.pushUnsupportedForTest();
+        undoManagerOf(m).push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.of()));
 
         int depthBefore = m.undoDepth();
         assertFalse(m.undo(), "未支持的类型应返回 false");
