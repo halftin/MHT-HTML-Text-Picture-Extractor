@@ -84,8 +84,11 @@ const settings = path.join(workRoot, 'settings.workflow.json');
 const claudeArgs = ['--print', '--dangerously-skip-permissions',
   '--settings', settings, '--max-budget-usd', String(budget)];
 
-if (opt.session) { claudeArgs.push('--session-id', opt.session); }
+// --session-id 与 --resume/--continue 互斥（claude 2.1.x 实测报错：
+// "--session-id can only be used with --continue or --resume if --fork-session is also specified"）。
+// 续跑用 --resume <uuid>；新会话才用 --session-id <uuid>。
 if (opt.resume && opt.session) { claudeArgs.push('--resume', opt.session); }
+else if (opt.session) { claudeArgs.push('--session-id', opt.session); }
 
 const promptText = fs.readFileSync(opt.prompt, 'utf8');
 
