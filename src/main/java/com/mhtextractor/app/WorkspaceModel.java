@@ -272,7 +272,7 @@ public final class WorkspaceModel {
                     added.add(it);
                 }
             } else if (o instanceof GroupItem<?> raw) {
-                GroupItem<PreviewItem> g = asPreviewGroup(raw);
+                GroupItem<PreviewItem> g = GroupStructure.asPreviewGroup(raw);
                 if (!topLevel.contains(g)) {
                     topLevel.add(g);
                 }
@@ -691,7 +691,7 @@ public final class WorkspaceModel {
     public void rebuildParentPointers() {
         for (Object o : topLevel) {
             if (o instanceof GroupItem<?> raw) {
-                GroupItem<PreviewItem> g = asPreviewGroup(raw);
+                GroupItem<PreviewItem> g = GroupStructure.asPreviewGroup(raw);
                 for (Object m : g.getMembers()) {
                     if (m instanceof PreviewItem it) {
                         it.parentGroup = g;
@@ -967,23 +967,6 @@ public final class WorkspaceModel {
                 g.getMembers().remove(t);
             }
         }
-    }
-
-    /**
-     * 把 {@code GroupItem<?>} 收敛为 {@code GroupItem<PreviewItem>}（与 GUI 侧同名方法同一套保护）。
-     *
-     * <p>先验证全部成员确为 {@code PreviewItem}：验证通过则转换必然安全（本工作区只会产生
-     * {@code GroupItem<PreviewItem>}）；验证失败立即抛异常，避免堆污染导致的
-     * {@code ClassCastException} 在远离根因处爆发。</p>
-     */
-    @SuppressWarnings("unchecked")
-    private static GroupItem<PreviewItem> asPreviewGroup(GroupItem<?> g) {
-        for (Object m : g.getMembers()) {
-            if (!(m instanceof PreviewItem)) {
-                throw new IllegalStateException("Non-PreviewItem member in group " + g.getName() + ": " + m);
-            }
-        }
-        return (GroupItem<PreviewItem>) g;
     }
 
     /**

@@ -4,10 +4,13 @@ import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.util.OutputUnitPlanner;
 import javafx.application.Platform;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ProgressBar;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -23,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
@@ -77,8 +81,6 @@ class ExtractionTaskCoordinatorCancelRaceTest {
         final List<ExtractionTaskCoordinator.ExtractOutcomeStyle> outcomes =
                 Collections.synchronizedList(new ArrayList<>());
         final java.util.concurrent.atomic.AtomicInteger started = new java.util.concurrent.atomic.AtomicInteger(0);
-        /** 终态落地次数（步骤 7：停止禁用 + 开始按派生函数重算的动作，三终态各恰一次） */
-        final java.util.concurrent.atomic.AtomicInteger finished = new java.util.concurrent.atomic.AtomicInteger(0);
 
         @Override
         public File sessionOutputFolder() {
@@ -106,11 +108,6 @@ class ExtractionTaskCoordinatorCancelRaceTest {
         }
 
         @Override
-        public void extractionFinished() {
-            finished.incrementAndGet();
-        }
-
-        @Override
         public void applyResults(BatchProcessor.ProcessStats stats) {
             applied.add(stats);
         }
@@ -119,6 +116,50 @@ class ExtractionTaskCoordinatorCancelRaceTest {
         public void setStatusText(String text) {
             statusTexts.add(text);
         }
+    }
+
+    // ==================== 桩宿主（E1.1：landTerminalState 只触达 stopButton） ====================
+
+    /**
+     * 只记录 {@code stopButton()} 调用的最小桩宿主：E1.1 起终态落地经
+     * {@code host.stopButton().setDisable(true)}（每次落地恰一次），按钮在 FX 线程上惰性创建。
+     * 其余宿主方法：{@code run()} 直驱路径的 UI 动作全走 {@link FakeUi} seam，不会触达宿主。
+     */
+    private static final class CancelHost implements ExtractionTaskCoordinator.Host {
+
+        final AtomicInteger stopButtonCalls = new AtomicInteger();
+        Button stopButton;
+
+        @Override public Button stopButton() {
+            stopButtonCalls.incrementAndGet();
+            if (stopButton == null) {
+                stopButton = new Button();   // 落地只发生在 FX 线程，toolkit 已就绪
+            }
+            return stopButton;
+        }
+
+        @Override public boolean isAnimating() { return false; }
+        @Override public String inputFolder() { return ""; }
+        @Override public String outputFolder() { return ""; }
+        @Override public int itemCount() { return 0; }
+        @Override public long visibleCount() { return 0; }
+        @Override public boolean imageMode() { return false; }
+        @Override public boolean openFolderAfterComplete() { return false; }
+        @Override public AppConfig textParamsCache() { return null; }
+        @Override public AppConfig imageParamsCache() { return null; }
+        @Override public boolean currentModeConfirmed() { return true; }
+        @Override public boolean otherModeConfirmed() { return false; }
+        @Override public AppConfig currentModeParamsOrDefaults() { return new AppConfig(); }
+        @Override public List<Object> dataOrder() { return List.of(); }
+        @Override public OutputUnitPlanner.ItemView<PreviewItem> itemView() { return null; }
+        @Override public List<PreviewItem> allVisibleItems() { return List.of(); }
+        @Override public void cancelWorkspaceActivity() { }
+        @Override public Label statusLabel() { return null; }
+        @Override public void setStatusText(String text) { }
+        @Override public void setProgressBarActivity(String styleClass) { }
+        @Override public void applyExtractResults(BatchProcessor.ProcessStats stats) { }
+        @Override public ProgressBar progressBar() { return null; }
+        @Override public Button startButton() { return null; }
     }
 
     // ==================== 闸门（递归深度回调 seam） ====================
@@ -269,9 +310,14 @@ class ExtractionTaskCoordinatorCancelRaceTest {
         }
     };
 
-    private ExtractionTaskCoordinator coordinator() {
+    /** 当前用例的桩宿主（coordinator 每次重造时替换；断言读它的 stopButtonCalls）。 */
+    private CancelHost cancelHost;
+
+    private ExtractionTaskCoordinator coordinator(AtomicInteger derivedCalls) {
+        cancelHost = new CancelHost();
         return new ExtractionTaskCoordinator(new WorkspaceExtractionService(
-                new PreviewCacheLifecycle(new PreviewCacheStore(tmp.resolve("cache")))));
+                new PreviewCacheLifecycle(new PreviewCacheStore(tmp.resolve("cache")))), cancelHost,
+                derivedCalls::incrementAndGet);
     }
 
     // ==================== 用例 ====================
@@ -283,7 +329,8 @@ class ExtractionTaskCoordinatorCancelRaceTest {
     @Test
     void cancelWhileWorkerBlockedInUnitWritesBackPartialExactlyOnce() throws Exception {
         requireToolkit();
-        ExtractionTaskCoordinator coordinator = coordinator();
+        AtomicInteger derivedCalls = new AtomicInteger();
+        ExtractionTaskCoordinator coordinator = coordinator(derivedCalls);
         FakeUi ui = new FakeUi();
         Label label = new Label();
         Gate gate = new Gate();
@@ -303,8 +350,9 @@ class ExtractionTaskCoordinatorCancelRaceTest {
                     "onCancelled 已跑但 worker 未完成：不得回写（旧实现此刻读 holder 会拿到 null/残留）");
             assertFalse(coordinator.running.get(),
                     "onCancelled 必须落地运行标记复位（不等到 worker 退出）");
-            assertEquals(1, ui.finished.get(),
-                    "onCancelled 必须落地停止禁用 + 开始按派生函数重算恰一次");
+            assertEquals(1, cancelHost.stopButtonCalls.get(),
+                    "onCancelled 必须落地停止禁用恰一次（E1.1：经 host.stopButton）");
+            assertEquals(1, derivedCalls.get(), "onCancelled 必须按派生函数重算开始按钮恰一次");
 
             gate.open();                     // 时点②：放行 worker → 返回 partial
             waitUntil("取消后 worker 完成 → partial 回写", () -> !ui.applied.isEmpty());
@@ -312,7 +360,8 @@ class ExtractionTaskCoordinatorCancelRaceTest {
             assertEquals(1, ui.applied.size(), "partial 必须恰好回写一次（worker 完成后）");
             assertSame(coordinator.extractStats().get(), ui.applied.get(0),
                     "回写载荷 == worker 返回的统计（同一对象）");
-            assertEquals(1, ui.finished.get(), "落地不得随 partial 回写重复（仍恰一次）");
+            assertEquals(1, cancelHost.stopButtonCalls.get(), "落地不得随 partial 回写重复（仍恰一次）");
+            assertEquals(1, derivedCalls.get(), "派生函数不得随 partial 回写重复调用");
         } finally {
             gate.open();                     // 任何失败路径都放行 worker，防非 daemon 线程残留
         }
@@ -322,7 +371,7 @@ class ExtractionTaskCoordinatorCancelRaceTest {
     @Test
     void cancelOnSecondRunWritesBackThisRunsPartialNotStaleHolder() throws Exception {
         requireToolkit();
-        ExtractionTaskCoordinator coordinator = coordinator();
+        ExtractionTaskCoordinator coordinator = coordinator(new AtomicInteger());
         FakeUi ui = new FakeUi();
         Label label = new Label();
         Path simple = fixture("/fixtures/simple-text.mht", "simple-b.mht");
@@ -354,7 +403,7 @@ class ExtractionTaskCoordinatorCancelRaceTest {
             assertSame(coordinator.extractStats().get(), ui.applied.get(1),
                     "第二次回写必须是 run 2 的 partial，不得是 run 1 的残留统计");
             assertSame(run1Stats, ui.applied.get(0), "run 1 的成功回写不受影响");
-            assertEquals(2, ui.finished.get(), "两次终态（run 1 成功 + run 2 取消）各落地一次");
+            assertEquals(2, cancelHost.stopButtonCalls.get(), "两次终态（run 1 成功 + run 2 取消）各落地一次");
             assertFalse(coordinator.running.get(), "取消终态必须复位运行标记");
         } finally {
             gate.open();
@@ -365,7 +414,7 @@ class ExtractionTaskCoordinatorCancelRaceTest {
     @Test
     void cancelThenImmediatelyStartNewRunKeepsLateCallbacksFromPolluting() throws Exception {
         requireToolkit();
-        ExtractionTaskCoordinator coordinator = coordinator();
+        ExtractionTaskCoordinator coordinator = coordinator(new AtomicInteger());
         FakeUi ui = new FakeUi();
         Label label = new Label();
         Path simple0 = fixture("/fixtures/simple-text.mht", "simple-c0.mht");

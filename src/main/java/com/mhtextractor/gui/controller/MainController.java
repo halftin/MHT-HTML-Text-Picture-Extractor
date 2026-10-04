@@ -431,7 +431,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void updateProgressStatus() { preparseController.updateProgressStatus(parseToken); }
         @Override public void renderThumbnails(PreviewItem item) { previewRenderer.renderThumbnails(item); }
         @Override public void startPreParseFor(List<PreviewItem> items) { preparseController.startPreParseFor(items); }
-        @Override public void clearPreviewCache(PreviewItem item) { MainController.this.clearPreviewCache(item); }
+        @Override public void clearPreviewCache(PreviewItem item) { item.resetPreviewState(); }
         @Override public void toggleGroupExpanded(GroupItem<PreviewItem> group) { groupCommand.toggleGroupExpanded(group); }
     });
     /**
@@ -461,7 +461,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public List<PreviewItem> applyUndoAffected() { return ws.applyUndoAffected(); }
         @Override public void applyParamUndo(UndoManager.Record<PreviewItem> record) { paramDomain.applyParamUndo(record); }
         @Override public void cacheRulesForRemovedItems(Iterable<PreviewItem> items) { workspaceParamService.itemsRemoved(items); }
-        @Override public void clearItemPreviewState(PreviewItem item) { MainController.this.clearPreviewCache(item); }
+        @Override public void clearItemPreviewState(PreviewItem item) { item.resetPreviewState(); }
         @Override public void refreshAfterListChange() { MainController.this.refreshAfterListChange(); }
         @Override public void startPreParseFor(List<PreviewItem> items) { preparseController.startPreParseFor(items); }
         @Override public boolean currentModeConfirmed() { return MainController.this.currentModeConfirmed(); }
@@ -499,7 +499,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void pushParamUndo(boolean imageMode, String path, Integer groupNo, AppConfig before) { paramClipboard.pushParamUndo(imageMode, path, groupNo, before); }
         @Override public void paramsChanged(boolean imageMode, PreviewItem item) { workspaceParamService.paramsChanged(imageMode, item); }
         @Override public void paramsChanged(boolean imageMode, Iterable<PreviewItem> items) { workspaceParamService.paramsChanged(imageMode, items); }
-        @Override public void clearPreviewCache(PreviewItem item) { MainController.this.clearPreviewCache(item); }
+        @Override public void clearPreviewCache(PreviewItem item) { item.resetPreviewState(); }
         @Override public void clearExtractOutcomes(List<PreviewItem> items) { infoPresenter.clearExtractOutcomes(items); }
         @Override public void updateBadgeHeader() { infoPresenter.updateBadgeHeader(); }
         @Override public void updateOutputModeLabel(Object sel) { infoPresenter.updateOutputModeLabel(sel); }
@@ -1222,10 +1222,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     @FXML
     private void onStopProcessing() {
-        extractionCoordinator.cancel();
-        extractionCoordinator.running.set(false);
-        refs.startButton().setDisable(false);
-        refs.stopButton().setDisable(true);
+        // E1.1：取消 + 复位（running / currentTask / 停止按钮 / 开始按钮派生函数）只有协调器一份实现；
+        // 此处只保留非复位 UI 动作。任务线程迟到的 onCancelled 会再落地一次（幂等，见 landTerminalState）。
+        extractionCoordinator.cancelAndReset();
         refs.progressBar().setVisible(false);
         setProgressBarActivity(null);
         refs.statusLabel().setText(I18n.get("extract.stopped"));
@@ -1253,16 +1252,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             }
         }
         return out;
-    }
-
-    /** 清空预览缓存并回到待解析（生效参数切换后重新预解析，阶段 5 机制）。只清内存态；磁盘缓存由 PreviewCacheLifecycle 四条规则管理 */
-    private void clearPreviewCache(PreviewItem it) {
-        it.cachedText = null;
-        it.cachedTitle = null;
-        it.cachedImages = null;
-        it.cachedThumbs = null;
-        it.cachedMeta = null;
-        it.status = PreviewItem.Status.WAITING;
     }
 
     // ==================== 显示序 / 数据序（F5） ====================
@@ -1533,7 +1522,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         // 组条目：预览区显示组信息与参数状态提示（6.5）
         if (item instanceof GroupItem<?> g) {
-            GroupItem<PreviewItem> group = ListInteractionController.asPreviewGroup(g);
+            GroupItem<PreviewItem> group = GroupStructure.asPreviewGroup(g);
             String info = I18n.get("preview.groupInfo") + group.getName()
                     + I18n.get("preview.groupItemCount", "count", visibleMemberCount(group))
                     + I18n.get("preview.paramsLabel") + groupParamStatusText(group);

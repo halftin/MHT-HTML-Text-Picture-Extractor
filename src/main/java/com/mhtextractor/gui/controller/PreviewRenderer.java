@@ -175,7 +175,10 @@ public final class PreviewRenderer {
 
     /** 单击缩略图：用系统默认图片查看器打开缓存目录里对应的图片（非 AWT；启动/校验/环境兜底见 {@link FileOpener}）。 */
     private void openCachedImage(PreviewItem item, int index) {
-        Path file = host.cacheLifecycle().store().imageFileFor(item.cachedMeta, index);
+        // E1.2：cachedMeta 为 null（参数变更后清空 / 从未落盘）时安全返回，warn 复用既有
+        // file == null 分支（同一日志键 log.maincontroller.65，不新增日志调用点）。
+        Path file = item.cachedMeta == null ? null
+                : host.cacheLifecycle().store().imageFileFor(item.cachedMeta, index);
         if (file == null || !Files.isRegularFile(file)) {
             log.warn(I18n.msg("log.maincontroller.65", item.name));
             return;

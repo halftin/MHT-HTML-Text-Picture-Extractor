@@ -7,6 +7,7 @@ import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.SelectionState;
 import com.mhtextractor.util.UndoManager;
@@ -162,7 +163,7 @@ public final class ListInteractionController implements MainViewActions {
             return;
         }
         if (item instanceof GroupItem<?> g) {
-            GroupItem<PreviewItem> group = asPreviewGroup(g);
+            GroupItem<PreviewItem> group = GroupStructure.asPreviewGroup(g);
             // 箭头槽位（cell x 22-46）：折叠/展开，优先于 Ctrl/Shift 多选手势；
             // pressed 判定比 released 可靠（released 会被 checkbox 吞掉导致间歇丢失）
             if (e.getX() >= 22 && e.getX() <= 46) {
@@ -264,7 +265,7 @@ public final class ListInteractionController implements MainViewActions {
         }
         if (item instanceof GroupItem<?> g) {
             if (e.getX() >= 46) {
-                onGroupCheckToggled(asPreviewGroup(g));
+                onGroupCheckToggled(GroupStructure.asPreviewGroup(g));
             }
         } else if (item instanceof PreviewItem it && !it.removed) {
             if (e.getX() >= 50) {
@@ -363,9 +364,9 @@ public final class ListInteractionController implements MainViewActions {
         }
         host.cancelPreviewLoad();
         if (lastSelected instanceof PreviewItem last && last != item) {
-            // 仅当前文件的图片数据驻留内存
-            last.cachedImages = null;
-            last.cachedThumbs = null;
+            // 仅当前文件的图片数据驻留内存（E1.2：只清图片数据的唯一实现是 PreviewItem.releaseImageData，
+            // 文本/标题/meta/状态保持不动 —— 这里的语义是"慎重"的局部释放，不是整体重置）
+            last.releaseImageData();
         }
         lastSelected = item;
         // 组行选中/未选中背景样式随选择变化切换；拖拽动画期间暂停刷新避免打乱快照画面
@@ -708,22 +709,5 @@ public final class ListInteractionController implements MainViewActions {
 
     boolean isDragPositionStale() {
         return dragPositionStale;
-    }
-
-    /**
-     * 把 {@code GroupItem<?>} 安全转换为 {@code GroupItem<PreviewItem>}（unchecked 转换的唯一收口点）。
-     *
-     * <p>转换前先验证全部成员确为 {@code PreviewItem}：验证通过则转换必然安全
-     * （本控制器的建组路径只会产生 {@code GroupItem<PreviewItem>}）；验证失败立即抛异常，
-     * 避免堆污染导致的 {@code ClassCastException} 在远离根因处爆发。</p>
-     */
-    @SuppressWarnings("unchecked")
-    static GroupItem<PreviewItem> asPreviewGroup(GroupItem<?> g) {
-        for (Object m : g.getMembers()) {
-            if (!(m instanceof PreviewItem)) {
-                throw new IllegalStateException("Non-PreviewItem member in group " + g.getName() + ": " + m);
-            }
-        }
-        return (GroupItem<PreviewItem>) g;
     }
 }

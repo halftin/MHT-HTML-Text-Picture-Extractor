@@ -5,12 +5,16 @@ import atlantafx.base.theme.NordLight;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mhtextractor.App;
+import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.config.GuiState;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
 import com.mhtextractor.gui.controller.ParamFormPane;
 import com.mhtextractor.gui.controller.ParamSidePanel;
+import com.mhtextractor.gui.controller.PreviewRenderer;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.model.ThumbnailData;
 import com.mhtextractor.util.ParamScope;
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -226,7 +230,8 @@ public class SidePanelProbe extends Application {
                 this::leftViewerRegression, this::openGroupA, this::makeDirty,
                 this::switchToGroupB, this::checkCardBlocksClose, this::clickCardCancel,
                 this::collapsePanelForCloseTests, this::checkDirtyAllowsClose,
-                this::resetDraftForCloseControl, this::checkCleanAllowsClose, this::closeWindowForReal));
+                this::resetDraftForCloseControl, this::checkCleanAllowsClose,
+                this::e12PreviewStateCheck, this::closeWindowForReal));
     }
 
     /** 关窗控制组的前置：先把草稿提交干净（走唯一提交路径 #confirmButton），再让窗口重新显示。 */
@@ -1157,6 +1162,113 @@ public class SidePanelProbe extends Application {
                 stage.isShowing());
         check("R3.6 branch 2: the pending card was NOT replaced or answered behind the user's back",
                 cardShown() && NotificationHost.hasPendingDecision(anchor));
+    }
+
+    /**
+     * E1.2 —— 「清预览态」收敛的运行时观测（决策 #11）：
+     * (a) 真实主界面装配拿到 {@code PreviewRenderer} 与一个可见条目；
+     * (b) {@code cachedMeta == null} 时 {@code openCachedImage} 必须安全返回
+     *     （不抛异常、不启动 open-cached-image 线程）；
+     * (c) 生产清空路径 {@code ParamDomainController.refreshAfterTargetedParamsChange} 驱动后
+     *     {@code cachedMeta == null} 且预览区不再有可点击缩略图节点（meta==null 且有点击处理器的状态不可达）。
+     * 反射只经本探针已登记的 helper（field / invoke / invokeOn），不新增反射原语。
+     */
+    private void e12PreviewStateCheck() {
+        // 切到图片模式：updateContentArea 只在图片模式触碰缩略图区（文本模式不动 thumbnailPane）。
+        // 本步已处链路末端（关窗前），模式切换不影响后续步骤。
+        ToggleButton imageMode = (ToggleButton) scene.lookup("#imageModeToggle");
+        if (imageMode != null) {
+            imageMode.setSelected(true);
+        }
+        Object item = null;
+        for (Object row : fileListView.getItems()) {
+            if (row instanceof PreviewItem p && !p.removed) {
+                item = p;
+                break;
+            }
+        }
+        if (item == null) {
+            check("E1.2 (a): a visible PreviewItem exists in #fileListView", false);
+            return;
+        }
+        selectRow(item);
+        Object renderer = field(controller, "previewRenderer");
+        check("E1.2 (a): field(mc, previewRenderer) resolves", renderer != null);
+        if (renderer == null) {
+            return;
+        }
+        Object pane = invokeOn(PreviewRenderer.Host.class, field(renderer, "host"),
+                "thumbnailPane", new Class<?>[]{});
+        if (!(pane instanceof javafx.scene.layout.Pane pn)) {
+            check("E1.2 (a): renderer host exposes the thumbnail pane", false);
+            return;
+        }
+
+        // (b) meta == null → openCachedImage 安全返回。invoke helper 吞异常并打印
+        // "(reflect ... failed"：捕获 System.out 断言无该标记；再以"未启动 open-cached-image
+        // 线程"作第二个可观测信号（成功路径会在检查后同步 spawn 该线程）。
+        ((PreviewItem) item).cachedMeta = null;
+        int threadsBefore = countThreads("open-cached-image");
+        java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream originalOut = System.out;
+        System.setOut(new java.io.PrintStream(captured, true));
+        try {
+            invoke(renderer, "openCachedImage", new Class<?>[]{PreviewItem.class, int.class}, item, 0);
+        } finally {
+            System.setOut(originalOut);
+        }
+        String openOut = captured.toString();
+        check("E1.2 (b): openCachedImage(meta=null) returned without exception"
+                        + (openOut.isBlank() ? "" : "  output=" + openOut.replace('\r', ' ').replace('\n', '|')),
+                !openOut.contains("openCachedImage failed"));
+        check("E1.2 (b): no open-cached-image thread spawned for meta==null (safe early return)",
+                countThreads("open-cached-image") == threadsBefore);
+
+        // 播种"有 meta + 可点击缩略图"的已渲染状态（生产渲染入口 appendThumb；meta 为 public 字段直接赋值）
+        ((PreviewItem) item).cachedMeta = new PreviewCacheMeta(PreviewCacheMeta.FORMAT_VERSION,
+                new PreviewCacheMeta.Source(((PreviewItem) item).path, 1L, 2L, ""), "probe-fp", true,
+                List.of(new PreviewCacheMeta.ImageEntry("images/0001.png", "cid:x", "0001.png", "png", List.of())),
+                List.of());
+        ((PreviewRenderer) renderer).appendThumb((PreviewItem) item,
+                new ThumbnailData("0001.png", 2, 2,
+                        new int[]{0xFF0000FF, 0xFF00FF00, 0xFFFF0000, 0xFFFFFFFF}), 0);
+        long clickableBefore = countClickableThumbs(pn);
+        check("E1.2 (c) precondition: a clickable thumbnail node exists before the clearing",
+                clickableBefore > 0);
+
+        // (c) 生产清空路径：ParamDomainController.refreshAfterTargetedParamsChange(affected=[item])
+        Object paramDomain = field(controller, "paramDomain");
+        invoke(paramDomain, "refreshAfterTargetedParamsChange", new Class<?>[]{List.class}, List.of(item));
+
+        boolean metaCleared = ((PreviewItem) item).cachedMeta == null;
+        long clickableAfter = countClickableThumbs(pn);
+        check("E1.2 (c): production clearing path nulls cachedMeta (the previously leaked field)",
+                metaCleared);
+        check("E1.2 (c): no clickable thumbnail nodes remain in the preview area "
+                        + "(before=" + clickableBefore + " after=" + clickableAfter + ")",
+                clickableAfter == 0);
+    }
+
+    /** 缩略图区里带点击处理器的节点数（buildThumbBox 把 onClick 挂在盒子节点上）。 */
+    private static long countClickableThumbs(javafx.scene.layout.Pane pane) {
+        long n = 0;
+        for (javafx.scene.Node child : pane.getChildren()) {
+            if (child.getOnMouseClicked() != null) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** 指定名字的存活线程数（E1.2 (b) 的第二个可观测信号）。 */
+    private static int countThreads(String name) {
+        int n = 0;
+        for (Thread t : Thread.getAllStackTraces().keySet()) {
+            if (t.getName().equals(name)) {
+                n++;
+            }
+        }
+        return n;
     }
 
     private void closeWindowForReal() {

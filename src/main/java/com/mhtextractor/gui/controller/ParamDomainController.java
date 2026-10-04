@@ -5,6 +5,7 @@ import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.UndoManager;
 import javafx.scene.Node;
@@ -104,7 +105,7 @@ public final class ParamDomainController {
     /** 确认路径的应用本体（R7.4 唯一实现点）：组 → 组参数；条目 → 条目参数；其余 → 全局参数 */
     void applyTargetParams(ParamScope.Target target, boolean imageMode, AppConfig params) {
         switch (target) {
-            case ParamScope.GroupTarget(GroupItem<?> g) -> applyGroupParams(ListInteractionController.asPreviewGroup(g), imageMode, params);
+            case ParamScope.GroupTarget(GroupItem<?> g) -> applyGroupParams(GroupStructure.asPreviewGroup(g), imageMode, params);
             case ParamScope.ItemTarget<?> it -> applyItemParams((PreviewItem) it.item(), imageMode, params);
             default -> {
                 applyConfirmedParams(imageMode, params);
@@ -274,7 +275,7 @@ public final class ParamDomainController {
                     topItems.add(it);
                 }
             } else if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> grp = ListInteractionController.asPreviewGroup(g);
+                GroupItem<PreviewItem> grp = GroupStructure.asPreviewGroup(g);
                 if ((imageMode ? grp.getImageParamsCache() : grp.getTextParamsCache()) != null) {
                     groups.add(grp);
                 }
@@ -349,11 +350,8 @@ public final class ParamDomainController {
     private void refreshAfterTargetedParamsChange(List<PreviewItem> affected) {
         host.cancelWorkspaceActivity();
         for (PreviewItem m : affected) {
-            m.cachedText = null;
-            m.cachedTitle = null;
-            m.cachedImages = null;
-            m.cachedThumbs = null;
-            m.status = PreviewItem.Status.WAITING;
+            // E1.2：清预览态的唯一实现是 PreviewItem.resetPreviewState()（此前的内联清单漏清 cachedMeta）
+            m.resetPreviewState();
         }
         Object sel = host.currentSelection();
         host.updateBadgeHeader();
@@ -417,7 +415,7 @@ public final class ParamDomainController {
                     for (Object o : host.dataOrder()) {
                         if (o instanceof GroupItem<?> g
                                 && g.getGroupNo() == record.paramTargetGroupNo()) {
-                            GroupItem<PreviewItem> grp = ListInteractionController.asPreviewGroup(g);
+                            GroupItem<PreviewItem> grp = GroupStructure.asPreviewGroup(g);
                             if (im) {
                                 grp.setImageParamsCache(record.paramBefore());
                             } else {
@@ -516,7 +514,7 @@ public final class ParamDomainController {
         List<PreviewItem> affected = new ArrayList<>(restoredItems);
         for (Object o : host.dataOrder()) {
             if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> grp = ListInteractionController.asPreviewGroup(g);
+                GroupItem<PreviewItem> grp = GroupStructure.asPreviewGroup(g);
                 if (groupBefore.containsKey(grp.getGroupNo())) {
                     if (im) grp.setImageParamsCache(groupBefore.get(grp.getGroupNo()));
                     else grp.setTextParamsCache(groupBefore.get(grp.getGroupNo()));

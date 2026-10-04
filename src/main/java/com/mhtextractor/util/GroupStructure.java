@@ -1,5 +1,7 @@
 package com.mhtextractor.util;
 
+import com.mhtextractor.model.PreviewItem;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -13,6 +15,24 @@ import java.util.function.Predicate;
 public final class GroupStructure {
 
     private GroupStructure() {
+    }
+
+    /**
+     * 把 {@code GroupItem<?>} 安全转换为 {@code GroupItem<PreviewItem>}（unchecked 转换的唯一收口点，E1.3）。
+     *
+     * <p>转换前先验证全部成员确为 {@code PreviewItem}：验证通过则转换必然安全
+     * （本工作区的建组路径只会产生 {@code GroupItem<PreviewItem>}）；验证失败立即抛异常，
+     * 避免堆污染导致的 {@code ClassCastException} 在远离根因处爆发。此前 {@code WorkspaceModel}
+     * 与 {@code ListInteractionController} 各有一份逐字相同的实现，已删除并统一走本入口。</p>
+     */
+    @SuppressWarnings("unchecked")
+    public static GroupItem<PreviewItem> asPreviewGroup(GroupItem<?> g) {
+        for (Object m : g.getMembers()) {
+            if (!(m instanceof PreviewItem)) {
+                throw new IllegalStateException("Non-PreviewItem member in group " + g.getName() + ": " + m);
+            }
+        }
+        return (GroupItem<PreviewItem>) g;
     }
 
     /** 结构快照条目：原组 + 成员列表副本（项目对象不深拷贝，恢复时复用原组对象） */

@@ -8,6 +8,7 @@ import com.mhtextractor.processor.FileResult;
 import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.SanitizeUtils;
 import com.mhtextractor.util.SourceKinds;
 import javafx.scene.control.Label;
@@ -75,7 +76,7 @@ public final class WorkspaceInfoPresenter {
             host.outputNameLabel().setManaged(false);
             host.groupNameBox().setVisible(true);
             host.groupNameBox().setManaged(true);
-            host.attachGroupNameEditor(ListInteractionController.asPreviewGroup(g));
+            host.attachGroupNameEditor(GroupStructure.asPreviewGroup(g));
             return;
         }
         AppConfig params = host.effectiveParams(item);

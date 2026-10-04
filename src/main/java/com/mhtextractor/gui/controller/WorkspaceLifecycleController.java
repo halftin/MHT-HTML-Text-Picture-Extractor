@@ -6,6 +6,7 @@ import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.UndoManager;
 import javafx.collections.ObservableList;
 import javafx.scene.Node;
@@ -90,7 +91,7 @@ public final class WorkspaceLifecycleController {
         }
         GroupItem<PreviewItem> group = null;
         if (target instanceof GroupItem<?> g) {
-            group = ListInteractionController.asPreviewGroup(g);
+            group = GroupStructure.asPreviewGroup(g);
         } else if (target instanceof PreviewItem it && it.parentGroup != null) {
             group = it.parentGroup;
         }
@@ -110,7 +111,7 @@ public final class WorkspaceLifecycleController {
         // D7：无勾选且选中组条目 → 整组移除（组名/参数随组对象保留在撤销记录中）
         if (targets.isEmpty() && sel instanceof GroupItem<?> g) {
             // G2（拍板）：整组移除一律必弹确认（R6"仅列表将空时确认"的有意例外），按钮行与右键菜单共用
-            removeGroupWithConfirm(ListInteractionController.asPreviewGroup(g));
+            removeGroupWithConfirm(GroupStructure.asPreviewGroup(g));
             return;
         }
         if (targets.isEmpty()) {
@@ -201,7 +202,7 @@ public final class WorkspaceLifecycleController {
         List<String> parts = new ArrayList<>();
         for (Object o : host.dataOrder()) {
             if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> group = ListInteractionController.asPreviewGroup(g);
+                GroupItem<PreviewItem> group = GroupStructure.asPreviewGroup(g);
                 if (!group.isExpanded()) {
                     long cnt = group.getMembers().stream()
                             .filter(m -> !m.removed && targets.contains(m)).count();

@@ -125,6 +125,34 @@ public class PreviewItem {
     /** 预览缓存元数据（需求 2 会话 9）：磁盘落盘后的 meta（含图片清单，不含字节） */
     public volatile PreviewCacheMeta cachedMeta;
 
+    /**
+     * 清空预览态（E1.2 的唯一实现，生效参数切换后重新预解析）：五个内存缓存字段全部清空 +
+     * 回到 {@link Status#WAITING}。磁盘缓存由 {@code PreviewCacheLifecycle} 的四条规则管理，不在此处触碰。
+     *
+     * <p><b>字段清单只许有一份</b>：任何"清预览态"语义都必须走本方法，不得在别处再手写
+     * 这五个字段的赋值（曾因 {@code ParamDomainController} 手写清单漏掉 {@code cachedMeta}
+     * 造成陈旧 meta 残留）。</p>
+     */
+    public void resetPreviewState() {
+        cachedText = null;
+        cachedTitle = null;
+        cachedImages = null;
+        cachedThumbs = null;
+        cachedMeta = null;
+        status = Status.WAITING;
+    }
+
+    /**
+     * 释放图片数据（E1.2 的唯一实现）：只清 {@code cachedImages}/{@code cachedThumbs}，
+     * 文本、标题、meta 与状态保持不变。这是 {@code ListInteractionController.onItemSelected}
+     * 的"仅当前文件的图片数据驻留内存"优化语义（慎重起见不并入 {@link #resetPreviewState}，
+     * 注释保留在原调用点）。
+     */
+    public void releaseImageData() {
+        cachedImages = null;
+        cachedThumbs = null;
+    }
+
     // ==================== 提取结果 ====================
 
     /** 最近一次提取结果（提取结果状态需求）：NONE 无结果；仅在 FX 线程回写/清除 */

@@ -42,8 +42,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 反向钉死：<b>worker 未完成时不得有任何回写、完成后恰好一次、载荷 == worker 返回的统计</b>。
  *
  * <p>⑦ 一节补上「三终态 UI 落地」（步骤 7 修复）：成功 / 失败 / 取消三个终态各自把
- * 运行标记复位、停止按钮禁用、开始按钮按<b>注入的派生函数</b>重算 —— 经
- * {@link ExtractionTaskCoordinator#landTerminalState} 驱动（零 JavaFX，与①②③同口径）。</p>
+ * 运行标记复位、开始按钮按<b>注入的派生函数</b>重算 —— 经
+ * {@link ExtractionTaskCoordinator#landTerminalState} 驱动（零 JavaFX，与①②③同口径）。
+ * 停止按钮禁用（E1.1 起经 host）由 {@code ExtractionTaskCoordinatorCancelRaceTest} /
+ * {@code ExtractionTaskCoordinatorGateTest} ④ 以真实控件断言。</p>
  */
 class ExtractionTaskCoordinatorRunChannelTest {
 
@@ -271,10 +273,11 @@ class ExtractionTaskCoordinatorRunChannelTest {
     @TempDir
     Path tmp;
 
-    /** 记录终态落地动作的桩 UI（零 JavaFX）：{@code finished} 计数 = 停止按钮禁用动作数。 */
+    /** 记录终态落地动作的桩 UI（零 JavaFX）：E1.1 起停止按钮禁用走 host（本测试 host 为 null，
+     *  跳过），落地契约的观测点是运行标记 + 注入派生函数 + 状态栏文案零写入。 */
     private static final class LandingUi implements ExtractionTaskCoordinator.ExtractionUi {
         final List<BatchProcessor.ProcessStats> applied = new ArrayList<>();
-        int finished;
+        int statusTextCalls;
 
         @Override public File sessionOutputFolder() { return new File("."); }
         @Override public boolean openFolderAfterComplete() { return false; }
@@ -282,8 +285,7 @@ class ExtractionTaskCoordinatorRunChannelTest {
         @Override public void setProgressBarOutcome(ExtractionTaskCoordinator.ExtractOutcomeStyle style) { }
         @Override public void extractionStarted() { }
         @Override public void applyResults(BatchProcessor.ProcessStats stats) { applied.add(stats); }
-        @Override public void setStatusText(String text) { }
-        @Override public void extractionFinished() { finished++; }
+        @Override public void setStatusText(String text) { statusTextCalls++; }
     }
 
     /** 3 参构造 + 注入派生函数计数（host 为 null：不注册顺序门，与 1/2 参构造同口径）。 */
@@ -293,7 +295,9 @@ class ExtractionTaskCoordinatorRunChannelTest {
                 derivedCalls::incrementAndGet);
     }
 
-    /** ⑦-成功：onSucceeded 的落地 —— 运行标记复位、停止禁用恰一次、开始按派生函数重算恰一次（落地本身不回写统计）。 */
+    /** ⑦-成功：onSucceeded 的落地 —— 运行标记复位、开始按派生函数重算恰一次（落地本身不回写统计、不改文案）。
+     *  停止按钮禁用走 host（E1.1），其"恰一次"由 {@code ExtractionTaskCoordinatorCancelRaceTest}（真实控件）与
+     *  {@code ExtractionTaskCoordinatorGateTest} ④ 断言。 */
     @Test
     void successTerminalStateLandsRunningOffStopDisabledAndStartRecomputed() {
         AtomicInteger derivedCalls = new AtomicInteger();
@@ -301,15 +305,15 @@ class ExtractionTaskCoordinatorRunChannelTest {
         LandingUi ui = new LandingUi();
         c.running.set(true);
 
-        c.landTerminalState(ui);
+        c.landTerminalState();
 
         assertFalse(c.running.get(), "成功终态必须复位运行标记");
-        assertEquals(1, ui.finished, "成功终态必须禁用停止按钮恰一次");
         assertEquals(1, derivedCalls.get(), "成功终态必须按派生函数重算开始按钮恰一次");
+        assertEquals(0, ui.statusTextCalls, "落地不得改状态栏文案");
         assertTrue(ui.applied.isEmpty(), "落地本身不得回写统计（回写是成功回调自身的动作）");
     }
 
-    /** ⑦-失败：onFailed 的落地 —— 与成功同一落地函数；即使失败路径无统计可回写，按钮态与运行标记照样复位。 */
+    /** ⑦-失败：onFailed 的落地 —— 与成功同一落地函数；即使失败路径无统计可回写，运行标记照样复位。 */
     @Test
     void failedTerminalStateLandsRunningOffStopDisabledAndStartRecomputed() {
         AtomicInteger derivedCalls = new AtomicInteger();
@@ -317,11 +321,11 @@ class ExtractionTaskCoordinatorRunChannelTest {
         LandingUi ui = new LandingUi();
         c.running.set(true);
 
-        c.landTerminalState(ui);
+        c.landTerminalState();
 
         assertFalse(c.running.get(), "失败终态必须复位运行标记");
-        assertEquals(1, ui.finished, "失败终态必须禁用停止按钮恰一次");
         assertEquals(1, derivedCalls.get(), "失败终态必须按派生函数重算开始按钮恰一次");
+        assertEquals(0, ui.statusTextCalls, "落地不得改状态栏文案");
         assertTrue(ui.applied.isEmpty(), "失败路径没有统计可回写（落地不依赖统计）");
     }
 
@@ -338,10 +342,9 @@ class ExtractionTaskCoordinatorRunChannelTest {
                 new ExtractionTaskCoordinator.RunChannel(1, q::add);
         c.running.set(true);
 
-        // 时点①：onCancelled —— 落地立即发生（运行标记复位、停止禁用、开始重算）
-        c.landTerminalState(ui);
+        // 时点①：onCancelled —— 落地立即发生（运行标记复位、开始重算）
+        c.landTerminalState();
         assertFalse(c.running.get(), "取消终态必须复位运行标记（不等到 worker 退出）");
-        assertEquals(1, ui.finished, "取消终态必须禁用停止按钮恰一次");
         assertEquals(1, derivedCalls.get(), "取消终态必须按派生函数重算开始按钮恰一次");
 
         // 取消回写仍在结果通道上挂"worker 完成后投递一次"（B 阶段口径不回退）
@@ -354,8 +357,28 @@ class ExtractionTaskCoordinatorRunChannelTest {
         channel.result.complete(partial);
         assertEquals(1, drain(q), "取消回写应恰好投递一次");
         assertEquals(List.of(partial), ui.applied, "回写载荷 == worker 返回的 partial");
-        assertEquals(1, ui.finished, "落地不得随回写重复（仍恰一次）");
         assertEquals(1, derivedCalls.get(), "派生函数不得随回写重复调用");
         assertFalse(c.running.get(), "回写不得复活运行标记");
+    }
+
+    /**
+     * ⑦-幂等（E1.1）：{@code MainController.onStopProcessing → cancelAndReset} 已同步落地一次之后，
+     * 任务线程迟到的 {@code onCancelled} 仍会在陈旧守卫通过时再落地一次 —— 两次落地结果必须相同、
+     * 不得抛异常、不得改状态栏文案（"extract.stopped" 只由 onStopProcessing 写一次）。
+     */
+    @Test
+    void repeatedTerminalLandingIsIdempotentAndWritesNoStatusText() {
+        AtomicInteger derivedCalls = new AtomicInteger();
+        ExtractionTaskCoordinator c = coordinator(derivedCalls);
+        LandingUi ui = new LandingUi();
+        c.running.set(true);
+
+        c.landTerminalState();   // 第一次落地：cancelAndReset 的同步复位
+        c.landTerminalState();   // 第二次落地：任务线程迟到的 onCancelled（陈旧守卫通过时）
+
+        assertFalse(c.running.get(), "两次落地后运行标记仍为复位（复位动作幂等）");
+        assertEquals(2, derivedCalls.get(), "派生函数每落地重算一次（纯派生，两次结果相同）");
+        assertEquals(0, ui.statusTextCalls, "落地不得改状态栏文案（stop 文案由 onStopProcessing 恰一次写入）");
+        assertTrue(ui.applied.isEmpty(), "落地本身不得回写统计");
     }
 }

@@ -12,6 +12,7 @@ import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.PerFileOverrides;
 import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.OutputUnitPlanner;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
@@ -91,13 +92,6 @@ public final class ExtractionTaskCoordinator {
          * {@code running.set(true)} 之后那 5 行逐条对应。
          */
         void extractionStarted();
-
-        /**
-         * 提取终态统一落地（成功 / 失败 / 取消三条路径各恰好一次，且只在陈旧守卫通过后调用）：
-         * 停止按钮禁用。开始按钮的重算由协调器注入的唯一派生函数负责（见
-         * {@link ExtractionTaskCoordinator#ExtractionTaskCoordinator(WorkspaceExtractionService, Host, Runnable)}）。
-         */
-        void extractionFinished();
 
         /** 结果一次性回写列表条目（{@code MainController.applyExtractResults}）。 */
         void applyResults(BatchProcessor.ProcessStats stats);
@@ -358,7 +352,7 @@ public final class ExtractionTaskCoordinator {
             List<GroupItem<PreviewItem>> groups = new ArrayList<>();
             for (Object o : host.dataOrder()) {
                 if (o instanceof GroupItem<?> g) {
-                    groups.add(ListInteractionController.asPreviewGroup(g));
+                    groups.add(GroupStructure.asPreviewGroup(g));
                 }
             }
             // 判定唯一来源 = app 层纯规则（本门只做展示；不再内联同名过滤）
@@ -452,7 +446,7 @@ public final class ExtractionTaskCoordinator {
             if (!channel.isCurrent(runGeneration)) {
                 return; // 陈旧任务的迟到回调：no-op（取消后立即再开新任务时不得污染新任务）
             }
-            landTerminalState(ui);
+            landTerminalState();
             ui.setProgress(1.0);
             ui.setStatusText(I18n.get("extract.done"));
             BatchProcessor.ProcessStats stats = task.getValue();
@@ -472,7 +466,7 @@ public final class ExtractionTaskCoordinator {
             if (!channel.isCurrent(runGeneration)) {
                 return; // 陈旧任务的迟到回调：no-op
             }
-            landTerminalState(ui);
+            landTerminalState();
             ui.setStatusText(I18n.get("extract.statusError"));
             Throwable ex = task.getException();
             log.error(I18n.msg("log.maincontroller.37"), ex);
@@ -484,7 +478,7 @@ public final class ExtractionTaskCoordinator {
             if (!channel.isCurrent(runGeneration)) {
                 return; // 陈旧任务的迟到回调：no-op（不得为旧 run 回写）
             }
-            landTerminalState(ui);
+            landTerminalState();
             // 拍板：中途取消回写已处理部分（未处理的保持原样）。
             // 时点①：取消请求 ≠ worker 已退出 —— 此刻不得读 lastExtractStats（null/残留旧值），
             // 只在结果通道上挂"worker 完成后投递一次"的回写，partial 到那时才存在。
@@ -511,17 +505,34 @@ public final class ExtractionTaskCoordinator {
     /**
      * 三终态（成功 / 失败 / 取消）共用的 UI 终态落地（必须在<b>陈旧守卫之后</b>、派发目标线程（FX）上调用）：
      * 运行标记复位（解析回调据此让出进度条 / 状态栏）、在途任务清空、停止按钮禁用
-     * （{@link ExtractionUi#extractionFinished}）、开始按钮按唯一派生函数重算
+     * （历史兼容构造 host 为 null 时跳过；搬迁前的 {@code ExtractionUi#extractionFinished} 唯一动作就是
+     * {@code host.stopButton().setDisable(true)}）、开始按钮按唯一派生函数重算
      * （注入的 {@code updateStartButtonState}；null = 历史兼容构造，跳过）。
      * 包级可见：无头测试（{@code ExtractionTaskCoordinatorRunChannelTest} ⑦）逐终态驱动并断言落地契约。
+     *
+     * <p><b>幂等</b>（E1.1）：{@link #cancelAndReset} 已同步落地一次之后，任务线程迟到的 {@code onCancelled}
+     * 仍会在陈旧守卫通过时再调一次本方法 —— 两次落地结果相同（复位动作全部幂等）、不得抛异常、
+     * 不得改状态栏文案（文案只由终态回调自身与 {@code MainController.onStopProcessing} 各写一次）。</p>
      */
-    void landTerminalState(ExtractionUi ui) {
+    void landTerminalState() {
         running.set(false);
         currentTask = null;
-        ui.extractionFinished();
+        if (host != null) {
+            host.stopButton().setDisable(true);
+        }
         if (updateStartButtonState != null) {
             updateStartButtonState.run();
         }
+    }
+
+    /**
+     * 停止按钮的复位入口（E1.1）：取消在途任务 + {@link #landTerminalState} 同步落地。
+     * {@code MainController.onStopProcessing} 的唯一业务入口 —— 运行标记、停止按钮与开始按钮
+     * 的复位<b>只经此路</b>（不再有绕过落地直写 {@code running} 的路径）。
+     */
+    void cancelAndReset() {
+        cancel();
+        landTerminalState();
     }
 
     /** 提取完成后按勾选打开会话输出目录（只由成功回调触发）。 */
@@ -747,11 +758,6 @@ public final class ExtractionTaskCoordinator {
                 host.progressBar().setVisible(true);
                 host.progressBar().setProgress(0);
                 host.setProgressBarActivity(ExtractOutcomeStyles.PROGRESS_EXTRACT_SUCCESS);   // 提取中 = 开始提取按钮绿
-            }
-
-            @Override
-            public void extractionFinished() {
-                host.stopButton().setDisable(true);
             }
 
             @Override
