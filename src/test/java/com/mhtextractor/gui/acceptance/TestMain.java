@@ -5,6 +5,7 @@ import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
+import com.mhtextractor.gui.controller.AgentExercise;
 import com.mhtextractor.gui.controller.FeatureExercise;
 import com.mhtextractor.gui.controller.MainController;
 import com.mhtextractor.i18n.I18n;
@@ -103,7 +104,8 @@ public final class TestMain extends Application {
 
         String agentDelay = System.getProperty("agent.exit.delay");
         if (agentDelay != null) {
-            FeatureExercise exercise = new FeatureExercise(controller);
+            // 步骤 6（需求 C3 / 决策 E）：演练已从 FeatureExercise 外迁至 AgentExercise，调用点随迁
+            AgentExercise exercise = new AgentExercise(controller);
             exercise.exerciseAllFeatures();
             new java.util.Timer(true).schedule(new java.util.TimerTask() {
                 @Override

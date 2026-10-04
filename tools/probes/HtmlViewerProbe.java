@@ -945,8 +945,8 @@ public class HtmlViewerProbe extends Application {
                         + "', not the line number '2')",
                 charByChar("E1#6", viewer.lineText(1), clip6) && clip6 != null && !clip6.startsWith("2"));
 
-        // #7 平台复制键（Ctrl/Cmd+C）触发复制（与 #1 的 API 路径对照：这里只有按键）
-        setClipboard("SENTINEL-7");
+        // #7 平台复制键（Ctrl/Cmd+C）触发复制（与 #1 的 API 路径对照：这里只有按键；
+        // 哨兵与落地校验在 copyViaKey 内完成，读回必为本次按键的结果）
         dragSelect(4, 5, 4, 10);
         copyViaKey();
         String expected7 = viewer.lineText(4).substring(5, 10);
@@ -954,12 +954,13 @@ public class HtmlViewerProbe extends Application {
                         + esc(clipboardString()) + ")",
                 charByChar("E1#7", expected7, clipboardString()));
 
-        // #8 无选择时复制键不覆盖剪贴板 / 不抛异常（单击 = 清空选择）
+        // #8 无选择时复制键不覆盖剪贴板 / 不抛异常（单击 = 清空选择）。
+        // 走原始按键（不经 copyViaKey 的哨兵路径 —— 本断言要验证的恰是"哨兵不被覆盖"）
         dragSelect(0, 0, 0, 0);
         setClipboard("SENTINEL-8-NO-SELECTION");
         String verdict8;
         try {
-            copyViaKey();
+            copyViaKeyRaw();
             verdict8 = "no exception";
         } catch (Throwable ex) {
             verdict8 = "threw " + ex;
@@ -1343,39 +1344,148 @@ public class HtmlViewerProbe extends Application {
         fireMouse(MouseEvent.MOUSE_RELEASED, listView, x, y, false, true);
     }
 
-    /** 平台复制键（Windows 下 = Ctrl+C，经 {@code KeyEvent.isShortcutDown()} 判定）。 */
-    private void copyViaKey() {
+    /** 每次复制验证用的哨兵序号（保证每次不同、且不可能等于夹具正文） */
+    private static final java.util.concurrent.atomic.AtomicInteger SENTINEL_SEQ =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    /**
+     * 剪贴板忙窗口的容忍预算。本机实测单次占用可达<b>十几秒</b>（连续多个复制检查读回全 null、
+     * 失败集合每次不同；全量探针轮内曾实测 >12s 仍不恢复），故预算给到 45s 并分多次
+     * {@code Thread.sleep}（250ms 粒度，绝不一次 sleep 到底，也避免 50ms 高频写把忙窗口拖长）。
+     * 正常路径一次写入 + 一次读回即返回，不增加稳态耗时。
+     */
+    private static final long CLIPBOARD_BUDGET_MS = 45_000;
+
+    /** 单次探针运行内剪贴板等待的<b>累计</b>上限：忙窗口再长也不让整轮拖死（q14 单探针时限 240s）。
+     *  累计打满后后续复制检查退化为单次尝试即放弃 —— 依旧大声失败，绝不静默放过。 */
+    private static long clipboardWaitSpentMs = 0;
+    private static final long CLIPBOARD_WAIT_TOTAL_MS = 120_000;
+
+    /** 平台复制键的原始触发（Windows 下 = Ctrl+C，经 {@code KeyEvent.isShortcutDown()} 判定）。
+     *  需要哨兵/落地校验的调用点走 {@link #copyViaKey()}；E1#8 这类"验证不覆盖"语义走本方法。 */
+    private void copyViaKeyRaw() {
         Event.fireEvent(listView, new KeyEvent(KeyEvent.KEY_PRESSED, "", "", KeyCode.C,
                 false, true, false, false));
     }
 
-    /**
-     * 经查看器的公开 API 复制（与按键路径对照用）。Windows 的系统剪贴板在连续快速写入时会
-     * 偶发"忙"：{@code setContent} 被静默丢弃、读回为 null（本机实测踩到过一次，同样的选择
-     * 下一次运行就通过）。这里在读回为 null 时重试最多 5 次 —— 生产 {@code copySelection}
-     * 未被改动，重试只是探针的读回校验，断言口径不变。
-     */
-    private void copyViaApi() {
-        viewer.copySelection();
-        for (int i = 0; i < 5 && clipboardString() == null; i++) {
-            try {
-                Thread.sleep(15);
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                return;
-            }
-            viewer.copySelection();
-        }
+    /** 平台复制键（带哨兵 + 落地校验；与 {@link #copyViaApi()} 同一套确定性机制）。 */
+    private void copyViaKey() {
+        copyVerified(this::copyViaKeyRaw);
     }
 
-    private static void setClipboard(String s) {
+    /** 经查看器公开 API 的原始复制（无哨兵校验）。E2「空选择不覆盖剪贴板」这类语义走本方法，
+     *  其余复制断言走 {@link #copyViaApi()}。 */
+    private void copyViaApiRaw() {
+        viewer.copySelection();
+    }
+
+    /**
+     * 经查看器的公开 API 复制（与按键路径对照用），带哨兵 + 落地校验（见 {@link #copyVerified}）。
+     * 生产 {@code copySelection} 未被改动，重试只是探针的读回校验，断言口径不变。
+     */
+    private void copyViaApi() {
+        copyVerified(this::copyViaApiRaw);
+    }
+
+    /**
+     * 确定性复制：每轮先写哨兵并<b>确认写入落地</b>（写不进说明剪贴板正忙，直接进下一轮重试），
+     * 再触发复制；读回「非 null 且不等于哨兵」才算复制落地（内容正确性由调用点的
+     * charByChar 逐字符判）。总预算 {@link #CLIPBOARD_BUDGET_MS}；耗尽后在 stderr 打诊断并
+     * 返回 —— 此时剪贴板仍是哨兵或 null，调用点的 charByChar 会因此<b>大声失败</b>。
+     *
+     * <p>哨兵同时杜绝「读到上一次复制的旧文本就提前退出」的假通过：复制被丢弃时读回必为
+     * 哨兵或 null（哨兵写入本身未落地时整体视为不成立，继续重试），循环不会因旧值提前结束。</p>
+     */
+    private void copyVerified(Runnable trigger) {
+        String sentinel = "PROBE-SENTINEL-" + SENTINEL_SEQ.incrementAndGet();
+        long deadline = System.currentTimeMillis() + CLIPBOARD_BUDGET_MS;
+        long startedAt = System.currentTimeMillis();
+        int attempts = 0;
+        while (System.currentTimeMillis() < deadline) {
+            // 累计等待预算打满后不再恋战：单次尝试即放弃（总等待有上限，防整轮拖死）
+            if (clipboardWaitSpentMs >= CLIPBOARD_WAIT_TOTAL_MS) {
+                trigger.run();
+                String once = clipboardStringRaw();
+                if (once != null && !sentinel.equals(once)) {
+                    return;
+                }
+                break;
+            }
+            if (!setClipboardVerified(sentinel)) {
+                attempts++;
+                sleep(250);
+                continue;
+            }
+            trigger.run();
+            // 用单次原始读：本循环自己就是重试预算（250ms 粒度），长鲁棒读会一次耗尽整个预算
+            String got = clipboardStringRaw();
+            if (got != null && !sentinel.equals(got)) {
+                return;
+            }
+            attempts++;
+            sleep(250);
+        }
+        clipboardWaitSpentMs += System.currentTimeMillis() - startedAt;
+        System.err.println("[HtmlViewerProbe] 复制未落地：哨兵/读回校验 " + attempts
+                + " 次未确认（已等待 " + (System.currentTimeMillis() - startedAt)
+                + " ms，系统剪贴板忙或不可用）—— 相关断言将按失败处理");
+    }
+
+    /** 写剪贴板并确认落地（单次原始读 + 250ms 粒度重写，单次调用预算 ~5s）。 */
+    private static boolean setClipboardVerified(String s) {
         ClipboardContent cc = new ClipboardContent();
         cc.putString(s);
         Clipboard.getSystemClipboard().setContent(cc);
+        long deadline = System.currentTimeMillis() + 5000;
+        while (!s.equals(clipboardStringRaw()) && System.currentTimeMillis() < deadline) {
+            sleep(250);
+            Clipboard.getSystemClipboard().setContent(cc);
+        }
+        return s.equals(clipboardStringRaw());
     }
 
+    /**
+     * 写剪贴板并<b>确认落地</b>（E1#8 / E2「空选择不覆盖」语义的哨兵写入用，预算
+     * {@link #CLIPBOARD_BUDGET_MS}，同样受累计等待上限约束）；仍写不进就在 stderr 打诊断
+     * （后续断言会据此大声失败，不静默放过）。
+     */
+    private static void setClipboard(String s) {
+        long deadline = System.currentTimeMillis() + CLIPBOARD_BUDGET_MS;
+        while (!setClipboardVerified(s) && System.currentTimeMillis() < deadline
+                && clipboardWaitSpentMs < CLIPBOARD_WAIT_TOTAL_MS) {
+            sleep(250);
+        }
+        if (!s.equals(clipboardString())) {
+            System.err.println("[HtmlViewerProbe] setClipboard 未落地: 期望=" + esc(s)
+                    + " 读回=" + esc(clipboardString()));
+        }
+    }
+
+    /**
+     * 读回剪贴板文本，容忍系统剪贴板忙：读回 null 时在 {@link #CLIPBOARD_BUDGET_MS} 预算内
+     * 以 250ms 粒度重试；仍读不到返回 null（调用点断言会大声失败，不静默放过）。
+     */
     private static String clipboardString() {
+        long deadline = System.currentTimeMillis() + CLIPBOARD_BUDGET_MS;
+        String got = clipboardStringRaw();
+        while (got == null && System.currentTimeMillis() < deadline) {
+            sleep(250);
+            got = clipboardStringRaw();
+        }
+        return got;
+    }
+
+    /** 单次原始读回（重试循环内部的粒度原语，勿直接用于断言） */
+    private static String clipboardStringRaw() {
         return Clipboard.getSystemClipboard().getString();
+    }
+
+    private static void sleep(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**
@@ -1701,10 +1811,11 @@ public class HtmlViewerProbe extends Application {
         check("E2 corpus: the tab line copies char-exact (tabs and spaces kept) (clipboard="
                         + esc(clipboardString()) + ")",
                 charByChar("E2-corpus-tab-line", "    <p title=\"a\tb\">", clipboardString()));
-        // 从空行锚点拖到别的行 → 空选择不产复制（单行口径：空行的行首=行尾=列 0）
+        // 从空行锚点拖到别的行 → 空选择不产复制（单行口径：空行的行首=行尾=列 0）。
+        // 走原始 API 复制（不经哨兵路径 —— 本断言要验证的恰是"哨兵不被覆盖"）
         setClipboard("SENTINEL-E2-EMPTY-DRAG");
         dragVisual(2, 0, 0, 4, 0, 19);
-        copyViaApi();
+        copyViaApiRaw();
         check("E2 corpus: dragging FROM an empty line to another line yields no selection "
                         + "(clipboard=" + esc(clipboardString()) + ")",
                 "SENTINEL-E2-EMPTY-DRAG".equals(clipboardString()));
@@ -1731,10 +1842,11 @@ public class HtmlViewerProbe extends Application {
                         + "(visualRows=" + (lastVRow + 1) + ", clipboard len="
                         + (clipboardString() == null ? -1 : clipboardString().length()) + ")",
                 charByChar("E2-corpus-long-line", longLine, clipboardString()));
-        // 空行单击（空选择）不产生复制内容（选择清空、剪贴板保持哨兵）
+        // 空行单击（空选择）不产生复制内容（选择清空、剪贴板保持哨兵）。
+        // 走原始 API 复制（不经哨兵路径 —— 本断言要验证的恰是"哨兵不被覆盖"）
         setClipboard("SENTINEL-E2-EMPTY-LINE");
         dragVisual(2, 0, 0, 2, 0, 0);
-        copyViaApi();
+        copyViaApiRaw();
         check("E2 corpus: clicking an empty line leaves the clipboard alone (clipboard="
                         + esc(clipboardString()) + ")",
                 "SENTINEL-E2-EMPTY-LINE".equals(clipboardString()));

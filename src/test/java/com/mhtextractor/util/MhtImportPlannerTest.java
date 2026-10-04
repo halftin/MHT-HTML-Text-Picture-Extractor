@@ -362,6 +362,36 @@ class MhtImportPlannerTest {
         assertEquals(1, plan.groupCount());
     }
 
+    // ---- 18b. FeatureExercise 统一导入「阶段一」纯扫描断言 1:1 外迁（步骤 6 / 需求 C3）：
+    // 原断言（FeatureExercise 旧行 858–866）：组批次数 = 4（sub1,sub2,sub2(2),deeper）、
+    // 非 MHT = 1、隐藏目录 = 1。FE 保留 GUI 可观察面（应用计划后的列表项与组名）。 ----
+
+    @Test
+    void combinedTreeYieldsFourGroupBatchesWithExactNoiseCounts() throws Exception {
+        Path sub1 = Files.createDirectory(dir.resolve("sub1"));
+        Path sub2 = Files.createDirectory(dir.resolve("sub2"));
+        Path sub2deep = Files.createDirectory(sub2.resolve("sub2"));  // 同名深层 → sub2(2)
+        Path hidden = Files.createDirectory(dir.resolve(".hidden"));
+        Path emptyLayer = Files.createDirectory(dir.resolve("noMhtHere"));
+        Path deeper = Files.createDirectory(emptyLayer.resolve("deeper"));
+
+        mht(dir, "r1.mht");            // 根层 → 顶层平铺
+        mht(dir, "r2.mht");            // 根层
+        mht(sub1, "s1.mht");           // 组 sub1
+        mht(sub2, "s2.mht");           // 组 sub2
+        mht(sub2deep, "s3.mht");       // 组 sub2(2)（同名 → 唯一化）
+        mht(hidden, "h1.mht");         // 应跳过
+        mht(deeper, "d1.mht");         // 组 deeper（noMhtHere 本层无 MHT → 不建组）
+        Files.writeString(dir.resolve("note.txt"), "x");  // 非 MHT → 忽略
+
+        MhtImportPlanner.Plan plan = scanner(dir.toString()).nextRound();
+        long groupBatches = plan.batches().stream()
+                .filter(b -> b instanceof MhtImportPlanner.GroupBatch).count();
+        assertEquals(4, groupBatches);              // sub1,sub2,sub2(2),deeper
+        assertEquals(1, plan.ignoredNonMht());      // note.txt
+        assertEquals(1, plan.hiddenDirs());         // .hidden
+    }
+
     // ---- 19. findDriveRoots："D:\" 命中；"D:\a" 不命中 ----
 
     @Test
