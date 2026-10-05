@@ -6,10 +6,16 @@ import java.util.List;
 /**
  * 软换行的<b>折行几何 ↔ 逻辑字符列</b>映射（E2 的纯函数内核，零 JavaFX、零第三方依赖）。
  *
- * <p>查看器的软换行按<b>字符网格</b>手工折行：等宽字体下每个字符等宽
- * （{@code HtmlSourceViewer#measureCharWidth()} 实测反推），一条 {@code len} 个
- * 逻辑字符的行每 {@code colsPerRow} 个切成一个视觉行。本类把这套换算集中成纯函数，
- * 供四条路径共用同一套坐标：</p>
+ * <p><b>折行模型（2026-10-05 起自适应）</b>：查看器按"<b>逐行贪心</b>"折行 ——
+ * {@link #rows} 拿到每个字符的<b>真实像素宽</b>后，每行尽量多放字符，直到再加一个就超宽。
+ * 因为等宽字体的 CJK 是全宽（≈字号）、拉丁是半宽，一条纯 ASCII 行以前只能用到面板约一半宽，
+ * 自适应后能铺满；同时"每行都不超宽"是硬约束（超宽会被定高的视觉行裁掉 → 丢字）。</p>
+ *
+ * <p>原有的<b>字符网格</b>换算（{@link #colsPerRow} / {@link #visualRowCount} /
+ * {@link #visualRow} / {@link #visualCol} / {@link #segments}）保留为纯函数：它们是
+ * "所有字符等宽"这一理想模型的投影，供单测与格点调用方使用；查看器自身不再用它们定坐标
+ * （高亮按 run 真实宽度、折行按 {@link #rows}）。本类不产生第二套坐标，只做投影换算：
+ * 所有列号都是 0 基<b>逻辑字符偏移</b>。</p>
  * <ul>
  *   <li>渲染：把一行切成一视觉行一个 {@code TextFlow}；</li>
  *   <li>选择/查找高亮的<b>逻辑区间切段</b>（{@link #segments}）：纯网格投影，供格点几何的调用方与单测使用。</li>
@@ -25,6 +31,47 @@ import java.util.List;
 public final class HtmlWrapMap {
 
     private HtmlWrapMap() {
+    }
+
+    /**
+     * <b>逐行贪心折行</b>：把一条逻辑行按每个字符的真实像素宽切成若干视觉行，
+     * 返回每行的 {@code [start, end)} 逻辑列半开区间。
+     *
+     * <p>规则：当前行从 {@code start} 起尽量多放字符，直到"再加上下一个字符就超过
+     * {@code contentWidth}"为止；<b>每行至少放一个字符</b>（即使它本身比内容区还宽），
+     * 否则宽字符/极窄视口会死循环。空文本也返回一个 {@code [0,0)} 的空行
+     * （空逻辑行在界面上仍占一个视觉行）。</p>
+     *
+     * @param advances     每个<b>UTF-16 code unit</b> 的像素宽（长度 = 文本长度；代理对的第二个
+     *                     unit 传 0，这样折行不会落在代理对中间）
+     * @param contentWidth 内容区像素宽（行号栏之后、扣除右侧安全留白）
+     */
+    public static List<int[]> rows(double[] advances, double contentWidth) {
+        List<int[]> out = new ArrayList<>();
+        int len = advances == null ? 0 : advances.length;
+        if (len == 0) {
+            out.add(new int[]{0, 0});
+            return out;
+        }
+        int start = 0;
+        while (start < len) {
+            int end = start;
+            double w = 0;
+            while (end < len) {
+                double adv = Math.max(0, advances[end]);
+                if (end > start && w + adv > contentWidth) {
+                    break;
+                }
+                w += adv;
+                end++;
+            }
+            if (end == start) {
+                end = start + 1;   // 退化输入（宽度非正/NaN）也要前进
+            }
+            out.add(new int[]{start, end});
+            start = end;
+        }
+        return out;
     }
 
     /** 每视觉行的列数：内容视口像素宽 ÷ 单字符像素宽，向下取整、至少 1（防除零与退化输入）。 */

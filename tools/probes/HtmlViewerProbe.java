@@ -146,6 +146,7 @@ public class HtmlViewerProbe extends Application {
     private int secondHitLine;
     /** 台账 §4-1 的 resize 步骤：拉宽窗口前的折行列数（下一步断言"确实变宽了"用）。 */
     private int step5ColsBefore;
+    private long step5FlowsBefore;
 
     private Path bigFile;
     private Path longFile;
@@ -1426,17 +1427,14 @@ public class HtmlViewerProbe extends Application {
             return;
         }
         Bounds b = cell.localToScene(cell.getBoundsInLocal());
-        double contentX = b.getMinX() + vDbl(viewer, "gutterWidth");
         double y = b.getMinY() + b.getHeight() / 2;
-        fireMouse(MouseEvent.MOUSE_PRESSED, cell, sceneXForCol(cell, fromLine, fromCol, contentX), y, true);
+        fireMouse(MouseEvent.MOUSE_PRESSED, cell, sceneXForCol(cell, fromLine, fromCol), y, true);
         Node cell2 = revealCellForLine(toLine);
-        double toContentX = contentX;
         if (cell2 != null) {
             Bounds b2 = cell2.localToScene(cell2.getBoundsInLocal());
-            toContentX = b2.getMinX() + vDbl(viewer, "gutterWidth");
             y = b2.getMinY() + b2.getHeight() / 2;
         }
-        double xEnd = sceneXForCol(cell2 != null ? cell2 : cell, toLine, toCol, toContentX);
+        double xEnd = sceneXForCol(cell2 != null ? cell2 : cell, toLine, toCol);
         fireMouse(MouseEvent.MOUSE_DRAGGED, listView, xEnd, y, true);
         fireMouse(MouseEvent.MOUSE_RELEASED, listView, xEnd, y, false);
     }
@@ -1449,9 +1447,8 @@ public class HtmlViewerProbe extends Application {
             return;
         }
         Bounds b = cell.localToScene(cell.getBoundsInLocal());
-        double contentX = b.getMinX() + vDbl(viewer, "gutterWidth");
         double y = b.getMinY() + b.getHeight() / 2;
-        double x = sceneXForCol(cell, line, toCol, contentX);
+        double x = sceneXForCol(cell, line, toCol);
         fireMouse(MouseEvent.MOUSE_PRESSED, cell, b.getMinX() + 2, y, true);
         fireMouse(MouseEvent.MOUSE_DRAGGED, listView, x, y, true);
         fireMouse(MouseEvent.MOUSE_RELEASED, listView, x, y, false);
@@ -1470,33 +1467,164 @@ public class HtmlViewerProbe extends Application {
     }
 
     /**
-     * 独立复算 (逻辑行, 逻辑列) → 场景 x：按<b>真实字形步进</b>逐字符累加（不用等宽网格），
-     * 与查看器的命中映射互为对照。查看器自 2026-10-05 起按 run 实测宽度定位，
-     * 用 {@code col × charWidth} 的网格算法会把指针指到别的列（CJK/拉丁混排时偏到左边）。
+     * 独立复算：逻辑列 {@code col} 的场景 x。
+     *
+     * <p>自适应折行后视觉行边界<b>不再等距</b>，无法再从 {@code col} 反推"行首列"；
+     * 改为在<b>已渲染的 run</b> 里找包含该列的那一个（run 的绝对列区间互不重叠），
+     * 用它的场景左缘 + run 内逐字符步进前缀定位。探针不复制查看器的折行规则，只读渲染事实。</p>
      */
-    private double sceneXForCol(Node cell, int line, int col, double contentX) {
-        String text = vLine(viewer, line);
-        int len = text == null ? 0 : text.length();
-        int target = Math.max(0, Math.min(col, len));
-        int cols = Math.max(1, vInt(viewer, "wrapCols"));
-        int rowStart = (target / cols) * cols;
-        javafx.scene.text.Font font = fontOf(cell);
-        double x = contentX;
-        for (int i = rowStart; i < target; i++) {
-            x += glyphWidth(text.charAt(i), font);
+    private double sceneXForCol(Node cell, int line, int col) {
+        if (cell == null) {
+            return -1;
+        }
+        List<javafx.scene.text.Text> runs = allRuns(cell);
+        if (runs.isEmpty()) {
+            return -1;
+        }
+        for (javafx.scene.text.Text t : runs) {
+            int[] cr = (int[]) t.getProperties().get(runColumnsKey());
+            if (cr == null || col < cr[0] || col >= cr[1]) {
+                continue;
+            }
+            double x = t.localToScene(t.getBoundsInLocal()).getMinX();
+            int n = Math.max(0, Math.min(col - cr[0], t.getText().length()));
+            for (int i = 0; i < n; i++) {
+                x += glyphWidth(t.getText().charAt(i), t.getFont());
+            }
+            return x;
+        }
+        // 越界：行的右侧 → 最后一个 run 的末端；左侧（负列/行号栏）→ 第一个 run 的左缘
+        javafx.scene.text.Text first = runs.get(0);
+        int[] fc = (int[]) first.getProperties().get(runColumnsKey());
+        if (fc != null && col < fc[0]) {
+            return first.localToScene(first.getBoundsInLocal()).getMinX();
+        }
+        javafx.scene.text.Text last = runs.get(runs.size() - 1);
+        return last.localToScene(last.getBoundsInLocal()).getMaxX();
+    }
+
+    /** 该 cell 里全部文本 run（文档顺序）。 */
+    private static List<javafx.scene.text.Text> allRuns(Node cell) {
+        List<javafx.scene.text.Text> out = new ArrayList<>();
+        if (cell == null) {
+            return out;
+        }
+        for (Node n : cell.lookupAll(".html-source-text")) {
+            if (n instanceof javafx.scene.text.Text t && t.getProperties().get(runColumnsKey()) != null) {
+                out.add(t);
+            }
+        }
+        return out;
+    }
+
+    /** 某视觉行占的逻辑列区间 {@code [start, end)}：从已渲染 run 的列区间读，不依赖折行规则。 */
+    private static int[] visualRowRange(Node cell, int vRow) {
+        List<javafx.scene.text.Text> runs = runsOfVisualRow(cell, vRow);
+        if (runs.isEmpty()) {
+            return new int[]{0, 0};
+        }
+        int start = Integer.MAX_VALUE;
+        int end = -1;
+        for (javafx.scene.text.Text t : runs) {
+            int[] cr = (int[]) t.getProperties().get(runColumnsKey());
+            start = Math.min(start, cr[0]);
+            end = Math.max(end, cr[1]);
+        }
+        return new int[]{start, end};
+    }
+
+    /** 含该逻辑列的文本 run（列区间唯一；行尾/越界列归到列号最大的那个 run）。 */
+    private static javafx.scene.text.Text runForColumn(Node cell, int col) {
+        javafx.scene.text.Text best = null;
+        int bestEnd = -1;
+        for (Node n : cell.lookupAll(".html-source-text")) {
+            if (!(n instanceof javafx.scene.text.Text t)) {
+                continue;
+            }
+            int[] cr = (int[]) t.getProperties().get(runColumnsKey());
+            if (cr == null) {
+                continue;
+            }
+            if (col >= cr[0] && col < cr[1]) {
+                return t;
+            }
+            if (cr[1] > bestEnd) {
+                bestEnd = cr[1];
+                best = t;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * 独立复算：视觉 (视觉行, 视觉列) → 场景 x。按该视觉行已渲染的 run 累加逐字符步进，
+     * <b>不含任何"每行多少字符"的假设</b>（自适应折行后每行字符数不同）。
+     */
+    private double sceneXForVisualCol(Node cell, int vRow, int vCol) {
+        List<javafx.scene.text.Text> runs = runsOfVisualRow(cell, vRow);
+        if (runs.isEmpty()) {
+            return -1;
+        }
+        double x = runs.get(0).localToScene(runs.get(0).getBoundsInLocal()).getMinX();
+        int remaining = vCol;
+        for (javafx.scene.text.Text t : runs) {
+            for (int i = 0; i < t.getText().length() && remaining > 0; i++, remaining--) {
+                x += glyphWidth(t.getText().charAt(i), t.getFont());
+            }
+            if (remaining <= 0) {
+                break;
+            }
         }
         return x;
     }
 
-    /** 取 cell 里字形实际用的字体（查看器按 monoFont 建节点；探针不复制这个决定，只读取事实）。 */
-    private static javafx.scene.text.Font fontOf(Node cell) {
-        if (cell != null) {
-            Node n = cell.lookup(".html-source-text");
-            if (n instanceof javafx.scene.text.Text t && t.getFont() != null) {
-                return t.getFont();
+    /** 某视觉行的文本 run（文档顺序）。 */
+    private static List<javafx.scene.text.Text> runsOfVisualRow(Node cell, int vRow) {
+        List<javafx.scene.text.Text> out = new ArrayList<>();
+        Node rowNode = visualRowNode(cell, vRow);
+        if (rowNode == null) {
+            return out;
+        }
+        for (Node n : rowNode.lookupAll(".html-source-text")) {
+            if (n instanceof javafx.scene.text.Text t && t.getProperties().get(runColumnsKey()) != null) {
+                out.add(t);
             }
         }
-        return javafx.scene.text.Font.font(13);
+        return out;
+    }
+
+    /** wrapper → HBox → VBox 的第 {@code vRow} 个视觉行节点（自适应折行后行数逐行不同）。 */
+    private static Node visualRowNode(Node cell, int vRow) {
+        if (!(cell instanceof javafx.scene.control.ListCell<?> lc)
+                || !(lc.getGraphic() instanceof StackPane wrapper)
+                || wrapper.getChildren().size() < 3
+                || !(wrapper.getChildren().get(2) instanceof javafx.scene.layout.HBox hb)
+                || hb.getChildren().size() < 2
+                || !(hb.getChildren().get(1) instanceof VBox vb)) {
+            return null;
+        }
+        return vRow >= 0 && vRow < vb.getChildren().size() ? vb.getChildren().get(vRow) : null;
+    }
+
+    /** 该 cell 的视觉行数（渲染事实）。 */
+    private static long flowCount(Node cell) {
+        return cell == null ? -1 : cell.lookupAll(".html-source-line").size();
+    }
+
+    /** 某视觉行渲染出来的文本像素宽（run 左缘到右缘；无文本 → 0）。 */
+    private static double visualRowWidth(Node cell, int vRow) {
+        List<javafx.scene.text.Text> runs = runsOfVisualRow(cell, vRow);
+        if (runs.isEmpty()) {
+            return 0;
+        }
+        double min = Double.MAX_VALUE;
+        double max = -Double.MAX_VALUE;
+        for (javafx.scene.text.Text t : runs) {
+            Bounds b = t.localToScene(t.getBoundsInLocal());
+            min = Math.min(min, b.getMinX());
+            max = Math.max(max, b.getMaxX());
+        }
+        return max - min;
     }
 
     private static double glyphWidth(char c, javafx.scene.text.Font font) {
@@ -1515,9 +1643,8 @@ public class HtmlViewerProbe extends Application {
             return;
         }
         Bounds b = cell.localToScene(cell.getBoundsInLocal());
-        double contentX = b.getMinX() + vDbl(viewer, "gutterWidth");
         double y = b.getMinY() + b.getHeight() / 2;
-        double x = sceneXForCol(cell, line, col, contentX);
+        double x = sceneXForCol(cell, line, col);
         fireMouse(MouseEvent.MOUSE_PRESSED, cell, x, y, true, true);
         fireMouse(MouseEvent.MOUSE_RELEASED, listView, x, y, false, true);
     }
@@ -1804,19 +1931,44 @@ public class HtmlViewerProbe extends Application {
         check("E2 soft wrap: the gutter digit count comes from the total line count (digits="
                         + vInt(viewer, "gutterDigits") + ", lines=" + vInt(viewer, "lineCount") + ")",
                 vInt(viewer, "gutterDigits") == String.valueOf(vInt(viewer, "lineCount")).length());
-        // 长行 cell：高度 = 视觉行数 × 行高；内部一视觉行一个 TextFlow、行号恰好一个
+        // 长行 cell：高度 = 视觉行数 × 行高；视觉行由<b>自适应折行</b>决定（不再由 uniform cols 决定）
         Node cell = revealCellForLine(1);
         Bounds cb = cell == null ? null : cell.localToScene(cell.getBoundsInLocal());
-        check("E2 soft wrap: the long line really wraps into multiple visual rows (wrapCols="
-                        + cols + ", longLen=" + longLen + ", visualRows=" + visualRows + ")",
-                visualRows > 1);
+        long flowsInCell = flowCount(cell);
+        check("E2 soft wrap: the long line really wraps into multiple visual rows (uniformCols="
+                        + cols + ", longLen=" + longLen + ", visualRows=" + flowsInCell + ")",
+                flowsInCell > 1);
         check("E2 soft wrap: the long line cell exists and its height grew to the visual-row count ("
-                        + fmt(cb == null ? -1 : cb.getHeight()) + " px vs " + fmt(visualRows * vDbl(viewer, "rowHeight")) + ")",
+                        + fmt(cb == null ? -1 : cb.getHeight()) + " px vs " + fmt(flowsInCell * vDbl(viewer, "rowHeight")) + ")",
                 cell != null && cb != null
-                        && Math.abs(cb.getHeight() - visualRows * vDbl(viewer, "rowHeight")) <= TOL);
-        long flowsInCell = cell == null ? -1 : cell.lookupAll(".html-source-line").size();
-        check("E2 soft wrap: the cell renders one TextFlow per visual row (" + flowsInCell
-                        + " == " + visualRows + ")", flowsInCell == visualRows);
+                        && Math.abs(cb.getHeight() - flowsInCell * vDbl(viewer, "rowHeight")) <= TOL);
+        // 自适应折行（2026-10-05）：按每个字符的真实像素宽逐行贪心 —— ASCII 行能铺满，
+        // 行数显著少于"按最宽字形（CJK 全宽）算的 uniform 网格"；且没有任何一行超出内容区
+        check("E2 adaptive wrap: the ASCII long line needs far fewer visual rows than the uniform "
+                        + "widest-glyph grid (" + flowsInCell + " < " + visualRows + ")",
+                flowsInCell < visualRows);
+        double contentArea = viewport - vDbl(viewer, "gutterWidth");
+        double widestRow = -1;
+        double narrowestFullRow = Double.MAX_VALUE;
+        boolean insideViewport = true;
+        for (int v = 0; v < flowsInCell; v++) {
+            double w = visualRowWidth(cell, v);
+            widestRow = Math.max(widestRow, w);
+            Node rowNode = visualRowNode(cell, v);
+            if (rowNode != null && cb != null) {
+                Bounds rb = rowNode.localToScene(rowNode.getBoundsInLocal());
+                insideViewport &= rb.getMaxX() <= cb.getMinX() + viewport + 0.5;
+            }
+            if (v < flowsInCell - 1) {
+                narrowestFullRow = Math.min(narrowestFullRow, w);
+            }
+        }
+        check("E2 adaptive wrap: no visual row overflows the content area (widest row "
+                        + fmt(widestRow) + " px <= content area " + fmt(contentArea) + " px)",
+                insideViewport && widestRow <= contentArea + 0.5);
+        check("E2 adaptive wrap: every non-final row fills the width (narrowest non-final row "
+                        + fmt(narrowestFullRow) + " px vs content area " + fmt(contentArea) + " px)",
+                flowsInCell < 2 || narrowestFullRow >= contentArea * 0.75);
         long guttersInCell = cell == null ? -1 : cell.lookupAll(".html-source-gutter").size();
         check("E2 soft wrap: the line number appears exactly once per logical line (gutters in "
                         + "the wrapped cell = " + guttersInCell + ")", guttersInCell == 1);
@@ -1868,10 +2020,14 @@ public class HtmlViewerProbe extends Application {
     private void checkE2WrapMapping() {
         int cols = vInt(viewer, "wrapCols");
         int longLen = vLine(viewer, 1).length();
-        // 1) 跨折行边界的拖选（视觉行 0 尾 → 视觉行 1 首）→ 复制逐字符 = 逻辑子串
-        int fromCol = Math.max(0, cols - 3);
-        int toCol = Math.min(longLen, cols + 5);
-        dragVisual(1, 0, fromCol, 1, 1, toCol - cols);
+        // 1) 跨折行边界的拖选（视觉行 0 尾 → 视觉行 1 首）→ 复制逐字符 = 逻辑子串。
+        //    行边界从<b>已渲染的 run 列区间</b>读：自适应折行后每行字符数不同，不能再用 cols 推算
+        Node wrapCell = revealCellForLine(1);
+        int[] row0 = visualRowRange(wrapCell, 0);
+        int[] row1 = visualRowRange(wrapCell, 1);
+        int fromCol = Math.max(row0[0], row0[1] - 3);
+        int toCol = Math.min(longLen, row1[0] + 5);
+        dragVisual(1, 0, fromCol - row0[0], 1, 1, toCol - row1[0]);
         copyViaApi();
         String expected = vLine(viewer, 1).substring(fromCol, toCol);
         check("E2 wrap mapping: a drag across the wrap boundary copies the exact logical range "
@@ -1894,11 +2050,12 @@ public class HtmlViewerProbe extends Application {
                 spansRows);
         snapshot("htmlviewer-e2-wrapped-selection");   // 此刻的选择正是跨折行的两段
         // 3) 最后一个视觉行的行尾拖选 → 复制 = 行尾子串（含"行长不在折行边界"的尾段）
-        int lastVRow = HtmlWrapMap.visualRowCount(longLen, cols) - 1;
-        int lastRowStart = lastVRow * cols;
-        dragVisual(1, lastVRow, longLen - lastRowStart - 4, 1, lastVRow, longLen - lastRowStart);
+        Node tailCell = revealCellForLine(1);
+        int lastVRow = (int) flowCount(tailCell) - 1;
+        int[] lastRow = visualRowRange(tailCell, lastVRow);
+        dragVisual(1, lastVRow, lastRow[1] - lastRow[0] - 4, 1, lastVRow, lastRow[1] - lastRow[0]);
         copyViaApi();
-        String expectedTail = vLine(viewer, 1).substring(longLen - 4);
+        String expectedTail = vLine(viewer, 1).substring(lastRow[1] - 4);
         check("E2 wrap mapping: selecting the tail of the last visual row copies the line end "
                         + "(clipboard=" + esc(clipboardString()) + ")",
                 charByChar("E2-wrap-tail", expectedTail, clipboardString()));
@@ -2010,11 +2167,11 @@ public class HtmlViewerProbe extends Application {
                         + esc(clipboardString()) + ")",
                 charByChar("E2-corpus-trailing", "<div>trailing   ", clipboardString()));
         // 超长行（209 字符）整行复制：跨多个折行逐字符
-        int cols = vInt(viewer, "wrapCols");
         String longLine = vLine(viewer, 7);
-        int lastVRow = HtmlWrapMap.visualRowCount(longLine.length(), cols) - 1;
-        int lastRowStart = lastVRow * cols;
-        dragVisual(7, 0, 0, 7, lastVRow, longLine.length() - lastRowStart);
+        Node longCell = revealCellForLine(7);
+        int lastVRow = (int) flowCount(longCell) - 1;
+        int[] lastRow = visualRowRange(longCell, lastVRow);
+        dragVisual(7, 0, 0, 7, lastVRow, lastRow[1] - lastRow[0]);
         copyViaApi();
         check("E2 corpus: copying the 209-char long line across its visual rows is char-exact "
                         + "(visualRows=" + (lastVRow + 1) + ", clipboard len="
@@ -2072,7 +2229,7 @@ public class HtmlViewerProbe extends Application {
         vNode(viewer).applyCss();
         vNode(viewer).layout();
         step5ColsBefore = vInt(viewer, "wrapCols");
-        int vrowsBefore = HtmlWrapMap.visualRowCount(vLine(viewer, 1).length(), step5ColsBefore);
+        step5FlowsBefore = flowCount(revealCellForLine(1));
         // 单行选区 [0,5)：resize 前后复制都必须逐字符相同（单行口径）
         dragVisual(1, 0, 0, 1, 0, 5);
         copyViaApi();
@@ -2084,8 +2241,8 @@ public class HtmlViewerProbe extends Application {
         scene.getRoot().layout();
         vNode(viewer).applyCss();
         vNode(viewer).layout();
-        System.out.println("step5 resize requested: colsBefore=" + step5ColsBefore
-                + " vrowsBefore=" + vrowsBefore + " colsNow=" + vInt(viewer, "wrapCols")
+        System.out.println("step5 resize requested: uniformColsBefore=" + step5ColsBefore
+                + " flowsBefore=" + step5FlowsBefore + " uniformColsNow=" + vInt(viewer, "wrapCols")
                 + " stageWidth=" + stage.getWidth());
     }
 
@@ -2096,22 +2253,21 @@ public class HtmlViewerProbe extends Application {
         vNode(viewer).applyCss();
         vNode(viewer).layout();
         int cols = vInt(viewer, "wrapCols");
-        int len1 = vLine(viewer, 1).length();
-        int vrows = HtmlWrapMap.visualRowCount(len1, cols);
         Node cell = revealCellForLine(1);
-        long flows = cell == null ? -1 : cell.lookupAll(".html-source-line").size();
+        long flows = flowCount(cell);
         Bounds cb = cell == null ? null : cell.localToScene(cell.getBoundsInLocal());
-        System.out.println("step5 resize rewrap: cols=" + cols + " (before " + step5ColsBefore
-                + ") vrows=" + vrows + " flowsInCell=" + flows
+        System.out.println("step5 resize rewrap: uniformCols=" + cols + " (before " + step5ColsBefore
+                + ") flowsInCell=" + flows + " (before " + step5FlowsBefore + ")"
                 + " cellHeight=" + fmt(cb == null ? -1 : cb.getHeight()));
-        check("step5 resize: wrapCols grew with the wider window (" + step5ColsBefore + " -> "
-                        + cols + ")", cols > step5ColsBefore);
-        check("step5 resize: the long line re-wrapped onto the NEW grid (flows " + flows
-                        + " == " + vrows + ")", flows == vrows);
+        check("step5 resize: the uniform diagnostic grid grew with the wider window ("
+                        + step5ColsBefore + " -> " + cols + ")", cols > step5ColsBefore);
+        check("step5 resize: adaptive wrap re-cut the long line into FEWER rows after widening ("
+                        + step5FlowsBefore + " -> " + flows + ")",
+                flows > 0 && step5FlowsBefore > 0 && flows < step5FlowsBefore);
         check("step5 resize: the cell height matches the new wrap count ("
                         + fmt(cb == null ? -1 : cb.getHeight()) + " vs "
-                        + fmt(vrows * vDbl(viewer, "rowHeight")) + ")",
-                cell != null && cb != null && Math.abs(cb.getHeight() - vrows * vDbl(viewer, "rowHeight")) <= TOL);
+                        + fmt(flows * vDbl(viewer, "rowHeight")) + ")",
+                cell != null && cb != null && Math.abs(cb.getHeight() - flows * vDbl(viewer, "rowHeight")) <= TOL);
         HtmlTextSelection.Range r = vRange(viewer);
         check("step5 resize: the selection survived the re-wrap and stays single-line (range="
                         + describeRange(r) + ")",
@@ -2140,11 +2296,13 @@ public class HtmlViewerProbe extends Application {
     private void checkNoHscrollWithSelection() {
         vNode(viewer).applyCss();
         vNode(viewer).layout();
-        int cols = vInt(viewer, "wrapCols");
         int len1 = vLine(viewer, 1).length();
-        int fromCol = Math.max(0, cols - 3);
-        int toCol = Math.min(len1, cols + 5);
-        dragVisual(1, 0, fromCol, 1, 1, toCol - cols);
+        Node wrapCell = revealCellForLine(1);
+        int[] row0 = visualRowRange(wrapCell, 0);
+        int[] row1 = visualRowRange(wrapCell, 1);
+        int fromCol = Math.max(row0[0], row0[1] - 3);
+        int toCol = Math.min(len1, row1[0] + 5);
+        dragVisual(1, 0, fromCol - row0[0], 1, 1, toCol - row1[0]);
         vNode(viewer).applyCss();
         vNode(viewer).layout();
         check("step5 hscroll: hbar stays NEVER with a selection on the long line ("
@@ -2181,19 +2339,14 @@ public class HtmlViewerProbe extends Application {
             return;
         }
         Bounds b = cell.localToScene(cell.getBoundsInLocal());
-        double contentX = b.getMinX() + vDbl(viewer, "gutterWidth");
-        int cols = Math.max(1, vInt(viewer, "wrapCols"));
         double y = b.getMinY() + (fromVRow + 0.5) * vDbl(viewer, "rowHeight");
-        fireMouse(MouseEvent.MOUSE_PRESSED, cell,
-                sceneXForCol(cell, fromLine, fromVRow * cols + fromVCol, contentX), y, true);
+        fireMouse(MouseEvent.MOUSE_PRESSED, cell, sceneXForVisualCol(cell, fromVRow, fromVCol), y, true);
         Node cell2 = revealCellForLine(toLine);
-        double toContentX = contentX;
         if (cell2 != null) {
             Bounds b2 = cell2.localToScene(cell2.getBoundsInLocal());
-            toContentX = b2.getMinX() + vDbl(viewer, "gutterWidth");
             y = b2.getMinY() + (toVRow + 0.5) * vDbl(viewer, "rowHeight");
         }
-        double x = sceneXForCol(cell2 != null ? cell2 : cell, toLine, toVRow * cols + toVCol, toContentX);
+        double x = sceneXForVisualCol(cell2 != null ? cell2 : cell, toVRow, toVCol);
         fireMouse(MouseEvent.MOUSE_DRAGGED, listView, x, y, true);
         fireMouse(MouseEvent.MOUSE_RELEASED, listView, x, y, false);
     }

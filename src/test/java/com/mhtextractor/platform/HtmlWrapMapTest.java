@@ -119,6 +119,66 @@ class HtmlWrapMapTest {
         assertEquals(List.of(), segs(HtmlWrapMap.segments(10, 5, 5, 5)));
     }
 
+    // ==================== rows（自适应逐行贪心折行，2026-10-05） ====================
+
+    @Test
+    void emptyTextStillOccupiesOneVisualRow() {
+        assertEquals(List.of(List.of(0, 0)), rowRanges(HtmlWrapMap.rows(new double[0], 100)));
+    }
+
+    @Test
+    void equalWidthCharactersFillEachRowGreedily() {
+        // 每字符 10px、内容区 25px → 每行放 2 个（3 个 = 30 超宽，1 个 = 10 没铺满）
+        double[] adv = new double[7];
+        java.util.Arrays.fill(adv, 10.0);
+        assertEquals(List.of(List.of(0, 2), List.of(2, 4), List.of(4, 6), List.of(6, 7)),
+                rowRanges(HtmlWrapMap.rows(adv, 25)));
+    }
+
+    @Test
+    void wideAndNarrowCharactersShareTheSameRows() {
+        // "AAAA中中中"：A=7px、中=13px、内容区 26px → 每行按真实宽度尽量多放（旧 uniform 网格做不到）
+        double[] adv = {7, 7, 7, 7, 13, 13, 13};
+        assertEquals(List.of(List.of(0, 3), List.of(3, 5), List.of(5, 7)),
+                rowRanges(HtmlWrapMap.rows(adv, 26)));
+    }
+
+    @Test
+    void aCharacterWiderThanTheContentStillAdvances() {
+        // 退化输入（宽字 + 极窄内容区）：每行至少一个字符，绝不空转/死循环
+        assertEquals(List.of(List.of(0, 1), List.of(1, 2)),
+                rowRanges(HtmlWrapMap.rows(new double[]{100, 100}, 10)));
+        assertEquals(List.of(List.of(0, 1), List.of(1, 2)),
+                rowRanges(HtmlWrapMap.rows(new double[]{10, 10}, 0)));
+    }
+
+    @Test
+    void zeroWidthUnitNeverStartsItsOwnRow() {
+        // 代理对的第二个 code unit 宽为 0 → 必须和前一个 unit 同行（折行不切在代理对中间）
+        assertEquals(List.of(List.of(0, 2), List.of(2, 3)),
+                rowRanges(HtmlWrapMap.rows(new double[]{13, 0, 13}, 14)));
+    }
+
+    @Test
+    void rowsCoverTheWholeLineWithoutGaps() {
+        double[] adv = {7, 13, 7, 13, 7, 13, 7, 13, 7};
+        List<int[]> rows = HtmlWrapMap.rows(adv, 20);
+        assertEquals(0, rows.get(0)[0]);
+        assertEquals(adv.length, rows.get(rows.size() - 1)[1]);
+        for (int i = 1; i < rows.size(); i++) {
+            assertEquals(rows.get(i - 1)[1], rows.get(i)[0], "行与行之间不能有空隙/重叠");
+        }
+    }
+
+    /** 把 {@code int[]} 行区间转成 {@code List<List<Integer>>} 做<b>值</b>比较。 */
+    private static List<List<Integer>> rowRanges(List<int[]> actual) {
+        List<List<Integer>> out = new ArrayList<>(actual.size());
+        for (int[] r : actual) {
+            out.add(List.of(r[0], r[1]));
+        }
+        return out;
+    }
+
     /** 把 {@code int[]} 段转成 {@code List<List<Integer>>} 做<b>值</b>比较（数组 equals 是引用比较）。 */
     private static List<List<Integer>> segs(List<int[]> actual) {
         List<List<Integer>> out = new ArrayList<>(actual.size());

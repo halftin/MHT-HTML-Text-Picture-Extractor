@@ -423,10 +423,20 @@ public final class HtmlSourceViewer {
         return ROW_HEIGHT;
     }
 
-    /** 当前每视觉行的逻辑列数（视口宽 ÷ 单字符宽；软换行的几何基准，渲染与选择共用）。 */
+    /**
+     * <b>uniform 网格对照值</b>：假如每个字符都与最宽字形（CJK 全宽）一样宽，每行能放多少个字符。
+     *
+     * <p>真实折行自 2026-10-05 起是<b>自适应</b>的（{@code HtmlWrapMap.rows}：按逐字符真实步进
+     * 贪心，见 {@code SourceCell#buildVisualRows}），所以这个值<b>不再等于</b>任何一行的实际字符数；
+     * 保留给探针做"旧网格 vs 自适应"对照与诊断输出。</p>
+     */
     int wrapCols() {
-        double contentW = scroller.getViewportBounds().getWidth() - gutterWidth() - CONTENT_TAIL;
-        return HtmlWrapMap.colsPerRow(contentW, charWidth);
+        return HtmlWrapMap.colsPerRow(contentWidth(), charWidth);
+    }
+
+    /** 内容区像素宽（视口宽 − 行号栏 − 右侧安全留白）：自适应折行的可用宽度。 */
+    private double contentWidth() {
+        return scroller.getViewportBounds().getWidth() - gutterWidth() - CONTENT_TAIL;
     }
 
     /** 以纯文本取某行的内容。 */
@@ -696,18 +706,16 @@ public final class HtmlSourceViewer {
                 continue;
             }
             String text = plainLines.get(cell.getIndex());
-            int cols = wrapCols();
+            int rowCount = Math.max(1, cell.visualRowCount());
             int vRow = (int) ((sceneY - b.getMinY()) / ROW_HEIGHT);
-            vRow = Math.max(0, Math.min(vRow, HtmlWrapMap.visualRowCount(text.length(), cols) - 1));
-            int maxInRow = Math.min(cols, text.length() - vRow * cols);
-            // 按 run 真实宽度 + 逐字符步进反查列（不再用等宽网格：CJK 与拉丁混排的行上，
-            // 网格会把指针映射到左边很远的列 —— 即"选中背景落在鼠标左侧"）
+            vRow = Math.max(0, Math.min(vRow, rowCount - 1));
+            // 按 run 真实宽度 + 逐字符步进反查列（不用等宽网格：CJK 与拉丁混排时网格会把指针
+            // 映射到左边很远的列）；自适应折行后视觉行边界不再等距 —— 行区间只由 run 的列区间给出
             int col = cell.columnAt(sceneX, vRow);
             if (col < 0) {
-                col = vRow * cols;
+                col = 0;
             }
-            col = Math.max(vRow * cols, Math.min(col, vRow * cols + maxInRow));
-            return new HtmlTextSelection.Pos(cell.getIndex(), col);
+            return new HtmlTextSelection.Pos(cell.getIndex(), Math.max(0, Math.min(col, text.length())));
         }
         return null;
     }
@@ -953,6 +961,11 @@ public final class HtmlSourceViewer {
             setText(null);
         }
 
+        /** 本 cell 当前的视觉行数（自适应折行后不再等于 {@code 行长 ÷ cols}）。 */
+        int visualRowCount() {
+            return flows.getChildren().size();
+        }
+
         /** 内容列（行号栏之后）在本 cell 里的场景 x 起点（取第一视觉行的 TextFlow 左缘）。 */
         private double contentSceneMinX() {
             if (flows.getChildren().isEmpty()) {
@@ -1195,17 +1208,35 @@ public final class HtmlSourceViewer {
          */
         private List<Node> buildVisualRows(Row row) {
             String text = plainText(row.tokens());
-            int cols = wrapCols();
-            int rowCount = HtmlWrapMap.visualRowCount(text.length(), cols);
+            // 自适应折行：按每个字符的真实像素宽逐行贪心。等宽字体的 CJK 是全宽（≈字号）、
+            // 拉丁是半宽，所以一条纯 ASCII 行也能铺满内容区（旧 uniform 网格按最宽字形算列数，
+            // ASCII 行只能用到约一半宽）；同时"每行都不超宽"是硬约束 —— 超宽会被定高的视觉行裁掉。
+            List<int[]> slices = HtmlWrapMap.rows(advancesOf(text), contentWidth());
             boolean active = row.number() - 1 == currentHitLine();
             int[] hit = active ? currentHitColumns() : null;
-            List<Node> out = new ArrayList<>(rowCount);
-            for (int v = 0; v < rowCount; v++) {
-                int from = v * cols;
-                int to = Math.min(text.length(), (v + 1) * cols);
-                out.add(buildRowFlow(row, from, to, hit));
+            List<Node> out = new ArrayList<>(slices.size());
+            for (int[] slice : slices) {
+                out.add(buildRowFlow(row, slice[0], slice[1], hit));
             }
             return out;
+        }
+
+        /** 每个 UTF-16 code unit 的真实像素宽（代理对的第二个 unit 记 0，折行不会切在代理对中间）。 */
+        private double[] advancesOf(String text) {
+            double[] a = new double[text == null ? 0 : text.length()];
+            if (text == null) {
+                return a;
+            }
+            for (int i = 0; i < text.length(); i++) {
+                int cp = text.codePointAt(i);
+                int units = Character.charCount(cp);
+                a[i] = charAdvance(cp);
+                if (units == 2 && i + 1 < text.length()) {
+                    a[i + 1] = 0;
+                    i++;
+                }
+            }
+            return a;
         }
 
         /** 一个视觉行：逻辑列区间 {@code [from, to)} 内的 token 切片拼成一个固定行高的 TextFlow。 */
