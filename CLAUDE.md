@@ -16,14 +16,14 @@ JavaFX 25 桌面 GUI：把 `.mht` / `.mhtml` / `.html` / `.htm`（含 HTML 侧�
 
 | 项 | 现状（2026-10-05 实测） |
 |---|---|
-| 重构阶段 | A1 / A2 / B / C / D / E / F **全部实施并验收**；第二批 **S0–S6（E1–E5）** 亦已实施并验收；《UI可切换重构方案》**P0（三条度量/不变式）与 P1-1…P1-5（全局参数缓存 + 预览缓存构造 + 侧边栏会话基线 + 参数剪贴板 + 撤销载荷 + 启动前顺序门链下沉 app，闸门 2 已归零）已实施并验收**；**P2-1/P2-2（抽 ui-core：`ExtractOutcomeStyles` / `HtmlFindIndex` / `ParamTargetText` / `FileMenuModel` 下沉 `com.mhtextractor.uicore`，零 JavaFX）已实施并验收**（2026-10-06，未收口项见《遗留目标与未完成事项.md》） |
+| 重构阶段 | A1 / A2 / B / C / D / E / F **全部实施并验收**；第二批 **S0–S6（E1–E5）** 亦已实施并验收；《UI可切换重构方案》**P0（三条度量/不变式）与 P1-1…P1-5（全局参数缓存 + 预览缓存构造 + 侧边栏会话基线 + 参数剪贴板 + 撤销载荷 + 启动前顺序门链下沉 app，闸门 2 已归零）已实施并验收**；**P2-1/P2-2（抽 ui-core：`ExtractOutcomeStyles` / `HtmlFindIndex` / `ParamTargetText` / `FileMenuModel` 下沉 `com.mhtextractor.uicore`，零 JavaFX）已实施并验收**；**P3-1（端口能力覆盖矩阵草案：167 条 → 覆盖 42 / 前端 92 / 缺口 33）与 P3-2（`com.mhtextractor.uiport` 最小切片 API 定稿，19 类 / 0 违规）已实施并验收**（2026-10-06，未收口项见《遗留目标与未完成事项.md》） |
 | `MainController` | **1706** 行（上限常量 **2240**，只减不增；为不变式自报口径） |
-| 测试 | 默认执行 **777**（+ `headless-layer-b` **68**）；架构不变式 **16** 条；产物黄金基线 **42** 份 |
+| 测试 | 默认执行 **783**（+ `headless-layer-b` **68**）；架构不变式 **16** 条；产物黄金基线 **42** 份 |
 | GUI 自动化 | zh / en **各 34 passed / 0 failed**；`tools/probes/` 探针全绿 |
 | i18n | zh_CN / en_US **各 547 键**（两份键集与占位符集合必须一致）+ **22** 个 `ErrorCode`（本轮新增 `NO_CHECKED_ITEMS`） |
 | 日志键 | `log.*` **236 键 / 247 调用点**（逐键不变，重构不得偷改日志文案；2026-10-05 重数，本轮新增 `log.maincontroller.39`）；全部 `I18n.get/msg` 调用点 **442** |
 | native | 默认 `dynamic`：**22 文件 ≈70 MB**；`static`：15 文件 ≈98 MB |
-| 规模 | 主源集 **132** 个 java 文件（其中 `gui` **31** 个 / **11,428** 行、`uicore` **4**、`app` **20**）/ 测试源集 **87** 个（2026-10-06 P2-2 实测） |
+| 规模 | 主源集 **148** 个 java 文件（其中 `gui` **31** / **11,428** 行、`uicore` **4**、`uiport` **16**、`app` **20**）/ 测试源集 **88** 个（2026-10-06 P3-2 实测） |
 
 ---
 
@@ -86,6 +86,7 @@ app          ← 无头应用层（零 JavaFX）：MhtExtractorApp / WorkspaceMo
 model        ← 纯数据模型（PreviewItem / ThumbnailData / ExtractWarning），零 JavaFX，app 与 gui 共用
 platform     ← 与操作系统交互的基础设施（零 JavaFX，纳入同一条不变式扫描）
 uicore       ← 框架无关的前端共用逻辑（零 JavaFX，P2 起纳入同一条不变式扫描）
+uiport       ← 端口层（命令/查询/事件/确认往返；零 JavaFX、零 I18n、零业务类型；P3 起，uiportHasNoJavaFxDependency 强制）
 ```
 
 ### 业务包
@@ -151,7 +152,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | `guiDoesNotMutateDataOrderDirectly` | GUI 不得直接/间接改 workspace 数据序（须经 `WorkspaceModel`）；实测 **0 / 0** |
 | `testAccessSurfaceIsFrozen` | 测试访问面冻结：`src/test/resources/test-access-surface.tsv` **119** 条（direct 90 / reflect 9 / reflect-dynamic 20；S2 曾一次性上调至 124，P2-1 删除 5 条 HtmlFindIndex）**只减不增**；发现集合 ⊆ 清单、清单无陈旧条目、`com.mhtextractor.gui` 同包驱动必须登记。扫描器 `baseline.TestAccessSurface`（字节码成员库 + 驱动类常量池引用；不用反射 API） |
 | `allowlistOnlyTargetsBusinessPackages` · `baselineHarnessIsPresent` | 防白名单滥用 / 基线与夹具在位 |
-| `uiportHasNoJavaFxDependency` | **P0 新增**：`uiport` 端口层字节码常量池零 `javafx/`（字节码扫描；当前包不存在 = 0/0，P3 建立后强制）。基线违规数 **0**，扫描器 `baseline.UiportSignature` |
+| `uiportHasNoJavaFxDependency` | **P0 新增**：`uiport` 端口层字节码常量池零 `javafx/`（字节码扫描）。**P3-2 起包已建立，实测 19 类 / 0 违规**；基线违规数 **0**，扫描器 `baseline.UiportSignature` |
 | `guiBusinessStateDoesNotGrow` | **P0 新增**：`gui` 层业务状态持有/构造点（`AppConfig` / `Map<String,AppConfig>` 字段 + 缓存/剪贴板/撤销载荷构造点（`new UndoManager.Record(...)` 含 `<>`））**只减不增**；基线 **0**（P1-3 后 a=b=c=d=0；P0 时 9 → P1-1 7 → P1-2 3 → P1-3 0，已提前达 P3 目标并保持只减不增）。扫描器 `baseline.GuiCoupling` |
 | `guiDirectBusinessPackageUsageDoesNotGrow` | **P0 新增**：`gui` 源码直连业务包 distinct (包, 类型) 数 **只减不增**；基线 **34**（业务 import 115 仅作诊断），P1–P3 逐阶段下调，P3 目标 0。扫描器 `baseline.GuiCoupling` |
 
@@ -255,7 +256,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | 档 | 内容 | 判据 |
 |---|---|---|
 | **A**（分钟级） | `compile` + 定向单测 + 结构事实（行数 / 标记 / 直写） | 全绿；无"重排整文件"型 diff |
-| **B**（每阶段） | `mvn clean test` + 独立聚合 + `ProductBaselineTest` + `ArchitectureTest` + GUI 自动化 + 探针 + 日志键对账 | 默认 **777/0** + headless **68/0**；产物基线 **42/0**；不变式 **16/0**；GUI zh/en **34/0**；`log.*` 键逐键不变 |
+| **B**（每阶段） | `mvn clean test` + 独立聚合 + `ProductBaselineTest` + `ArchitectureTest` + GUI 自动化 + 探针 + 日志键对账 | 默认 **783/0** + headless **68/0**；产物基线 **42/0**；不变式 **16/0**；GUI zh/en **34/0**；`log.*` 键逐键不变 |
 | **C**（阶段收尾） | native 构建 + native 产物基线 + 截图对比 + i18n 键 | `build-native.cmd` exit 0、report `status=OK`；native 基线 **42/0** |
 
 **没实际跑过的项目要明确标为"未验证"，不许推断通过。**
