@@ -264,7 +264,7 @@ class ArchitectureTest {
      * 仅剩 {@code WorkspaceInfoPresenter} 引用，清单见 {@link GuiCoupling#distinctBusinessTypes}）；
      * P3-3b-2 预览缓存算键与写锁下沉 app 层 {@code PreviewService}，-2（PreviewCacheKey / SourceFingerprint）。
      */
-    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 30;
+    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 29;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

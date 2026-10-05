@@ -151,7 +151,6 @@ class ExtractionTaskCoordinatorCancelRaceTest {
         @Override public boolean otherModeConfirmed() { return false; }
         @Override public AppConfig currentModeParamsOrDefaults() { return new AppConfig(); }
         @Override public List<Object> dataOrder() { return List.of(); }
-        @Override public OutputUnitPlanner.ItemView<PreviewItem> itemView() { return null; }
         @Override public List<PreviewItem> allVisibleItems() { return List.of(); }
         @Override public void cancelWorkspaceActivity() { }
         @Override public Label statusLabel() { return null; }

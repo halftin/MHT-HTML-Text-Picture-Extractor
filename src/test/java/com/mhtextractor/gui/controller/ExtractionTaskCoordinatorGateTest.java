@@ -7,7 +7,6 @@ import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
-import com.mhtextractor.util.OutputUnitPlanner;
 import javafx.application.Platform;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -87,7 +86,6 @@ class ExtractionTaskCoordinatorGateTest {
         @Override public boolean otherModeConfirmed() { return false; }
         @Override public AppConfig currentModeParamsOrDefaults() { return new AppConfig(); }
         @Override public List<Object> dataOrder() { return List.of(); }
-        @Override public OutputUnitPlanner.ItemView<PreviewItem> itemView() { return VIEW; }
         @Override public List<PreviewItem> allVisibleItems() { return List.of(); }
         @Override public void cancelWorkspaceActivity() { cancelActivityCalls++; events.add("cancelActivity"); }
         @Override public Label statusLabel() { return statusLabel; }
@@ -98,15 +96,6 @@ class ExtractionTaskCoordinatorGateTest {
         @Override public Button startButton() { return startButton; }
         @Override public Button stopButton() { return stopButton; }
     }
-
-    /** 桩条目视图（数据序为空，实际不会被问到字段）。 */
-    private static final OutputUnitPlanner.ItemView<PreviewItem> VIEW = new OutputUnitPlanner.ItemView<>() {
-        @Override public String path(PreviewItem item) { return item.path; }
-        @Override public String sourceFolder(PreviewItem item) { return item.sourceFolder; }
-        @Override public boolean removed(PreviewItem item) { return item.removed; }
-        @Override public AppConfig textItemParams(PreviewItem item) { return null; }
-        @Override public AppConfig imageItemParams(PreviewItem item) { return null; }
-    };
 
     /** 记录询问顺序的假门：被询问即记名，随后按预置答案交付（同步，无 toolkit 也可跑）。 */
     private static final class FakeGate implements PreStartGate {

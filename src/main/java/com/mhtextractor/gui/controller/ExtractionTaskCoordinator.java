@@ -1,5 +1,6 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.ExtractionPlanService;
 import com.mhtextractor.app.ExtractionPreconditions;
 import com.mhtextractor.app.PreStartGate;
 import com.mhtextractor.app.PreStartGateContext;
@@ -14,7 +15,6 @@ import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.PerFileOverrides;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
-import com.mhtextractor.util.OutputUnitPlanner;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.scene.control.Button;
@@ -157,9 +157,6 @@ public final class ExtractionTaskCoordinator {
         /** 数据序只读投影（输出单元规划入参：原 {@code items}）。 */
         List<Object> dataOrder();
 
-        /** 输出单元规划的字段视图（原 {@code MainController.ITEM_VIEW}）。 */
-        OutputUnitPlanner.ItemView<PreviewItem> itemView();
-
         /** 全部有效项目（原 {@code allVisibleItems()}，逐文件覆盖构造用）。 */
         List<PreviewItem> allVisibleItems();
 
@@ -267,7 +264,9 @@ public final class ExtractionTaskCoordinator {
             // 查询全部转发 host；三个展示回调 = 搬迁前私有门类里的 GuiNotifications + I18n.get 文案渲染（逐字）
             PreStartGateContext ctx = new PreStartGateContext() {
                 @Override public List<Object> dataOrder() { return host.dataOrder(); }
-                @Override public OutputUnitPlanner.ItemView<PreviewItem> itemView() { return host.itemView(); }
+                @Override public ExtractionPlanService.ItemView itemView() {
+                    return ExtractionPlanService.itemView(host.extractCheckedOnly());
+                }
                 @Override public boolean imageMode() { return host.imageMode(); }
                 @Override public AppConfig textParamsCache() { return host.textParamsCache(); }
                 @Override public AppConfig imageParamsCache() { return host.imageParamsCache(); }
@@ -616,17 +615,10 @@ public final class ExtractionTaskCoordinator {
         });
     }
 
-    /** 以已确认参数（未确认时用默认参数）+ 主窗口 GUI 状态构建运行时提取配置（{@code AcceptanceDriver} 公开契约，签名不变）。 */
+    /** 以已确认参数（未确认时用默认参数）+ 主窗口 GUI 状态构建运行时提取配置（{@code AcceptanceDriver} 公开契约，签名不变；实现已下沉 {@code app.ExtractionPlanService}）。 */
     AppConfig buildRuntimeConfig() {
-        AppConfig config = host.imageMode() ? host.imageParamsCache() : host.textParamsCache();
-        if (config == null) {
-            config = new AppConfig();
-        }
-        config.setInputFolder(host.inputFolder());
-        config.setOutputFolder(host.outputFolder());
-        config.setImageModeEnabled(host.imageMode());
-        config.setOpenFolderAfterComplete(host.openFolderAfterComplete());
-        return config;
+        return ExtractionPlanService.runtimeConfig(host.imageMode(), host.imageParamsCache(), host.textParamsCache(),
+                host.inputFolder(), host.outputFolder(), host.openFolderAfterComplete());
     }
 
     private Map<String, PerFileOverrides> overrides() {
@@ -666,17 +658,10 @@ public final class ExtractionTaskCoordinator {
                     (int) host.visibleCount()));
         }
 
-        // 构建输出单元计划（FX 线程快照；单元参数补充运行时 GUI 字段）
-        List<OutputUnitPlanner.OutputUnit> units = OutputUnitPlanner.plan(
-                host.dataOrder(), host.itemView(), imageMode, host.textParamsCache(),
-                host.imageParamsCache(), sessionOutputFolder);
-        for (OutputUnitPlanner.OutputUnit unit : units) {
-            AppConfig params = unit.getParams();
-            params.setInputFolder(host.inputFolder());
-            params.setOutputFolder(host.outputFolder());
-            params.setImageModeEnabled(imageMode);
-            params.setOpenFolderAfterComplete(host.openFolderAfterComplete());
-        }
+        // 构建输出单元计划（FX 线程快照；计划与单元参数补充已下沉 app.ExtractionPlanService，P3-3b-3）
+        var units = ExtractionPlanService.plan(host.dataOrder(), imageMode, host.textParamsCache(),
+                host.imageParamsCache(), sessionOutputFolder, host.inputFolder(), host.outputFolder(),
+                host.openFolderAfterComplete(), host.extractCheckedOnly());
         log.info(I18n.msg("log.maincontroller.33", units.stream()
                 .map(u -> I18n.get("extract.groupFileCount", "group", u.label(),
                         "count", u.fileCount())).toList()));

@@ -1,5 +1,6 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.ExtractionPlanService;
 import com.mhtextractor.app.PreviewService;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.app.WorkspaceImportService;
@@ -20,7 +21,6 @@ import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.MhtImportPlanner;
-import com.mhtextractor.util.OutputUnitPlanner;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.UndoManager;
 import javafx.application.Platform;
@@ -93,33 +93,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     private static final String HINT_NEED_PARAMS = I18n.get("preview.hintParamsUnset");
     private static final String HINT_NO_FILES = I18n.get("preview.hintNoMht");
 
-    /** 输出单元规划的字段视图（路径/来源目录/移除标记，阶段 8） */
-    static final OutputUnitPlanner.ItemView<PreviewItem> ITEM_VIEW = new OutputUnitPlanner.ItemView<>() {
-        @Override
-        public String path(PreviewItem item) {
-            return item.path;
-        }
-
-        @Override
-        public String sourceFolder(PreviewItem item) {
-            return item.sourceFolder;
-        }
-
-        @Override
-        public boolean removed(PreviewItem item) {
-            return item.removed;
-        }
-
-        @Override
-        public AppConfig textItemParams(PreviewItem item) {
-            return item.textItemParams;
-        }
-
-        @Override
-        public AppConfig imageItemParams(PreviewItem item) {
-            return item.imageItemParams;
-        }
-    };
+    /**
+     * 输出单元规划的字段视图（路径/来源目录/移除标记，阶段 8）。
+     * 实现已下沉 {@code app.ExtractionPlanService}（P3-3b-3）；本包级常量仅维持
+     * {@code AcceptanceDriver.itemView()} 的直访契约（测试访问面清单条目不变）。
+     */
+    static final ExtractionPlanService.ItemView ITEM_VIEW = ExtractionPlanService.itemView(false);
 
     /**
      * FXML 加载器（P6-B）：由<b>加载方</b>经 {@code setControllerFactory} 注入
@@ -245,11 +224,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 }
                 @Override public AppConfig currentModeParamsOrDefaults() { return MainController.this.currentParamsOrDefaults(); }
                 @Override public List<Object> dataOrder() { return items; }
-                @Override public OutputUnitPlanner.ItemView<PreviewItem> itemView() {
-                    // 功能一：开关打开时把"参与"判定交给 checked；关闭时用默认视图（checked 恒 true）
-                    return refs.extractCheckedOnlyCheck().isSelected()
-                            ? OutputUnitPlanner.withChecked(ITEM_VIEW, it -> it.selected) : ITEM_VIEW;
-                }
                 @Override public boolean extractCheckedOnly() { return refs.extractCheckedOnlyCheck().isSelected(); }
                 @Override public int visibleCheckedCount() {
                     return (int) MainController.this.allVisibleItems().stream().filter(i -> i.selected).count();
