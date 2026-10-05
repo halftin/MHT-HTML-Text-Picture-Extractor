@@ -1,6 +1,7 @@
 package com.mhtextractor.gui.component;
 
 import com.mhtextractor.baseline.SourceScanUtils;
+import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.util.ExtractOutcome;
 import org.junit.jupiter.api.Test;
 
@@ -52,7 +53,7 @@ class ExtractOutcomeStylesTest {
     private static final Path GUI_CONTROLLER = MAIN_SOURCES.resolve("com/mhtextractor/gui/controller");
     private static final Path CONTROLLER = GUI_CONTROLLER.resolve("MainController.java");
     private static final Path CELL = GUI_CONTROLLER.resolve("PreviewListCell.java");
-    private static final Path STYLES = MAIN_SOURCES.resolve("com/mhtextractor/gui/component/ExtractOutcomeStyles.java");
+    private static final Path STYLES = MAIN_SOURCES.resolve("com/mhtextractor/uicore/ExtractOutcomeStyles.java");
     private static final Path CSS = Path.of("src", "main", "resources", "custom.css");
 
     /** 进度条 4 个活动样式类名（= {@code custom.css} 的选择器名；改名会静默丢样式）。 */
@@ -216,7 +217,7 @@ class ExtractOutcomeStylesTest {
             List<String> styleHits = hits(code, PROGRESS_STYLE_NAMES);
             assertTrue(styleHits.isEmpty(),
                     src.getFileName() + " 里仍出现进度条样式类名字面量 " + styleHits
-                            + " —— 它们唯一应当在 com.mhtextractor.gui.component.ExtractOutcomeStyles。");
+                            + " —— 它们唯一应当在 com.mhtextractor.uicore.ExtractOutcomeStyles。");
 
             List<String> paintHits = hits(code, OUTCOME_PAINT_NEEDLES);
             assertTrue(paintHits.isEmpty(),

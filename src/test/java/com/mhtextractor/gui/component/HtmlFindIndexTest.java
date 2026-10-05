@@ -1,6 +1,7 @@
 package com.mhtextractor.gui.component;
 
 import com.mhtextractor.platform.HtmlSyntaxTokens;
+import com.mhtextractor.uicore.HtmlFindIndex;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -18,8 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 通配符"这类事情一旦错了，界面表现完全正常（只是搜出来的东西不对）——
  * 正是本项目"没人会发现"的那种缺陷。</p>
  *
- * <p>本类在 {@code com.mhtextractor.gui.component} 包内，因为 {@link HtmlFindIndex} 是
- * 包级可见（它只服务于 {@link HtmlSourceViewer}）；它也<b>不需要 JavaFX</b>，
+ * <p>本类仍留在 {@code com.mhtextractor.gui.component} 包内，因为它还要直访同包的
+ * {@link HtmlSourceViewer#plainText}；{@link HtmlFindIndex} 已于 P2-1 迁入
+ * {@code com.mhtextractor.uicore} 并<b>放宽为 public</b>。它也<b>不需要 JavaFX</b>，
  * 因此留在默认执行集里（不是 headless-layer-b 的那五个类）。</p>
  */
 class HtmlFindIndexTest {

@@ -1,10 +1,10 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.config.AppConfig;
-import com.mhtextractor.gui.component.ExtractOutcomeStyles;
 import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.util.ChangeListener;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.ExtractOutcome;

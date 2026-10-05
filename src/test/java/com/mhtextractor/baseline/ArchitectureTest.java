@@ -60,7 +60,8 @@ class ArchitectureTest {
             "com/mhtextractor/i18n",
             "com/mhtextractor/model",   // E2.1：PreviewItem / ThumbnailData 外迁至此，必须保持零 JavaFX
             "com/mhtextractor/app",     // 目标产物：E4 起建立，建立后自动纳入约束
-            "com/mhtextractor/platform" // 步骤 5：与操作系统交互的基础设施（BrowserLauncher 迁出 gui.util）
+            "com/mhtextractor/platform", // 步骤 5：与操作系统交互的基础设施（BrowserLauncher 迁出 gui.util）
+            "com/mhtextractor/uicore"    // P2-1：ui-core = 框架无关的前端共用逻辑，同样零 JavaFX
     );
 
     /**
@@ -965,8 +966,9 @@ class ArchitectureTest {
 
     // ==================== 7. 测试访问面冻结（D2 · 第 13 条不变式） ====================
 
-    /** 测试访问面清单条目数上限：2026-10-05 S2（E2.1/E2.2）一次性上调至 124，此后只减不增。 */
-    private static final int TEST_ACCESS_SURFACE_MAX = 124;
+    /** 测试访问面清单条目数上限：2026-10-05 S2（E2.1/E2.2）一次性上调至 124，此后只减不增；
+     *  2026-10-06 P2-1 删除 5 条 HtmlFindIndex（迁入 uicore 并放宽 public，public 成员不入冻结面）→ 119。 */
+    private static final int TEST_ACCESS_SURFACE_MAX = 119;
 
     /**
      * 「测试访问面冻结」不变式（D2）：三条断言合取 + 驱动文件完整性守卫，失败信息分区列出。

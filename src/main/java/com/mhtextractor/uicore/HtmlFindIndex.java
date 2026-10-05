@@ -1,4 +1,4 @@
-package com.mhtextractor.gui.component;
+package com.mhtextractor.uicore;
 
 import com.mhtextractor.platform.HtmlSyntaxTokens;
 
@@ -34,15 +34,17 @@ import java.util.regex.PatternSyntaxException;
  * <p><b>为什么行号/列号由本类算</b>：{@code tokenize} 的每个 token 都<b>不跨行</b>
  * （{@link HtmlSyntaxTokens} 已保证），所以"归一化后的全文"与"逐行 token 拼起来"
  * 是同一个字符串 —— 在全文上取命中偏移，再二分回行号，与逐行扫是等价且更快的。</p>
+ *
+ * <p>P2-1 自 gui.component 迁入 ui-core，可见性放宽以便前端复用。</p>
  */
-final class HtmlFindIndex {
+public final class HtmlFindIndex {
 
     /** 一次命中：行下标（0 基）+ 该行内的半开区间 {@code [startCol, endCol)}。 */
-    record Match(int line, int startCol, int endCol) {
+    public record Match(int line, int startCol, int endCol) {
     }
 
     /** 无命中的空索引（查询为空 / 无法编译时用它，避免各处判 null）。 */
-    static final HtmlFindIndex EMPTY = new HtmlFindIndex(List.of());
+    public static final HtmlFindIndex EMPTY = new HtmlFindIndex(List.of());
 
     private final List<Match> matches;
 
@@ -51,16 +53,16 @@ final class HtmlFindIndex {
     }
 
     /** 命中总数（R5.3 的 m）。 */
-    int size() {
+    public int size() {
         return matches.size();
     }
 
-    boolean isEmpty() {
+    public boolean isEmpty() {
         return matches.isEmpty();
     }
 
     /** 第 {@code i} 个命中；越界抛 {@link IndexOutOfBoundsException}（调用方保证 0 ≤ i < size()）。 */
-    Match get(int i) {
+    public Match get(int i) {
         return matches.get(i);
     }
 
@@ -71,7 +73,7 @@ final class HtmlFindIndex {
      * @param lines          {@link HtmlSyntaxTokens#tokenize(String)} 的逐行结果（只用于校验行边界）
      * @param query          用户输入（null / 空 → {@link #EMPTY}）
      */
-    static HtmlFindIndex build(String normalizedHtml, List<HtmlSyntaxTokens.Line> lines, String query) {
+    public static HtmlFindIndex build(String normalizedHtml, List<HtmlSyntaxTokens.Line> lines, String query) {
         if (query == null || query.isEmpty() || normalizedHtml == null || normalizedHtml.isEmpty()) {
             return EMPTY;
         }

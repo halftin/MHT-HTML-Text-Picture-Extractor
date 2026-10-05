@@ -5,6 +5,7 @@ import com.mhtextractor.platform.HtmlSyntaxPalette;
 import com.mhtextractor.platform.HtmlSyntaxTokens;
 import com.mhtextractor.platform.HtmlTextSelection;
 import com.mhtextractor.platform.HtmlWrapMap;
+import com.mhtextractor.uicore.HtmlFindIndex;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;

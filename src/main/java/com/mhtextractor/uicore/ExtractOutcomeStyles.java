@@ -1,4 +1,4 @@
-package com.mhtextractor.gui.component;
+package com.mhtextractor.uicore;
 
 import com.mhtextractor.util.ExtractOutcome;
 

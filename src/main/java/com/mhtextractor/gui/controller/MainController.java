@@ -8,7 +8,6 @@ import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
-import com.mhtextractor.gui.component.ExtractOutcomeStyles;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.WorkspaceFxAdapter;
@@ -16,6 +15,7 @@ import com.mhtextractor.gui.util.JavaFxUtil;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.processor.BatchProcessor;
+import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
@@ -73,7 +73,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /* 选中态 = 基础色混合 40% 浅灰 #bebebe（拍板 2026-09-22，与组行选中切换同机制） */
     /* 提取结果背景画值（提取结果状态需求拍板，配色修订 2026-09-21、2026-09-25）：浅红=失败/跳过；标准绿=成功；分割色=成功+警告（左1/3红右2/3绿）。
        2026-09-25 用户反馈：浅红改 Windows 错误红 #E81123（白字）；警告分割行右侧绿加深 #2E7D32 以承载白字 */
-    /* 进度条活动样式类（含各色）与"提取结果 → 样式/颜色"的映射统一在 gui.component.ExtractOutcomeStyles */
+    /* 进度条活动样式类（含各色）与"提取结果 → 样式/颜色"的映射统一在 uicore.ExtractOutcomeStyles */
 
     /* 8.5 条目背景画值（配色修订 2026-09-21）：深蓝 = 生效参数为全局参数（白字）；浅蓝 = 生效参数为组/条目级独立参数 */
     /* 组条目行样式（配色修订 2026-09-21）：标准黑色底、白色文字；行高大幅缩小为比文字稍高 */

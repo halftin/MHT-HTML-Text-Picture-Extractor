@@ -1,11 +1,6 @@
 # 测试访问面清单（只减不增）。列：通道 <TAB> 生产类/文件 <TAB> 成员/方法 <TAB> 理由
 # 通道取值：direct（驱动类字节码常量池直访，第 2 列=生产类 FQN） | reflect（静态具名反射，第 2 列=生产类 FQN）
 #   reflect-dynamic（成员名无法静态解析的反射点，按 文件+方法 登记，第 2 列=源文件相对路径）
-direct	com.mhtextractor.gui.component.HtmlFindIndex	EMPTY	同包直访（驱动类字节码常量池引用）；驱动: HtmlFindIndexTest
-direct	com.mhtextractor.gui.component.HtmlFindIndex	build	同包直访（驱动类字节码常量池引用）；驱动: HtmlFindIndexTest
-direct	com.mhtextractor.gui.component.HtmlFindIndex	get	同包直访（驱动类字节码常量池引用）；驱动: HtmlFindIndexTest
-direct	com.mhtextractor.gui.component.HtmlFindIndex	isEmpty	同包直访（驱动类字节码常量池引用）；驱动: HtmlFindIndexTest
-direct	com.mhtextractor.gui.component.HtmlFindIndex	size	同包直访（驱动类字节码常量池引用）；驱动: HtmlFindIndexTest
 direct	com.mhtextractor.gui.component.HtmlSourceViewer	plainText	同包直访（驱动类字节码常量池引用）；驱动: HtmlFindIndexTest
 direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator	buildRuntimeConfig	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator	landTerminalState	同包直访（驱动类字节码常量池引用）；驱动: ExtractionTaskCoordinatorRunChannelTest
