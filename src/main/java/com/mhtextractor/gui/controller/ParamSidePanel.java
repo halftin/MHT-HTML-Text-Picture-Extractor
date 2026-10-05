@@ -1,5 +1,6 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.SessionParamBaseline;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
@@ -82,8 +83,7 @@ public final class ParamSidePanel {
      * 用户<b>从未见过</b>的旧值（实测：取消后复位值恰好等于草稿值，"丢弃"形同虚设）。
      * 会话起点 = {@link #load} 之后 / 干净的同目标重开（dirty 重开是会话继续，不重记）。</p>
      */
-    private AppConfig sessionTextCache;
-    private AppConfig sessionImageCache;
+    private SessionParamBaseline sessionBaseline;
 
     /** 宿主回调：确认时把采集到的参数交回去（由 {@code MainController} 接线）。 */
     private Consumer<AppConfig> onCommit;
@@ -180,8 +180,7 @@ public final class ParamSidePanel {
             this.onCommit = commit;
             if (!isDirty()) {
                 // 干净重开 = 新会话起点：重记复位源（此时宿主缓存就是面板当前值的那份；dirty 重开是会话继续，不重记）
-                this.sessionTextCache = textCache;
-                this.sessionImageCache = imageCache;
+                this.sessionBaseline = new SessionParamBaseline(textCache, imageCache);
             }
             host.hideReopen(SidePanelHost.Side.RIGHT);
             host.showRight(pane, I18n.get("dialog.title"), this::collapse);
@@ -205,8 +204,7 @@ public final class ParamSidePanel {
     private void load(ParamScope.Target target, boolean imageMode,
                       AppConfig textCache, AppConfig imageCache, Consumer<AppConfig> commit) {
         this.onCommit = commit;
-        this.sessionTextCache = textCache;
-        this.sessionImageCache = imageCache;
+        this.sessionBaseline = new SessionParamBaseline(textCache, imageCache);
         pane.load(textCache, imageCache, imageMode, target);
         this.loadedTarget = target;
         this.loadedImageMode = imageMode;
@@ -270,7 +268,7 @@ public final class ParamSidePanel {
         } else if (loadedTarget != null) {
             // 取消 = 结束（丢弃草稿，决策 2.4）：按会话起点的缓存重新载入同一目标 ——
             // 控件复位到用户本次会话看到的初值、基线重记（与"切换目标确认丢弃"同一动作）
-            pane.load(sessionTextCache, sessionImageCache, loadedImageMode, loadedTarget);
+            pane.load(sessionBaseline.text(), sessionBaseline.image(), loadedImageMode, loadedTarget);
         }
         endSession();
     }

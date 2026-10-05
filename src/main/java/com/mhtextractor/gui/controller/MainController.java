@@ -5,7 +5,6 @@ import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.app.WorkspaceImportService;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
-import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
@@ -48,7 +47,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -192,8 +190,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 列表选择代次：切换选择时自增，取消过期的图片懒加载 */
     private int requestToken = 0;
     /** 预览会话缓存（需求 2 会话 9）：存储层 + 四条生命周期规则；root = <java.io.tmpdir>/mht-extractor-preview（P6/P8，与 HtmlExportBuilder 的 mht-extractor-view 并列） */
-    final PreviewCacheLifecycle previewCacheLifecycle = new PreviewCacheLifecycle(
-            new PreviewCacheStore(Paths.get(System.getProperty("java.io.tmpdir"), "mht-extractor-preview")));
+    final PreviewCacheLifecycle previewCacheLifecycle = com.mhtextractor.app.PreviewCacheFactory.create();
     /**
      * 工作区缓存失效服务（E2.2）：把原先散落在 12 处的"规则 (a)/(c)"调用收敛为具名操作，
      * 并成为 {@code com.mhtextractor.app}（无头应用层）的第一块砖。零 JavaFX 依赖。

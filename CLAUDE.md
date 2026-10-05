@@ -16,8 +16,8 @@ JavaFX 25 桌面 GUI：把 `.mht` / `.mhtml` / `.html` / `.htm`（含 HTML 侧�
 
 | 项 | 现状（2026-10-05 实测） |
 |---|---|
-| 重构阶段 | A1 / A2 / B / C / D / E / F **全部实施并验收**；第二批 **S0–S6（E1–E5）** 亦已实施并验收；《UI可切换重构方案》**P0（三条度量/不变式）与 P1-1（全局参数缓存下沉 app）已实施并验收**（2026-10-06，未收口项见《遗留目标与未完成事项.md》） |
-| `MainController` | **1709** 行（上限常量 **2240**，只减不增；为不变式自报口径） |
+| 重构阶段 | A1 / A2 / B / C / D / E / F **全部实施并验收**；第二批 **S0–S6（E1–E5）** 亦已实施并验收；《UI可切换重构方案》**P0（三条度量/不变式）与 P1-1/P1-2（全局参数缓存 + 预览缓存构造 + 侧边栏会话基线下沉 app）已实施并验收**（2026-10-06，未收口项见《遗留目标与未完成事项.md》） |
+| `MainController` | **1706** 行（上限常量 **2240**，只减不增；为不变式自报口径） |
 | 测试 | 默认执行 **771**（+ `headless-layer-b` **68**）；架构不变式 **16** 条；产物黄金基线 **42** 份 |
 | GUI 自动化 | zh / en **各 34 passed / 0 failed**；`tools/probes/` 探针全绿 |
 | i18n | zh_CN / en_US **各 547 键**（两份键集与占位符集合必须一致）+ **22** 个 `ErrorCode`（本轮新增 `NO_CHECKED_ITEMS`） |
@@ -119,7 +119,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 
 ### GUI 层
 
-- **`MainController`（1709 行）** —— 只做 FXML 事件接线、协作者装配、UI 状态呈现；**行数只减不增**。
+- **`MainController`（1706 行）** —— 只做 FXML 事件接线、协作者装配、UI 状态呈现；**行数只减不增**。
   列表单元格渲染/拖拽、预览渲染/加载、分组动画、移除/撤销/窗口生命周期、预解析、信息展示均已外迁。
 - **既有协作者（沿用，不要重造平行框架）**：`MainViewRefs` / `MainViewInstaller` / `ListInteractionController` +
   `MainViewActions` / `PreviewListCell` / `PreviewRenderer` / `PreviewLoader` / `SourceViewActions` /
@@ -140,7 +140,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 |---|---|
 | `businessPackagesHaveNoUiFrameworkDependency` | 业务包 + `app` + `platform` + `model` **不得依赖 `javafx.*`**（字节码常量池口径，带白名单腐化检测） |
 | `applicationLayerDoesNotDependOnViewOrShell` | `app` 不得 import `gui` / `logging` / `App` |
-| `mainControllerIsShrinking` | `MainController` 行数（实测 **1709**）≤ 上限 **2240**，**只减不增** |
+| `mainControllerIsShrinking` | `MainController` 行数（实测 **1706**）≤ 上限 **2240**，**只减不增** |
 | `reflectionAgainstMainControllerIsZero` | 测试对 `MainController` 私有成员的**反射 = 0**（改用测试源集的同包 acceptance driver） |
 | `testSupportSurfaceDoesNotGrow` | `/* test-support */` 标记 = **0**。⚠️ 该计数**只覆盖 `MainController` 文本** |
 | `headlessTestPackagesHaveNoJavaFx` | 无头测试包源码不得出现 UI 框架字面量 |
@@ -151,8 +151,8 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | `testAccessSurfaceIsFrozen` | 测试访问面冻结：`src/test/resources/test-access-surface.tsv` **124** 条（direct 95 / reflect 9 / reflect-dynamic 20；S2 一次性上调并记账）**只减不增**；发现集合 ⊆ 清单、清单无陈旧条目、`com.mhtextractor.gui` 同包驱动必须登记。扫描器 `baseline.TestAccessSurface`（字节码成员库 + 驱动类常量池引用；不用反射 API） |
 | `allowlistOnlyTargetsBusinessPackages` · `baselineHarnessIsPresent` | 防白名单滥用 / 基线与夹具在位 |
 | `uiportHasNoJavaFxDependency` | **P0 新增**：`uiport` 端口层字节码常量池零 `javafx/`（字节码扫描；当前包不存在 = 0/0，P3 建立后强制）。基线违规数 **0**，扫描器 `baseline.UiportSignature` |
-| `guiBusinessStateDoesNotGrow` | **P0 新增**：`gui` 层业务状态持有/构造点（`AppConfig` / `Map<String,AppConfig>` 字段 + 缓存/剪贴板/撤销载荷构造点）**只减不增**；基线 **7**（P1-1 全局参数缓存下沉后 a=4 b=2 c=1 d=0；P0 时为 9），P1–P3 逐阶段下调，P3 目标 0。扫描器 `baseline.GuiCoupling` |
-| `guiDirectBusinessPackageUsageDoesNotGrow` | **P0 新增**：`gui` 源码直连业务包 distinct (包, 类型) 数 **只减不增**；基线 **35**（业务 import 119 仅作诊断），P1–P3 逐阶段下调，P3 目标 0。扫描器 `baseline.GuiCoupling` |
+| `guiBusinessStateDoesNotGrow` | **P0 新增**：`gui` 层业务状态持有/构造点（`AppConfig` / `Map<String,AppConfig>` 字段 + 缓存/剪贴板/撤销载荷构造点）**只减不增**；基线 **3**（P1-2 后 a=2 b=0 c=1 d=0；P0 时 9 → P1-1 7），P1–P3 逐阶段下调，P3 目标 0。扫描器 `baseline.GuiCoupling` |
+| `guiDirectBusinessPackageUsageDoesNotGrow` | **P0 新增**：`gui` 源码直连业务包 distinct (包, 类型) 数 **只减不增**；基线 **34**（业务 import 118 仅作诊断），P1–P3 逐阶段下调，P3 目标 0。扫描器 `baseline.GuiCoupling` |
 
 **其余硬约束**：主源集不出现 `java.awt`；不引入 `WebView`（**仅 JavaFX 前端生效**，换框架后重新评估）；不新增事件总线 / DI 容器 / 通用工作流引擎。
 
@@ -221,7 +221,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
   （进程起来但无窗口、**退出码仍 0**，资源管理器里双击图片也打不开）。凡"用系统默认程序打开文件"一律走 `platform.FileOpener`。
 - 🚨 **运行时/测试产物一律放 H 盘（2026-10-05 起）**：本项目产物放 `H:\TEST\mht\`、临时放 `H:\TEST\temp\`；跑 GUI / native / 探针 / 黑盒前设 **`-Djava.io.tmpdir=H:\TEST\temp`**（否则预览缓存 `mht-extractor-preview`、浏览器查看页 `mht-extractor-view` 会写进 `C:\Users\Admin\AppData\Local\Temp`）。**不要再把生成数据塞到 C 盘**，验收时断言 C 盘无新增生成数据。宿主目录 `.dsh` / `.agents-anywhere` / `.m2` / `.openjfx` 已是指向 `H:\TEST\*` 的 **junction**（旧 C 路径仍可用，新脚本请用 H 路径）；详见 `H:\TEST\MIGRATION-BRIEF.md`。
 - **任何 `mvn clean` 不得与 GUI 自动化 / native 构建并发**（会互删 `target/`）。
-- **不要整文件读取 `MainController.java`**（1709 行）：`grep -n` 定位 + 区间读。
+- **不要整文件读取 `MainController.java`**（1706 行）：`grep -n` 定位 + 区间读。
   **文档里的行号会漂移**，引用前先复核。
 - **git 身份未配置**：提交需内联 `git -c user.name=… -c user.email=… commit`（不要改用户环境）。
 - `.gitignore` 的 `/config/`、`/logs/`、`/temp/`、`/输出文件/` 已锚定仓库根，**不要去掉前导 `/`**
@@ -322,7 +322,7 @@ AtlantaFX 2.1.0（主题）· Logback 1.5.26 · Ikonli 12.3.1 · JUnit 6.0.3 · 
   `PreviewCacheMeta.warnings` 语言中立，展示层经 `I18n.render(...)` 按当前 locale 渲染；`FORMAT_VERSION` 已 2 → 3。
 - ✅ **已修复（E4.2 / S4）**：`AD_KEYWORDS` 仍硬编码，但 `AppConfig.IMAGE_EXTRACTION_RULES_VERSION` 已参与
   `imageExtractionFingerprint()`；**改关键词清单 / 去重口径时必须 +1**，否则预览缓存串味。
-- `MainController` 已从 3875 行降到 **1709** 行：参数域随**步骤 1** 外迁到 `ParamDomainController`（579 行）、
+- `MainController` 已从 3875 行降到 **1706** 行：参数域随**步骤 1** 外迁到 `ParamDomainController`（579 行）、
   提取编排随**步骤 2** 收口到 `ExtractionTaskCoordinator`（854 行），残余为 GUI 事件接线与状态呈现；
   `FeatureExercise` 已于步骤 6 拆分（演练 → `AgentExercise`、共享底座 → `FeatureExerciseSupport`、
   业务断言 → 各业务包 JUnit；1633 → 当前 **1058** 行）。
