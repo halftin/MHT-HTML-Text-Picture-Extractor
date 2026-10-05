@@ -1,18 +1,17 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.core.MimeParser;
-import com.mhtextractor.core.SourceParsers;
+import com.mhtextractor.app.SourceViewService;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.HtmlSourceViewer;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.platform.BrowserLauncher;
-import com.mhtextractor.util.HtmlExportBuilder;
 import javafx.application.Platform;
 import javafx.scene.Node;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -83,30 +82,31 @@ public final class SourceViewActions {
         host.setStatusText(I18n.get("browser.generatingPage"));
         Thread t = new Thread(() -> {
             try {
-                MimeParser.ParsedMht parsed = SourceParsers.forPath(it.path).parse(it.path, false, () -> false, null, null);
-                if (parsed.getHtmlContent() == null) {
-                    throw new IllegalStateException(I18n.get("browser.exportUnparseable"));
-                }
-                HtmlExportBuilder.ExportResult r = HtmlExportBuilder.export(it.path, parsed);
-                if (!r.success()) {
-                    throw new IllegalStateException(r.error());
-                }
-                log.info(I18n.msg("log.maincontroller.24", r.htmlFile(), r.imageCount(), r.warnings().size()));
-                // 浏览器启动可能耗时（注册表探测 / CDP 端点等待最长约 15 秒），独立后台线程避免冻结界面
-                Thread launcher = new Thread(() -> {
-                    if (sourceMode) {
-                        // R2：源码不再交给外部浏览器，改为应用内左侧覆盖式查看器（禁用 WebView，R2.6）。
-                        HtmlSourceViewer.showFile(host.anchor(), I18n.get("browser.viewerTitle"), r.htmlFile());
-                        return;
+                SourceViewService.Export result = SourceViewService.export(it.path);
+                switch (result) {
+                    case SourceViewService.Export.Unparseable() ->
+                            throw new IllegalStateException(I18n.get("browser.exportUnparseable"));
+                    case SourceViewService.Export.Failed(String error) ->
+                            throw new IllegalStateException(error);
+                    case SourceViewService.Export.Success(Path htmlFile, int imageCount, int warningCount) -> {
+                        log.info(I18n.msg("log.maincontroller.24", htmlFile, imageCount, warningCount));
+                        // 浏览器启动可能耗时（注册表探测 / CDP 端点等待最长约 15 秒），独立后台线程避免冻结界面
+                        Thread launcher = new Thread(() -> {
+                            if (sourceMode) {
+                                // R2：源码不再交给外部浏览器，改为应用内左侧覆盖式查看器（禁用 WebView，R2.6）。
+                                HtmlSourceViewer.showFile(host.anchor(), I18n.get("browser.viewerTitle"), htmlFile);
+                                return;
+                            }
+                            boolean ok = BrowserLauncher.openHtml(htmlFile);
+                            if (!ok) {
+                                log.warn(I18n.msg("log.maincontroller.25", htmlFile));
+                                Platform.runLater(() -> GuiNotifications.browserLaunchFailed(host.anchor(), htmlFile));
+                            }
+                        }, "html-browser-launch");
+                        launcher.setDaemon(true);
+                        launcher.start();
                     }
-                    boolean ok = BrowserLauncher.openHtml(r.htmlFile());
-                    if (!ok) {
-                        log.warn(I18n.msg("log.maincontroller.25", r.htmlFile()));
-                        Platform.runLater(() -> GuiNotifications.browserLaunchFailed(host.anchor(), r.htmlFile()));
-                    }
-                }, "html-browser-launch");
-                launcher.setDaemon(true);
-                launcher.start();
+                }
             } catch (Exception e) {
                 log.error(I18n.msg("log.maincontroller.26", it.path), e);
                 Platform.runLater(() -> GuiNotifications.browserViewFailed(host.anchor()));
