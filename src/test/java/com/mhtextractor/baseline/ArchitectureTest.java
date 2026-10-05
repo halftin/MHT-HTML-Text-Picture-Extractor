@@ -261,9 +261,10 @@ class ArchitectureTest {
      * 闸门 3：gui 层直连业务包 distinct (包, 类型) 数上限（只减不增，P1–P3 逐阶段下调，P3 目标 0）。
      * 基线 34（P1-2 预览缓存构造下沉 app 层 {@code PreviewCacheFactory}，-1）；
      * P3-3b 产物命名规则下沉 app 层 {@code OutputNameService}，-2（SourceKinds / ImageBatchProcessor
-     * 仅剩 {@code WorkspaceInfoPresenter} 引用，清单见 {@link GuiCoupling#distinctBusinessTypes}）。
+     * 仅剩 {@code WorkspaceInfoPresenter} 引用，清单见 {@link GuiCoupling#distinctBusinessTypes}）；
+     * P3-3b-2 预览缓存算键与写锁下沉 app 层 {@code PreviewService}，-2（PreviewCacheKey / SourceFingerprint）。
      */
-    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 32;
+    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 30;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

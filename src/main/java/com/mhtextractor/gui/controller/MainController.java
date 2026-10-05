@@ -351,7 +351,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             return ParamScope.effectiveImageParams(item.parentGroup, item.imageItemParams, paramDomain.imageParamsCache());
         }
         @Override public PreviewService previewService() { return previewService; }
-        @Override public PreviewCacheLifecycle cacheLifecycle() { return previewCacheLifecycle; }
         @Override public PreviewRenderer renderer() { return previewRenderer; }
         @Override public ProgressBar progressBar() { return refs.progressBar(); }
         @Override public Label statusLabel() { return refs.statusLabel(); }

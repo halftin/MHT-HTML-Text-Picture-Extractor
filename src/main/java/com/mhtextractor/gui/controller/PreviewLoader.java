@@ -1,9 +1,6 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.cache.PreviewCacheKey;
-import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheMeta;
-import com.mhtextractor.cache.SourceFingerprint;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.gui.component.GuiNotifications;
@@ -65,9 +62,6 @@ public final class PreviewLoader {
 
         /** 预览服务（搬迁前是 {@code previewService} 字段）。 */
         com.mhtextractor.app.PreviewService previewService();
-
-        /** 预览会话缓存生命周期（搬迁前是 {@code previewCacheLifecycle} 字段）。 */
-        PreviewCacheLifecycle cacheLifecycle();
 
         /** 预览渲染协作者（搬迁前是 {@code previewRenderer} 字段；渲染唯一实现点）。 */
         PreviewRenderer renderer();
@@ -168,11 +162,11 @@ public final class PreviewLoader {
             return;
         }
 
-        final PreviewCacheKey cacheKey;
+        // 键在 FX 线程算好（搬迁前口径：失败即日志 + 提醒并返回，不进入加载态）；
+        // Prepared 承载键与锁语义，gui 不引用任何 cache 类型（P3-3b-2b）。
+        final com.mhtextractor.app.PreviewService.Prepared prepared;
         try {
-            cacheKey = PreviewCacheKey.compute(Path.of(item.path),   // R6.5：键含 HTML 侧车目录内容摘要
-                    params.imageExtractionFingerprint(), SourceFingerprint.of(Path.of(item.path)),
-                    PreviewCacheMeta.FORMAT_VERSION);
+            prepared = host.previewService().prepare(Path.of(item.path), params);
         } catch (IOException e) {
             log.error(I18n.msg("log.maincontroller.61", item.path), e);
             GuiNotifications.readFileInfoFailed(host.statusLabel());
@@ -196,10 +190,9 @@ public final class PreviewLoader {
             try {
                 // 每项目写锁（§2.6(6)）：同项目「查缓存→提取→落盘」串行，不同项目并行。
                 // 缓存业务逻辑已搬入 com.mhtextractor.app.PreviewService（步骤 2），控制器只做 UI。
-                final com.mhtextractor.app.PreviewService.PreviewResult pr;
-                synchronized (host.cacheLifecycle().lockFor(cacheKey.absolutePath())) {
-                    pr = host.previewService().ensureCached(Path.of(item.path), params, cacheKey, () -> token != host.requestToken());
-                }
+                // 键已在 FX 线程经 prepare() 算好（P3-3b-2b），此处只持键加锁取缓存。
+                final com.mhtextractor.app.PreviewService.PreviewResult pr =
+                        host.previewService().ensureCachedLocked(prepared, () -> token != host.requestToken());
                 if (token != host.requestToken()) {
                     return;   // 代次失效：放弃上屏（缓存保留，重选时命中复用）
                 }
@@ -240,13 +233,16 @@ public final class PreviewLoader {
                     AppConfig imageParamsNow = host.effectiveImageParams(item);
                     boolean stale = item.removed || imageParamsNow == null
                             || !imageParamsNow.imageExtractionFingerprint()
-                                    .equals(cacheKey.paramFingerprint());
+                                    .equals(pr.meta().paramFingerprint());
                     if (stale) {
                         Thread cleanup = new Thread(() -> {
                             try {
-                                host.cacheLifecycle().store().delete(cacheKey);
+                                // 键由服务经 meta 反推（与写盘时的 key 同一个）
+                                host.previewService().deleteCacheOf(pr);
                             } catch (IOException e) {
-                                log.warn(I18n.msg("log.maincontroller.63", cacheKey.toDirName()), e);
+                                // 目录名经服务入口取：= 写盘键的 64 位目录名（与搬迁前 cacheKey.toDirName() 逐字一致）
+                                log.warn(I18n.msg("log.maincontroller.63",
+                                        host.previewService().cacheDirName(pr)), e);
                             }
                         }, "preview-cache-stale-delete");
                         cleanup.setDaemon(true);

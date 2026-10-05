@@ -4,6 +4,7 @@ import com.mhtextractor.cache.PreviewCacheKey;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.cache.PreviewCacheStore;
+import com.mhtextractor.cache.SourceFingerprint;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.core.SourceParser;
@@ -61,6 +62,16 @@ public final class PreviewService {
     public record PreviewResult(PreviewCacheMeta meta, Path imagesDir, List<ThumbnailData> thumbs) {
     }
 
+    /**
+     * 一次预览加载的准备结果（P3-3b-2b）：{@link #prepare} 在<b>调用方线程</b>算好的缓存键，
+     * 连同取缓存所需的文件与参数。gui 层只把它当<b>不透明令牌</b>使用 —— 不展开、不引用任何
+     * cache 类型，原样回传给 {@link #ensureCachedLocked(Prepared, Supplier)}。
+     *
+     * @param cacheKey 已算好的缓存键（内部实现细节，调用方不得展开）
+     */
+    public record Prepared(Path mht, AppConfig params, PreviewCacheKey cacheKey) {
+    }
+
     private final PreviewCacheLifecycle previewCache;
 
     public PreviewService(PreviewCacheLifecycle previewCache) {
@@ -111,15 +122,70 @@ public final class PreviewService {
     /**
      * 便捷重载：由本方法按 {@code (文件, 参数)} 现算缓存键。
      *
-     * <p>⚠️ GUI 主路径<b>不应</b>用它：那里需要 {@code key.absolutePath()} 去取每项目写锁，
-     * 键必须在外层算一次再传进来（见上一方法的 javadoc）。本重载存在的意义是无头测试与
-     * "不需要锁"的调用方不必重复三段实参。</p>
+     * <p>⚠️ GUI 主路径<b>不应</b>用它：那里需要「FX 线程算键（失败不进加载态）+ 每项目写锁」，
+     * 走 {@link #prepare} + {@link #ensureCachedLocked(Prepared, Supplier)}。
+     * 本重载存在的意义是无头测试与"不需要锁"的调用方不必重复三段实参。</p>
      */
     public PreviewResult ensureCached(Path mht, AppConfig params, Supplier<Boolean> cancelled)
             throws Exception {
         return ensureCached(mht, params,
                 PreviewCacheKey.compute(mht, params.imageExtractionFingerprint(),
                         PreviewCacheMeta.FORMAT_VERSION), cancelled);
+    }
+
+    /**
+     * GUI 预览主路径第一步（P3-3b-2b）：在<b>调用方线程</b>（GUI 为 FX 线程）按搬迁前
+     * {@code PreviewLoader} 的口径算缓存键 —— 与搬迁前 FX 线程上的
+     * {@link PreviewCacheKey#compute} 逐字一致（含 HTML 侧车附属指纹）；读不到 size/mtime 时抛
+     * {@link IOException}（与搬迁前同类型）。
+     *
+     * <p><b>为什么键必须在调用方线程算</b>（P3-3b-2 教训）：算键失败属于「读取文件信息失败」，
+     * GUI 必须在<b>设置加载态之前</b>同步处理（日志 + 提醒 + 返回）—— 若把算键挪进加载线程，
+     * 失败时就会"先亮加载态、再复位"，多一次可观察的闪烁。因此算键不放在
+     * {@link #ensureCachedLocked(Prepared, Supplier)} 里，而由本方法提前完成。</p>
+     *
+     * @throws IOException 读取文件信息失败（size / mtime 不可得）
+     */
+    public Prepared prepare(Path mht, AppConfig params) throws IOException {
+        return new Prepared(mht, params, PreviewCacheKey.compute(mht, params.imageExtractionFingerprint(),
+                SourceFingerprint.of(mht), PreviewCacheMeta.FORMAT_VERSION));
+    }
+
+    /**
+     * GUI 预览主路径第二步（P3-3b-2b）：持 {@code prepared} 键对应的<b>每项目写锁</b>取缓存 ——
+     * 锁覆盖「查缓存 → 解析抽图 → 落盘（含台阶检查）」整段；同项目串行，不同项目并行。
+     *
+     * @param prepared  {@link #prepare} 的产物（键已在调用方线程算好，本方法不再算）
+     * @param cancelled 取消判定（语义同 {@link #ensureCached(Path, AppConfig, Supplier)}），可为 null
+     */
+    public PreviewResult ensureCachedLocked(Prepared prepared, Supplier<Boolean> cancelled)
+            throws Exception {
+        synchronized (previewCache.lockFor(prepared.cacheKey().absolutePath())) {
+            return ensureCached(prepared.mht(), prepared.params(), prepared.cacheKey(), cancelled);
+        }
+    }
+
+    /**
+     * 某次加载结果对应的缓存目录名 = {@link PreviewCacheKey#toDirName()} 的 64 位十六进制目录名
+     * （{@code imagesDir} 是 {@code <root>/<64hex>} 的项目目录本身，末段即目录名）。
+     * GUI 日志专用（如 {@code log.maincontroller.63} 的实参），与搬迁前
+     * {@code cacheKey.toDirName()} <b>逐字一致</b>；避免 GUI 自己摆弄缓存路径语义。
+     */
+    public String cacheDirName(PreviewResult pr) {
+        return pr.imagesDir().getFileName().toString();
+    }
+
+    /**
+     * 删除某次加载结果对应的缓存目录（GUI 陈旧清理专用，P3-3b-2）。
+     *
+     * <p>key 由 {@code pr.meta()} 四要素 + 附属指纹 + 格式版本反推（与
+     * {@link PreviewCacheStore#imageFileFor} / {@link PreviewCacheStore#listKeys()} 同法），
+     * 与搬迁前 GUI 持有的那个 key 是<b>同一个</b> —— 落盘时 {@link PreviewCacheStore#write}
+     * 已用 {@code meta.matches(key)} 校验一致性，反推必然回到原 key，
+     * 删除语义与搬迁前 {@code store().delete(cacheKey)} 逐字一致。</p>
+     */
+    public boolean deleteCacheOf(PreviewResult pr) throws IOException {
+        return previewCache.store().delete(keyOf(pr.meta()));
     }
 
     // ==================== 内部：取缓存 ====================
@@ -188,6 +254,13 @@ public final class PreviewService {
     }
 
     // ==================== 内部：缩略图元数据 ====================
+
+    /** 由 meta 反推缓存键（{@link PreviewCacheStore#listKeys()} 同法）。 */
+    private static PreviewCacheKey keyOf(PreviewCacheMeta meta) {
+        return new PreviewCacheKey(meta.source().absolutePath(), meta.source().size(),
+                meta.source().mtime(), meta.paramFingerprint(), meta.source().sidecarFingerprint(),
+                meta.formatVersion());
+    }
 
     /**
      * 由 meta 的图片清单算出缩略图<b>元数据</b>（{@code pixels} 留空待渲染层解码）。
