@@ -58,9 +58,14 @@ public class ContextMenuProbe extends Application {
             "item:list.menuSelect", "item:list.menuSelectAll", "sep",
             "item:browser.menuOpen", "item:list.menuOpenFolder", "item:browser.menuViewSource", "sep",
             "item:params.menuSet", "item:params.menuClear", "item:params.menuApplyGlobal",
-            "item:params.menuCopy", "item:params.menuApplyToSelection", "sep",
+            "item:params.menuCopy", "item:params.menuApplyToThisItem", "sep",
             "item:group.menuMerge", "item:group.menuUngroup", "sep",
             "item:list.menuRemove", "item:group.menuRemove");
+
+    /** 功能二：应用到所选五档文案键（独立副本；顺序无关，集合等价）。 */
+    private static final List<String> APPLY_KEYS = List.of(
+            "params.menuApplyToThisItem", "params.menuApplyToManyItems", "params.menuApplyToGroup",
+            "params.menuApplyToGroupAndThisItem", "params.menuApplyToGroupAndMany");
 
     private int passed;
     private int failed;
@@ -104,6 +109,7 @@ public class ContextMenuProbe extends Application {
 
         Timer timer = new Timer("context-menu-probe", true);
         timer.schedule(at(400, this::runStaticAssertions), 400);
+        timer.schedule(at(550, this::applyTextChecks), 550);
         timer.schedule(at(700, this::r7CopyApplyEndToEnd), 700);
         timer.schedule(at(1200, this::behaviorShowA), 1200);
         timer.schedule(at(1700, this::behaviorFireA), 1700);
@@ -175,8 +181,16 @@ public class ContextMenuProbe extends Application {
                 String key = expected.substring("item:".length());
                 boolean isPlainItem = item instanceof MenuItem && !(item instanceof SeparatorMenuItem);
                 check("#" + i + " 是普通 MenuItem（不是分隔符）", isPlainItem);
-                check("#" + i + " 文案 == I18n.get(\"" + key + "\")（实际 \"" + item.getText() + "\"）",
-                        I18n.get(key).equals(item.getText()));
+                if (APPLY_KEYS.contains(key)) {
+                    // 功能二：应用到所选是 5 档动态文案 —— 这里只断言初始文案“∈ 5 档”，
+                    // “与实际作用集合一致”由 applyTextChecks() 独立驱动真实宿主链路验证。
+                    List<String> applyTexts = APPLY_KEYS.stream().map(I18n::get).toList();
+                    check("#" + i + " 应用到所选初始文案 ∈ 5 档（实际 \"" + item.getText() + "\"）",
+                            applyTexts.contains(item.getText()));
+                } else {
+                    check("#" + i + " 文案 == I18n.get(\"" + key + "\")（实际 \"" + item.getText() + "\"）",
+                            I18n.get(key).equals(item.getText()));
+                }
                 actualOrder.add("item:" + key);
             }
         }
@@ -289,6 +303,65 @@ public class ContextMenuProbe extends Application {
 
     private String text(FileListContextMenu.Entry entry) {
         return menu.item(entry).getText();
+    }
+
+    // ==================== t=550ms：功能二 5 档文案与实际作用集合一致 ====================
+
+    /**
+     * 走<b>真实</b>宿主链路（{@code updateContextMenuState} → {@code resolveParamTargets} →
+     * {@code countTargets} → {@code stateFor}）验证五档：组外 1 / 组外 ≥2 / 只有组 / 组外 1+组 /
+     * 组外 ≥2+组，并覆盖“勾选优先于右键目标”。用完即从模型移除，避免影响后续 R7。
+     */
+    private void applyTextChecks() {
+        try {
+            PreviewItem a = newPreview("apply-a");
+            PreviewItem b = newPreview("apply-b");
+            PreviewItem m = newPreview("apply-m");
+            workspace().appendItems(new ArrayList<>(List.of(a, b, m)));
+            GroupItem<PreviewItem> g = workspace().group(new ArrayList<>(List.of(m)), "probe-apply");
+
+            List<String> rendered = APPLY_KEYS.stream().map(I18n::get).toList();
+            check("功能二：5 档文案渲染后两两不同", rendered.stream().distinct().count() == 5);
+
+            a.selected = true;
+            b.selected = false;
+            m.selected = false;
+            applyText("只有组外项 1 个", a, FileListContextMenu.KEY_APPLY_THIS);
+
+            b.selected = true;
+            applyText("只有组外项 ≥2", a, FileListContextMenu.KEY_APPLY_MANY);
+
+            a.selected = false;
+            b.selected = false;
+            m.selected = true;
+            applyText("只有组相关", m, FileListContextMenu.KEY_APPLY_GROUP);
+
+            a.selected = true;
+            applyText("组外 1 + 组", a, FileListContextMenu.KEY_APPLY_GROUP_AND_THIS);
+
+            b.selected = true;
+            applyText("组外 ≥2 + 组", a, FileListContextMenu.KEY_APPLY_GROUP_AND_MANY);
+
+            // 勾选优先于右键目标：右键未勾选的 c，实际集合 = 勾选集合（a/b/m）
+            PreviewItem c = newPreview("apply-c");
+            workspace().appendItems(new ArrayList<>(List.of(c)));
+            applyText("勾选优先于右键目标", c, FileListContextMenu.KEY_APPLY_GROUP_AND_MANY);
+
+            workspace().removeItems(new ArrayList<>(List.of(a, b, c)));
+            if (g != null) {
+                workspace().removeGroup(g);
+            }
+        } catch (Throwable t) {
+            check("功能二 5 档步骤抛异常: " + t, false);
+            t.printStackTrace(System.out);
+        }
+    }
+
+    private void applyText(String what, Object target, String expectedKey) {
+        updateState(target);
+        String actual = menu.item(FileListContextMenu.Entry.APPLY_TO_SELECTION).getText();
+        check("功能二[" + what + "] 文案 == I18n.get(" + expectedKey + ")（实际 \"" + actual + "\"）",
+                I18n.get(expectedKey).equals(actual));
     }
 
     // ==================== t=700ms：R7 端到端（复制 → 应用 → 撤销 → 控制组） ====================

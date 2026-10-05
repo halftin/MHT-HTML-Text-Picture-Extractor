@@ -55,7 +55,9 @@ public enum ErrorCode {
     /** ParamPanelActions:106 删除配置失败 */
     CONFIG_DELETE_FAILED,
     /** ImageBatchProcessor:450 高速内存模式下预加载的 MHT 文件无法提供（占位符 {reason} = 原始失败原因） */
-    LOAD_MHT_FAILED;
+    LOAD_MHT_FAILED,
+    /** 功能一：开启"只提取选中的列表项"但没有任何勾选（ERROR：居中卡片，必须确认） */
+    NO_CHECKED_ITEMS;
 
     /** bundle 键：{@code error.<CODE>}。 */
     public String key() {

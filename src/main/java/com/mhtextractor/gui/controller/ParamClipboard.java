@@ -99,9 +99,11 @@ public final class ParamClipboard {
      */
     public FileListContextMenu.ParamsInfo paramsInfo(List<Object> targets, boolean independent,
                                                      EffectiveParamsService service,
-                                                     EffectiveParamsService.Context ctx) {
+                                                     EffectiveParamsService.Context ctx,
+                                                     int topLevelCount, int distinctGroupCount) {
         return new FileListContextMenu.ParamsInfo(independent,
-                service.anyHasEffectiveParams(targets, ctx), service.isUniform(targets, ctx), !isEmpty());
+                service.anyHasEffectiveParams(targets, ctx), service.isUniform(targets, ctx), !isEmpty(),
+                topLevelCount, distinctGroupCount);
     }
 
     // ==================== 批量应用与"整批一条撤销记录"（R7.4/R7.5） ====================

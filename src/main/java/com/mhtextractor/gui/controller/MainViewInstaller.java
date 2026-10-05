@@ -46,6 +46,7 @@ final class MainViewInstaller {
 
     /** 1. 外壳标签：完成后打开开关的标签位置 + 章节列头提示。 */
     void installShellLabels() {
+        refs.extractCheckedOnlyCheck().setLabelPosition(HorizontalDirection.RIGHT);
         refs.openFolderAfterCompleteCheck().setLabelPosition(HorizontalDirection.RIGHT);
         refs.badgeHeaderLabel().setTooltip(new Tooltip(I18n.get("list.chapterNoTooltip")));
     }
@@ -132,6 +133,7 @@ final class MainViewInstaller {
         // 目录/开关变更：刷新列表 + 持久化 GUI 状态
         refs.inputFolderField().textProperty().addListener((_, _, _) -> mc.onInputFolderChanged());
         refs.outputFolderField().textProperty().addListener((_, _, _) -> mc.saveGuiState());
+        refs.extractCheckedOnlyCheck().selectedProperty().addListener((_, _, _) -> mc.saveGuiState());
         refs.openFolderAfterCompleteCheck().selectedProperty().addListener((_, _, _) -> mc.saveGuiState());
 
         // 恢复 GUI 状态（无状态文件时与旧版启动逻辑一致）

@@ -185,6 +185,26 @@ public final class ExtractionTaskCoordinator {
 
         /** 停止按钮（提取中启用）。 */
         Button stopButton();
+
+        // ==================== 功能一：只提取选中的列表项 ====================
+
+        /** 是否只提取列表中被勾选的项目（"开始提取"点击时快照）。默认 false。 */
+        default boolean extractCheckedOnly() {
+            return false;
+        }
+
+        /** 本次会参与提取的可见项数（开关打开时 = 勾选且未移除的数量）。默认 0。 */
+        default int visibleCheckedCount() {
+            return 0;
+        }
+
+        /** 清空指定条目的提取结果色（不参与本次提取的可见项，避免误读 ✓/✗）。默认无操作。 */
+        default void clearExtractOutcomes(List<PreviewItem> items) {
+        }
+
+        /** 提取运行中锁定/恢复列表勾选框与"只提取选中"开关（禁用 + 刷新单元格）。默认无操作。 */
+        default void setExtractionUiLocked(boolean locked) {
+        }
     }
 
     /**
@@ -260,6 +280,7 @@ public final class ExtractionTaskCoordinator {
         if (host != null) {
             preStartGates.add(new DraftGate(host));        // 步骤 4 · 功能二：草稿门（决策 C：必须第一道）
             preStartGates.add(new UnnamedGroupGate(host)); // 步骤 3 · 功能一：未命名组门（生产注册）
+            preStartGates.add(new MergedNameGate(host));   // 功能一：合并名可能变化的提示门（链尾）
         }
     }
 
@@ -355,6 +376,8 @@ public final class ExtractionTaskCoordinator {
                     groups.add(GroupStructure.asPreviewGroup(g));
                 }
             }
+            // 功能一：只提醒"过滤后仍会产生单元"的顶层组（开关关闭时 = 现状）
+            groups = new ArrayList<>(ExtractionPreconditions.participatingGroups(groups, host.extractCheckedOnly()));
             // 判定唯一来源 = app 层纯规则（本门只做展示；不再内联同名过滤）
             List<String> names = ExtractionPreconditions.unnamedGroups(groups);
             if (names.isEmpty()) {
@@ -365,6 +388,43 @@ public final class ExtractionTaskCoordinator {
                     I18n.get("group.unnamedConfirm", "names",
                             String.join(I18n.get("list.nameSeparator"), names)),
                     proceed);
+        }
+    }
+
+    /**
+     * 功能一 —— 合并名可能变化的提示门（链尾，决策：草稿门 → 未命名组门 → 本门）。
+     *
+     * <p>仅当三个条件全满足才弹：① 开关打开；② 参与项数 &lt; 可见项数（确实有未参与项）；
+     * ③ 本次输出单元里存在合并单元（未分组按来源合并桶、任意组单元、图片合并单元）。
+     * 确定 = 继续提取；取消 = 中止本次启动。</p>
+     */
+    private static final class MergedNameGate implements PreStartGate {
+
+        private final Host host;
+
+        MergedNameGate(Host host) {
+            this.host = host;
+        }
+
+        @Override
+        public void ask(Consumer<Boolean> proceed) {
+            if (!host.extractCheckedOnly()) {
+                proceed.accept(true);
+                return;
+            }
+            if (host.visibleCheckedCount() >= host.visibleCount()) {
+                proceed.accept(true);
+                return;
+            }
+            List<OutputUnitPlanner.OutputUnit> units = OutputUnitPlanner.plan(
+                    host.dataOrder(), host.itemView(), host.imageMode(),
+                    host.textParamsCache(), host.imageParamsCache(), host.outputFolder());
+            if (!OutputUnitPlanner.hasMergedUnit(units, host.imageMode())) {
+                proceed.accept(true);
+                return;
+            }
+            GuiNotifications.subsetMergedNameConfirm(host.statusLabel(),
+                    I18n.get("extract.subsetMergedNameConfirm"), proceed);
         }
     }
 
@@ -519,6 +579,7 @@ public final class ExtractionTaskCoordinator {
         currentTask = null;
         if (host != null) {
             host.stopButton().setDisable(true);
+            host.setExtractionUiLocked(false);   // 功能一：终态恢复勾选框与开关
         }
         if (updateStartButtonState != null) {
             updateStartButtonState.run();
@@ -597,6 +658,11 @@ public final class ExtractionTaskCoordinator {
         if (denial == null) {
             denial = ExtractionPreconditions.deny(ExtractionPreconditions.noExtractableItems(
                     host.itemCount(), (int) host.visibleCount()));
+        }
+        if (denial == null && host.extractCheckedOnly()) {
+            // 功能一：开启"只提取选中的列表项"但一项未勾选 → ERROR 居中卡片（须确认）
+            denial = ExtractionPreconditions.deny(
+                    ExtractionPreconditions.noCheckedItems(host.visibleCheckedCount()));
         }
         if (denial != null) {
             // 会话 19：ERROR 走居中错误卡片（必须确认），WARNING 走右上角 toast（非阻塞）
@@ -686,6 +752,17 @@ public final class ExtractionTaskCoordinator {
         }
         log.info(I18n.msg("log.maincontroller.32", sessionOutputFolder));
 
+        // 功能一：只提取选中项时，先清空"本次不参与的可见项"的旧提取结果色（避免误读 ✓/✗）
+        if (host.extractCheckedOnly()) {
+            List<PreviewItem> nonParticipating = host.allVisibleItems().stream()
+                    .filter(i -> !i.selected).toList();
+            if (!nonParticipating.isEmpty()) {
+                host.clearExtractOutcomes(nonParticipating);
+            }
+            log.info(I18n.msg("log.maincontroller.39", host.visibleCheckedCount(),
+                    (int) host.visibleCount()));
+        }
+
         // 构建输出单元计划（FX 线程快照；单元参数补充运行时 GUI 字段）
         List<OutputUnitPlanner.OutputUnit> units = OutputUnitPlanner.plan(
                 host.dataOrder(), host.itemView(), imageMode, host.textParamsCache(),
@@ -754,6 +831,7 @@ public final class ExtractionTaskCoordinator {
 
             @Override
             public void extractionStarted() {
+                host.setExtractionUiLocked(true);   // 功能一：提取中禁用勾选框与"只提取选中"开关
                 host.startButton().setDisable(true);
                 host.stopButton().setDisable(false);
                 host.progressBar().setVisible(true);

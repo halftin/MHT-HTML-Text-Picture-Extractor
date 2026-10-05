@@ -41,18 +41,18 @@ import java.util.Objects;
  * </ul>
  *
  * <h2>{@code from(...)} 的语义（本步最容易埋雷的地方）</h2>
- * <p><b>缺失即失败、且指名 {@code fx:id}</b>：44 个名字里漏一个，症状会是运行期 NPE；
+ * <p><b>缺失即失败、且指名 {@code fx:id}</b>：45 个名字里漏一个，症状会是运行期 NPE；
  * 所以 {@link #from(Map)} 会对 {@link #SPEC} 里的每一项做"存在 + 类型"校验，
  * 任一不满足就抛 {@link IllegalStateException}，消息里带 {@code fx:id="<名字>"}。</p>
- * <p><b>{@code all()}</b> 返回同一张映射（44 项、全部非 null），供探针机械断言"一个都没漏"
+ * <p><b>{@code all()}</b> 返回同一张映射（45 项、全部非 null），供探针机械断言"一个都没漏"
  * （见 {@code tools/probes/MainViewRefsProbe.java}）。</p>
  *
  * <h2>{@code modeToggleGroup} 为什么让 {@code all()} 的值类型是 {@code Object}</h2>
- * <p>44 个 {@code fx:id} 中 43 个是 {@code Node}，唯一例外 {@code modeToggleGroup} 是
+ * <p>45 个 {@code fx:id} 中 43 个是 {@code Node}，唯一例外 {@code modeToggleGroup} 是
  * {@code javafx.scene.control.ToggleGroup}（写在 {@code <fx:define>} 里，<b>不是</b> {@code Node}）——
  * 这是实测事实（同一结论早先记录在 {@code FeatureExercise} 与 {@code ArchitectureTest} 的演进记录里）。
  * 若把 {@code all()} 声明成 {@code Map<String, Node>}，这一项就<b>放不进去</b>，
- * "44 项全非 null 且数量与 FXML 的 {@code fx:id} 数一致"这条断言将无法成立。</p>
+ * "45 项全非 null 且数量与 FXML 的 {@code fx:id} 数一致"这条断言将无法成立。</p>
  *
  * <p><b>⏱ 时机</b>：{@code FXMLLoader.loadImpl} 的顺序是"先往 namespace 写 location/resources →
  * 解析 XML（每个 {@code fx:id} 元素构造完成时写进同一张 namespace）→ injectFields →
@@ -63,7 +63,7 @@ import java.util.Objects;
 public final class MainViewRefs {
 
     /**
-     * 44 个 {@code fx:id} 及其期望控件类型 —— <b>唯一清单</b>。
+     * 45 个 {@code fx:id} 及其期望控件类型 —— <b>唯一清单</b>。
      *
      * <p>⚠️ {@code MainView.fxml} 增删 {@code fx:id} 必须同步改这里；漏改会在
      * {@link #from(Map)} 处立刻炸，而不是等某个按钮点了没反应。
@@ -121,11 +121,12 @@ public final class MainViewRefs {
         m.put("startButton", Button.class);
         m.put("stopButton", Button.class);
         m.put("logTextArea", LogTextArea.class);
+        m.put("extractCheckedOnlyCheck", ToggleSwitch.class);
         m.put("openFolderAfterCompleteCheck", ToggleSwitch.class);
         return Collections.unmodifiableMap(m);
     }
 
-    /** {@code fx:id} → 控件（44 项，全部非 null；unmodifiable）。 */
+    /** {@code fx:id} → 控件（45 项，全部非 null；unmodifiable）。 */
     private final Map<String, Object> byId;
 
     private MainViewRefs(Map<String, Object> byId) {
@@ -135,7 +136,7 @@ public final class MainViewRefs {
     /**
      * 由 FXML 命名空间构造（{@code FXMLLoader.getNamespace()}）。
      *
-     * @param namespace 命名空间（除 44 个 {@code fx:id} 外还含 {@code location}/{@code resources} 两个键，
+     * @param namespace 命名空间（除 45 个 {@code fx:id} 外还含 {@code location}/{@code resources} 两个键，
      *                  本类只取 {@link #SPEC} 里的键）
      * @throws IllegalStateException 任一项缺失或类型不符 —— 消息里带 {@code fx:id="<名字>"}
      */
@@ -339,11 +340,15 @@ public final class MainViewRefs {
         return (LogTextArea) byId.get("logTextArea");
     }
 
+    public ToggleSwitch extractCheckedOnlyCheck() {
+        return (ToggleSwitch) byId.get("extractCheckedOnlyCheck");
+    }
+
     public ToggleSwitch openFolderAfterCompleteCheck() {
         return (ToggleSwitch) byId.get("openFolderAfterCompleteCheck");
     }
 
-    /** 本类暴露的全部 {@code fx:id} → 控件（44 项、全部非 null；探针用它断言"一个都没漏"）。 */
+    /** 本类暴露的全部 {@code fx:id} → 控件（45 项、全部非 null；探针用它断言"一个都没漏"）。 */
     public Map<String, Object> all() {
         return byId;
     }

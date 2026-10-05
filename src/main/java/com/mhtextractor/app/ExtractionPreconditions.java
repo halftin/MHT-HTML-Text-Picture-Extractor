@@ -108,6 +108,19 @@ public final class ExtractionPreconditions {
         return totalItems == 0 ? ErrorCode.NO_MHT_FOUND : ErrorCode.KEEP_AT_LEAST_ONE;
     }
 
+    /**
+     * 功能一：开启"只提取选中的列表项"但没有勾选任何可见项时的拒绝码。
+     *
+     * <p>与 {@link #noExtractableItems(int, int)} 分开：后者是三态语义（从未导入 / 全被移除），
+     * 不能把"可见项 &gt; 0 但勾选为 0"塞进去，否则会破坏其既有三态。调用方只在开关打开时调用本方法。
+     *
+     * @param participating 本次会参与提取的可见项数（开关打开时 = 勾选且未移除的数量）
+     * @return {@code null} = 通过；否则 {@link ErrorCode#NO_CHECKED_ITEMS}
+     */
+    public static ErrorCode noCheckedItems(int participating) {
+        return participating == 0 ? ErrorCode.NO_CHECKED_ITEMS : null;
+    }
+
     // ==================== 未命名组规则（步骤 3 · 功能一） ====================
 
     /**
@@ -134,6 +147,27 @@ public final class ExtractionPreconditions {
         return List.copyOf(names);
     }
 
+    /**
+     * 功能一：过滤出"过滤后仍会产生单元"的顶层组（开关打开时 ≥1 个勾选且未移除的成员；
+     * 开关关闭时原样返回）。未命名组提醒只针对这些组。纯函数。
+     */
+    public static List<GroupItem<PreviewItem>> participatingGroups(
+            List<GroupItem<PreviewItem>> groups, boolean checkedOnly) {
+        if (groups == null || !checkedOnly) {
+            return groups == null ? List.of() : List.copyOf(groups);
+        }
+        List<GroupItem<PreviewItem>> out = new ArrayList<>();
+        for (GroupItem<PreviewItem> g : groups) {
+            for (Object m : g.getMembers()) {
+                if (m instanceof PreviewItem it && !it.removed && it.selected) {
+                    out.add(g);
+                    break;
+                }
+            }
+        }
+        return List.copyOf(out);
+    }
+
     // ==================== 展示级别（把"该用 WARNING 还是 ERROR"也变成规则的一部分） ====================
 
     /**
@@ -146,9 +180,13 @@ public final class ExtractionPreconditions {
      */
     public enum Level { WARNING, ERROR }
 
-    /** 按错误码给出展示级别（未知码保守取 WARNING） */
+    /**
+     * 按错误码给出展示级别（未知码保守取 WARNING）。
+     * 功能一：{@link ErrorCode#NO_CHECKED_ITEMS} 必须 ERROR（居中卡片、须确认）。
+     */
     public static Level levelOf(ErrorCode code) {
-        return code == ErrorCode.INPUT_DIR_MISSING ? Level.ERROR : Level.WARNING;
+        return code == ErrorCode.INPUT_DIR_MISSING || code == ErrorCode.NO_CHECKED_ITEMS
+                ? Level.ERROR : Level.WARNING;
     }
 
     /**

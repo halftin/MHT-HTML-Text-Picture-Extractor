@@ -1,11 +1,15 @@
 package com.mhtextractor.app;
 
 import com.mhtextractor.i18n.ErrorCode;
+import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.util.GroupItem;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -156,6 +160,59 @@ class ExtractionPreconditionsTest {
         var w = ExtractionPreconditions.deny(ErrorCode.OUTPUT_DIR_INVALID);
         assertNotNull(w);
         assertEquals(ExtractionPreconditions.Level.WARNING, w.level());
+    }
+
+    // ==================== 功能一：只提取选中项的前置校验 ====================
+
+    @Test
+    void noCheckedItemsOnlyRejectsWhenNothingParticipates() {
+        assertNull(ExtractionPreconditions.noCheckedItems(3), "有勾选项 → 通过");
+        assertNull(ExtractionPreconditions.noCheckedItems(1));
+        assertEquals(ErrorCode.NO_CHECKED_ITEMS, ExtractionPreconditions.noCheckedItems(0),
+                "一项未勾选 → 新错误码");
+        // 不破坏 noExtractableItems 的三态语义
+        assertEquals(ErrorCode.NO_MHT_FOUND, ExtractionPreconditions.noExtractableItems(0, 0));
+        assertEquals(ErrorCode.KEEP_AT_LEAST_ONE, ExtractionPreconditions.noExtractableItems(5, 0));
+        assertNull(ExtractionPreconditions.noExtractableItems(5, 3));
+    }
+
+    @Test
+    void noCheckedItemsIsAnErrorLevelDenial() {
+        assertEquals(ExtractionPreconditions.Level.ERROR,
+                ExtractionPreconditions.levelOf(ErrorCode.NO_CHECKED_ITEMS),
+                "缺勾选必须是 ERROR（居中卡片、须确认）");
+        var d = ExtractionPreconditions.deny(ErrorCode.NO_CHECKED_ITEMS);
+        assertNotNull(d);
+        assertEquals(ExtractionPreconditions.Level.ERROR, d.level());
+    }
+
+    @Test
+    void participatingGroupsKeepOnlyGroupsWithACheckedMemberWhenSwitchOn() {
+        GroupItem<PreviewItem> g1 = new GroupItem<>(1, "g1");
+        PreviewItem checked = item("a");
+        checked.selected = true;
+        g1.getMembers().add(checked);
+
+        GroupItem<PreviewItem> g2 = new GroupItem<>(2, "g2");
+        g2.getMembers().add(item("b"));   // 未勾选
+
+        GroupItem<PreviewItem> g3 = new GroupItem<>(3, "g3");
+        PreviewItem removed = item("c");
+        removed.selected = true;
+        removed.removed = true;
+        g3.getMembers().add(removed);
+
+        // 开关关闭 → 原样（现状）
+        assertEquals(List.of(g1, g2, g3),
+                ExtractionPreconditions.participatingGroups(List.of(g1, g2, g3), false));
+        // 开关打开 → 只有含勾选且未移除成员的组
+        assertEquals(List.of(g1),
+                ExtractionPreconditions.participatingGroups(List.of(g1, g2, g3), true));
+        assertEquals(List.of(), ExtractionPreconditions.participatingGroups(null, true));
+    }
+
+    private static PreviewItem item(String name) {
+        return new PreviewItem("C:/pre/" + name + ".mht", name + ".mht", LocalDateTime.now(), "C:/pre");
     }
 
     // ==================== 便捷重载（内部自己探目录） ====================

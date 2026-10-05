@@ -208,6 +208,25 @@ public final class FileListContextMenu {
     /** 「复制参数」禁用时的文案键：多选目标的生效参数<b>不统一</b>（R7.2 理由二） */
     public static final String KEY_COPY_MIXED_PARAMS = "params.menuCopyMixedParams";
 
+    /** 功能二：「应用到所选」五档文案键（按<b>实际作用集合</b>分类）。 */
+    public static final String KEY_APPLY_THIS = "params.menuApplyToThisItem";
+
+    /** 功能二：组外项 ≥2 个且无组。 */
+    public static final String KEY_APPLY_MANY = "params.menuApplyToManyItems";
+
+    /** 功能二：只有组相关（组条目 / 组内成员），任意多个组。 */
+    public static final String KEY_APPLY_GROUP = "params.menuApplyToGroup";
+
+    /** 功能二：组外项 == 1 且有组。 */
+    public static final String KEY_APPLY_GROUP_AND_THIS = "params.menuApplyToGroupAndThisItem";
+
+    /** 功能二：组外项 ≥2 且有组。 */
+    public static final String KEY_APPLY_GROUP_AND_MANY = "params.menuApplyToGroupAndMany";
+
+    /** 五档文案键（供探针"∈ 5 档"特判与文案两两不同自检使用）。 */
+    public static final List<String> APPLY_TO_SELECTION_KEYS = List.of(
+            KEY_APPLY_THIS, KEY_APPLY_MANY, KEY_APPLY_GROUP, KEY_APPLY_GROUP_AND_THIS, KEY_APPLY_GROUP_AND_MANY);
+
     /** 14 个菜单项的文案键（逐字照抄搬前 {@code buildContextMenu} 的 {@code I18n.get} 实参） */
     public static final Map<Entry, String> TEXT_KEYS = textKeys();
 
@@ -222,7 +241,7 @@ public final class FileListContextMenu {
         keys.put(Entry.CLEAR_PARAMS, "params.menuClear");
         keys.put(Entry.APPLY_GLOBAL, "params.menuApplyGlobal");
         keys.put(Entry.COPY_PARAMS, KEY_COPY_PARAMS);
-        keys.put(Entry.APPLY_TO_SELECTION, "params.menuApplyToSelection");
+        keys.put(Entry.APPLY_TO_SELECTION, KEY_APPLY_THIS);
         keys.put(Entry.GROUP, "group.menuMerge");
         keys.put(Entry.UNGROUP, "group.menuUngroup");
         keys.put(Entry.REMOVE, "list.menuRemove");
@@ -249,6 +268,7 @@ public final class FileListContextMenu {
                         boolean copyParams,
                         String copyParamsTextKey,
                         boolean applyToSelection,
+                        String applyToSelectionTextKey,
                         boolean group,
                         boolean ungroup,
                         boolean remove,
@@ -262,8 +282,27 @@ public final class FileListContextMenu {
      * @param hasEffective 目标集合里是否有生效参数（R7.2 理由一的<b>反面</b>）
      * @param uniform     目标集合的生效参数是否统一（R7.2 理由二的<b>反面</b>）
      * @param copied      是否已复制过参数（R7.3）
+     * @param topLevelCount     功能二：实际作用集合里的<b>组外项数</b>（顶层项目条目）
+     * @param distinctGroupCount 功能二：实际作用集合里涉及的<b>去重组数</b>
      */
-    public record ParamsInfo(boolean independent, boolean hasEffective, boolean uniform, boolean copied) {
+    public record ParamsInfo(boolean independent, boolean hasEffective, boolean uniform, boolean copied,
+                             int topLevelCount, int distinctGroupCount) {
+    }
+
+    /**
+     * 功能二：按<b>实际作用集合</b>给出「应用到所选」的文案键（纯函数，5 档）。
+     *
+     * <p>分类只用两个计数：组外项数 {@code topLevelCount} 与去重组数 {@code distinctGroupCount}。
+     * 有效集合为空（两者皆 0）时"保持现状" —— 不新增档，落在默认档 {@link #KEY_APPLY_THIS}
+     * （此时菜单项通常因未复制而禁用）。</p>
+     */
+    public static String applyToSelectionTextKey(int topLevelCount, int distinctGroupCount) {
+        if (distinctGroupCount > 0) {
+            return topLevelCount >= 2 ? KEY_APPLY_GROUP_AND_MANY
+                    : topLevelCount == 1 ? KEY_APPLY_GROUP_AND_THIS
+                    : KEY_APPLY_GROUP;
+        }
+        return topLevelCount >= 2 ? KEY_APPLY_MANY : KEY_APPLY_THIS;
     }
 
     /**
@@ -287,6 +326,7 @@ public final class FileListContextMenu {
         boolean copy = info.hasEffective() && info.uniform();
         String copyKey = !info.hasEffective() ? KEY_COPY_NO_PARAMS
                 : (info.uniform() ? KEY_COPY_PARAMS : KEY_COPY_MIXED_PARAMS);
+        String applyKey = applyToSelectionTextKey(info.topLevelCount(), info.distinctGroupCount());
 
         return new State(
                 !blank,                 // 勾选：项目条目勾选自身；组条目整组勾选
@@ -301,6 +341,7 @@ public final class FileListContextMenu {
                 copy,                   // 复制参数（R7.2）
                 copyKey,                // 复制参数文案键（R7.2：禁用理由写在文本里）
                 info.copied(),          // 应用到所选（R7.3：未复制过 ⇒ 不可交互）
+                applyKey,               // 应用到所选文案键（功能二：按实际作用集合 5 档）
                 item,                   // 建组：仅项目条目
                 group,                  // 拆分组：仅组条目
                 item,                   // 移除：仅项目条目（组条目走"移除组"）
@@ -451,6 +492,7 @@ public final class FileListContextMenu {
         items.get(Entry.COPY_PARAMS).setDisable(!state.copyParams());
         items.get(Entry.COPY_PARAMS).setText(I18n.get(state.copyParamsTextKey()));
         items.get(Entry.APPLY_TO_SELECTION).setDisable(!state.applyToSelection());
+        items.get(Entry.APPLY_TO_SELECTION).setText(I18n.get(state.applyToSelectionTextKey()));
         items.get(Entry.GROUP).setDisable(!state.group());
         items.get(Entry.UNGROUP).setDisable(!state.ungroup());
         items.get(Entry.REMOVE).setDisable(!state.remove());

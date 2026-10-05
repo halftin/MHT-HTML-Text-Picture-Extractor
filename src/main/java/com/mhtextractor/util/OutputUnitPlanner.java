@@ -35,11 +35,59 @@ public final class OutputUnitPlanner {
 
         boolean removed(I item);
 
+        /**
+         * 功能一：该条目本次是否参与提取（默认全部参与）。
+         * 开关关闭时恒 true；打开时 = 条目被勾选（由 GUI 视图实现给出）。
+         */
+        default boolean checked(I item) {
+            return true;
+        }
+
         /** 条目级文本参数（null = 未设置；条目独立参数需求） */
         AppConfig textItemParams(I item);
 
         /** 条目级图片参数（null = 未设置；条目独立参数需求） */
         AppConfig imageItemParams(I item);
+    }
+
+    /**
+     * 视图装饰（功能一）：返回与 {@code base} 字段相同、但 {@link ItemView#checked} 改由
+     * {@code checked} 判定的视图。开关关闭时不必装饰（默认恒 true）。纯函数、零副作用。
+     */
+    public static <I> ItemView<I> withChecked(ItemView<I> base, java.util.function.Predicate<I> checked) {
+        java.util.Objects.requireNonNull(base, "base");
+        java.util.Objects.requireNonNull(checked, "checked");
+        return new ItemView<>() {
+            @Override public String path(I item) { return base.path(item); }
+
+            @Override public String sourceFolder(I item) { return base.sourceFolder(item); }
+
+            @Override public boolean removed(I item) { return base.removed(item); }
+
+            @Override public boolean checked(I item) { return checked.test(item); }
+
+            @Override public AppConfig textItemParams(I item) { return base.textItemParams(item); }
+
+            @Override public AppConfig imageItemParams(I item) { return base.imageItemParams(item); }
+        };
+    }
+
+    /**
+     * 本次输出单元里是否存在"合并单元"（功能一提示卡判定条件③）：任意组单元，或未分组的合并桶
+     * （文本模式 = 非单独输出；图片模式 = 单输出/合并）。纯函数。
+     */
+    public static boolean hasMergedUnit(List<OutputUnit> units, boolean imageMode) {
+        for (OutputUnit u : units) {
+            if (u.isGroup()) {
+                return true;
+            }
+            AppConfig p = u.getParams();
+            boolean merged = imageMode ? p.isSingleOutputMode() : !p.isSeparateFiles();
+            if (merged) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 输出单元：一组按数据序排列的文件 + 生效参数 + 输出路径 */
@@ -123,7 +171,7 @@ public final class OutputUnitPlanner {
             } else {
                 @SuppressWarnings("unchecked")
                 I item = (I) o;
-                if (!view.removed(item)) {
+                if (!view.removed(item) && view.checked(item)) {
                     anyUngrouped = true;
                     AppConfig itemParams = resolveItem(item, view, imageMode, textGlobal, imageGlobal);
                     boolean separate = imageMode ? !itemParams.isSingleOutputMode() : itemParams.isSeparateFiles();
@@ -188,7 +236,7 @@ public final class OutputUnitPlanner {
         for (Object m : g.getMembers()) {
             @SuppressWarnings("unchecked")
             I item = (I) m;
-            if (!view.removed(item)) {
+            if (!view.removed(item) && view.checked(item)) {
                 members.add(item);
             }
         }

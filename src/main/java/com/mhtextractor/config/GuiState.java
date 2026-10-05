@@ -15,6 +15,12 @@ public class GuiState {
     private boolean openFolderAfterComplete;
 
     /**
+     * 功能一：只提取列表中被勾选的项目（默认 false = 提取全部可见项）。
+     * 与 openFolderAfterComplete 同构，随 logs/gui-state.json 持久化。
+     */
+    private boolean extractCheckedOnly;
+
+    /**
      * 界面语言，形如 "zh_CN" / "en_US"；null 或空白 = 跟随系统默认（见 I18n.parseLocale）。
      * 持久化契约与语言无关：该字段只是"选择哪种语言"的偏好值，切换语言不改变 JSON 结构。
      */

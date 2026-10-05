@@ -276,6 +276,78 @@ class OutputUnitPlannerTest {
         assertEquals(List.of(top.path()), units.get(0).getPaths());
     }
 
+    // ==================== 功能一：checked 过滤（只提取选中项） ====================
+
+    /** checked=false 的未分组项与组成员都不参与；全部被过滤 → 不产生单元（组沿用空组跳过）。 */
+    @Test
+    void checkedItemsFilterUngroupedAndGroupMembers() {
+        TItem keptA = item("A\\1.mht", "C:\\src\\A");
+        TItem skippedA = new TItem("A\\2.mht", "C:\\src\\A", false, null, null);
+        GroupItem<TItem> g = new GroupItem<>(1, "组1");
+        TItem keptM = item("G\\1.mht", "C:\\src\\G");
+        TItem skippedM = item("G\\2.mht", "C:\\src\\G");
+        g.getMembers().addAll(List.of(keptM, skippedM));
+
+        OutputUnitPlanner.ItemView<TItem> view = checkedView(item -> item == keptA || item == keptM);
+        List<OutputUnitPlanner.OutputUnit> units =
+                OutputUnitPlanner.plan(order(keptA, skippedA, g), view, false, null, null, "S");
+
+        assertEquals(2, units.size(), "一个未分组单元 + 一个组单元");
+        assertEquals(List.of(keptA.path()), units.get(0).getPaths(), "未分组只保留 checked 项");
+        assertEquals(List.of(keptM.path()), units.get(1).getPaths(), "组成员只保留 checked 项");
+
+        // 控制组：默认视图（checked 恒 true）保留全部未移除项
+        List<OutputUnitPlanner.OutputUnit> all =
+                OutputUnitPlanner.plan(order(keptA, skippedA, g), VIEW, false, null, null, "S");
+        assertEquals(2, all.get(0).fileCount(), "默认视图不按勾选过滤");
+        assertEquals(2, all.get(1).fileCount());
+
+        // 组内全被过滤 → 沿用既有 members.isEmpty() → 不产生组单元
+        GroupItem<TItem> empty = new GroupItem<>(2, "组2");
+        empty.getMembers().add(skippedA);
+        List<OutputUnitPlanner.OutputUnit> noGroup =
+                OutputUnitPlanner.plan(order(empty), checkedView(i -> false), false, null, null, "S");
+        assertTrue(noGroup.isEmpty(), "组成员全被过滤 → 空组跳过");
+    }
+
+    /** hasMergedUnit：未分组合并桶 / 任意组单元 / 图片合并单元，纯函数判定。 */
+    @Test
+    void hasMergedUnitCoversUngroupedMergedGroupAndImageMerged() {
+        // 文本合并（默认）→ true
+        List<OutputUnitPlanner.OutputUnit> textMerged =
+                plan(order(item("A\\1.mht", "C:\\src\\A")), false, null, null);
+        assertTrue(OutputUnitPlanner.hasMergedUnit(textMerged, false));
+
+        // 文本单独输出 → false
+        AppConfig separate = new AppConfig();
+        separate.setSeparateFiles(true);
+        List<OutputUnitPlanner.OutputUnit> textSeparate =
+                plan(order(item("A\\1.mht", "C:\\src\\A")), false, separate, null);
+        assertFalse(OutputUnitPlanner.hasMergedUnit(textSeparate, false));
+
+        // 任意组单元 → true（即使该组是单独输出）
+        GroupItem<TItem> g = new GroupItem<>(1, "组1");
+        g.setTextParamsCache(separate);
+        g.getMembers().add(item("G\\1.mht", "C:\\src\\G"));
+        List<OutputUnitPlanner.OutputUnit> groupUnit = plan(order(g), false, null, null);
+        assertTrue(OutputUnitPlanner.hasMergedUnit(groupUnit, false), "任意组单元即视为合并单元");
+
+        // 图片模式：singleOutputMode=true → true；false → false
+        AppConfig imageMerged = new AppConfig();
+        imageMerged.setSingleOutputMode(true);
+        AppConfig imageSeparate = new AppConfig();
+        imageSeparate.setSingleOutputMode(false);
+        assertTrue(OutputUnitPlanner.hasMergedUnit(
+                plan(order(item("A\\1.mht", "C:\\src\\A")), true, null, imageMerged), true));
+        assertFalse(OutputUnitPlanner.hasMergedUnit(
+                plan(order(item("A\\1.mht", "C:\\src\\A")), true, null, imageSeparate), true));
+    }
+
+    /** 装饰视图：与 base 字段一致、只改 checked。 */
+    private static OutputUnitPlanner.ItemView<TItem> checkedView(java.util.function.Predicate<TItem> checked) {
+        return OutputUnitPlanner.withChecked(VIEW, checked);
+    }
+
     // ==================== 参数回退默认 ====================
 
     @Test

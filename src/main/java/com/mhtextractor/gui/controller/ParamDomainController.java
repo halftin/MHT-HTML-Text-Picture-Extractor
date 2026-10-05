@@ -248,12 +248,51 @@ public final class ParamDomainController {
 
     /** 勾选集合优先 → 回退对象（与"移除"的勾选优先拍板一致）；复制/应用与清除参数共用同一"所选"口径 */
     List<Object> resolveParamTargets(Object fallback) {
-        List<PreviewItem> checked = host.allVisibleItems().stream()
-                .filter(i -> i.selected).toList();
+        return resolveTargets(host.allVisibleItems(), fallback);
+    }
+
+    /**
+     * 功能二："实际作用集合"解析的<b>纯函数</b>形态（勾选集合优先 → 回退右键目标）。
+     * 与 {@link #resolveParamTargets(Object)} 共用同一实现，供无头单测直接驱动
+     * "勾选优先于右键目标"这一基线，不需要构造宿主。
+     *
+     * @param visible  当前可见（未移除）条目
+     * @param fallback 勾选为空时的回退目标（右键命中的条目/组，可为 null）
+     */
+    public static List<Object> resolveTargets(List<PreviewItem> visible, Object fallback) {
+        List<PreviewItem> checked = visible == null ? List.of()
+                : visible.stream().filter(i -> i.selected).toList();
         if (!checked.isEmpty()) {
             return new ArrayList<>(checked);
         }
         return fallback == null ? new ArrayList<>() : new ArrayList<>(List.of(fallback));
+    }
+
+    /** 功能二：实际作用集合的两个计数（组外项数 / 去重组数）——纯函数。 */
+    public record TargetCounts(int topLevelCount, int distinctGroupCount) {
+    }
+
+    /**
+     * 功能二：把"实际作用集合"归类为两个计数。组内成员与组条目都落到<b>整组</b>（去重）；
+     * 顶层项目计入组外项；已移除条目不计。
+     */
+    public static TargetCounts countTargets(List<Object> targets) {
+        int topLevel = 0;
+        Set<GroupItem<PreviewItem>> groups = new LinkedHashSet<>();
+        if (targets != null) {
+            for (Object o : targets) {
+                if (o instanceof PreviewItem it) {
+                    if (it.parentGroup != null) {
+                        groups.add(it.parentGroup);
+                    } else if (!it.removed) {
+                        topLevel++;
+                    }
+                } else if (o instanceof GroupItem<?> g) {
+                    groups.add(GroupStructure.asPreviewGroup(g));
+                }
+            }
+        }
+        return new TargetCounts(topLevel, groups.size());
     }
 
     /**

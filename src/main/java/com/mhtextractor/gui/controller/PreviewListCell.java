@@ -173,8 +173,8 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         setOnMouseReleased(null);
         setOnMousePressed(null);
         clearInsertIndicator();
-        // 折叠/展开动画期间列表项目不可交互：所有可见单元格复选框禁用
-        checkBox.setDisable(actions.isListAnimating());
+        // 折叠/展开动画期间、以及提取运行中列表项目不可交互：所有可见单元格复选框禁用
+        checkBox.setDisable(actions.isListAnimating() || actions.isExtractionRunning());
         if (empty || item == null) {
             setGraphic(null);
             setTooltip(null);

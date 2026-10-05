@@ -66,6 +66,7 @@ public final class ListInteractionController implements MainViewActions {
         int visibleMemberCount(com.mhtextractor.util.GroupItem<com.mhtextractor.model.PreviewItem> group);
         long unitIndex(com.mhtextractor.model.PreviewItem item);
         boolean isListAnimating();                                     // C3 动画锁（仍留在 MainController）
+        boolean extractionRunning();                                   // 功能一：提取运行中锁定勾选框
         Object animLockedSelection();                                  // 动画锁定的选中项（可 null）
         boolean isCurrentModeConfirmed();
         // ---- 派生刷新 / 邻域动作（实现留在 MainController）----
@@ -140,6 +141,11 @@ public final class ListInteractionController implements MainViewActions {
     @Override
     public boolean isListAnimating() {
         return host.isListAnimating();
+    }
+
+    @Override
+    public boolean isExtractionRunning() {
+        return host.extractionRunning();
     }
 
     // ===== MainViewActions：选择 / 勾选交互 =====

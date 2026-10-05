@@ -248,7 +248,21 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 }
                 @Override public AppConfig currentModeParamsOrDefaults() { return MainController.this.currentParamsOrDefaults(); }
                 @Override public List<Object> dataOrder() { return items; }
-                @Override public OutputUnitPlanner.ItemView<PreviewItem> itemView() { return ITEM_VIEW; }
+                @Override public OutputUnitPlanner.ItemView<PreviewItem> itemView() {
+                    // 功能一：开关打开时把"参与"判定交给 checked；关闭时用默认视图（checked 恒 true）
+                    return refs.extractCheckedOnlyCheck().isSelected()
+                            ? OutputUnitPlanner.withChecked(ITEM_VIEW, it -> it.selected) : ITEM_VIEW;
+                }
+                @Override public boolean extractCheckedOnly() { return refs.extractCheckedOnlyCheck().isSelected(); }
+                @Override public int visibleCheckedCount() {
+                    return (int) MainController.this.allVisibleItems().stream().filter(i -> i.selected).count();
+                }
+                @Override public void clearExtractOutcomes(List<PreviewItem> items) { infoPresenter.clearExtractOutcomes(items); }
+                @Override public void setExtractionUiLocked(boolean locked) {
+                    boolean anyMode = refs.textModeToggle().isSelected() || refs.imageModeToggle().isSelected();
+                    refs.extractCheckedOnlyCheck().setDisable(locked || !anyMode);
+                    refs.fileListView().refresh();
+                }
                 @Override public List<PreviewItem> allVisibleItems() { return MainController.this.allVisibleItems(); }
                 @Override public void cancelWorkspaceActivity() { MainController.this.cancelWorkspaceActivity(); }
                 @Override public Label statusLabel() { return refs.statusLabel(); }
@@ -429,6 +443,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public int visibleMemberCount(GroupItem<PreviewItem> group) { return MainController.this.visibleMemberCount(group); }
         @Override public long unitIndex(PreviewItem item) { return MainController.this.unitIndex(item); }
         @Override public boolean isListAnimating() { return groupCommand.isAnimating(); }
+        @Override public boolean extractionRunning() { return MainController.this.running().get(); }
         @Override public Object animLockedSelection() { return groupCommand.animLockedSelection(); }
         @Override public boolean isCurrentModeConfirmed() { return currentModeConfirmed(); }
         @Override public void cancelPreviewLoad() { requestToken++; previewLoader.cancel(); }
@@ -594,6 +609,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             refs.outputFolderField().setText(state.getOutputFolder());
         }
         refs.openFolderAfterCompleteCheck().setSelected(state.isOpenFolderAfterComplete());
+        refs.extractCheckedOnlyCheck().setSelected(state.isExtractCheckedOnly());
         if (state.isImageModeEnabled()) {
             refs.imageModeToggle().setSelected(true);
         } else {
@@ -607,6 +623,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         state.setInputFolder(refs.inputFolderField().getText());
         state.setOutputFolder(refs.outputFolderField().getText());
         state.setOpenFolderAfterComplete(refs.openFolderAfterCompleteCheck().isSelected());
+        state.setExtractCheckedOnly(refs.extractCheckedOnlyCheck().isSelected());
         Locale loc = I18n.currentLocale();
         state.setLocale(loc.getLanguage() + (loc.getCountry().isEmpty() ? "" : "_" + loc.getCountry()));
         GuiStateManager.save(state);
@@ -946,6 +963,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         refs.browseInputButton().setDisable(!anyModeSelected);
         refs.browseOutputButton().setDisable(!anyModeSelected);
         refs.openFolderAfterCompleteCheck().setDisable(!anyModeSelected);
+        refs.extractCheckedOnlyCheck().setDisable(!anyModeSelected);
         refs.paramSettingsButton().setDisable(!anyModeSelected);
         paramDomain.updateStartButtonState();
         // 清除参数拍板：按钮启用状态随当前模式刷新（同时修复"应用到全局"按钮切模式后陈旧态）
@@ -1027,8 +1045,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 return !(item instanceof PreviewItem it && it.removed);
             }
             @Override public FileListContextMenu.ParamsInfo paramsInfo(Object target) {
-                return paramClipboard.paramsInfo(paramDomain.resolveParamTargets(target), hasIndependentParams(target),
-                        effectiveParamsService, effectiveContext());
+                List<Object> targets = paramDomain.resolveParamTargets(target);
+                ParamDomainController.TargetCounts counts = ParamDomainController.countTargets(targets);
+                return paramClipboard.paramsInfo(targets, hasIndependentParams(target),
+                        effectiveParamsService, effectiveContext(),
+                        counts.topLevelCount(), counts.distinctGroupCount());
             }
             @Override public void select(Object target) { onContextSelect(target); }
             @Override public void selectAll(Object target) { onContextSelectAll(target); }

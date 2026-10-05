@@ -35,9 +35,9 @@ import java.util.regex.Pattern;
  *
  * <p>它证明三件在源码里"看起来对"但必须实测的事：</p>
  * <ol>
- *   <li><b>一个都没漏</b>：{@code MainViewRefs.all()} 的 44 项全非 null，且键集与
+ *   <li><b>一个都没漏</b>：{@code MainViewRefs.all()} 的 45 项全非 null，且键集与
  *       {@code MainView.fxml} 里数出来的 {@code fx:id} 集合<b>逐名相等</b>（数量也相等）；
- *       另外把 44 个访问器逐个反射调用一遍，确认"访问器名 = fx:id = all() 里的键"
+ *       另外把 45 个访问器逐个反射调用一遍，确认"访问器名 = fx:id = all() 里的键"
  *       （防止某条访问器写错字符串键 → 运行期 NPE 而编译通过）。</li>
  *   <li><b>反例（控制组）</b>：故意从 namespace 里拿掉一个 {@code fx:id} ⇒
  *       {@code MainViewRefs.from(...)} <b>必须抛异常并指名它</b>；
@@ -48,7 +48,7 @@ import java.util.regex.Pattern;
  *       {@code ProbeController extends MainController} 覆写 {@code initialize()}：
  *       在 {@code super.initialize()} <b>之前</b>抓一份 namespace 快照
  *       （FXMLLoader 反射调用的就是子类这个覆写方法 —— 源码 addAccessibleMembers 先递归父类
- *       再放子类，HashMap 里最后写入的是子类的 initialize），断言这份"入口快照"已经含全部 44 个
+ *       再放子类，HashMap 里最后写入的是子类的 initialize），断言这份"入口快照"已经含全部 45 个
  *       {@code fx:id}、且此刻 {@code refs} 还是 null（证明它由 super.initialize() 构造）。</li>
  * </ol>
  *
@@ -61,8 +61,8 @@ import java.util.regex.Pattern;
  */
 public class MainViewRefsProbe extends Application {
 
-    /** 与 MainView.fxml 的 fx:id 数一致（P6-B 实测 42；标题可编辑需求新增 titleEditBox/titleField → 44）。 */
-    private static final int EXPECTED_FX_IDS = 44;
+    /** 与 MainView.fxml 的 fx:id 数一致（P6-B 实测 42；标题可编辑 +2 → 44；功能一"只提取选中" +1 → 45）。 */
+    private static final int EXPECTED_FX_IDS = 45;
 
     /**
      * 探针控制器：唯一职责是在 {@code super.initialize()} 之前抓 namespace 快照。
@@ -140,7 +140,7 @@ public class MainViewRefsProbe extends Application {
         }
         check("all() 的每一项都非 null" + (nulls.isEmpty() ? "" : " —— 为 null 的：" + nulls), nulls.isEmpty());
 
-        // 44 个访问器逐个反射调用：名字必须是 fx:id、返回值必须非 null 且与 all() 同一实例
+        // 45 个访问器逐个反射调用：名字必须是 fx:id、返回值必须非 null 且与 all() 同一实例
         Map<String, Method> accessors = new TreeMap<>();
         for (Method m : MainViewRefs.class.getDeclaredMethods()) {
             if (Modifier.isStatic(m.getModifiers()) || m.getParameterCount() != 0

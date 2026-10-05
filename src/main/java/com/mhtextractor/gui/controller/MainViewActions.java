@@ -18,6 +18,8 @@ interface MainViewActions {
     long unitIndex(PreviewItem item);
     boolean isRowSelected(Object row);
     boolean isListAnimating();
+    /** 功能一：提取运行中，勾选框不可交互（与动画锁并列）。 */
+    boolean isExtractionRunning();
     // 选择 / 勾选交互
     void onCellPressed(Object item, MouseEvent e);
     void onCellDoubleClicked(Object item, MouseEvent e);

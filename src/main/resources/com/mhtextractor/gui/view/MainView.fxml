@@ -226,6 +226,7 @@
             <Label fx:id="statusLabel" text="%main.statusReady" styleClass="text-small"/>
 
             <!-- 完成后操作 -->
+            <ToggleSwitch fx:id="extractCheckedOnlyCheck" text="%main.extractCheckedOnly"/>
             <ToggleSwitch fx:id="openFolderAfterCompleteCheck" text="%main.openFolderAfter"/>
 
             <!-- 操作按钮 -->

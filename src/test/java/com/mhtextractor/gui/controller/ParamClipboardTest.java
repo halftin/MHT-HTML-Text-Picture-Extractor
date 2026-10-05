@@ -194,7 +194,7 @@ class ParamClipboardTest {
         PreviewItem b = item("b");
         b.textItemParams = params("SAME");
 
-        FileListContextMenu.ParamsInfo before = clipboard.paramsInfo(List.of(a, b), true, service, ctx);
+        FileListContextMenu.ParamsInfo before = clipboard.paramsInfo(List.of(a, b), true, service, ctx, 0, 0);
         assertTrue(before.independent(), "独立参数位由宿主传入");
         assertTrue(before.hasEffective(), "两条目都有生效参数");
         assertTrue(before.uniform(), "签名相同 ⇒ 统一");
@@ -202,15 +202,15 @@ class ParamClipboardTest {
         assertTrue(FileListContextMenu.stateFor(FileListContextMenu.TargetType.TOP_ITEM, before).copyParams());
 
         clipboard.copy(params("X"));
-        FileListContextMenu.ParamsInfo after = clipboard.paramsInfo(List.of(a, b), true, service, ctx);
+        FileListContextMenu.ParamsInfo after = clipboard.paramsInfo(List.of(a, b), true, service, ctx, 0, 0);
         assertTrue(after.copied(), "复制后 copied=true");
         assertTrue(FileListContextMenu.stateFor(FileListContextMenu.TargetType.TOP_ITEM, after).applyToSelection());
         clipboard.clear();
-        assertFalse(clipboard.paramsInfo(List.of(a, b), true, service, ctx).copied(), "清空后 copied 回到 false");
+        assertFalse(clipboard.paramsInfo(List.of(a, b), true, service, ctx, 0, 0).copied(), "清空后 copied 回到 false");
 
         // 混合：a 有参数、b 没有 ⇒ 服务判为"不统一" ⇒ 文案走 mixed 键（null 算一种取值，见服务 javadoc）
         b.textItemParams = null;
-        FileListContextMenu.ParamsInfo mixed = clipboard.paramsInfo(List.of(a, b), true, service, ctx);
+        FileListContextMenu.ParamsInfo mixed = clipboard.paramsInfo(List.of(a, b), true, service, ctx, 0, 0);
         assertTrue(mixed.hasEffective());
         assertFalse(mixed.uniform());
         FileListContextMenu.State state = FileListContextMenu.stateFor(FileListContextMenu.TargetType.TOP_ITEM, mixed);
@@ -219,7 +219,7 @@ class ParamClipboardTest {
 
         // 全无参数 ⇒ hasEffective=false ⇒ 文案走"无参数"键
         a.textItemParams = null;
-        FileListContextMenu.ParamsInfo none = clipboard.paramsInfo(List.of(a, b), false, service, ctx);
+        FileListContextMenu.ParamsInfo none = clipboard.paramsInfo(List.of(a, b), false, service, ctx, 0, 0);
         assertFalse(none.hasEffective());
         assertEquals(FileListContextMenu.KEY_COPY_NO_PARAMS,
                 FileListContextMenu.stateFor(FileListContextMenu.TargetType.TOP_ITEM, none).copyParamsTextKey());

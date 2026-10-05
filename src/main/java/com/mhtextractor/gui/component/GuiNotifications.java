@@ -218,6 +218,14 @@ public final class GuiNotifications {
         NotificationHost.confirm(anchor, message, FontAwesomeSolid.OBJECT_GROUP, onDecision);
     }
 
+    /**
+     * 功能一：开启"只提取选中的列表项"且本次存在合并单元时，提示"合并输出的文件名/目录名可能变化"。
+     * 确定 = 继续提取；取消 = 中止本次启动（与 {@link #paramTargetConfirm} 同形居中确认卡）。
+     */
+    public static void subsetMergedNameConfirm(Node anchor, String message, Consumer<Boolean> onDecision) {
+        NotificationHost.confirm(anchor, message, FontAwesomeSolid.FILE_EXPORT, onDecision);
+    }
+
     /** 移除后列表已空：右上角信息 toast（不是错误 —— 用户自己移除的）。 */
     public static void listEmpty(Node anchor) {
         NotificationHost.toastInfo(anchor, ErrorCode.KEEP_AT_LEAST_ONE.message(), FontAwesomeSolid.LIST);
