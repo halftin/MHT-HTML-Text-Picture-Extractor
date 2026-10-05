@@ -50,6 +50,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -678,8 +679,8 @@ public final class HtmlSourceViewer {
      * 场景坐标 → (行, 列)。行由<b>真实 cell 的布局边界</b>命中得出（不写死
      * {@code y = 行 × ROW_HEIGHT}，不受 ListView 内边距、虚拟流滚动偏移影响）；
      * cell 内先按 {@link #rowHeight()} 折算出<b>视觉行</b>（clamp 到该逻辑行的折行数内），
-     * 再按字符宽折算<b>视觉列</b>，逻辑列 = 视觉行 × 每行列数 + 视觉列，
-     * clamp 到 {@code [0, 该行字符数]} —— 与渲染共用的同一套折行投影（{@link HtmlWrapMap}）。
+     * 再交给该 cell 按<b>真实字形步进</b>反查列（{@code SourceCell#columnAt}，与渲染同一套几何），
+     * clamp 到 {@code [0, 该行字符数]}。
      */
     private HtmlTextSelection.Pos posAt(double sceneX, double sceneY) {
         for (Node n : listView.lookupAll(".list-cell")) {
@@ -695,12 +696,14 @@ public final class HtmlSourceViewer {
             int cols = wrapCols();
             int vRow = (int) ((sceneY - b.getMinY()) / ROW_HEIGHT);
             vRow = Math.max(0, Math.min(vRow, HtmlWrapMap.visualRowCount(text.length(), cols) - 1));
-            // round 而不是 floor：把指针位置归到"最近的字符边界"（标准文本选择语义），
-            // 也免受首字符 left-bearing 造成的亚像素偏移影响（floor 在整列边界上会差 1）
-            int vCol = (int) Math.round((sceneX - cell.contentSceneMinX()) / charWidth);
             int maxInRow = Math.min(cols, text.length() - vRow * cols);
-            vCol = Math.max(0, Math.min(vCol, maxInRow));
-            int col = Math.max(0, Math.min(vRow * cols + vCol, text.length()));
+            // 按 run 真实宽度 + 逐字符步进反查列（不再用等宽网格：CJK 与拉丁混排的行上，
+            // 网格会把指针映射到左边很远的列 —— 即"选中背景落在鼠标左侧"）
+            int col = cell.columnAt(sceneX, vRow);
+            if (col < 0) {
+                col = vRow * cols;
+            }
+            col = Math.max(vRow * cols, Math.min(col, vRow * cols + maxInRow));
             return new HtmlTextSelection.Pos(cell.getIndex(), col);
         }
         return null;
@@ -938,6 +941,53 @@ public final class HtmlSourceViewer {
             return first.localToScene(first.getBoundsInLocal()).getMinX();
         }
 
+        /**
+         * 场景 x → 本 cell 指定视觉行内的<b>逻辑列</b>。
+         *
+         * <p>沿该视觉行的 {@code Text} run 累加<b>实测布局宽</b>定位到具体 run，再在该 run 内用
+         * {@link #runOffsets} 反查到最近的字符边界（标准文本选择语义）。不使用等宽网格 ——
+         * CJK（全宽）与拉丁（半宽）混排时网格会把指针映射到左边很远的列（用户报的"选中背景落在鼠标左侧"）。</p>
+         *
+         * @return 逻辑列；该视觉行没有可命中的文本节点时返回 {@code -1}
+         */
+        int columnAt(double sceneX, int vRow) {
+            List<Node> rowNodes = flows.getChildren();
+            if (vRow < 0 || vRow >= rowNodes.size() || !(rowNodes.get(vRow) instanceof TextFlow flow)) {
+                return -1;
+            }
+            List<Text> runs = new ArrayList<>();
+            for (Node child : flow.getChildren()) {
+                if (child instanceof Text t && t.getProperties().get(RUN_COLUMNS_KEY) != null) {
+                    runs.add(t);
+                }
+            }
+            double x = contentSceneMinX();
+            for (int r = 0; r < runs.size(); r++) {
+                Text t = runs.get(r);
+                int[] cols = (int[]) t.getProperties().get(RUN_COLUMNS_KEY);
+                Object widthProp = t.getProperties().get(RUN_WIDTH_KEY);
+                double w = widthProp instanceof Double d ? d : 0;
+                if (w <= 0 || cols == null) {
+                    continue;
+                }
+                if (sceneX <= x + w || r == runs.size() - 1) {
+                    double[] off = runOffsets(t.getText(), w);
+                    int len = Math.min(cols[1] - cols[0], off.length - 1);
+                    int best = 0;
+                    for (int i = 1; i <= len; i++) {
+                        if (sceneX - x >= (off[i - 1] + off[i]) / 2) {
+                            best = i;
+                        } else {
+                            break;
+                        }
+                    }
+                    return cols[0] + best;
+                }
+                x += w;
+            }
+            return -1;
+        }
+
         @Override
         protected void updateItem(Row row, boolean empty) {
             super.updateItem(row, empty);
@@ -1012,9 +1062,11 @@ public final class HtmlSourceViewer {
                 int s = Math.max(from, cols[0]);
                 int e = Math.min(to, cols[1]);
                 if (from >= 0 && len > 0 && e > s) {
-                    double adv = w / len;
-                    double x1 = x + (s - cols[0]) * adv;
-                    double x2 = x + (e - cols[0]) * adv;
+                    double[] off = runOffsets(t.getText(), w);
+                    int a = Math.max(0, Math.min(len, s - cols[0]));
+                    int b = Math.max(0, Math.min(len, e - cols[0]));
+                    double x1 = x + off[a];
+                    double x2 = x + off[b];
                     Rectangle rect = new Rectangle(0, 0, 0, 0);
                     rect.getStyleClass().add(whiteText ? "html-source-selected" : "html-source-hit");
                     rect.setFill(fill);
@@ -1031,6 +1083,55 @@ public final class HtmlSourceViewer {
                 }
                 x += w;
             }
+        }
+
+        /**
+         * 单字符步进缓存：同一字体下按码点缓存（等宽字体里拉丁/CJK 各自恒定；CJK 是全宽、拉丁是半宽，
+         * 这正是不能用"一个 charWidth 当所有字符宽"的原因）。
+         */
+        private static final Map<Integer, Double> CHAR_ADVANCES = new HashMap<>();
+
+        private static double charAdvance(int codePoint) {
+            Double cached = CHAR_ADVANCES.get(codePoint);
+            if (cached != null) {
+                return cached;
+            }
+            Text probe = new Text(new String(Character.toChars(codePoint)));
+            probe.setFont(monoFont());
+            double w = probe.getLayoutBounds().getWidth();
+            double adv = w > 0 ? w : FONT_SIZE * 0.6;
+            CHAR_ADVANCES.put(codePoint, adv);
+            return adv;
+        }
+
+        /**
+         * 一段 run 内每个 UTF-16 下标处的像素偏移（{@code [0..len]}）。
+         *
+         * <p>先按逐字符实测步进累加，再<b>整体比例缩放到该 run 的实测布局宽</b>：端点因此精确等于 run
+         * 边界（不会被累计误差漂移），run 内部也按真实字形比例分布 —— CJK 与拉丁混排的行上，
+         * 选区边界与黑底矩形因此逐字符对齐（用"run 宽 ÷ 字符数"的均值会在混排 run 里错位）。</p>
+         */
+        private static double[] runOffsets(String runText, double runWidth) {
+            int len = runText == null ? 0 : runText.length();
+            double[] off = new double[len + 1];
+            if (len == 0) {
+                return off;
+            }
+            double[] raw = new double[len + 1];
+            for (int i = 0; i < len; ) {
+                int cp = runText.codePointAt(i);
+                int units = Character.charCount(cp);
+                raw[i + 1] = raw[i] + charAdvance(cp);
+                if (units == 2 && i + 1 < len) {
+                    raw[i + 2] = raw[i + 1];   // 代理对的第二个 code unit 不占额外宽度
+                }
+                i += units;
+            }
+            double total = raw[len];
+            for (int i = 0; i <= len; i++) {
+                off[i] = total > 0 ? raw[i] * (runWidth / total) : runWidth * i / len;
+            }
+            return off;
         }
 
         /** 在一段 run 上做"区间内白、区间外基础色"的硬边界填充（边界即黑底矩形的边界）。 */

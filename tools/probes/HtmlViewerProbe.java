@@ -1427,16 +1427,18 @@ public class HtmlViewerProbe extends Application {
         }
         Bounds b = cell.localToScene(cell.getBoundsInLocal());
         double contentX = b.getMinX() + vDbl(viewer, "gutterWidth");
-        double cw = vDbl(viewer, "charWidth");
         double y = b.getMinY() + b.getHeight() / 2;
-        fireMouse(MouseEvent.MOUSE_PRESSED, cell, contentX + fromCol * cw, y, true);
+        fireMouse(MouseEvent.MOUSE_PRESSED, cell, sceneXForCol(cell, fromLine, fromCol, contentX), y, true);
         Node cell2 = revealCellForLine(toLine);
+        double toContentX = contentX;
         if (cell2 != null) {
             Bounds b2 = cell2.localToScene(cell2.getBoundsInLocal());
+            toContentX = b2.getMinX() + vDbl(viewer, "gutterWidth");
             y = b2.getMinY() + b2.getHeight() / 2;
         }
-        fireMouse(MouseEvent.MOUSE_DRAGGED, listView, contentX + toCol * cw, y, true);
-        fireMouse(MouseEvent.MOUSE_RELEASED, listView, contentX + toCol * cw, y, false);
+        double xEnd = sceneXForCol(cell2 != null ? cell2 : cell, toLine, toCol, toContentX);
+        fireMouse(MouseEvent.MOUSE_DRAGGED, listView, xEnd, y, true);
+        fireMouse(MouseEvent.MOUSE_RELEASED, listView, xEnd, y, false);
     }
 
     /** 在行号区（gutter）按下再拖到内容列 {@code toCol}（#9：行号不得进复制）。 */
@@ -1449,10 +1451,10 @@ public class HtmlViewerProbe extends Application {
         Bounds b = cell.localToScene(cell.getBoundsInLocal());
         double contentX = b.getMinX() + vDbl(viewer, "gutterWidth");
         double y = b.getMinY() + b.getHeight() / 2;
-        double cw = vDbl(viewer, "charWidth");
+        double x = sceneXForCol(cell, line, toCol, contentX);
         fireMouse(MouseEvent.MOUSE_PRESSED, cell, b.getMinX() + 2, y, true);
-        fireMouse(MouseEvent.MOUSE_DRAGGED, listView, contentX + toCol * cw, y, true);
-        fireMouse(MouseEvent.MOUSE_RELEASED, listView, contentX + toCol * cw, y, false);
+        fireMouse(MouseEvent.MOUSE_DRAGGED, listView, x, y, true);
+        fireMouse(MouseEvent.MOUSE_RELEASED, listView, x, y, false);
     }
 
     private static void fireMouse(EventType<MouseEvent> type, Node target,
@@ -1467,6 +1469,44 @@ public class HtmlViewerProbe extends Application {
                 primary, false, false, false, false, true, null));
     }
 
+    /**
+     * 独立复算 (逻辑行, 逻辑列) → 场景 x：按<b>真实字形步进</b>逐字符累加（不用等宽网格），
+     * 与查看器的命中映射互为对照。查看器自 2026-10-05 起按 run 实测宽度定位，
+     * 用 {@code col × charWidth} 的网格算法会把指针指到别的列（CJK/拉丁混排时偏到左边）。
+     */
+    private double sceneXForCol(Node cell, int line, int col, double contentX) {
+        String text = vLine(viewer, line);
+        int len = text == null ? 0 : text.length();
+        int target = Math.max(0, Math.min(col, len));
+        int cols = Math.max(1, vInt(viewer, "wrapCols"));
+        int rowStart = (target / cols) * cols;
+        javafx.scene.text.Font font = fontOf(cell);
+        double x = contentX;
+        for (int i = rowStart; i < target; i++) {
+            x += glyphWidth(text.charAt(i), font);
+        }
+        return x;
+    }
+
+    /** 取 cell 里字形实际用的字体（查看器按 monoFont 建节点；探针不复制这个决定，只读取事实）。 */
+    private static javafx.scene.text.Font fontOf(Node cell) {
+        if (cell != null) {
+            Node n = cell.lookup(".html-source-text");
+            if (n instanceof javafx.scene.text.Text t && t.getFont() != null) {
+                return t.getFont();
+            }
+        }
+        return javafx.scene.text.Font.font(13);
+    }
+
+    private static double glyphWidth(char c, javafx.scene.text.Font font) {
+        javafx.scene.text.Text t = new javafx.scene.text.Text(String.valueOf(c));
+        t.setFont(font);
+        double w = t.getLayoutBounds().getWidth();
+        return w > 0 ? w : 1;
+    }
+
+
     /** Shift+单击（决策 3.5 的扩选路径）：按在 (line, col)，同一位置松开（Shift 保持按下）。 */
     private void shiftClick(int line, int col) {
         Node cell = revealCellForLine(line);
@@ -1477,7 +1517,7 @@ public class HtmlViewerProbe extends Application {
         Bounds b = cell.localToScene(cell.getBoundsInLocal());
         double contentX = b.getMinX() + vDbl(viewer, "gutterWidth");
         double y = b.getMinY() + b.getHeight() / 2;
-        double x = contentX + col * vDbl(viewer, "charWidth");
+        double x = sceneXForCol(cell, line, col, contentX);
         fireMouse(MouseEvent.MOUSE_PRESSED, cell, x, y, true, true);
         fireMouse(MouseEvent.MOUSE_RELEASED, listView, x, y, false, true);
     }
@@ -2142,15 +2182,18 @@ public class HtmlViewerProbe extends Application {
         }
         Bounds b = cell.localToScene(cell.getBoundsInLocal());
         double contentX = b.getMinX() + vDbl(viewer, "gutterWidth");
-        double cw = vDbl(viewer, "charWidth");
+        int cols = Math.max(1, vInt(viewer, "wrapCols"));
         double y = b.getMinY() + (fromVRow + 0.5) * vDbl(viewer, "rowHeight");
-        fireMouse(MouseEvent.MOUSE_PRESSED, cell, contentX + fromVCol * cw, y, true);
+        fireMouse(MouseEvent.MOUSE_PRESSED, cell,
+                sceneXForCol(cell, fromLine, fromVRow * cols + fromVCol, contentX), y, true);
         Node cell2 = revealCellForLine(toLine);
+        double toContentX = contentX;
         if (cell2 != null) {
             Bounds b2 = cell2.localToScene(cell2.getBoundsInLocal());
+            toContentX = b2.getMinX() + vDbl(viewer, "gutterWidth");
             y = b2.getMinY() + (toVRow + 0.5) * vDbl(viewer, "rowHeight");
         }
-        double x = contentX + toVCol * cw;
+        double x = sceneXForCol(cell2 != null ? cell2 : cell, toLine, toVRow * cols + toVCol, toContentX);
         fireMouse(MouseEvent.MOUSE_DRAGGED, listView, x, y, true);
         fireMouse(MouseEvent.MOUSE_RELEASED, listView, x, y, false);
     }
