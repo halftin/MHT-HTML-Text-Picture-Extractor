@@ -12,8 +12,9 @@ import java.util.List;
  * 供四条路径共用同一套坐标：</p>
  * <ul>
  *   <li>渲染：把一行切成一视觉行一个 {@code TextFlow}；</li>
- *   <li>选择高亮：把逻辑选择区间按折行切成"每视觉行一段"，每段一个覆盖矩形；</li>
- *   <li>查找高亮：命中段（逻辑列区间）跨折行时同样切段渲染；</li>
+ *   <li>选择/查找高亮的<b>逻辑区间切段</b>（{@link #segments}）：纯网格投影，供格点几何的调用方与单测使用。</li>
+ *   <li>（2026-10-05 起）查看器的高亮矩形改按每个 {@code Text} run 的<b>真实布局宽</b>定位，
+ *       不再用网格宽度猜字形位置 —— 比例回退字体、CJK 与拉丁混排时网格会偏（见 HtmlSourceViewer）。</li>
  *   <li>鼠标命中：像素 → 视觉行/列 → 逻辑列。</li>
  * </ul>
  *
@@ -52,11 +53,15 @@ public final class HtmlWrapMap {
     }
 
     /**
-     * 把逻辑行内的选择区间 {@code [fromLogicalCol, toLogicalCol)} 切成"每视觉行一段"，
+     * 把逻辑行内的区间 {@code [fromLogicalCol, toLogicalCol)} 切成"每视觉行一段"，
      * 每段是 {@code [start, end)} 的<b>逻辑列</b>半开区间；空区间 / 完全越界 → 空列表。
      *
      * <p>调用方给每个段画一个矩形：x = 视觉行起点 + (段起点 − 该视觉行首列) × 字符宽，
      * y = 视觉行号 × 行高，宽 = (段终点 − 段起点) × 字符宽，高 = 行高。</p>
+     *
+     * <p>⚠️ 这是<b>格点</b>投影：要求每个字符等宽、且与量出来的 {@code charWidth} 一致。
+     * 查看器的高亮自 2026-10-05 起改按 run 真实宽度定位（见 {@code HtmlSourceViewer#paintRunRects}），
+     * 本方法保留为纯函数/单测与格点调用方使用。</p>
      */
     public static List<int[]> segments(int logicalLineLength, int fromLogicalCol,
                                        int toLogicalCol, int colsPerRow) {

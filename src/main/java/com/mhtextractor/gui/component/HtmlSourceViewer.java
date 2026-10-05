@@ -33,6 +33,10 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.paint.CycleMethod;
+import javafx.scene.paint.LinearGradient;
+import javafx.scene.paint.Paint;
+import javafx.scene.paint.Stop;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
@@ -105,9 +109,9 @@ import java.util.WeakHashMap;
  * 语义<b>保持不动</b>（查找与复制的既有能力不变）。</p>
  * <p><b>决策 3.1 黑底白字 + 3.7 层序</b>：cell 的层序是
  * {@code [命中高亮层, 选区背景层, TextFlow 字形层]}——选区黑底在查找命中的黄底<b>之上</b>、
- * 在字形<b>之下</b>（不再盖字），被选区覆盖的 {@code Text} run 临时 {@code setFill(WHITE)}，
- * 松手/滚动/重载时还原为基础色。选择高亮是每 cell 的<b>覆盖矩形</b>（折行后每视觉行一段，
- * {@code HtmlWrapMap.segments}），<b>不重建</b>任何 {@code Text} 节点 —— 拖动期间重绘不会把
+ * 在字形<b>之下</b>（不再盖字）。选中部分的字形临时置白，<b>只白到选中的列</b>（整段 run 先还原基础色，
+ * 再按该 run 的真实布局宽把选中列换算成像素、在黑底矩形正上方置白）——整段 run 染白会让未选中的字
+ * 变白底白字而消失（2026-10-05 修复）。选择高亮<b>不重建</b>任何 {@code Text} 节点 —— 拖动期间重绘不会把
  * "鼠标抓着的节点"摘出场景图（重建方案会让拖拽中途丢事件），大文件上也绝不按总行数建节点
  * （只画可见 cell，R2.7 判据不变；代价由 {@link #selectionCellsPaintedInLastRepaint()} 实测，
  * 决策 3.9）。</p>
@@ -120,8 +124,18 @@ public final class HtmlSourceViewer {
 
     /** 源码字号（与 {@code SourceViewPage} 的 {@code .row} 的 13px 对齐）。 */
     private static final double FONT_SIZE = 13;
-    /** 等宽字体族（与页面上的 {@code Consolas,"Courier New",monospace} 同一顺序）。 */
-    private static final String FONT_FAMILY = "Consolas, \"Courier New\", monospace";
+    /**
+     * 等宽字体族候选（按序取第一个<b>真实存在且等宽</b>的族）。
+     *
+     * <p>🚨 不能写 {@code Font.font("Consolas, \"Courier New\", monospace", size)}：JavaFX 把整串当
+     * <b>一个</b> family 名，该 family 不存在时<b>静默回退到比例字体 System</b>（本机装了 Consolas 也照样回退），
+     * 于是"一字符一格"的折行/选择几何全错。故逐个候选解析并用 {@link #isFixedAdvance(Font)} 校验。</p>
+     */
+    private static final String[] MONO_CANDIDATES = {
+            "Consolas", "Cascadia Mono", "Courier New", "Lucida Console", "Monospaced"};
+
+    /** 解析出的等宽字体（首次用到时确定；每个 {@code Text} 节点都会问它）。 */
+    private static volatile Font monoFontCache;
     /** 行高（页面上是 {@code line-height:1.5}；<b>向上取整到整像素</b>—— JavaFX 布局按像素
      *  吸附（snapToPixel），19.5 的行实际会被吸附成 20，选择/列折算若还用 19.5 会在多折行
      *  上累计漂移；取整后 ROW_HEIGHT 与吸附后的真实行高逐像素一致）。 */
@@ -131,10 +145,16 @@ public final class HtmlSourceViewer {
     /** 内容右侧安全留白（E2：折行列数按"视口宽 − 行号栏 − 本值"折算，既让最后一列不贴边，
      *  也盖住 ListView 自身竖向滚动条的覆盖宽度，保证折行后字符不被它遮住）。 */
     private static final double CONTENT_TAIL = 24;
-    /** 量字符宽用的样本（等宽字体下 40 个 M 的布局宽除以 40 即单字宽）。 */
+    /** 量字符宽用的拉丁样本（等宽字体下 40 个 M 的布局宽除以 40 即单字宽）。 */
     private static final String SAMPLE_MEASURE = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
+    /**
+     * 量字符宽用的 CJK 样本：CJK 在多数等宽字体里仍按全宽（≈字号）排版，比拉丁步进宽得多。
+     * 折行/选择按"一字符一格"处理，格子宽必须取两者的<b>较大值</b>，否则 CJK 行会超出内容视口、
+     * 被定高的视觉行裁掉（文字丢失）。
+     */
+    private static final String SAMPLE_CJK = "中中中中中中中中中中中中中中中中中中中中";
     /** 选择高亮背景色（决策 3.1：黑底白字，对齐日志 TextArea 的观感；白字由 cell 的
-     *  {@code applyRunFills} 负责）。 */
+     *  {@code paintSelection} 按 run 真实宽度负责）。 */
     private static final Color SELECTION_FILL = Color.BLACK;
     /** 查找命中高亮背景色（R5；黄底 —— 与 custom.css 的 {@code .html-source-hit} 同值）。 */
     private static final Color HIT_FILL = Color.web("#ffe680");
@@ -356,6 +376,9 @@ public final class HtmlSourceViewer {
     static final String RUN_COLUMNS_KEY = "htmlSourceViewer.runColumns";
     /** 探针/测试接缝：{@link Text} 节点属性键 —— 基础填充色（松手/滚动/重载时还原到它）。 */
     static final String RUN_BASE_FILL_KEY = "htmlSourceViewer.runBaseFill";
+    /** 节点属性键：run 的<b>自然布局宽</b>（建节点时量一次；选择层按它把列区间换算成像素）。
+     *  不取绘制时的 {@code getLayoutBounds()} —— TextFlow 可能给它设 wrappingWidth，届时宽度会变。 */
+    static final String RUN_WIDTH_KEY = "htmlSourceViewer.runWidth";
 
     /** 行号栏 + 间距的像素宽（R2.8 的对齐判据用）。 */
     double gutterWidth() {
@@ -804,16 +827,55 @@ public final class HtmlSourceViewer {
 
     // ==================== 渲染 ====================
 
-    /** 等宽字体下"一字符多少像素"：用 {@link Text} 的实测布局宽反推，不写死魔数。 */
+    /**
+     * "一字符多少像素"：用 {@link Text} 的实测布局宽反推，不写死魔数。
+     *
+     * <p>取拉丁样本与 CJK 样本的<b>较大值</b>作为格子宽：等宽字体的 CJK 仍是全宽（≈字号），
+     * 用拉丁步进当格子宽会让 CJK 视觉行超出内容视口、被定高行裁掉。</p>
+     */
     private double measureCharWidth() {
-        Text probe = new Text(SAMPLE_MEASURE);
-        probe.setFont(monoFont());
-        double w = probe.getLayoutBounds().getWidth() / SAMPLE_MEASURE.length();
+        Font font = monoFont();
+        double latin = advance(SAMPLE_MEASURE, font);
+        double cjk = advance(SAMPLE_CJK, font);
+        double w = Math.max(latin, cjk);
         return w > 0 ? w : FONT_SIZE * 0.6;
     }
 
+    /** 每个字符的平均步进（等宽字体下即单字宽）。 */
+    private static double advance(String sample, Font font) {
+        Text probe = new Text(sample);
+        probe.setFont(font);
+        double w = probe.getLayoutBounds().getWidth() / Math.max(1, sample.length());
+        return w > 0 ? w : 0;
+    }
+
+    /**
+     * 等宽字体：按候选族<b>逐个解析并校验</b>，只接受 {@code 'M'} 与 {@code 'i'} 步进相同的真实字体
+     * （{@code Font.font(不存在的 family)} 会静默回退到比例字体，必须靠这条挡掉）。结果缓存一次。
+     */
     private static Font monoFont() {
-        return Font.font(FONT_FAMILY, FONT_SIZE);
+        Font cached = monoFontCache;
+        if (cached != null) {
+            return cached;
+        }
+        Font chosen = null;
+        for (String family : MONO_CANDIDATES) {
+            Font candidate = Font.font(family, FONT_SIZE);
+            if (candidate != null && isFixedAdvance(candidate)) {
+                chosen = candidate;
+                break;
+            }
+        }
+        if (chosen == null) {
+            chosen = Font.font(FONT_SIZE);   // 找不到任何等宽族：退默认字体（格子宽仍取两样本较大值）
+        }
+        monoFontCache = chosen;
+        return chosen;
+    }
+
+    private static boolean isFixedAdvance(Font font) {
+        double m = advance("M", font);
+        return m > 0 && Math.abs(m - advance("i", font)) < 0.01;
     }
 
     /** 一行的 token 文本拼起来（R5 的列号就是这个坐标系里的列）。 */
@@ -893,10 +955,14 @@ public final class HtmlSourceViewer {
         }
 
         /**
-         * 本行的选择段（与 {@code [0, 行长)} 的交集）按折行切成"每视觉行一段"，每段一个
-         * 黑色覆盖矩形（决策 3.1），画在选区层；再按<b>黑底白字</b>把选区内的 {@code Text}
-         * run 临时变白、其余还原基础色（松手/滚动/重载都走这里还原）。只动覆盖层与填充、
-         * 不重建文本节点（见 {@link HtmlSourceViewer#repaintSelection()}）。
+         * 本行的选择段画到选区层与字形层（决策 3.1 黑底白字）。
+         *
+         * <p>几何取自<b>真实 run</b>：沿每个视觉行的 {@code Text} 子节点累加各自缓存的自然宽度，
+         * 选中列区间再按该 run 的"宽 ÷ 字符数"换算成像素。这样黑底矩形与白字<b>必然同源</b>——
+         * 不会出现"整段 run 被染白、黑底却只盖住其中几列"（那会让未选中的字变白底白字而消失），
+         * 也不再依赖 {@code charWidth} 网格去猜字形位置（比例回退字体、CJK 与拉丁混排时网格会偏）。</p>
+         *
+         * <p>只改覆盖层与 {@code Text} 的填充，不重建任何节点（拖拽中途不摘掉鼠标下的节点）。</p>
          */
         private void paintSelection(int line) {
             HtmlTextSelection.Range r = HtmlSourceViewer.this.selectionRange();
@@ -908,26 +974,75 @@ public final class HtmlSourceViewer {
                 to = line == r.endLine() ? r.endCol() : text.length();
             }
             selPane.getChildren().clear();
-            if (from >= 0) {
-                int cols = wrapCols();
-                for (int[] seg : HtmlWrapMap.segments(text.length(), from, to, cols)) {
-                    selPane.getChildren().add(selectionRect(seg, cols));
+            int vRow = 0;
+            for (Node rowNode : flows.getChildren()) {
+                if (rowNode instanceof TextFlow flow) {
+                    paintRunRects(flow, vRow, from, to, SELECTION_FILL, selPane, true);
                 }
+                vRow++;
             }
-            applyRunFills(from, to);
         }
 
-        /** 选区背景的一段矩形：黑色（决策 3.1），列位置与折行几何同 {@link #paintHit}。 */
-        private Rectangle selectionRect(int[] seg, int cols) {
-            int vRow = seg[0] / cols;
-            Rectangle rect = new Rectangle(0, 0, 0, 0);
-            rect.getStyleClass().add("html-source-selected");
-            rect.setFill(SELECTION_FILL);
-            rect.setX(gutterWidth() + (seg[0] - vRow * cols) * charWidth);
-            rect.setY(vRow * ROW_HEIGHT);
-            rect.setWidth((seg[1] - seg[0]) * charWidth);
-            rect.setHeight(ROW_HEIGHT);
-            return rect;
+        /**
+         * 把一个逻辑列区间 {@code [from, to)} 在某视觉行上的部分画成矩形（几何取自 run 真实宽度，
+         * 见 {@link #paintSelection} 的说明）。选区（{@code whiteText=true}）同时把选中列的字形置白；
+         * 查找命中只要背景。
+         *
+         * @param fill      矩形颜色（选区黑 / 命中黄）
+         * @param target    覆盖图层（{@code selPane} / {@code hitPane}）
+         * @param whiteText true = 选区语义：先还原基础色再按区间置白；false = 只要背景
+         */
+        private void paintRunRects(TextFlow flow, int vRow, int from, int to,
+                                   Color fill, Pane target, boolean whiteText) {
+            double x = gutterWidth();
+            for (Node child : flow.getChildren()) {
+                if (!(child instanceof Text t)) {
+                    continue;
+                }
+                Color base = (Color) t.getProperties().get(RUN_BASE_FILL_KEY);
+                int[] cols = (int[]) t.getProperties().get(RUN_COLUMNS_KEY);
+                Object widthProp = t.getProperties().get(RUN_WIDTH_KEY);
+                if (whiteText && base != null) {
+                    t.setFill(base);   // 先还原（松手/滚动/重载都不残留白字）
+                }
+                if (cols == null || !(widthProp instanceof Double w) || w <= 0) {
+                    continue;
+                }
+                int len = cols[1] - cols[0];
+                int s = Math.max(from, cols[0]);
+                int e = Math.min(to, cols[1]);
+                if (from >= 0 && len > 0 && e > s) {
+                    double adv = w / len;
+                    double x1 = x + (s - cols[0]) * adv;
+                    double x2 = x + (e - cols[0]) * adv;
+                    Rectangle rect = new Rectangle(0, 0, 0, 0);
+                    rect.getStyleClass().add(whiteText ? "html-source-selected" : "html-source-hit");
+                    rect.setFill(fill);
+                    rect.setX(x1);
+                    rect.setY(vRow * ROW_HEIGHT);
+                    rect.setWidth(x2 - x1);
+                    rect.setHeight(ROW_HEIGHT);
+                    target.getChildren().add(rect);
+                    if (whiteText && base != null) {
+                        t.setFill(s == cols[0] && e == cols[1]
+                                ? Color.WHITE
+                                : whiteOverBlack(base, w, x1 - x, x2 - x));
+                    }
+                }
+                x += w;
+            }
+        }
+
+        /** 在一段 run 上做"区间内白、区间外基础色"的硬边界填充（边界即黑底矩形的边界）。 */
+        private static Paint whiteOverBlack(Color base, double width, double a, double b) {
+            double fa = Math.max(0, Math.min(1, a / width));
+            double fb = Math.max(0, Math.min(1, b / width));
+            if (fb <= fa) {
+                return base;
+            }
+            return new LinearGradient(0, 0, width, 0, false, CycleMethod.NO_CYCLE,
+                    new Stop(0, base), new Stop(fa, base), new Stop(fa, Color.WHITE),
+                    new Stop(fb, Color.WHITE), new Stop(fb, base), new Stop(1, base));
         }
 
         /**
@@ -942,38 +1057,12 @@ public final class HtmlSourceViewer {
             if (hit == null || text == null) {
                 return;
             }
-            int cols = wrapCols();
-            for (int[] seg : HtmlWrapMap.segments(text.length(), hit[0], hit[1], cols)) {
-                int vRow = seg[0] / cols;
-                Rectangle rect = new Rectangle(0, 0, 0, 0);
-                rect.getStyleClass().add("html-source-hit");
-                rect.setFill(HIT_FILL);
-                rect.setX(gutterWidth() + (seg[0] - vRow * cols) * charWidth);
-                rect.setY(vRow * ROW_HEIGHT);
-                rect.setWidth((seg[1] - seg[0]) * charWidth);
-                rect.setHeight(ROW_HEIGHT);
-                hitPane.getChildren().add(rect);
-            }
-        }
-
-        /**
-         * 黑底白字（决策 3.1）：把本 cell 的 {@code Text} run 先全部还原到<b>基础填充色</b>
-         * （构建时存在 {@link #RUN_BASE_FILL_KEY} 属性里），再把与选区 {@code [from, to)} 有交集的
-         * run 临时置白（列区间来自构建时存的 {@link #RUN_COLUMNS_KEY}）。{@code from < 0} = 无选择，
-         * 只做还原 —— 松手清空、cell 重建、文档重载后都不会残留白字。
-         */
-        private void applyRunFills(int from, int to) {
-            for (Node n : flows.lookupAll(".html-source-text")) {
-                if (!(n instanceof Text t)) {
-                    continue;
+            int vRow = 0;
+            for (Node rowNode : flows.getChildren()) {
+                if (rowNode instanceof TextFlow flow) {
+                    paintRunRects(flow, vRow, hit[0], hit[1], HIT_FILL, hitPane, false);
                 }
-                int[] cols = (int[]) t.getProperties().get(RUN_COLUMNS_KEY);
-                Color base = (Color) t.getProperties().get(RUN_BASE_FILL_KEY);
-                if (cols == null || base == null) {
-                    continue;
-                }
-                boolean inside = from >= 0 && cols[1] > from && cols[0] < to;
-                t.setFill(inside ? Color.WHITE : base);
+                vRow++;
             }
         }
 
@@ -1082,6 +1171,8 @@ public final class HtmlSourceViewer {
             }
             node.getProperties().put(RUN_COLUMNS_KEY, new int[]{colStart, colEnd});
             node.getProperties().put(RUN_BASE_FILL_KEY, node.getFill());
+            // 自然布局宽：此刻还没进 TextFlow、没被设 wrappingWidth，量到的就是单行真实宽度
+            node.getProperties().put(RUN_WIDTH_KEY, node.getLayoutBounds().getWidth());
             return node;
         }
     }

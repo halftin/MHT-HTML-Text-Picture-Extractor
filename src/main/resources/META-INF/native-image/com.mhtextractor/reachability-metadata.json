@@ -3343,6 +3343,2645 @@
   },
   {
    "type": "javafx.scene.web.WebView"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaOne_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaOne_Color_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaOne_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaOne_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaOne_LinearGradient_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaOne_LinearGradient_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaOne_RadialGradient_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaOne_RadialGradient_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTextureDifference_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTextureDifference_Color_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTextureDifference_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTextureDifference_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTextureDifference_LinearGradient_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTextureDifference_LinearGradient_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTextureDifference_RadialGradient_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTextureDifference_RadialGradient_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTexture_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTexture_Color_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTexture_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTexture_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTexture_LinearGradient_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTexture_LinearGradient_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTexture_RadialGradient_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.AlphaTexture_RadialGradient_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_Color_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_LinearGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_LinearGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_LinearGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_LinearGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_LinearGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_LinearGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_RadialGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_RadialGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_RadialGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_RadialGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_RadialGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawCircle_RadialGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_Color_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_LinearGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_LinearGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_LinearGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_LinearGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_LinearGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_LinearGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_RadialGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_RadialGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_RadialGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_RadialGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_RadialGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawEllipse_RadialGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_LinearGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_LinearGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_LinearGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_LinearGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_LinearGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_LinearGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_RadialGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_RadialGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_RadialGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_RadialGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_RadialGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawPgram_RadialGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_LinearGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_LinearGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_LinearGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_LinearGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_LinearGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_LinearGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_RadialGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_RadialGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_RadialGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_RadialGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_RadialGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawRoundRect_RadialGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_Color_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_LinearGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_LinearGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_LinearGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_LinearGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_LinearGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_LinearGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_RadialGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_RadialGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_RadialGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_RadialGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_RadialGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.DrawSemiRoundRect_RadialGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_Color_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_LinearGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_LinearGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_LinearGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_LinearGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_LinearGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_LinearGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_RadialGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_RadialGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_RadialGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_RadialGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_RadialGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillCircle_RadialGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_Color_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_LinearGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_LinearGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_LinearGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_LinearGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_LinearGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_LinearGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_RadialGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_RadialGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_RadialGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_RadialGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_RadialGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillEllipse_RadialGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_LinearGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_LinearGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_LinearGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_LinearGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_LinearGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_LinearGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_RadialGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_RadialGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_RadialGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_RadialGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_RadialGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillPgram_RadialGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_LinearGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_LinearGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_LinearGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_LinearGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_LinearGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_LinearGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_RadialGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_RadialGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_RadialGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_RadialGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_RadialGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.FillRoundRect_RadialGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Mask_TextureRGB_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Mask_TextureRGB_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Mask_TextureSuper_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_Color_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_LinearGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_LinearGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_LinearGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_LinearGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_LinearGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_LinearGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_RadialGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_RadialGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_RadialGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_RadialGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_RadialGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_RadialGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_TextureFirstPassLCD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_TextureRGB_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_TextureSecondPassLCD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_TextureYV12_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Solid_TextureYV12_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_Color_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_ImagePattern_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_ImagePattern_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_LinearGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_LinearGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_LinearGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_LinearGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_LinearGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_LinearGradient_REPEAT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_RadialGradient_PAD_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_RadialGradient_PAD_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_RadialGradient_REFLECT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_RadialGradient_REFLECT_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_RadialGradient_REPEAT_AlphaTest_Loader"
+  },
+  {
+   "methods": [
+    {
+     "name": "loadShader",
+     "parameterTypes": [
+      "com.sun.prism.ps.ShaderFactory",
+      "java.lang.String",
+      "java.io.InputStream"
+     ]
+    }
+   ],
+   "type": "com.sun.prism.shader.Texture_RadialGradient_REPEAT_Loader"
   }
  ],
  "resources": [
@@ -13584,6 +16223,818 @@
   },
   {
    "glob": "com/sun/scenario/effect/impl/hw/d3d/hlsl/LinearConvolveShadow_8.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaOne_Color.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaOne_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaOne_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaOne_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaOne_LinearGradient.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaOne_LinearGradient_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaOne_RadialGradient.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaOne_RadialGradient_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTextureDifference_Color.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTextureDifference_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTextureDifference_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTextureDifference_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTextureDifference_LinearGradient.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTextureDifference_LinearGradient_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTextureDifference_RadialGradient.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTextureDifference_RadialGradient_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTexture_Color.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTexture_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTexture_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTexture_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTexture_LinearGradient.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTexture_LinearGradient_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTexture_RadialGradient.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/AlphaTexture_RadialGradient_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_Color.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_LinearGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_LinearGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_LinearGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_LinearGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_LinearGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_LinearGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_RadialGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_RadialGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_RadialGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_RadialGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_RadialGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawCircle_RadialGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_Color.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_LinearGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_LinearGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_LinearGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_LinearGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_LinearGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_LinearGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_RadialGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_RadialGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_RadialGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_RadialGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_RadialGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawEllipse_RadialGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_LinearGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_LinearGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_LinearGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_LinearGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_LinearGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_LinearGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_RadialGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_RadialGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_RadialGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_RadialGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_RadialGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawPgram_RadialGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_LinearGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_LinearGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_LinearGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_LinearGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_LinearGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_LinearGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_RadialGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_RadialGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_RadialGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_RadialGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_RadialGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawRoundRect_RadialGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_Color.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_LinearGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_LinearGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_LinearGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_LinearGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_LinearGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_LinearGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_RadialGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_RadialGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_RadialGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_RadialGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_RadialGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/DrawSemiRoundRect_RadialGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_Color.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_LinearGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_LinearGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_LinearGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_LinearGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_LinearGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_LinearGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_RadialGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_RadialGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_RadialGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_RadialGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_RadialGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillCircle_RadialGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_Color.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_LinearGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_LinearGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_LinearGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_LinearGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_LinearGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_LinearGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_RadialGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_RadialGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_RadialGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_RadialGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_RadialGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillEllipse_RadialGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_LinearGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_LinearGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_LinearGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_LinearGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_LinearGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_LinearGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_RadialGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_RadialGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_RadialGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_RadialGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_RadialGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillPgram_RadialGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_LinearGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_LinearGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_LinearGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_LinearGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_LinearGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_LinearGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_RadialGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_RadialGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_RadialGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_RadialGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_RadialGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/FillRoundRect_RadialGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Mask_TextureRGB.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Mask_TextureRGB_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Mask_TextureSuper_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_Color.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_LinearGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_LinearGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_LinearGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_LinearGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_LinearGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_LinearGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_RadialGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_RadialGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_RadialGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_RadialGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_RadialGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_RadialGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_TextureFirstPassLCD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_TextureRGB_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_TextureSecondPassLCD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_TextureYV12.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Solid_TextureYV12_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_Color_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_ImagePattern.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_ImagePattern_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_LinearGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_LinearGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_LinearGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_LinearGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_LinearGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_LinearGradient_REPEAT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_RadialGradient_PAD.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_RadialGradient_PAD_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_RadialGradient_REFLECT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_RadialGradient_REFLECT_AlphaTest.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_RadialGradient_REPEAT.obj",
+   "module": "javafx.graphics"
+  },
+  {
+   "glob": "com/sun/prism/d3d/hlsl/Texture_RadialGradient_REPEAT_AlphaTest.obj",
    "module": "javafx.graphics"
   }
  ]

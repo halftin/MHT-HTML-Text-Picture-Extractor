@@ -27,6 +27,8 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.paint.Color;
+import javafx.scene.paint.LinearGradient;
+import javafx.scene.paint.Paint;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.KeyCode;
@@ -1239,10 +1241,14 @@ public class HtmlViewerProbe extends Application {
                         && Math.abs(hitFill.getGreen() - 0.9) < 0.01
                         && Math.abs(hitFill.getBlue() - 0.5) < 0.01
                         && selFill == Color.BLACK);
-        // S9 黑底白字：选区覆盖的 run 变白、其余保持基础色
+        // S9 黑底白字（2026-10-05 修复后语义）：只有<b>被选中的列</b>变白 ——
+        //   完全落在选区内的 run 整体 WHITE；<b>部分相交</b>的 run 必须是"区间内白、区间外基础色"的
+        //   硬边界渐变，绝不能整段变白（整段变白会让未选中的字白底白字而消失 —— 用户报的缺陷）；
+        //   不相交的 run 保持基础色。
         boolean runRule = cell3 != null;
-        int whiteRuns3 = 0;
-        int baseRuns3 = 0;
+        int whiteRuns3 = 0;      // 完全在选区内（整体置白）
+        int partialRuns3 = 0;    // 部分相交（硬边界渐变）
+        int baseRuns3 = 0;       // 不相交（基础色）
         if (cell3 != null) {
             for (Node n : cell3.lookupAll(".html-source-text")) {
                 if (!(n instanceof javafx.scene.text.Text t)) {
@@ -1254,19 +1260,26 @@ public class HtmlViewerProbe extends Application {
                     runRule = false;
                     continue;
                 }
-                boolean inside = cr[1] > 2 && cr[0] < 10;
-                if (inside) {
+                Paint fill = t.getFill();
+                boolean overlaps = cr[1] > 2 && cr[0] < 10;
+                boolean fully = cr[0] >= 2 && cr[1] <= 10;
+                if (fully) {
                     whiteRuns3++;
-                    runRule &= Color.WHITE.equals(t.getFill());
+                    runRule &= Color.WHITE.equals(fill);
+                } else if (overlaps) {
+                    partialRuns3++;
+                    runRule &= !Color.WHITE.equals(fill) && !base.equals(fill)
+                            && fill instanceof LinearGradient;
                 } else {
                     baseRuns3++;
-                    runRule &= base.equals(t.getFill());
+                    runRule &= base.equals(fill);
                 }
             }
         }
-        check("step5 S9 white-on-black: covered runs are WHITE and the rest keep their base fill "
-                        + "(white=" + whiteRuns3 + " base=" + baseRuns3 + ")",
-                runRule && whiteRuns3 > 0 && baseRuns3 > 0);
+        check("step5 S9 white-on-black: only the SELECTED columns are white (full=WHITE / "
+                        + "partial=hard-stop gradient / rest=base) (full=" + whiteRuns3
+                        + " partial=" + partialRuns3 + " base=" + baseRuns3 + ")",
+                runRule && (whiteRuns3 + partialRuns3) > 0 && baseRuns3 > 0);
         // S10 松手（单击清空选择）→ 全部 run 还原基础色
         dragSelect(0, 0, 0, 0);
         boolean restored = true;
