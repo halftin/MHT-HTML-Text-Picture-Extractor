@@ -1,23 +1,20 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.OutputNameService;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.ExtractWarning;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.FileResult;
-import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
-import com.mhtextractor.util.SanitizeUtils;
-import com.mhtextractor.util.SourceKinds;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -129,53 +126,24 @@ public final class WorkspaceInfoPresenter {
         host.outputNameLabel().setVisible(true);
         host.outputNameLabel().setManaged(true);
         if (host.isTextMode()) {
+            String outputName = OutputNameService.textOutputName(it, params, host.inputFolderField().getText());
             if (params.isSeparateFiles()) {
-                host.outputNameLabel().setText(I18n.get("preview.outputFilePrefix") + SourceKinds.stripKnownExtension(it.name) + ".txt");
+                host.outputNameLabel().setText(I18n.get("preview.outputFilePrefix") + outputName);
             } else {
-                String inputDirName = new File(host.inputFolderField().getText()).getName();
-                if (inputDirName.isEmpty()) {
-                    inputDirName = "mht_output";
-                }
-                host.outputNameLabel().setText(I18n.get("preview.outputFilePrefix") + inputDirName + ".txt"
+                host.outputNameLabel().setText(I18n.get("preview.outputFilePrefix") + outputName
                         + I18n.get("preview.outputFileTxtSuffix"));
             }
-        } else if (params.isSingleOutputMode()) {
-            String folderName = mergedFolderName(it);
-            host.outputNameLabel().setText(I18n.get("preview.outputDirPrefix") + folderName
-                    + I18n.get("preview.outputDirMergedNote"));
         } else {
-            String dirName = separateDirName(it);
-            host.outputNameLabel().setText(I18n.get("preview.outputDirPrefix") + dirName);
-        }
-    }
-
-    private String separateDirName(PreviewItem item) {
-        AppConfig params = host.effectiveParams(item);
-        if (params != null && params.isEnableNameExtraction()) {
-            if (item.status == PreviewItem.Status.WAITING) {
-                return I18n.get("preview.parsing");
-            }
-            if (item.cachedTitle != null) {
-                return SanitizeUtils.sanitize(item.cachedTitle);
+            OutputNameService.Name name = OutputNameService.imageOutputName(it, params,
+                    host.allVisibleItems().stream().findFirst().orElse(null), host.inputFolderField().getText());
+            String dirName = name.parsing() ? I18n.get("preview.parsing") : name.value();
+            if (params.isSingleOutputMode()) {
+                host.outputNameLabel().setText(I18n.get("preview.outputDirPrefix") + dirName
+                        + I18n.get("preview.outputDirMergedNote"));
+            } else {
+                host.outputNameLabel().setText(I18n.get("preview.outputDirPrefix") + dirName);
             }
         }
-        return SourceKinds.stripKnownExtension(item.name);
-    }
-
-    private String mergedFolderName(PreviewItem item) {
-        AppConfig params = host.effectiveParams(item);
-        if (params != null && params.isEnableNameExtraction()) {
-            PreviewItem first = host.allVisibleItems().stream().findFirst().orElse(null);
-            if (first != null) {
-                if (first.status == PreviewItem.Status.WAITING) {
-                    return I18n.get("preview.parsing");
-                }
-                if (first.cachedTitle != null) {
-                    return SanitizeUtils.sanitize(first.cachedTitle);
-                }
-            }
-        }
-        return ImageBatchProcessor.determineDefaultFolderName(host.inputFolderField().getText());
     }
 
     /** 输出模式标签按当前选中对象的生效参数显示（组条目→该组生效参数；项目→其生效参数；无选中→全局） */
