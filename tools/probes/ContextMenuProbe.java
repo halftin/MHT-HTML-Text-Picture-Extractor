@@ -14,6 +14,7 @@ import com.mhtextractor.gui.controller.MainController;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.uicore.FileMenuModel;
 
 import atlantafx.base.controls.ToggleSwitch;
 import javafx.application.Application;
@@ -41,7 +42,7 @@ import javafx.stage.Stage;
  * {@code ContextMenu.getItems()} 是否一致"只能在这里证 —— 否则 {@code LAYOUT} 只是一个没人校验的副本。</p>
  *
  * <p><b>本探针里的期望值是独立副本</b>：18 项类型序列、14 个文案键、四种目标的禁用矩阵都在本文件里
- * 逐项写死（<b>不复用</b> {@code FileListContextMenu.LAYOUT} / {@code TEXT_KEYS}），因此新类里改错
+ * 逐项写死（<b>不复用</b> {@code FileMenuModel.LAYOUT} / {@code TEXT_KEYS}），因此新类里改错
  * 顺序 / 换错键 / 写错启用位都会在这里失败。</p>
  *
  * <p>被测对象是 {@code MainView.fxml} 加载出的<b>真实</b> {@code MainController}（与 App.start() 同构装配），
@@ -209,11 +210,11 @@ public class ContextMenuProbe extends Application {
 
         // ---- 2. 新类的 LAYOUT 与真实序列同源（同一个硬编码期望对两边都成立） ----
         List<String> fromLayout = new ArrayList<>();
-        for (FileListContextMenu.Entry e : FileListContextMenu.LAYOUT) {
+        for (FileMenuModel.Entry e : FileMenuModel.LAYOUT) {
             if (e.isSeparator()) {
                 fromLayout.add("sep");
             } else {
-                fromLayout.add("item:" + FileListContextMenu.TEXT_KEYS.get(e));
+                fromLayout.add("item:" + FileMenuModel.TEXT_KEYS.get(e));
             }
         }
         check("LAYOUT + TEXT_KEYS 派生出的序列 == 硬编码期望", fromLayout.equals(EXPECTED_ORDER));
@@ -267,41 +268,41 @@ public class ContextMenuProbe extends Application {
             return;
         }
         check(what + "：勾选" + (select ? "启用" : "禁用"),
-                dis(FileListContextMenu.Entry.SELECT) == !select);
-        check(what + "：全选恒启用", !dis(FileListContextMenu.Entry.SELECT_ALL));
+                dis(FileMenuModel.Entry.SELECT) == !select);
+        check(what + "：全选恒启用", !dis(FileMenuModel.Entry.SELECT_ALL));
         check(what + "：打开所在文件夹" + (itemScoped ? "启用" : "禁用"),
-                dis(FileListContextMenu.Entry.OPEN_FOLDER) == !itemScoped);
+                dis(FileMenuModel.Entry.OPEN_FOLDER) == !itemScoped);
         check(what + "：在浏览器中查看" + (itemScoped ? "启用" : "禁用"),
-                dis(FileListContextMenu.Entry.OPEN_IN_BROWSER) == !itemScoped);
+                dis(FileMenuModel.Entry.OPEN_IN_BROWSER) == !itemScoped);
         check(what + "：查看源码" + (itemScoped ? "启用" : "禁用"),
-                dis(FileListContextMenu.Entry.VIEW_SOURCE) == !itemScoped);
-        check(what + "：设置参数恒启用", !dis(FileListContextMenu.Entry.PARAMS));
+                dis(FileMenuModel.Entry.VIEW_SOURCE) == !itemScoped);
+        check(what + "：设置参数恒启用", !dis(FileMenuModel.Entry.PARAMS));
         check(what + "：参数文案 = " + (paramsGlobal ? "params.menuSetGlobal" : "params.menuSet"),
-                I18n.get(paramsGlobal ? FileListContextMenu.KEY_PARAMS_GLOBAL : FileListContextMenu.KEY_PARAMS)
-                        .equals(menu.item(FileListContextMenu.Entry.PARAMS).getText()));
-        check(what + "：建组" + (group ? "启用" : "禁用"), dis(FileListContextMenu.Entry.GROUP) == !group);
-        check(what + "：拆分组" + (ungroup ? "启用" : "禁用"), dis(FileListContextMenu.Entry.UNGROUP) == !ungroup);
-        check(what + "：移除" + (remove ? "启用" : "禁用"), dis(FileListContextMenu.Entry.REMOVE) == !remove);
+                I18n.get(paramsGlobal ? FileMenuModel.KEY_PARAMS_GLOBAL : FileMenuModel.KEY_PARAMS)
+                        .equals(menu.item(FileMenuModel.Entry.PARAMS).getText()));
+        check(what + "：建组" + (group ? "启用" : "禁用"), dis(FileMenuModel.Entry.GROUP) == !group);
+        check(what + "：拆分组" + (ungroup ? "启用" : "禁用"), dis(FileMenuModel.Entry.UNGROUP) == !ungroup);
+        check(what + "：移除" + (remove ? "启用" : "禁用"), dis(FileMenuModel.Entry.REMOVE) == !remove);
         check(what + "：移除组" + (removeGroup ? "启用" : "禁用"),
-                dis(FileListContextMenu.Entry.REMOVE_GROUP) == !removeGroup);
+                dis(FileMenuModel.Entry.REMOVE_GROUP) == !removeGroup);
         // 与宿主自己的判定一致性（不是独立期望：独立期望在无头单测里）
         try {
             Method hip = MainController.class.getDeclaredMethod("hasIndependentParams", Object.class);
             hip.setAccessible(true);
             boolean indep = (Boolean) hip.invoke(controller, target);
             check(what + "：清除参数/应用到全局 == 宿主 hasIndependentParams(" + indep + ")",
-                    dis(FileListContextMenu.Entry.CLEAR_PARAMS) == !indep
-                            && dis(FileListContextMenu.Entry.APPLY_GLOBAL) == !indep);
+                    dis(FileMenuModel.Entry.CLEAR_PARAMS) == !indep
+                            && dis(FileMenuModel.Entry.APPLY_GLOBAL) == !indep);
         } catch (Exception e) {
             System.out.println("      (info) hasIndependentParams 反射失败，跳过该一致性断言：" + e);
         }
     }
 
-    private boolean dis(FileListContextMenu.Entry entry) {
+    private boolean dis(FileMenuModel.Entry entry) {
         return menu.item(entry).isDisable();
     }
 
-    private String text(FileListContextMenu.Entry entry) {
+    private String text(FileMenuModel.Entry entry) {
         return menu.item(entry).getText();
     }
 
@@ -326,26 +327,26 @@ public class ContextMenuProbe extends Application {
             a.selected = true;
             b.selected = false;
             m.selected = false;
-            applyText("只有组外项 1 个", a, FileListContextMenu.KEY_APPLY_THIS);
+            applyText("只有组外项 1 个", a, FileMenuModel.KEY_APPLY_THIS);
 
             b.selected = true;
-            applyText("只有组外项 ≥2", a, FileListContextMenu.KEY_APPLY_MANY);
+            applyText("只有组外项 ≥2", a, FileMenuModel.KEY_APPLY_MANY);
 
             a.selected = false;
             b.selected = false;
             m.selected = true;
-            applyText("只有组相关", m, FileListContextMenu.KEY_APPLY_GROUP);
+            applyText("只有组相关", m, FileMenuModel.KEY_APPLY_GROUP);
 
             a.selected = true;
-            applyText("组外 1 + 组", a, FileListContextMenu.KEY_APPLY_GROUP_AND_THIS);
+            applyText("组外 1 + 组", a, FileMenuModel.KEY_APPLY_GROUP_AND_THIS);
 
             b.selected = true;
-            applyText("组外 ≥2 + 组", a, FileListContextMenu.KEY_APPLY_GROUP_AND_MANY);
+            applyText("组外 ≥2 + 组", a, FileMenuModel.KEY_APPLY_GROUP_AND_MANY);
 
             // 勾选优先于右键目标：右键未勾选的 c，实际集合 = 勾选集合（a/b/m）
             PreviewItem c = newPreview("apply-c");
             workspace().appendItems(new ArrayList<>(List.of(c)));
-            applyText("勾选优先于右键目标", c, FileListContextMenu.KEY_APPLY_GROUP_AND_MANY);
+            applyText("勾选优先于右键目标", c, FileMenuModel.KEY_APPLY_GROUP_AND_MANY);
 
             workspace().removeItems(new ArrayList<>(List.of(a, b, c)));
             if (g != null) {
@@ -359,7 +360,7 @@ public class ContextMenuProbe extends Application {
 
     private void applyText(String what, Object target, String expectedKey) {
         updateState(target);
-        String actual = menu.item(FileListContextMenu.Entry.APPLY_TO_SELECTION).getText();
+        String actual = menu.item(FileMenuModel.Entry.APPLY_TO_SELECTION).getText();
         check("功能二[" + what + "] 文案 == I18n.get(" + expectedKey + ")（实际 \"" + actual + "\"）",
                 I18n.get(expectedKey).equals(actual));
     }
@@ -396,36 +397,36 @@ public class ContextMenuProbe extends Application {
 
             // ---- 控制组 ①：无参数目标 + 未复制过 ⇒ 两项都禁用，复制文案 = "无参数" ----
             updateState(bare);
-            check("控制组：无生效参数条目上「复制参数」禁用（证明'可用'不是恒真）", dis(FileListContextMenu.Entry.COPY_PARAMS));
+            check("控制组：无生效参数条目上「复制参数」禁用（证明'可用'不是恒真）", dis(FileMenuModel.Entry.COPY_PARAMS));
             check("R7.2：禁用理由写在选项文本里（无参数版）",
-                    I18n.get(FileListContextMenu.KEY_COPY_NO_PARAMS).equals(text(FileListContextMenu.Entry.COPY_PARAMS)));
-            check("R7.3：未复制过 ⇒「应用到所选」禁用", dis(FileListContextMenu.Entry.APPLY_TO_SELECTION));
+                    I18n.get(FileMenuModel.KEY_COPY_NO_PARAMS).equals(text(FileMenuModel.Entry.COPY_PARAMS)));
+            check("R7.3：未复制过 ⇒「应用到所选」禁用", dis(FileMenuModel.Entry.APPLY_TO_SELECTION));
 
             // ---- R7.2 理由二：两个勾选项生效参数不同 ⇒ 禁用 + "参数不统一"版文案 ----
             a.selected = true;
             b.selected = true;
             updateState(a);
-            check("R7.2：多选参数不统一 ⇒「复制参数」禁用", dis(FileListContextMenu.Entry.COPY_PARAMS));
+            check("R7.2：多选参数不统一 ⇒「复制参数」禁用", dis(FileMenuModel.Entry.COPY_PARAMS));
             check("R7.2：禁用理由是'参数不统一'版文案",
-                    I18n.get(FileListContextMenu.KEY_COPY_MIXED_PARAMS).equals(text(FileListContextMenu.Entry.COPY_PARAMS)));
+                    I18n.get(FileMenuModel.KEY_COPY_MIXED_PARAMS).equals(text(FileMenuModel.Entry.COPY_PARAMS)));
             a.selected = false;
             b.selected = false;
 
             // ---- R7.1/R7.2 可用态：右键有参数条目 ⇒ 复制参数启用、文案 = "复制参数" ----
             updateState(a);
-            check("R7.2：有生效参数且统一 ⇒「复制参数」启用", !dis(FileListContextMenu.Entry.COPY_PARAMS));
+            check("R7.2：有生效参数且统一 ⇒「复制参数」启用", !dis(FileMenuModel.Entry.COPY_PARAMS));
             check("R7.2：可用时文案 = params.menuCopy",
-                    I18n.get(FileListContextMenu.KEY_COPY_PARAMS).equals(text(FileListContextMenu.Entry.COPY_PARAMS)));
+                    I18n.get(FileMenuModel.KEY_COPY_PARAMS).equals(text(FileMenuModel.Entry.COPY_PARAMS)));
 
             // ---- R7.1：经真实菜单项复制（复制不写模型、不压撤销记录） ----
             int depthBeforeCopy = workspace().undoDepth();
-            fire(FileListContextMenu.Entry.COPY_PARAMS, a);
+            fire(FileMenuModel.Entry.COPY_PARAMS, a);
             check("R7.1：复制参数不写模型（撤销栈不变）", workspace().undoDepth() == depthBeforeCopy);
             updateState(b);
-            check("R7.3：复制过之后「应用到所选」启用", !dis(FileListContextMenu.Entry.APPLY_TO_SELECTION));
+            check("R7.3：复制过之后「应用到所选」启用", !dis(FileMenuModel.Entry.APPLY_TO_SELECTION));
 
             // ---- R7.4/R7.5/R7.7：应用到所选（真实菜单项 → 宿主既有 apply* 路径） ----
-            fire(FileListContextMenu.Entry.APPLY_TO_SELECTION, b);
+            fire(FileMenuModel.Entry.APPLY_TO_SELECTION, b);
             check("R7.5：一次应用只压一条撤销记录（实际 +" + (workspace().undoDepth() - depthBeforeCopy)
                     + "）", workspace().undoDepth() == depthBeforeCopy + 1);
             AppConfig applied = itemParamsOf(b, im);
@@ -485,7 +486,7 @@ public class ContextMenuProbe extends Application {
     }
 
     /** 经真实菜单项触发动作：把新类的私有 target 指向被测目标（等价于真实右键命中那一行），再 fire() */
-    private void fire(FileListContextMenu.Entry entry, Object target) throws Exception {
+    private void fire(FileMenuModel.Entry entry, Object target) throws Exception {
         Field tf = FileListContextMenu.class.getDeclaredField("target");
         tf.setAccessible(true);
         tf.set(menu, target);

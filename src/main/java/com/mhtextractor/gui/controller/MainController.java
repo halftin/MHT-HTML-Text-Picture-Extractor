@@ -1017,7 +1017,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      *
      * <p><b>模型类型判定留在本类</b>：{@code targetType} / {@code isLiveTarget} 是搬前
      * {@code updateContextMenuState} 头四行与 {@code pickItemAt} 里那一句 {@code it.removed} 的逐字搬移，
-     * 于是菜单类零模型依赖（只认 {@link FileListContextMenu.TargetType} 这个四布尔快照）。
+     * 于是菜单类零模型依赖（只认 {@link com.mhtextractor.uicore.FileMenuModel.TargetType} 这个四布尔快照）。
      * 四布尔而非枚举是<b>有意</b>的：原实现允许"非空但既不是条目也不是组"的目标（四标记全 false），
      * 那与空白区域并不等价。</p>
      *
@@ -1029,13 +1029,13 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             @Override public boolean isDragActive() { return listInteraction.isDragActive(); }
             @Override public long visibleCount() { return MainController.this.visibleCount(); }
             @Override public void selectRow(Object target) { refs.fileListView().getSelectionModel().select(target); }
-            @Override public FileListContextMenu.TargetType targetType(Object target) {
+            @Override public com.mhtextractor.uicore.FileMenuModel.TargetType targetType(Object target) {
                 return switch (target) {
-                    case null -> FileListContextMenu.TargetType.BLANK;
-                    case GroupItem<?> g -> FileListContextMenu.TargetType.GROUP;
-                    case PreviewItem it when it.parentGroup != null -> FileListContextMenu.TargetType.MEMBER;
-                    case PreviewItem it -> FileListContextMenu.TargetType.TOP_ITEM;
-                    default -> new FileListContextMenu.TargetType(false, false, false, false);
+                    case null -> com.mhtextractor.uicore.FileMenuModel.TargetType.BLANK;
+                    case GroupItem<?> g -> com.mhtextractor.uicore.FileMenuModel.TargetType.GROUP;
+                    case PreviewItem it when it.parentGroup != null -> com.mhtextractor.uicore.FileMenuModel.TargetType.MEMBER;
+                    case PreviewItem it -> com.mhtextractor.uicore.FileMenuModel.TargetType.TOP_ITEM;
+                    default -> new com.mhtextractor.uicore.FileMenuModel.TargetType(false, false, false, false);
                 };
             }
             @Override public boolean isLiveTarget(Object item) {

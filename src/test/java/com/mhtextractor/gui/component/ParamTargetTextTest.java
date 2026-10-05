@@ -4,6 +4,7 @@ import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.ParamTargetText;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.ParamScope;
 import org.junit.jupiter.api.AfterEach;

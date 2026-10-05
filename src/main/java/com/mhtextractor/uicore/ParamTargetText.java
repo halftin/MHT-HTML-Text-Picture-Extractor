@@ -1,4 +1,4 @@
-package com.mhtextractor.gui.component;
+package com.mhtextractor.uicore;
 
 import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.i18n.I18n;

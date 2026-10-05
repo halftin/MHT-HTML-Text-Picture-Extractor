@@ -17,6 +17,7 @@ import com.mhtextractor.app.ParamClipboard;
 import com.mhtextractor.app.ParamsInfo;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.FileMenuModel;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.UndoManager;
@@ -201,12 +202,12 @@ class ParamClipboardTest {
         assertTrue(before.hasEffective(), "两条目都有生效参数");
         assertTrue(before.uniform(), "签名相同 ⇒ 统一");
         assertFalse(before.copied(), "未复制过 ⇒ copied=false");
-        assertTrue(FileListContextMenu.stateFor(FileListContextMenu.TargetType.TOP_ITEM, before).copyParams());
+        assertTrue(FileMenuModel.stateFor(FileMenuModel.TargetType.TOP_ITEM, before).copyParams());
 
         clipboard.copy(params("X"));
         ParamsInfo after = clipboard.paramsInfo(List.of(a, b), true, service, ctx, 0, 0);
         assertTrue(after.copied(), "复制后 copied=true");
-        assertTrue(FileListContextMenu.stateFor(FileListContextMenu.TargetType.TOP_ITEM, after).applyToSelection());
+        assertTrue(FileMenuModel.stateFor(FileMenuModel.TargetType.TOP_ITEM, after).applyToSelection());
         clipboard.clear();
         assertFalse(clipboard.paramsInfo(List.of(a, b), true, service, ctx, 0, 0).copied(), "清空后 copied 回到 false");
 
@@ -215,16 +216,16 @@ class ParamClipboardTest {
         ParamsInfo mixed = clipboard.paramsInfo(List.of(a, b), true, service, ctx, 0, 0);
         assertTrue(mixed.hasEffective());
         assertFalse(mixed.uniform());
-        FileListContextMenu.State state = FileListContextMenu.stateFor(FileListContextMenu.TargetType.TOP_ITEM, mixed);
+        FileMenuModel.State state = FileMenuModel.stateFor(FileMenuModel.TargetType.TOP_ITEM, mixed);
         assertFalse(state.copyParams());
-        assertEquals(FileListContextMenu.KEY_COPY_MIXED_PARAMS, state.copyParamsTextKey());
+        assertEquals(FileMenuModel.KEY_COPY_MIXED_PARAMS, state.copyParamsTextKey());
 
         // 全无参数 ⇒ hasEffective=false ⇒ 文案走"无参数"键
         a.textItemParams = null;
         ParamsInfo none = clipboard.paramsInfo(List.of(a, b), false, service, ctx, 0, 0);
         assertFalse(none.hasEffective());
-        assertEquals(FileListContextMenu.KEY_COPY_NO_PARAMS,
-                FileListContextMenu.stateFor(FileListContextMenu.TargetType.TOP_ITEM, none).copyParamsTextKey());
+        assertEquals(FileMenuModel.KEY_COPY_NO_PARAMS,
+                FileMenuModel.stateFor(FileMenuModel.TargetType.TOP_ITEM, none).copyParamsTextKey());
     }
 
     /** 装置自检：桩 apply 确实按宿主的形态调用了 pushParamUndo（否则上面的"一条记录"断言可能假通过） */
