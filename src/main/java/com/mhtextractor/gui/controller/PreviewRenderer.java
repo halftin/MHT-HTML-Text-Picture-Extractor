@@ -1,5 +1,6 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.PreviewNamingService;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.extractor.ImageExtractor;
@@ -7,10 +8,7 @@ import com.mhtextractor.gui.util.ThumbnailFxBridge;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ThumbnailData;
-import com.mhtextractor.output.FileWriter;
-import com.mhtextractor.output.ImageWriter;
 import com.mhtextractor.platform.FileOpener;
-import com.mhtextractor.util.SanitizeUtils;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.control.Button;
@@ -92,8 +90,8 @@ public final class PreviewRenderer {
         }
         String startTemplate = params.isEnableTemplate() ? params.getStartTemplate() : "";
         String endTemplate = params.isEnableTemplate() ? params.getEndTemplate() : "";
-        String head = FileWriter.processTemplate(startTemplate, item.name, item.modifiedTime);
-        String tail = FileWriter.processTemplate(endTemplate, item.name, item.modifiedTime);
+        String head = PreviewNamingService.applyTemplate(startTemplate, item.name, item.modifiedTime);
+        String tail = PreviewNamingService.applyTemplate(endTemplate, item.name, item.modifiedTime);
         String text = item.cachedText == null ? "" : item.cachedText;
         if (text.length() <= 10000) {
             host.textPreviewArea().setText(head + text + tail);
@@ -218,9 +216,9 @@ public final class PreviewRenderer {
      */
     public ThumbnailData decodeThumb(ImageExtractor.ImageData imageData, int index, AppConfig params) {
         byte[] data = imageData.getData();
-        String ext = SanitizeUtils.detectExtensionByMagicNumber(data, "jpg");
+        String ext = PreviewNamingService.detectExtension(data, "jpg");
         boolean rename = params != null && params.isEnableBatchRenaming();
-        String coreName = ImageWriter.computeFileName(imageData, ext, rename, index + 1, "");
+        String coreName = PreviewNamingService.imageFileName(imageData, ext, rename, index + 1, "");
         Image img = null;
         try {
             if ("webp".equals(ext)) {
