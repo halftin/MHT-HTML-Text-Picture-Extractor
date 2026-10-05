@@ -225,6 +225,26 @@ class ArchitectureTest {
      */
     private static final int TEST_SUPPORT_MARKER_MAX = 0;
 
+    // ==================== P0 三条 UI 可切换耦合闸门（方案 §8 新增不变式 1–3） ====================
+    // 三条基线均「只减不增，P1–P3 逐阶段下调，P3 目标 0」—— 它们是 UI 可切换重构的耦合闸门：
+    // 换 UI 框架时 uiport 端口层必须零 JavaFX，gui 层不得继续持有业务状态、不得直连业务包。
+
+    /** 闸门 1：uiport 包 JavaFX 违规类数上限 —— 恒为 0（P3 建立 uiport 后必须零 JavaFX，否则换 UI 框架失效）。 */
+    private static final int UIPORT_JAVAFX_VIOLATION_MAX = 0;
+
+    /**
+     * 闸门 2：gui 层业务状态持有/构造点上限（只减不增，P1–P3 逐阶段下调，P3 目标 0）。
+     * 基线 9 = (a) AppConfig/Map&lt;String,AppConfig&gt; 字段 6 + (b) 预览缓存构造 2
+     * + (c) 参数剪贴板构造 1 + (d) 撤销载荷构造 0（逐条清单见 {@link GuiCoupling#scanBusinessState}）。
+     */
+    private static final int GUI_BUSINESS_STATE_MAX = 9;
+
+    /**
+     * 闸门 3：gui 层直连业务包 distinct (包, 类型) 数上限（只减不增，P1–P3 逐阶段下调，P3 目标 0）。
+     * 基线 35（清单见 {@link GuiCoupling#distinctBusinessTypes}）。
+     */
+    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 35;
+
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {
         Path mc = MAIN_SOURCES.resolve("com/mhtextractor/gui/controller/MainController.java");
@@ -993,6 +1013,78 @@ class ArchitectureTest {
 
         System.out.println("[arch] 测试访问面：清单 " + manifest.size() + " / 发现 " + discovered.size()
                 + " / 新增 " + added.size() + " / 陈旧 " + stale.size() + " / 驱动 " + srcDrivers.size());
+    }
+
+    // ==================== 8. P0 三条 UI 可切换耦合闸门（方案 §8 新增不变式 1–3） ====================
+
+    /**
+     * 闸门 1（方案 §8 新增不变式 1）：{@code uiport} 包字节码零 JavaFX。
+     *
+     * <p>扫 {@code target/classes/com/mhtextractor/uiport/**​/*.class}（主源集字节码）的常量池
+     * {@code javafx/} 描述符，命中即该<b>类</b>违规；断言违规类数 = 0。{@code uiport} 是 P3 才建立的
+     * UI 端口层（当前包不存在 → 0 个类，空跑通过）；P0-1 控制组已验证加一个违规类会把它跑红。</p>
+     */
+    @Test
+    void uiportHasNoJavaFxDependency() throws IOException {
+        UiportSignature.Scan scan = UiportSignature.scan(MAIN_CLASSES);
+        List<String> violators = new ArrayList<>();
+        for (UiportSignature.Violation v : scan.violations()) {
+            violators.add(v.className() + "  →  " + v.descriptors());
+        }
+        assertTrue(scan.violations().size() <= UIPORT_JAVAFX_VIOLATION_MAX,
+                "uiport 包出现 JavaFX 依赖（它是 UI 可切换重构的端口层，必须零 JavaFX）：\n  "
+                        + String.join("\n  ", violators));
+        System.out.println("[arch] uiport JavaFX 闸门：扫描了 " + scan.classesScanned() + " 个类 / 违规 "
+                + scan.violations().size() + " 个（" + violators + "）");
+    }
+
+    /**
+     * 闸门 2（方案 §8 新增不变式 2）：gui 层业务状态持有/构造点度量。
+     *
+     * <p>四类点：字段（AppConfig / Map&lt;String,AppConfig&gt;，带作用域判断，不含局部变量与参数）、
+     * 预览缓存构造、参数剪贴板构造、撤销载荷构造；总数 ≤ {@value #GUI_BUSINESS_STATE_MAX}（只减不增）。
+     * 业务状态必须下沉到 app/uiport，P1–P3 逐阶段下调，P3 目标 0。</p>
+     */
+    @Test
+    void guiBusinessStateDoesNotGrow() throws IOException {
+        GuiCoupling.StateScan scan = GuiCoupling.scanBusinessState(GuiCoupling.GUI_SOURCES);
+        List<String> lines = new ArrayList<>();
+        for (GuiCoupling.StatePoint p : scan.points()) {
+            lines.add(p.relPath() + ":" + p.line() + " " + p.text());
+        }
+        assertTrue(scan.total() <= GUI_BUSINESS_STATE_MAX,
+                "gui 层业务状态持有/构造点增长：" + scan.total() + " > " + GUI_BUSINESS_STATE_MAX
+                        + "（a-字段 " + scan.fields() + " / b-缓存构造 " + scan.cacheConstructors()
+                        + " / c-剪贴板构造 " + scan.clipboardConstructors()
+                        + " / d-撤销载荷构造 " + scan.undoRecordConstructors() + "）：\n  "
+                        + String.join("\n  ", lines)
+                        + "\n业务状态必须下沉到 app/uiport（只减不增，P1–P3 逐阶段下调，P3 目标 0）。");
+        System.out.println("[arch] gui 业务状态点 " + scan.total() + " / 上限 " + GUI_BUSINESS_STATE_MAX
+                + "（a=" + scan.fields() + " b=" + scan.cacheConstructors()
+                + " c=" + scan.clipboardConstructors() + " d=" + scan.undoRecordConstructors() + "）");
+        for (String line : lines) {
+            System.out.println("[arch]   " + line);
+        }
+    }
+
+    /**
+     * 闸门 3（方案 §8 新增不变式 3）：gui 层直连业务包计数。
+     *
+     * <p>口径：gui 主源集<b>去除注释与字符串字面量</b>后，匹配
+     * {@code com.mhtextractor.(core|extractor|processor|output|util|cache|config|i18n).<类型名>}，
+     * 取 (包, 类型) 的 distinct 集合；断言 ≤ {@value #GUI_DIRECT_BUSINESS_TYPES_MAX}（只减不增，
+     * P1–P3 逐阶段下调，P3 目标 0）。import 语句条数仅作<b>非门禁</b>诊断打印。</p>
+     */
+    @Test
+    void guiDirectBusinessPackageUsageDoesNotGrow() throws IOException {
+        Set<String> types = GuiCoupling.distinctBusinessTypes(GuiCoupling.GUI_SOURCES);
+        assertTrue(types.size() <= GUI_DIRECT_BUSINESS_TYPES_MAX,
+                "gui 直连业务包 distinct 类型数增长：" + types.size() + " > " + GUI_DIRECT_BUSINESS_TYPES_MAX
+                        + "\n  " + String.join("\n  ", types)
+                        + "\nGUI 对业务层的依赖必须经 uiport 端口收口（只减不增，P1–P3 逐阶段下调，P3 目标 0）。");
+        int imports = GuiCoupling.businessImportCount(GuiCoupling.GUI_SOURCES);
+        System.out.println("[arch] gui 直连业务类型 " + types.size() + " / 上限 " + GUI_DIRECT_BUSINESS_TYPES_MAX
+                + "；业务 import 条数（诊断，非门禁）" + imports);
     }
 
     /** 发现键（通道\t类/文件\t成员）转可读行（制表符转空格）。 */

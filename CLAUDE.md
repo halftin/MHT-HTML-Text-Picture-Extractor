@@ -16,9 +16,9 @@ JavaFX 25 桌面 GUI：把 `.mht` / `.mhtml` / `.html` / `.htm`（含 HTML 侧�
 
 | 项 | 现状（2026-10-05 实测） |
 |---|---|
-| 重构阶段 | A1 / A2 / B / C / D / E / F **全部实施并验收**；第二批 **S0–S6（E1–E5）** 亦已实施并验收（未收口项见《遗留目标与未完成事项.md》） |
+| 重构阶段 | A1 / A2 / B / C / D / E / F **全部实施并验收**；第二批 **S0–S6（E1–E5）** 亦已实施并验收；《UI可切换重构方案》**P0（三条度量/不变式）已实施并验收**（2026-10-06，未收口项见《遗留目标与未完成事项.md》） |
 | `MainController` | **1709** 行（上限常量 **2240**，只减不增；为不变式自报口径） |
-| 测试 | 默认执行 **768**（+ `headless-layer-b` **68**）；架构不变式 **13** 条；产物黄金基线 **42** 份 |
+| 测试 | 默认执行 **771**（+ `headless-layer-b` **68**）；架构不变式 **16** 条；产物黄金基线 **42** 份 |
 | GUI 自动化 | zh / en **各 34 passed / 0 failed**；`tools/probes/` 探针全绿 |
 | i18n | zh_CN / en_US **各 547 键**（两份键集与占位符集合必须一致）+ **22** 个 `ErrorCode`（本轮新增 `NO_CHECKED_ITEMS`） |
 | 日志键 | `log.*` **236 键 / 247 调用点**（逐键不变，重构不得偷改日志文案；2026-10-05 重数，本轮新增 `log.maincontroller.39`）；全部 `I18n.get/msg` 调用点 **442** |
@@ -134,7 +134,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 - **日志进界面**：`LogTextArea` + `TextAreaAppender`（Logback consumer）。
 - `MainView.fxml` / `ParamDialog.fxml` 文案全部是 `%key`（`loader.setResources(I18n.bundle())`），**不得出现中文字面量**。
 
-### 架构红线（`ArchitectureTest` 的 13 条不变式）
+### 架构红线（`ArchitectureTest` 的 16 条不变式）
 
 | 不变式 | 含义 |
 |---|---|
@@ -150,6 +150,9 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | `guiDoesNotMutateDataOrderDirectly` | GUI 不得直接/间接改 workspace 数据序（须经 `WorkspaceModel`）；实测 **0 / 0** |
 | `testAccessSurfaceIsFrozen` | 测试访问面冻结：`src/test/resources/test-access-surface.tsv` **124** 条（direct 95 / reflect 9 / reflect-dynamic 20；S2 一次性上调并记账）**只减不增**；发现集合 ⊆ 清单、清单无陈旧条目、`com.mhtextractor.gui` 同包驱动必须登记。扫描器 `baseline.TestAccessSurface`（字节码成员库 + 驱动类常量池引用；不用反射 API） |
 | `allowlistOnlyTargetsBusinessPackages` · `baselineHarnessIsPresent` | 防白名单滥用 / 基线与夹具在位 |
+| `uiportHasNoJavaFxDependency` | **P0 新增**：`uiport` 端口层字节码常量池零 `javafx/`（字节码扫描；当前包不存在 = 0/0，P3 建立后强制）。基线违规数 **0**，扫描器 `baseline.UiportSignature` |
+| `guiBusinessStateDoesNotGrow` | **P0 新增**：`gui` 层业务状态持有/构造点（`AppConfig` / `Map<String,AppConfig>` 字段 + 缓存/剪贴板/撤销载荷构造点）**只减不增**；基线 **9**（a=6 b=2 c=1 d=0），P1–P3 逐阶段下调，P3 目标 0。扫描器 `baseline.GuiCoupling` |
+| `guiDirectBusinessPackageUsageDoesNotGrow` | **P0 新增**：`gui` 源码直连业务包 distinct (包, 类型) 数 **只减不增**；基线 **35**（业务 import 119 仅作诊断），P1–P3 逐阶段下调，P3 目标 0。扫描器 `baseline.GuiCoupling` |
 
 **其余硬约束**：主源集不出现 `java.awt`；不引入 `WebView`（**仅 JavaFX 前端生效**，换框架后重新评估）；不新增事件总线 / DI 容器 / 通用工作流引擎。
 
@@ -251,7 +254,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | 档 | 内容 | 判据 |
 |---|---|---|
 | **A**（分钟级） | `compile` + 定向单测 + 结构事实（行数 / 标记 / 直写） | 全绿；无"重排整文件"型 diff |
-| **B**（每阶段） | `mvn clean test` + 独立聚合 + `ProductBaselineTest` + `ArchitectureTest` + GUI 自动化 + 探针 + 日志键对账 | 默认 **768/0** + headless **68/0**；产物基线 **42/0**；不变式 **13/0**；GUI zh/en **34/0**；`log.*` 键逐键不变 |
+| **B**（每阶段） | `mvn clean test` + 独立聚合 + `ProductBaselineTest` + `ArchitectureTest` + GUI 自动化 + 探针 + 日志键对账 | 默认 **771/0** + headless **68/0**；产物基线 **42/0**；不变式 **16/0**；GUI zh/en **34/0**；`log.*` 键逐键不变 |
 | **C**（阶段收尾） | native 构建 + native 产物基线 + 截图对比 + i18n 键 | `build-native.cmd` exit 0、report `status=OK`；native 基线 **42/0** |
 
 **没实际跑过的项目要明确标为"未验证"，不许推断通过。**
