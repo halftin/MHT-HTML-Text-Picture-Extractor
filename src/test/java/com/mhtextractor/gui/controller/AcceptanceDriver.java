@@ -350,24 +350,25 @@ public final class AcceptanceDriver {
             return mc.extractStats();
         }
 
-        /** 文本模式已确认参数缓存（包级字段；读可经 effectiveForObject 派生，但"置 null = 未确认"
-         *  无手势可表达 —— 没有用户流程会把缓存清回 null 而不带其它副作用。步骤 1 起字段由
-         *  {@code ParamDomainController} 持有，这里经 {@code mc.paramDomain} 直访）。 */
+        /** 文本模式已确认参数缓存（读可经 effectiveForObject 派生，但"置 null = 未确认"
+         *  无手势可表达 —— 没有用户流程会把缓存清回 null 而不带其它副作用。步骤 1 起由
+         *  {@code ParamDomainController} 持有（P1-1 下沉 app 层，包级同名委托方法），
+         *  这里经 {@code mc.paramDomain} 调同名方法）。 */
         public AppConfig textParamsCache() {
-            return mc.paramDomain.textParamsCache;
+            return mc.paramDomain.textParamsCache();
         }
 
         public void textParamsCache(AppConfig v) {
-            mc.paramDomain.textParamsCache = v;
+            mc.paramDomain.textParamsCache(v);
         }
 
-        /** 图片模式已确认参数缓存（包级字段；理由同 {@link #textParamsCache()}）。 */
+        /** 图片模式已确认参数缓存（包级委托方法；理由同 {@link #textParamsCache()}）。 */
         public AppConfig imageParamsCache() {
-            return mc.paramDomain.imageParamsCache;
+            return mc.paramDomain.imageParamsCache();
         }
 
         public void imageParamsCache(AppConfig v) {
-            mc.paramDomain.imageParamsCache = v;
+            mc.paramDomain.imageParamsCache(v);
         }
 
         /** 工作区后台活动代次（包级字段；内部计数器，无手势）。 */

@@ -1,5 +1,6 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.GlobalParameterCache;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.i18n.I18n;
@@ -27,8 +28,9 @@ import java.util.Set;
  * 三分支的入栈与应用顺序、快照内容、缓存失效（规则 (a)，经 {@code app.WorkspaceParamService} 收口）时机与
  * R1.7 开始按钮派生规则全部保持不变。
  *
- * <p>两套全局参数缓存（{@code textParamsCache} / {@code imageParamsCache}）由本类独占持有（包级字段，
- * 原 {@code MainController} 同可见性搬入；测试源集 AcceptanceDriver 与 UI 探针按新位置读取）；
+ * <p>两套全局参数缓存（{@code textParamsCache} / {@code imageParamsCache}）由本类独占持有
+ * （P1-1：值下沉 app 层 {@link GlobalParameterCache}，本类只留包级同名委托方法；测试源集
+ * AcceptanceDriver 与 UI 探针按新位置读取）；
  * FXML/菜单入口仍留在 {@code MainController} 作薄转发（onParamSettings / onApplyGlobalClicked /
  * onClearParamsClicked / 右键五项），参数剪贴板字段也仍由 {@code MainController} 持有
  * （其路由与应用函数注入本类实现）。本类含 JavaFX，属 gui 层。</p>
@@ -84,12 +86,29 @@ public final class ParamDomainController {
 
     private final Host host;
 
-    /** 两套已确认提取参数缓存：null 表示该模式尚未确认过参数（原 MainController 包级字段原样搬入） */
-    AppConfig textParamsCache;
-    AppConfig imageParamsCache;
+    /** 两套已确认提取参数缓存（P1-1 下沉）：值在 app 层 {@link GlobalParameterCache}；null 表示该模式尚未确认过参数 */
+    private final GlobalParameterCache globalParams = new GlobalParameterCache();
 
     public ParamDomainController(Host host) {
         this.host = host;
+    }
+
+    /** 文本模式已确认参数缓存（包级委托方法，原包级字段；供 MainController / AcceptanceDriver 继续按原名读取） */
+    AppConfig textParamsCache() {
+        return globalParams.text();
+    }
+
+    void textParamsCache(AppConfig v) {
+        globalParams.set(false, v);
+    }
+
+    /** 图片模式已确认参数缓存（包级委托方法，原包级字段；理由同 {@link #textParamsCache()}） */
+    AppConfig imageParamsCache() {
+        return globalParams.image();
+    }
+
+    void imageParamsCache(AppConfig v) {
+        globalParams.set(true, v);
     }
 
     /** 选择对象 → 参数作用域目标（R7.4 复用点）："设置参数"按钮与"应用到所选"共用这一份路由 */
@@ -124,7 +143,7 @@ public final class ParamDomainController {
             // Q6b/R1.7：草稿变了（改字段 / 提交 / 切目标丢弃）就重算开始按钮 —— 判定仍只有
             // ParamFormPane.isDirty() 一处，这里只接线（每次 show 都重设，幂等）。
             panel.setDirtyListener(this::updateStartButtonState);
-            panel.show(target, imageMode, textParamsCache, imageParamsCache,
+            panel.show(target, imageMode, globalParams.text(), globalParams.image(),
                     params -> applyTargetParams(target, imageMode, params));
             updateStartButtonState();   // 本次 show 可能什么都没变（同目标重开 / 取消切换）⇒ 兜底重算
         } catch (Exception e) {
@@ -155,11 +174,11 @@ public final class ParamDomainController {
 
     /** 写入某模式的已确认参数缓存并刷新工作区（agent 演练/自动化测试也走此入口）；入撤销栈（PARAM_SET） */
     void applyConfirmedParams(boolean imageMode, AppConfig params) {
-        AppConfig before = imageMode ? imageParamsCache : textParamsCache;
+        AppConfig before = imageMode ? globalParams.image() : globalParams.text();
         if (imageMode) {
-            imageParamsCache = params;
+            globalParams.set(true, params);
         } else {
-            textParamsCache = params;
+            globalParams.set(false, params);
         }
         host.pushParamUndo(imageMode, null, null, before);
         // 拍板：全局参数重新确认 → 全部条目旧提取结果色失效
@@ -200,7 +219,7 @@ public final class ParamDomainController {
         }
         boolean imageMode = host.imageMode();
         // 撤销快照（拍板 2026-09-22）：应用前的全局参数 + 全部独立参数，撤销可完整回退
-        AppConfig globalBefore = imageMode ? imageParamsCache : textParamsCache;
+        AppConfig globalBefore = imageMode ? globalParams.image() : globalParams.text();
         Map<String, AppConfig> itemBefore = new HashMap<>();
         for (PreviewItem it : host.allPreviewItems()) {
             itemBefore.put(it.path, imageMode ? it.imageItemParams : it.textItemParams);
@@ -213,9 +232,9 @@ public final class ParamDomainController {
             }
         }
         if (imageMode) {
-            imageParamsCache = params;
+            globalParams.set(true, params);
         } else {
-            textParamsCache = params;
+            globalParams.set(false, params);
         }
         for (PreviewItem it : host.allPreviewItems()) {
             if (imageMode) {
@@ -474,9 +493,9 @@ public final class ParamDomainController {
                     }
                 } else {
                     if (im) {
-                        imageParamsCache = record.paramBefore();
+                        globalParams.set(true, record.paramBefore());
                     } else {
-                        textParamsCache = record.paramBefore();
+                        globalParams.set(false, record.paramBefore());
                     }
                     host.clearExtractOutcomes(host.allPreviewItems());
                     // 规则 (a)：撤销恢复全局参数 → 全部条目生效参数可能变化 → 保守全删
@@ -500,9 +519,9 @@ public final class ParamDomainController {
                 // 条目独立参数需求拍板：恢复应用前的全局参数与全部独立参数快照
                 boolean im = record.applyGlobalImageMode();
                 if (im) {
-                    imageParamsCache = record.applyGlobalBefore();
+                    globalParams.set(true, record.applyGlobalBefore());
                 } else {
-                    textParamsCache = record.applyGlobalBefore();
+                    globalParams.set(false, record.applyGlobalBefore());
                 }
                 Map<String, AppConfig> itemBefore = record.applyGlobalItemParamsBefore();
                 for (PreviewItem it : host.allPreviewItems()) {

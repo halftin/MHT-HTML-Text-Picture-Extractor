@@ -240,11 +240,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 @Override public long visibleCount() { return MainController.this.visibleCount(); }
                 @Override public boolean imageMode() { return refs.imageModeToggle().isSelected(); }
                 @Override public boolean openFolderAfterComplete() { return refs.openFolderAfterCompleteCheck().isSelected(); }
-                @Override public AppConfig textParamsCache() { return paramDomain.textParamsCache; }
-                @Override public AppConfig imageParamsCache() { return paramDomain.imageParamsCache; }
+                @Override public AppConfig textParamsCache() { return paramDomain.textParamsCache(); }
+                @Override public AppConfig imageParamsCache() { return paramDomain.imageParamsCache(); }
                 @Override public boolean currentModeConfirmed() { return MainController.this.currentModeConfirmed(); }
                 @Override public boolean otherModeConfirmed() {
-                    return refs.imageModeToggle().isSelected() ? paramDomain.textParamsCache != null : paramDomain.imageParamsCache != null;
+                    return refs.imageModeToggle().isSelected() ? paramDomain.textParamsCache() != null : paramDomain.imageParamsCache() != null;
                 }
                 @Override public AppConfig currentModeParamsOrDefaults() { return MainController.this.currentParamsOrDefaults(); }
                 @Override public List<Object> dataOrder() { return items; }
@@ -351,7 +351,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public Object currentSelection() { return MainController.this.currentSelection(); }
         @Override public AppConfig effectiveParams(Object item) { return MainController.this.effectiveForObject(item); }
         @Override public AppConfig effectiveImageParams(PreviewItem item) {
-            return ParamScope.effectiveImageParams(item.parentGroup, item.imageItemParams, paramDomain.imageParamsCache);
+            return ParamScope.effectiveImageParams(item.parentGroup, item.imageItemParams, paramDomain.imageParamsCache());
         }
         @Override public PreviewService previewService() { return previewService; }
         @Override public PreviewCacheLifecycle cacheLifecycle() { return previewCacheLifecycle; }
@@ -914,12 +914,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 当前模式参数是否已确认（确定过一次即视为已设置） */
     private boolean currentModeConfirmed() {
-        return refs.imageModeToggle().isSelected() ? paramDomain.imageParamsCache != null : paramDomain.textParamsCache != null;
+        return refs.imageModeToggle().isSelected() ? paramDomain.imageParamsCache() != null : paramDomain.textParamsCache() != null;
     }
 
     /** 当前模式已确认参数；未确认时返回默认参数（仅用于展示，不算已设置） */
     private AppConfig currentParamsOrDefaults() {
-        AppConfig c = refs.imageModeToggle().isSelected() ? paramDomain.imageParamsCache : paramDomain.textParamsCache;
+        AppConfig c = refs.imageModeToggle().isSelected() ? paramDomain.imageParamsCache() : paramDomain.textParamsCache();
         return c != null ? c : new AppConfig();
     }
 
@@ -938,7 +938,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 生效参数判定的解析上下文（唯一构造点）：当前模式 + 两个全局已确认参数缓存（现由参数域协作者持有） */
     private com.mhtextractor.app.EffectiveParamsService.Context effectiveContext() {
         return new com.mhtextractor.app.EffectiveParamsService.Context(
-                refs.imageModeToggle().isSelected(), paramDomain.textParamsCache, paramDomain.imageParamsCache);
+                refs.imageModeToggle().isSelected(), paramDomain.textParamsCache(), paramDomain.imageParamsCache());
     }
 
     /** 任一有效项目存在生效参数（组参数或全局参数已确认）—— 判定收口到服务（R8-①） */
@@ -1661,7 +1661,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (own != null) {
             return I18n.get("group.paramsIndependent");
         }
-        AppConfig global = imageMode ? paramDomain.imageParamsCache : paramDomain.textParamsCache;
+        AppConfig global = imageMode ? paramDomain.imageParamsCache() : paramDomain.textParamsCache();
         return global != null ? I18n.get("group.paramsInherited") : I18n.get("group.paramsInheritedUnconfirmed");
     }
 
