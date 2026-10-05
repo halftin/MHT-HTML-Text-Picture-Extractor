@@ -1,6 +1,9 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.ExtractionPreconditions;
+import com.mhtextractor.app.PreStartGate;
+import com.mhtextractor.app.PreStartGateContext;
+import com.mhtextractor.app.PreStartGates;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.ExtractOutcomeStyles;
@@ -11,8 +14,6 @@ import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.PerFileOverrides;
-import com.mhtextractor.util.GroupItem;
-import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.OutputUnitPlanner;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
@@ -207,28 +208,12 @@ public final class ExtractionTaskCoordinator {
         }
     }
 
-    /**
-     * 启动前顺序门（决策 C 的可插拔顺序点 —— 本步<b>只落位，不实现任何门</b>）。
-     *
-     * <p>{@link #begin()} 在 deny 链 + R1.6 参数未确认卡之后、真正启动之前，按
-     * {@link #preStartGates()} 的插入顺序逐个调用 {@link #ask}。门在决定已做出时调用
-     * {@code proceed}（<b>恰好一次</b>；异步确认卡在 FX 线程回调里交付）：
-     * {@code proceed.accept(true)} 放行到下一道门（链空则启动），
-     * {@code proceed.accept(false)} 中止本次启动 —— <b>后续门不再被询问</b>（串行：前一张卡
-     * 取消即 return，不回退到后一张）。生产链的顺序即优先级（决策 C）：
-     * <b>草稿门（步骤 4）→ 未命名组门（步骤 3）</b>，草稿卡先于未命名组卡。</p>
-     */
-    @FunctionalInterface
-    public interface PreStartGate {
-        /** 按序询问本道门；决定做出后以 {@code proceed} 交付（true = 放行，false = 中止）。 */
-        void ask(Consumer<Boolean> proceed);
-    }
-
     private final WorkspaceExtractionService extractionService;
     private final Host host;
     /**
-     * 启动前顺序门（决策 C 的落位）：{@code begin()} 里按插入顺序串行询问。生产当前为空链
-     * （行为与搬迁前逐字一致）；测试/后续步骤经 {@link #preStartGates()} 插入。
+     * 启动前顺序门（决策 C 的落位）：{@code begin()} 里按插入顺序串行询问。
+     * 生产链 = {@link PreStartGates#productionChain(PreStartGateContext)}（草稿门 → 未命名组门 → 合并名门，
+     * P1-5 下沉到 app 层）；测试经 {@link #preStartGates()} 插入。
      */
     private final List<PreStartGate> preStartGates = new ArrayList<>();
     /**
@@ -270,7 +255,8 @@ public final class ExtractionTaskCoordinator {
 
     /**
      * 生产构造：编排宿主 + 开始按钮唯一派生函数的重算入口（三终态落地时调用，见
-     * {@link #landTerminalState}）。宿主非 null 时注册顺序门（决策 C：草稿门 → 未命名组门）。
+     * {@link #landTerminalState}）。宿主非 null 时注册顺序门（P1-5：门规则已下沉
+     * {@link PreStartGates#productionChain(PreStartGateContext)}，本类只做上下文转发与卡片渲染）。
      */
     public ExtractionTaskCoordinator(WorkspaceExtractionService extractionService, Host host,
                                      Runnable updateStartButtonState) {
@@ -278,9 +264,39 @@ public final class ExtractionTaskCoordinator {
         this.host = host;
         this.updateStartButtonState = updateStartButtonState;
         if (host != null) {
-            preStartGates.add(new DraftGate(host));        // 步骤 4 · 功能二：草稿门（决策 C：必须第一道）
-            preStartGates.add(new UnnamedGroupGate(host)); // 步骤 3 · 功能一：未命名组门（生产注册）
-            preStartGates.add(new MergedNameGate(host));   // 功能一：合并名可能变化的提示门（链尾）
+            // 查询全部转发 host；三个展示回调 = 搬迁前私有门类里的 GuiNotifications + I18n.get 文案渲染（逐字）
+            PreStartGateContext ctx = new PreStartGateContext() {
+                @Override public List<Object> dataOrder() { return host.dataOrder(); }
+                @Override public OutputUnitPlanner.ItemView<PreviewItem> itemView() { return host.itemView(); }
+                @Override public boolean imageMode() { return host.imageMode(); }
+                @Override public AppConfig textParamsCache() { return host.textParamsCache(); }
+                @Override public AppConfig imageParamsCache() { return host.imageParamsCache(); }
+                @Override public String outputFolder() { return host.outputFolder(); }
+                @Override public boolean extractCheckedOnly() { return host.extractCheckedOnly(); }
+                @Override public int visibleCheckedCount() { return host.visibleCheckedCount(); }
+                @Override public long visibleCount() { return host.visibleCount(); }
+                @Override public boolean draftDirty() { return ParamSidePanel.isDirty(host.statusLabel()); }
+
+                @Override
+                public void confirmUnnamedGroups(List<String> names, Consumer<Boolean> proceed) {
+                    GuiNotifications.unnamedGroupConfirm(host.statusLabel(),
+                            I18n.get("group.unnamedConfirm", "names",
+                                    String.join(I18n.get("list.nameSeparator"), names)),
+                            proceed);
+                }
+
+                @Override
+                public void confirmSubsetMergedName(Consumer<Boolean> proceed) {
+                    GuiNotifications.subsetMergedNameConfirm(host.statusLabel(),
+                            I18n.get("extract.subsetMergedNameConfirm"), proceed);
+                }
+
+                @Override
+                public void draftBlocksStart() {
+                    GuiNotifications.draftBlocksStart(host.statusLabel());
+                }
+            };
+            preStartGates.addAll(PreStartGates.productionChain(ctx)); // 决策 C：草稿门 → 未命名组门 → 合并名门
         }
     }
 
@@ -346,120 +362,6 @@ public final class ExtractionTaskCoordinator {
                     onFx.accept(stats);
                 }
             }));
-        }
-    }
-
-    /**
-     * 步骤 3 · 功能一 —— 未命名组门（需求 §1.1）：启动提取前拦截「从未被用户重命名过」的手工组。
-     *
-     * <p>规则在 app 层（{@link ExtractionPreconditions#unnamedGroups}，零 I18n），本门只做 GUI 侧
-     * 展示：组名按 locale 用 {@code list.nameSeparator}（zh「、」/ en「, 」）拼进
-     * {@code group.unnamedConfirm} 确认卡（决策 1.6：卡片列出具体组名；决策 1.7：多组聚合一次提示）；
-     * 确定 = 以默认名提取，取消 = 中止本次启动（决策 1.8：仅不提取，不做跳转/选中）。</p>
-     *
-     * <p><b>插入约定</b>：本门由生产构造注册（当前链尾）。步骤 4 的草稿门必须插在本门<b>之前</b>
-     * （草稿卡 → 未命名组卡），不得插到其后。</p>
-     */
-    private static final class UnnamedGroupGate implements PreStartGate {
-
-        private final Host host;
-
-        UnnamedGroupGate(Host host) {
-            this.host = host;
-        }
-
-        @Override
-        public void ask(Consumer<Boolean> proceed) {
-            List<GroupItem<PreviewItem>> groups = new ArrayList<>();
-            for (Object o : host.dataOrder()) {
-                if (o instanceof GroupItem<?> g) {
-                    groups.add(GroupStructure.asPreviewGroup(g));
-                }
-            }
-            // 功能一：只提醒"过滤后仍会产生单元"的顶层组（开关关闭时 = 现状）
-            groups = new ArrayList<>(ExtractionPreconditions.participatingGroups(groups, host.extractCheckedOnly()));
-            // 判定唯一来源 = app 层纯规则（本门只做展示；不再内联同名过滤）
-            List<String> names = ExtractionPreconditions.unnamedGroups(groups);
-            if (names.isEmpty()) {
-                proceed.accept(true);
-                return;
-            }
-            GuiNotifications.unnamedGroupConfirm(host.statusLabel(),
-                    I18n.get("group.unnamedConfirm", "names",
-                            String.join(I18n.get("list.nameSeparator"), names)),
-                    proceed);
-        }
-    }
-
-    /**
-     * 功能一 —— 合并名可能变化的提示门（链尾，决策：草稿门 → 未命名组门 → 本门）。
-     *
-     * <p>仅当三个条件全满足才弹：① 开关打开；② 参与项数 &lt; 可见项数（确实有未参与项）；
-     * ③ 本次输出单元里存在合并单元（未分组按来源合并桶、任意组单元、图片合并单元）。
-     * 确定 = 继续提取；取消 = 中止本次启动。</p>
-     */
-    private static final class MergedNameGate implements PreStartGate {
-
-        private final Host host;
-
-        MergedNameGate(Host host) {
-            this.host = host;
-        }
-
-        @Override
-        public void ask(Consumer<Boolean> proceed) {
-            if (!host.extractCheckedOnly()) {
-                proceed.accept(true);
-                return;
-            }
-            if (host.visibleCheckedCount() >= host.visibleCount()) {
-                proceed.accept(true);
-                return;
-            }
-            List<OutputUnitPlanner.OutputUnit> units = OutputUnitPlanner.plan(
-                    host.dataOrder(), host.itemView(), host.imageMode(),
-                    host.textParamsCache(), host.imageParamsCache(), host.outputFolder());
-            if (!OutputUnitPlanner.hasMergedUnit(units, host.imageMode())) {
-                proceed.accept(true);
-                return;
-            }
-            GuiNotifications.subsetMergedNameConfirm(host.statusLabel(),
-                    I18n.get("extract.subsetMergedNameConfirm"), proceed);
-        }
-    }
-
-    /**
-     * 步骤 4 · 功能二 —— 草稿门（需求 §1.2 / 决策 D / R1.7 语义变更）：启动提取前拦截
-     * 「未提交的参数草稿」。
-     *
-     * <p>判定唯一来源是 {@link ParamSidePanel#isDirty(Node)}（R1.7 旧禁用条件的同一接缝）；
-     * 命中时弹 {@code sidepanel.draftBlocksStart} 提醒卡 —— 决策 D：居中、只有一个「确定」。
-     * 卡片是<b>信息性阻断</b>（{@link NotificationHost#error} 形态，无确认回调），
-     * 故本门在展示后即交付 {@code proceed(false)}：链中止、不启动；「确定」只关卡片
-     * （微决策：等价 {@code proceed(false)}，不展开侧边栏、不改变焦点）。
-     * {@code NotificationHost.hasPendingDecision} 行为不变：信息卡不注册未答决策，
-     * 与 R3.6「dirty 草稿不拦关窗」一致。</p>
-     *
-     * <p><b>插入约定</b>：本门必须排在 {@link UnnamedGroupGate} <b>之前</b>（决策 C：
-     * 草稿卡 → 未命名组卡），由生产构造注册在第一道 —— 草稿未处理时用户看到的是草稿卡，
-     * 处理完草稿才会遇到未命名组卡。</p>
-     */
-    private static final class DraftGate implements PreStartGate {
-
-        private final Host host;
-
-        DraftGate(Host host) {
-            this.host = host;
-        }
-
-        @Override
-        public void ask(Consumer<Boolean> proceed) {
-            if (!ParamSidePanel.isDirty(host.statusLabel())) {
-                proceed.accept(true);
-                return;
-            }
-            GuiNotifications.draftBlocksStart(host.statusLabel());
-            proceed.accept(false);
         }
     }
 
@@ -618,7 +520,8 @@ public final class ExtractionTaskCoordinator {
     // 文案键（extract.confirmModeSwitch / extract.confirmParamsUnset / params.datetimeFormat /
     // alert.recursionDepth* / extract.groupFileCount）、撤销语义与缓存失效路径全部不变。
     //
-    // 与搬迁前的唯一新增是 {@link #preStartGates}（决策 C 的可插拔顺序点，本步不实现任何门）：
+    // 与搬迁前的唯一新增是 {@link #preStartGates}（决策 C 的可插拔顺序点；P1-5 起生产链由
+    // {@link PreStartGates#productionChain(PreStartGateContext)} 提供）：
     // deny 链 + R1.6 卡通过之后、{@link #startExtractionTask} 之前按插入顺序串行询问。
 
     /**
@@ -633,7 +536,7 @@ public final class ExtractionTaskCoordinator {
      *   <li>图片模式额外校验（ZIP/CBZ 打包时确保输出目录存在，失败打 {@code log.maincontroller.30}）；</li>
      *   <li>R1.6 当前模式参数未确认 → 窗口内确认卡（区分「从未设置」与「检测到模式切换」两种文案），
      *       确认后进入顺序门（保留既有行为与位置，不属于本步改造范围）；</li>
-     *   <li>{@link #preStartGates} 顺序门（生产链：草稿门 → 未命名组门，任一取消即整体中止）；</li>
+     *   <li>{@link #preStartGates} 顺序门（生产链：草稿门 → 未命名组门 → 合并名门，任一取消即整体中止）；</li>
      *   <li>{@link #startExtractionTask}。</li>
      * </ol>
      */

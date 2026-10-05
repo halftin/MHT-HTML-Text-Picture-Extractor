@@ -1,5 +1,6 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.PreStartGate;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;
@@ -31,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * 步骤 2 —— 提取启动<b>可插拔顺序门</b>（{@link ExtractionTaskCoordinator.PreStartGate}）的可观察证据。
+ * 步骤 2 —— 提取启动<b>可插拔顺序门</b>（{@link PreStartGate}）的可观察证据。
  *
  * <p>决策 C 要求：deny 链 + R1.6 参数未确认卡之后、真正启动之前，按插入顺序<b>串行</b>询问门链，
  * 前一道门取消（{@code proceed(false)}）即整体中止、不回退到后续门。本测试注入假门断言：
@@ -108,7 +109,7 @@ class ExtractionTaskCoordinatorGateTest {
     };
 
     /** 记录询问顺序的假门：被询问即记名，随后按预置答案交付（同步，无 toolkit 也可跑）。 */
-    private static final class FakeGate implements ExtractionTaskCoordinator.PreStartGate {
+    private static final class FakeGate implements PreStartGate {
         final List<String> order;
         final String name;
         final boolean allow;
