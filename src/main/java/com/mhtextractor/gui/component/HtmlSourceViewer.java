@@ -182,6 +182,8 @@ public final class HtmlSourceViewer {
     private int digits = 1;
     /** 单字符像素宽（等宽字体 ⇒ 折行列数 = 视口宽 ÷ 本值）。 */
     private double charWidth = FONT_SIZE * 0.6;
+    /** 等宽字体单行文本的布局高（ascent+descent+leading）：视觉行里给字形做半行距居中用的。 */
+    private double lineHeight = FONT_SIZE;
     /** 归一化后的整篇源码（查找索引的坐标基准）。 */
     private String source = "";
     private List<HtmlSyntaxTokens.Line> lines = List.of();
@@ -509,6 +511,7 @@ public final class HtmlSourceViewer {
         selCaret = null;
         resetFind();
         charWidth = measureCharWidth();
+        lineHeight = measureLineHeight();
         rows.setAll(src.rows());
         listView.scrollTo(0);   // 新文档回到顶部（可变行高下不要沿用上一文档的滚动位置）
         loadCount++;
@@ -842,6 +845,24 @@ public final class HtmlSourceViewer {
         double cjk = advance(SAMPLE_CJK, font);
         double w = Math.max(latin, cjk);
         return w > 0 ? w : FONT_SIZE * 0.6;
+    }
+
+    /**
+     * 等宽字体单行文本的布局高：{@link TextFlow} 默认把首行贴顶排（line-height 只影响行距、
+     * 不产生"半行距"），而查看器的视觉行高是 {@code ROW_HEIGHT = ceil(1.5 × 字号)}。
+     * 不补这段半行距，字形就会贴在该行顶部，黑底矩形（整行高）看起来像"往下错位"。
+     */
+    private static double measureLineHeight() {
+        Text probe = new Text("Ag");
+        probe.setFont(monoFont());
+        TextFlow holder = new TextFlow(probe);
+        // ⚠️ 独立 Text 的 getLayoutBounds().getHeight() 只等于字号（本机 Consolas 13 = 13.0）；
+        // 必须走一次 TextFlow 的布局，Text 才带上真实行高（= 15.2217，含 leading）。
+        // 定宽（1000）是必须的：零宽下 TextFlow 会把一行折成多行（实测 "中Ag" → 45.665）。
+        holder.resize(1000, ROW_HEIGHT);
+        holder.layout();
+        double h = probe.getLayoutBounds().getHeight();
+        return h > 0 ? h : FONT_SIZE;
     }
 
     /** 每个字符的平均步进（等宽字体下即单字宽）。 */
@@ -1194,6 +1215,9 @@ public final class HtmlSourceViewer {
             flow.setPrefHeight(ROW_HEIGHT);
             flow.setMinHeight(ROW_HEIGHT);
             flow.setMaxHeight(ROW_HEIGHT);
+            // 半行距：把字形在 ROW_HEIGHT 里居中（对齐 CSS line-height:1.5 与行号栏的居中标签），
+            // 否则 TextFlow 把首行贴顶排，整行高的黑底看起来就"偏下"
+            flow.setPadding(new Insets(Math.max(0, (ROW_HEIGHT - lineHeight) / 2), 0, 0, 0));
             flow.getChildren().setAll(buildRowRuns(row, from, to, hit));
             return flow;
         }
