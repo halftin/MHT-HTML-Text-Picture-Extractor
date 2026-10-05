@@ -264,9 +264,10 @@ class ArchitectureTest {
      * 仅剩 {@code WorkspaceInfoPresenter} 引用，清单见 {@link GuiCoupling#distinctBusinessTypes}）；
      * P3-3b-2 预览缓存算键与写锁下沉 app 层 {@code PreviewService}，-2（PreviewCacheKey / SourceFingerprint）；
      * P3-3b-3 提取计划下沉 app 层 {@code ExtractionPlanService}，-1；
-     * P3-3b-4 查看源码导出下沉 app 层 {@code SourceViewService}，-1（HtmlExportBuilder 退出 gui）。
+     * P3-3b-4 查看源码导出下沉 app 层 {@code SourceViewService}，-1（HtmlExportBuilder 退出 gui）；
+     * P3-3b-5 会话状态持久化下沉 app 层 {@code SessionStateService}，-2（GuiState / GuiStateManager 退出 gui）。
      */
-    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 28;
+    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 26;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

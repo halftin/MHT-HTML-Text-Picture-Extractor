@@ -2,13 +2,12 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.ExtractionPlanService;
 import com.mhtextractor.app.PreviewService;
+import com.mhtextractor.app.SessionStateService;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.app.WorkspaceImportService;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.config.AppConfig;
-import com.mhtextractor.config.GuiState;
-import com.mhtextractor.config.GuiStateManager;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.WorkspaceFxAdapter;
@@ -568,19 +567,19 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     // ==================== GUI 状态持久化（logs/gui-state.json） ====================
 
     void restoreGuiState() {
-        GuiState state = GuiStateManager.load();
+        SessionStateService.Session state = SessionStateService.load();
         if (state == null) {
             return;
         }
-        if (state.getInputFolder() != null && !state.getInputFolder().isEmpty()) {
-            refs.inputFolderField().setText(state.getInputFolder());
+        if (state.inputFolder() != null && !state.inputFolder().isEmpty()) {
+            refs.inputFolderField().setText(state.inputFolder());
         }
-        if (state.getOutputFolder() != null && !state.getOutputFolder().isEmpty()) {
-            refs.outputFolderField().setText(state.getOutputFolder());
+        if (state.outputFolder() != null && !state.outputFolder().isEmpty()) {
+            refs.outputFolderField().setText(state.outputFolder());
         }
-        refs.openFolderAfterCompleteCheck().setSelected(state.isOpenFolderAfterComplete());
-        refs.extractCheckedOnlyCheck().setSelected(state.isExtractCheckedOnly());
-        if (state.isImageModeEnabled()) {
+        refs.openFolderAfterCompleteCheck().setSelected(state.openFolderAfterComplete());
+        refs.extractCheckedOnlyCheck().setSelected(state.extractCheckedOnly());
+        if (state.imageModeEnabled()) {
             refs.imageModeToggle().setSelected(true);
         } else {
             refs.textModeToggle().setSelected(true);
@@ -588,15 +587,14 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     void saveGuiState() {
-        GuiState state = new GuiState();
-        state.setImageModeEnabled(refs.imageModeToggle().isSelected());
-        state.setInputFolder(refs.inputFolderField().getText());
-        state.setOutputFolder(refs.outputFolderField().getText());
-        state.setOpenFolderAfterComplete(refs.openFolderAfterCompleteCheck().isSelected());
-        state.setExtractCheckedOnly(refs.extractCheckedOnlyCheck().isSelected());
         Locale loc = I18n.currentLocale();
-        state.setLocale(loc.getLanguage() + (loc.getCountry().isEmpty() ? "" : "_" + loc.getCountry()));
-        GuiStateManager.save(state);
+        SessionStateService.save(new SessionStateService.Session(
+                refs.inputFolderField().getText(),
+                refs.outputFolderField().getText(),
+                refs.openFolderAfterCompleteCheck().isSelected(),
+                refs.extractCheckedOnlyCheck().isSelected(),
+                refs.imageModeToggle().isSelected(),
+                loc.getLanguage() + (loc.getCountry().isEmpty() ? "" : "_" + loc.getCountry())));
     }
 
     // ==================== 目录浏览与文件列表 ====================
