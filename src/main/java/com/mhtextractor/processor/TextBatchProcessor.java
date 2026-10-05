@@ -69,11 +69,17 @@ public class TextBatchProcessor extends BatchProcessor {
             return stats;
         }
 
-        // 条目独立参数需求拍板：单独输出文件名——启用标题提取且提取到标题时用标题（sanitize），
-        // 否则用原始 mht 文件名
+        // 条目独立参数需求拍板：单独输出文件名——**用户编辑值优先**（该文件有标题覆盖时用覆盖值，
+        // sanitize 后非空即采用）；否则启用标题提取且提取到标题时用标题（sanitize），再否则用原始 mht 文件名
         return processFiles(orderedFiles, stats, (i, parsed) -> {
             String base = getOutputDirName(i.getName());
-            if (config.isEnableTitleExtraction() && parsed != null && parsed.getHtmlContent() != null
+            // 用户编辑值优先：只要该文件的覆盖标题 sanitize 后非空，就直接用它命名
+            PerFileOverrides ov = overrides.getOrDefault(i.getPath(), PerFileOverrides.DEFAULTS);
+            String overrideTitle = ov.titleOverride() == null
+                    ? "" : SanitizeUtils.sanitize(ov.titleOverride().trim());
+            if (!overrideTitle.isEmpty()) {
+                base = overrideTitle;
+            } else if (config.isEnableTitleExtraction() && parsed != null && parsed.getHtmlContent() != null
                     && config.getTitleStartMarker() != null && !config.getTitleStartMarker().isEmpty()) {
                 try {
                     String title = new TextExtractor(parsed).extractTitle(
@@ -163,7 +169,8 @@ public class TextBatchProcessor extends BatchProcessor {
                 PerFileOverrides ov = overrides.getOrDefault(fileInfo.getPath(), PerFileOverrides.DEFAULTS);
                 boolean withChapter = !addNumber || ov.chapterEnabled();
                 String chapterHeader = withChapter
-                        ? buildChapterHeaderFromParsed(parsed, fileInfo.getName(), chapterIndex.get(), stats, fileWarnings)
+                        ? buildChapterHeaderFromParsed(parsed, fileInfo.getName(), chapterIndex.get(), stats,
+                                fileWarnings, ov)
                         : null;
 
                 if (addNumber && withChapter) {
@@ -216,13 +223,18 @@ public class TextBatchProcessor extends BatchProcessor {
 
     private String buildChapterHeaderFromParsed(MimeParser.ParsedMht parsed, String fileName,
                                                 int chapterIndex, ProcessStats stats,
-                                                List<ExtractWarning> fileWarnings) {
+                                                List<ExtractWarning> fileWarnings,
+                                                PerFileOverrides ov) {
         String extractedTitle = null;
         boolean enableTitleExtract = config.isEnableTitleExtraction();
         String titleStart = config.getTitleStartMarker();
         String titleEnd = config.getTitleEndMarker();
 
-        if (enableTitleExtract && titleStart != null && !titleStart.isEmpty() && parsed.getHtmlContent() != null) {
+        if (ov != null && ov.hasTitleOverride()) {
+            // 用户编辑值优先：跳过标题提取，直接采用用户编辑的标题（仍输出同一条 log.textbatchprocessor.14）
+            extractedTitle = ov.titleOverride().trim();
+            log.info(I18n.msg("log.textbatchprocessor.14", fileName, extractedTitle));
+        } else if (enableTitleExtract && titleStart != null && !titleStart.isEmpty() && parsed.getHtmlContent() != null) {
             try {
                 TextExtractor extractor = new TextExtractor(parsed);
                 extractedTitle = extractor.extractTitle(titleStart, titleEnd, config.isTitleUseRegex());

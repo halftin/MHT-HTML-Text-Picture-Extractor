@@ -115,6 +115,14 @@ public class PreviewItem {
     public volatile String cachedText;
     public volatile String cachedTitle;
     /**
+     * 用户编辑的提取标题（需求：查看器「提取标题」行改为可编辑文本框）。
+     * <p>null/空白 = 使用提取值；非空 = 最终输出命名优先采用该值。</p>
+     * <p><b>为什么不在 {@link #resetPreviewState()} 里清它</b>：它是<b>用户手工编辑</b>的结果，
+     * 不是派生缓存；切换参数触发的重新预解析只应清提取派生值（{@code cachedTitle}），
+     * 清掉用户输入会造成"改一次参数就丢标题"。</p>
+     */
+    public volatile String titleOverride;
+    /**
      * 全尺寸图片（历史遗留：会话 18 实测**只被写 null、从不被读取**，唯一用途是 C2 断言
      * {@code cachedImages == null}）。其元素类型 {@code ImageExtractor.ImageData} 零 JavaFX，
      * 不构成分层障碍；删除它属行为变更，故按 R3 保留并登记为清理项。

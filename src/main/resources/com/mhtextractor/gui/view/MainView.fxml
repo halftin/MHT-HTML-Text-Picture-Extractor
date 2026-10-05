@@ -183,6 +183,10 @@
                         <Label text="%main.outputGroupFile"/>
                         <TextField fx:id="groupNameField" HBox.hgrow="ALWAYS"/>
                     </HBox>
+                    <HBox fx:id="titleEditBox" spacing="6" alignment="CENTER_LEFT" visible="false" managed="false">
+                        <Label text="%preview.titlePrefix"/>
+                        <TextField fx:id="titleField" HBox.hgrow="ALWAYS"/>
+                    </HBox>
                     <Label fx:id="titleInfoLabel" wrapText="true" visible="false" managed="false"/>
                     <Label fx:id="outputResultLabel" wrapText="true" visible="false" managed="false"/>
                     <CheckBox fx:id="adjustCheck" text="" visible="false" managed="false"/>

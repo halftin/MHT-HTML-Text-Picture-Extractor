@@ -219,9 +219,11 @@ public final class WorkspaceExtractionService {
                 processor.setCancelSupplier(cancelSupplier);
                 processor.setRecursionContinueCallback(recursionCallback);
                 if (config.isSingleOutputMode()) {
-                    return processor.process(files, sessionOutputFolder, unit.getOutputName(), callback);
+                    // 逐文件覆盖项透传：合并目录名优先取第一个文件的用户编辑标题
+                    return processor.process(files, sessionOutputFolder, unit.getOutputName(), callback, overrides);
                 }
-                return processor.process(files, unit.getOutputPath(), callback);
+                // 单独模式没有显式目录名（传 null），但仍需逐文件覆盖项用于图片标题命名
+                return processor.process(files, unit.getOutputPath(), null, callback, overrides);
             } else {
                 TextBatchProcessor processor = new TextBatchProcessor(config);
                 processor.setCancelSupplier(cancelSupplier);

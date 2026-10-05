@@ -44,6 +44,8 @@ public final class WorkspaceInfoPresenter {
      */
     public interface Host {
         Label titleInfoLabel();                          // = refs.titleInfoLabel()
+        HBox titleEditBox();                             // = refs.titleEditBox()
+        TextField titleField();                          // = refs.titleField()
         Label outputNameLabel();                         // = refs.outputNameLabel()
         HBox groupNameBox();                             // = refs.groupNameBox()
         Label badgeHeaderLabel();                        // = refs.badgeHeaderLabel()
@@ -59,6 +61,8 @@ public final class WorkspaceInfoPresenter {
         void refreshList();                              // = refs.fileListView().refresh()
         void attachGroupNameEditor(GroupItem<PreviewItem> group); // = attachGroupNameEditor(group)
         void clearNameEditingGroup();                    // = nameEditingGroup = null
+        void attachTitleEditor(PreviewItem item);        // = attachTitleEditor(item)
+        void clearTitleEditingItem();                    // = titleEditingItem = null
     }
 
     private final Host host;
@@ -73,6 +77,9 @@ public final class WorkspaceInfoPresenter {
         if (item instanceof GroupItem<?> g) {
             host.titleInfoLabel().setVisible(false);
             host.titleInfoLabel().setManaged(false);
+            host.titleEditBox().setVisible(false);
+            host.titleEditBox().setManaged(false);
+            host.clearTitleEditingItem();
             host.outputNameLabel().setVisible(false);
             host.outputNameLabel().setManaged(false);
             host.groupNameBox().setVisible(true);
@@ -91,14 +98,26 @@ public final class WorkspaceInfoPresenter {
         // 提取标题行：文本模式 + 标题提取开启且起始标记非空时显示（与正式提取判定一致，按该条目生效参数）
         boolean showTitle = confirmed && host.isTextMode() && params.isEnableTitleExtraction()
                 && params.getTitleStartMarker() != null && !params.getTitleStartMarker().isEmpty();
-        host.titleInfoLabel().setVisible(showTitle);
-        host.titleInfoLabel().setManaged(showTitle);
+        // 需求（提取标题可编辑）：showTitle 且条目已就绪（READY）时，把只读标题行换成可编辑文本框；
+        // 解析中 / 无标题 / 非条目等其余情况保持原只读展示。
+        PreviewItem readyItem = item instanceof PreviewItem pi && pi.status == PreviewItem.Status.READY
+                ? pi : null;
+        boolean editableTitle = showTitle && readyItem != null;
+        host.titleEditBox().setVisible(editableTitle);
+        host.titleEditBox().setManaged(editableTitle);
+        host.titleInfoLabel().setVisible(showTitle && !editableTitle);
+        host.titleInfoLabel().setManaged(showTitle && !editableTitle);
+        if (!editableTitle) {
+            host.clearTitleEditingItem();
+        }
         if (!(item instanceof PreviewItem it) || !confirmed) {
             host.outputNameLabel().setVisible(false);
             host.outputNameLabel().setManaged(false);
             return;
         }
-        if (showTitle) {
+        if (editableTitle) {
+            host.attachTitleEditor(readyItem);
+        } else if (showTitle) {
             switch (it.status) {
                 case WAITING -> host.titleInfoLabel().setText(I18n.get("preview.titleParsing"));
                 case FAILED, EMPTY -> host.titleInfoLabel().setText(I18n.get("preview.titleNone"));

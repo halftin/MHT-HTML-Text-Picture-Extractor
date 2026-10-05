@@ -663,7 +663,8 @@ public final class ExtractionTaskCoordinator {
     private Map<String, PerFileOverrides> overrides() {
         Map<String, PerFileOverrides> map = new LinkedHashMap<>();
         for (PreviewItem item : host.allVisibleItems()) {
-            map.put(item.path, new PerFileOverrides(item.chapterEnabled));
+            // 标题覆盖 = 用户在查看器「提取标题」文本框里的编辑值（null/空白 = 用提取值）
+            map.put(item.path, new PerFileOverrides(item.chapterEnabled, item.titleOverride));
         }
         return map;
     }

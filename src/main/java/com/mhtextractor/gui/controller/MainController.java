@@ -270,6 +270,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     private String lastValidGroupName = "";
     /** 组名输入框程序回写期间的抑制标记（防监听递归） */
     private boolean updatingGroupName = false;
+    /** 正在编辑提取标题的条目（信息区「提取标题」输入框挂接对象） */
+    private PreviewItem titleEditingItem = null;
+    /** 标题输入框程序回写期间的抑制标记（防监听递归） */
+    private boolean updatingTitle = false;
     /** 已挂勾选监听的项目集合（Identity 去重，防止重复挂接） */
     final Set<PreviewItem> selectionListened =
             Collections.newSetFromMap(new IdentityHashMap<>());
@@ -396,6 +400,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void refreshList() { refs.fileListView().refresh(); }
         @Override public void attachGroupNameEditor(GroupItem<PreviewItem> group) { MainController.this.attachGroupNameEditor(group); }
         @Override public void clearNameEditingGroup() { nameEditingGroup = null; }
+        @Override public HBox titleEditBox() { return refs.titleEditBox(); }
+        @Override public TextField titleField() { return refs.titleField(); }
+        @Override public void attachTitleEditor(PreviewItem item) { MainController.this.attachTitleEditor(item); }
+        @Override public void clearTitleEditingItem() { MainController.this.clearTitleEditingItem(); }
     });
     /**
      * 列表交互协作者（C2）：列表选择 / 勾选联动 / 拖拽生命周期 / 章节徽标重算从本类原样外迁到
@@ -1460,6 +1468,34 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             updatingGroupName = false;
             g.setName(lastValidGroupName);
         }
+    }
+
+    // ==================== 提取标题编辑（查看器右侧信息区） ====================
+
+    /** 选中已就绪条目：信息区「提取标题」行挂接可编辑输入框（显示用户编辑值；无则回填提取标题） */
+    private void attachTitleEditor(PreviewItem it) {
+        if (titleEditingItem != it) {
+            titleEditingItem = it;
+            // 程序化回填，不得误走 onTitleEdited 提交分支
+            updatingTitle = true;
+            refs.titleField().setText(it.titleOverride != null ? it.titleOverride : it.cachedTitle);
+            updatingTitle = false;
+        }
+    }
+
+    /** 提取标题输入即生效：trim 后为空恢复"用提取值"，否则写入用户编辑值（最终输出命名优先取它） */
+    void onTitleEdited(String newVal) {
+        PreviewItem it = titleEditingItem;
+        if (it == null || updatingTitle) {
+            return;
+        }
+        String trimmed = newVal == null ? "" : newVal.trim();
+        it.titleOverride = trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /** 离开标题编辑（换条目 / 组条目 / 未就绪）：切断挂接，避免误写到旧条目 */
+    private void clearTitleEditingItem() {
+        titleEditingItem = null;
     }
 
     /** 其它组（排除自身）的组名集合 */

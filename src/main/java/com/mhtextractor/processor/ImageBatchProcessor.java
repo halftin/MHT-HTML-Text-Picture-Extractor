@@ -19,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -77,6 +78,20 @@ public class ImageBatchProcessor extends BatchProcessor {
      */
     public ProcessStats process(List<MhtFileInfo> orderedFiles, String outputFolder,
                                 String mergedOutputName, ProgressCallback callback) {
+        return process(orderedFiles, outputFolder, mergedOutputName, callback, Map.of());
+    }
+
+    /**
+     * 处理多个 MHT 文件（按传入顺序处理，支持进度回调；逐文件覆盖项完整版）。
+     *
+     * @param mergedOutputName 合并输出模式的显式输出目录名（sanitize 后使用）；
+     *                         null 时沿用现有命名逻辑（首个文件标题，回退输入目录名）
+     * @param overrides        逐文件覆盖项（按文件路径索引）。标题覆盖 = 用户编辑值，
+     *                         优先于从 HTML 提取的标题（单独模式目录名与图片文件名均如此）
+     */
+    public ProcessStats process(List<MhtFileInfo> orderedFiles, String outputFolder,
+                                String mergedOutputName, ProgressCallback callback,
+                                Map<String, PerFileOverrides> overrides) {
         this.progressCallback = callback;
         ProcessStats stats = new ProcessStats();
         stats.setStartTime(System.currentTimeMillis());
@@ -108,9 +123,9 @@ public class ImageBatchProcessor extends BatchProcessor {
         String mimeParser = orderedFiles.getFirst().getPath();
 
         if (config.isHighSpeedMemoryMode()) {
-            return processWithPreload(orderedFiles, outputFolder, mergedOutputName, mimeParser, stats);
+            return processWithPreload(orderedFiles, outputFolder, mergedOutputName, mimeParser, stats, overrides);
         } else {
-            return processStreaming(orderedFiles, outputFolder, mergedOutputName, mimeParser, stats);
+            return processStreaming(orderedFiles, outputFolder, mergedOutputName, mimeParser, stats, overrides);
         }
     }
 
@@ -123,7 +138,8 @@ public class ImageBatchProcessor extends BatchProcessor {
      */
     private ProcessStats processWithPreload(List<MhtFileInfo> mhtFiles, String outputFolder,
                                              String mergedOutputName, String firstPath,
-                                             ProcessStats stats) {
+                                             ProcessStats stats,
+                                             Map<String, PerFileOverrides> overrides) {
         log.info(I18n.msg("log.imagebatchprocessor.07"));
 
         PreloadedImageInput.LoadResult preload = PreloadedImageInput.preload(mhtFiles, firstPath,
@@ -147,21 +163,22 @@ public class ImageBatchProcessor extends BatchProcessor {
                 firstParsed = preload.parsedList().getFirst().parsed();
             }
             MergedImageOutput merged = MergedImageOutput.create(config, outputFolder, mhtFiles,
-                    firstParsed, stats, mergedOutputName);
+                    firstParsed, stats, mergedExplicitName(mhtFiles, mergedOutputName, overrides));
             mergedNameWarning = merged.nameWarning();
             outputs = merged;
         } else {
             outputs = new SeparateImageOutput(outputFolder);
         }
         return processUnified(mhtFiles, outputFolder, inputs, outputs, stats, 0.3, 0.3,
-                mergedNameWarning);
+                mergedNameWarning, overrides);
     }
 
     // ==================== 流式模式 ====================
 
     private ProcessStats processStreaming(List<MhtFileInfo> mhtFiles, String outputFolder,
                                            String mergedOutputName, String firstPath,
-                                           ProcessStats stats) {
+                                           ProcessStats stats,
+                                           Map<String, PerFileOverrides> overrides) {
         if (config.isSingleOutputMode()) {
             // 预解析第一个文件用于确定合并目录名
             MimeParser.ParsedMht firstParsed = null;
@@ -173,20 +190,39 @@ public class ImageBatchProcessor extends BatchProcessor {
             }
 
             MergedImageOutput merged = MergedImageOutput.create(config, outputFolder, mhtFiles,
-                    firstParsed, stats, mergedOutputName);
+                    firstParsed, stats, mergedExplicitName(mhtFiles, mergedOutputName, overrides));
             ExtractWarning mergedNameWarning = merged.nameWarning();
             var inputs = new StreamingImageInput(mhtFiles, firstParsed,
                     index -> loadFile(mhtFiles, index), this::isCancelled);
             return processUnified(mhtFiles, outputFolder, inputs, merged, stats, 0.35, 0.25,
-                    mergedNameWarning);
+                    mergedNameWarning, overrides);
         } else {
             log.info(I18n.msg("log.imagebatchprocessor.16", mhtFiles.size()));
             log.info("========================================");
             var outputs = new SeparateImageOutput(outputFolder);
             var inputs = new StreamingImageInput(mhtFiles, null,
                     index -> loadFile(mhtFiles, index), this::isCancelled);
-            return processUnified(mhtFiles, outputFolder, inputs, outputs, stats, 0.3, 0.3, null);
+            return processUnified(mhtFiles, outputFolder, inputs, outputs, stats, 0.3, 0.3, null,
+                    overrides);
         }
+    }
+
+    /**
+     * 合并输出目录名的显式来源：调用方显式名优先；否则批内第一个文件的用户编辑标题（非空时）。
+     *
+     * <p>{@link MergedImageOutput#create} 已优先使用 {@code explicitName}（并会 sanitize），
+     * 故这里只需给出「用户编辑值优先」的那一层。</p>
+     */
+    private static String mergedExplicitName(List<MhtFileInfo> mhtFiles, String mergedOutputName,
+                                             Map<String, PerFileOverrides> overrides) {
+        if (mergedOutputName != null && !mergedOutputName.isEmpty()) {
+            return mergedOutputName;
+        }
+        if (mhtFiles.isEmpty()) {
+            return mergedOutputName;
+        }
+        PerFileOverrides ov = overrides.getOrDefault(mhtFiles.getFirst().getPath(), PerFileOverrides.DEFAULTS);
+        return ov.hasTitleOverride() ? ov.titleOverride().trim() : mergedOutputName;
     }
 
     /**
@@ -237,7 +273,8 @@ public class ImageBatchProcessor extends BatchProcessor {
     private ProcessStats processUnified(List<MhtFileInfo> mhtFiles, String outputFolder,
                                          ImageInputStrategy inputs, ImageOutputStrategy outputs,
                                          ProcessStats stats, double extractionBaseProgress,
-                                         double extractionRange, ExtractWarning mergedNameWarning) {
+                                         double extractionRange, ExtractWarning mergedNameWarning,
+                                         Map<String, PerFileOverrides> overrides) {
         int total = mhtFiles.size();
         int totalImageCount = 0;
 
@@ -250,6 +287,8 @@ public class ImageBatchProcessor extends BatchProcessor {
 
             final int idx = i + 1;
             final String name = fileInfo.getName();
+            // 用户编辑值优先：本文件的标题覆盖（null/空白 = 用提取值）
+            PerFileOverrides ov = overrides.getOrDefault(fileInfo.getPath(), PerFileOverrides.DEFAULTS);
 
             try {
                 log.info("----------------------------------------");
@@ -286,9 +325,11 @@ public class ImageBatchProcessor extends BatchProcessor {
                     fileWarnings = new ArrayList<>(hit.meta().warnings());
                     reportExtractorWarnings(name, () -> fileWarnings, stats);
                     if (needsTitleParse) {
-                        extractedTitle = new ImageExtractor(parsed,
-                                config.getImageNameStartMarker(), config.getImageNameEndMarker(),
-                                null, null).extractTitle();
+                        // 用户编辑值优先：有覆盖标题时跳过提取
+                        extractedTitle = ov.hasTitleOverride() ? ov.titleOverride().trim()
+                                : new ImageExtractor(parsed,
+                                        config.getImageNameStartMarker(), config.getImageNameEndMarker(),
+                                        null, null).extractTitle();
                     }
                 } else {
                     if (parsed == null || parsed.getHtmlContent() == null) {
@@ -342,9 +383,10 @@ public class ImageBatchProcessor extends BatchProcessor {
 
                     log.info(I18n.msg("log.imagebatchprocessor.26", name, images.size()));
 
-                    // 提取标题（单独模式需要用于目录命名）
+                    // 提取标题（单独模式需要用于目录命名）；用户编辑值优先
                     if (config.isEnableNameExtraction()) {
-                        extractedTitle = imageExtractor.extractTitle();
+                        extractedTitle = ov.hasTitleOverride() ? ov.titleOverride().trim()
+                                : imageExtractor.extractTitle();
                     }
                     imageSource = new InMemoryImageSource(images);
                 }

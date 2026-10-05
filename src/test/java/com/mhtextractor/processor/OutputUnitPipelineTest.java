@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -228,6 +229,59 @@ class OutputUnitPipelineTest {
         // 步骤 B 修复：标题恰为 unnamed 不再被丢弃；标题缺失/空仍回退原始文件名
         assertEquals(List.of("unnamed.txt", "正常标题.txt"),
                 Files.list(out).map(p -> p.getFileName().toString()).sorted().toList());
+    }
+
+    @Test
+    void separateModeUserTitleOverrideWins() throws Exception {
+        Path source = tmp.resolve("srcOverride");
+        Files.createDirectories(source);
+        Path a = writeTextMht(source, "a.mht", "TITLE-START提取标题TITLE-END 内容");
+        Path b = writeTextMht(source, "b.mht", "TITLE-START乙标题TITLE-END 内容");
+        Path out = Files.createDirectories(tmp.resolve("outOverride"));
+
+        AppConfig cfg = new AppConfig();
+        cfg.setEnableTitleExtraction(true);
+        cfg.setTitleStartMarker("TITLE-START");
+        cfg.setTitleEndMarker("TITLE-END");
+
+        // a 有用户编辑标题 → 用它命名；b 的覆盖为纯空白 → 退回提取标题
+        Map<String, PerFileOverrides> overrides = Map.of(
+                a.toString(), new PerFileOverrides(true, "用户标题"),
+                b.toString(), new PerFileOverrides(true, "   "));
+
+        TextBatchProcessor processor = new TextBatchProcessor(cfg);
+        BatchProcessor.ProcessStats stats = processor.processSeparate(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString(), b.toString())),
+                out.toString(), null, overrides);
+        assertEquals(2, stats.getSuccessCount(), stats.toString());
+        assertEquals(List.of("乙标题.txt", "用户标题.txt"),
+                Files.list(out).map(p -> p.getFileName().toString()).sorted().toList());
+    }
+
+    @Test
+    void mergedModeUserTitleOverrideUsedInChapterHeader() throws Exception {
+        Path source = tmp.resolve("srcMergedOverride");
+        Files.createDirectories(source);
+        Path a = writeTextMht(source, "a.mht", "TITLE-START提取标题TITLE-END 正文甲");
+        Path session = Files.createDirectories(tmp.resolve("SOverride"));
+
+        AppConfig cfg = new AppConfig();
+        cfg.setEnableTitleExtraction(true);
+        cfg.setTitleStartMarker("TITLE-START");
+        cfg.setTitleEndMarker("TITLE-END");
+        cfg.setAddChapterNumber(false);   // 章节头即标题本身，便于断言"覆盖值优先于提取值"
+
+        TextBatchProcessor processor = new TextBatchProcessor(cfg);
+        Map<String, PerFileOverrides> overrides = Map.of(a.toString(), new PerFileOverrides(true, "覆盖标题"));
+        Path outPath = session.resolve("merged.txt");
+        BatchProcessor.ProcessStats stats = processor.processMerged(
+                BatchProcessor.buildMhtFileInfoList(List.of(a.toString())),
+                outPath.toString(), null, overrides);
+        assertEquals(1, stats.getSuccessCount(), stats.toString());
+
+        String written = Files.readString(outPath);
+        assertTrue(written.startsWith("覆盖标题"), written);
+        assertFalse(written.startsWith("提取标题"), written);   // 控制组：未覆盖时会用提取标题
     }
 
     // ==================== 提取结果记录（提取结果状态需求） ====================

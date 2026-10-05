@@ -73,6 +73,8 @@ final class MainViewInstaller {
                 mc.onGroupNameFocusLost();
             }
         });
+        // 提取标题可编辑（查看器右侧信息区）：输入即写回条目的 titleOverride；失焦无需处理
+        refs.titleField().textProperty().addListener((_, _, newVal) -> mc.onTitleEdited(newVal));
         // 新条目自动挂勾选监听（F1）：数据序所有权移交模型后，挂接面从"列表被 add"改为"模型发布了变更"。
         // 载荷里的条目（ITEMS_ADDED / GROUPED / UNGROUPED / UNDO_APPLIED）逐个挂接；selectionListened 按身份
         // 去重，故"同一对象重复挂接"是 no-op —— 这比迁移前的 ObservableList 监听面只多不少，不产生第二份状态。
