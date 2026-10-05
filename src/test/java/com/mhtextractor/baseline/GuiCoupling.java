@@ -23,7 +23,7 @@ import java.util.stream.Stream;
  *   <li>(b) 预览缓存构造点：{@code new PreviewCacheStore(} / {@code new PreviewCacheLifecycle(} /
  *       {@code new PreviewCacheKey(} / {@code new PreviewCacheMeta(}；</li>
  *   <li>(c) 参数剪贴板构造点：{@code new ParamClipboard(}；</li>
- *   <li>(d) 撤销载荷构造点：{@code new UndoManager.Record(}。</li>
+ *   <li>(d) 撤销载荷构造点：{@code new UndoManager.Record(...)}（含 {@code <>}/泛型实参）。</li>
  * </ul>
  *
  * <p><b>字段检测的作用域判断</b>：复用同包 {@link TestAccessSurface.SrcFile#parseSource(String, String)}
@@ -87,6 +87,44 @@ public final class GuiCoupling {
             q -= 2;
         }
         return q - 1 >= start && toks.get(q - 1).is("@");
+    }
+
+    /**
+     * (d) 判定：{@code Record} 之后的构造实参表 —— {@code (} 直接命中（{@code new UndoManager.Record(}），
+     * 或先跳过<b>可选的泛型实参</b> {@code <...>} 再要求 {@code (}（{@code new UndoManager.Record<>(} /
+     * {@code new UndoManager.Record<PreviewItem>(}）。用 tokenizer 的 {@link TestAccessSurface.Tok} 判断；
+     * {@code <} / {@code >} 按深度配对（嵌套泛型的 {@code >>} 单 token 计两次闭合），
+     * 未闭合即撞上 {@code (} / {@code ;} / {@code {} 视为不是构造调用。
+     */
+    private static boolean recordCtorParenAt(List<TestAccessSurface.Tok> toks, int k) {
+        if (k >= toks.size()) {
+            return false;
+        }
+        if (toks.get(k).is("(")) {
+            return true;
+        }
+        if (!toks.get(k).is("<")) {
+            return false;
+        }
+        int depth = 0;
+        for (int i = k; i < toks.size(); i++) {
+            TestAccessSurface.Tok t = toks.get(i);
+            if (t.is("<")) {
+                depth++;
+            } else if (t.is(">>")) {
+                depth -= 2;
+            } else if (t.is(">")) {
+                depth--;
+            } else if (t.is("(") || t.is(";") || t.is("{")) {
+                return false;
+            }
+            if (t.is(">") || t.is(">>")) {
+                if (depth <= 0) {
+                    return i + 1 < toks.size() && toks.get(i + 1).is("(");
+                }
+            }
+        }
+        return false;
     }
 
     /** 闸门 2：扫描 gui 业务状态持有/构造点（四类合计）。 */
@@ -188,7 +226,7 @@ public final class GuiCoupling {
                     }
                     if (name.equals("UndoManager") && k + 4 < toks.size()
                             && toks.get(k + 2).is(".") && toks.get(k + 3).text().equals("Record")
-                            && toks.get(k + 4).is("(")) {
+                            && recordCtorParenAt(toks, k + 4)) {
                         points.add(new StatePoint("d-撤销载荷构造", rel, c.line(), "new UndoManager.Record("));
                         undoCtors++;
                     }

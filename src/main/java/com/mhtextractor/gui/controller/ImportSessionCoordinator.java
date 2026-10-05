@@ -6,7 +6,6 @@ import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.MhtImportPlanner;
-import com.mhtextractor.util.UndoManager;
 import javafx.application.Platform;
 import lombok.extern.slf4j.Slf4j;
 
@@ -197,9 +196,7 @@ public final class ImportSessionCoordinator {
         // 撤销栈：一次导入 = 一条记录（BC-5；多轮导入时每轮记录均携带全量累计，一次撤销撤整批）
         List<PreviewItem> accumulated = service.accumulated(session);
         if (!accumulated.isEmpty()) {
-            ws.push(new UndoManager.Record<>(
-                    UndoManager.RecordType.IMPORT, new ArrayList<>(accumulated),
-                    new ArrayList<>(createdGroups)));
+            ws.push(com.mhtextractor.app.UndoRecords.importRecord(accumulated, createdGroups));
         }
 
         ui.refreshList();                         // 每轮一次（RISK-8，不是每批一次）

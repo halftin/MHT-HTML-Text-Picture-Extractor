@@ -237,7 +237,8 @@ class ArchitectureTest {
      * 基线 0 = (a) AppConfig/Map&lt;String,AppConfig&gt; 字段 0（P1-3 参数剪贴板下沉 app 层
      * {@code ParamClipboard}，-2）+ (b) 预览缓存构造 0（P1-2 下沉 app 层 {@code PreviewCacheFactory}）
      * + (c) 参数剪贴板构造 0（P1-3 构造下沉 app 层 {@code ParamClipboardFactory}，-1）
-     * + (d) 撤销载荷构造 0（逐条清单见 {@link GuiCoupling#scanBusinessState}）。
+     * + (d) 撤销载荷构造 0（口径：{@code new UndoManager.Record(...)}（含 {@code <>}/泛型实参）；
+     * 逐条清单见 {@link GuiCoupling#scanBusinessState}）。
      */
     private static final int GUI_BUSINESS_STATE_MAX = 0;
 

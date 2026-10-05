@@ -252,10 +252,7 @@ public final class ParamDomainController {
                 }
             }
         }
-        host.pushUndo(new UndoManager.Record<>(UndoManager.RecordType.APPLY_GLOBAL, List.of(),
-                null, -1, List.of(), List.of(), List.of(), List.of(),
-                imageMode, globalBefore, itemBefore, groupBefore, false, null, null, null,
-                false, null, null));
+        host.pushUndo(com.mhtextractor.app.UndoRecords.applyGlobal(imageMode, globalBefore, itemBefore, groupBefore));
         host.clearExtractOutcomes(host.allPreviewItems());
         // 规则 (a)：全局参数写入 + 全部独立参数清空 → 全部条目生效参数变化 → 删除全部缓存目录
         host.paramsChanged(imageMode, host.allPreviewItems());
@@ -367,10 +364,7 @@ public final class ParamDomainController {
                 grp.setTextParamsCache(null);
             }
         }
-        host.pushUndo(new UndoManager.Record<>(UndoManager.RecordType.CLEAR_PARAMS, List.of(),
-                null, -1, List.of(), List.of(), List.of(), List.of(),
-                false, null, null, null, false, null, null, null,
-                imageMode, itemBefore, groupBefore));
+        host.pushUndo(com.mhtextractor.app.UndoRecords.clearParams(imageMode, itemBefore, groupBefore));
         // 受影响条目：清除条目参数的项目 + 清除组参数的各组全部有效成员
         List<PreviewItem> affected = new ArrayList<>(topItems);
         for (GroupItem<PreviewItem> grp : groups) {
