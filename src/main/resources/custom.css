@@ -576,10 +576,15 @@
     -fx-cursor: default;
 }
 
-/* 命中高亮：命中样式的唯一定义处 —— 现在挂在 cell 最底层命中层的矩形上
-   （HtmlSourceViewer.paintHit），黄色与代码里的 HIT_FILL 同值 */
+/* 查找命中配色：唯一定义处（与代码里的 MATCH_FILL / HIT_FILL 同值，对齐 Chrome 的
+   find-in-page）—— 全部命中挂最底层 matchPane（黄 #FFFF00），当前命中挂其上的
+   hitPane（橙 #FF9632）；两层都由 HtmlSourceViewer.paintMatches / paintHit 填矩形。 */
+.html-source-match {
+    -fx-fill: #ffff00;
+}
+
 .html-source-hit {
-    -fx-fill: #ffe680;
+    -fx-fill: #ff9632;
 }
 
 /* 底部查找栏（R5.1） */

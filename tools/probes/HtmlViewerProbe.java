@@ -992,11 +992,8 @@ public class HtmlViewerProbe extends Application {
                 }
             }
             double flowMinX = Double.NaN;
-            if (diag instanceof javafx.scene.control.ListCell<?> lc
-                    && lc.getGraphic() instanceof StackPane wrapper
-                    && wrapper.getChildren().size() >= 3
-                    && wrapper.getChildren().get(2) instanceof javafx.scene.layout.HBox hb
-                    && hb.getChildren().size() >= 2
+            javafx.scene.layout.HBox hb = glyphBox(diag);
+            if (hb != null && hb.getChildren().size() >= 2
                     && hb.getChildren().get(1) instanceof VBox vb
                     && !vb.getChildren().isEmpty()
                     && vb.getChildren().get(0) instanceof javafx.scene.text.TextFlow tf) {
@@ -1203,6 +1200,7 @@ public class HtmlViewerProbe extends Application {
         Node cell3 = revealCellForLine(3);
         List<String> layerKind = new ArrayList<>();
         boolean layerOrder = false;
+        Color matchFill = null;
         Color hitFill = null;
         Color selFill = null;
         if (cell3 instanceof javafx.scene.control.ListCell<?> lc
@@ -1211,37 +1209,59 @@ public class HtmlViewerProbe extends Application {
             for (Node k : kids) {
                 layerKind.add(describe(k));
             }
-            layerOrder = kids.size() == 3
-                    && kids.get(0) instanceof Pane hitLayer
+            layerOrder = kids.size() == 4
+                    && kids.get(0) instanceof Pane matchLayer
+                    && matchLayer.lookupAll(".html-source-match").size() > 0
+                    && kids.get(1) instanceof Pane hitLayer
                     && hitLayer.lookupAll(".html-source-hit").size() > 0
-                    && kids.get(1) instanceof Pane selLayer
+                    && kids.get(2) instanceof Pane selLayer
                     && selLayer.lookupAll(".html-source-selected").size() > 0
-                    && kids.get(2) instanceof javafx.scene.layout.HBox;
-            if (kids.size() == 3 && kids.get(0) instanceof Pane hitLayer) {
-                for (Node n : hitLayer.getChildren()) {
-                    if (n instanceof Rectangle r8 && r8.isVisible()) {
-                        hitFill = (Color) r8.getFill();
-                        break;
-                    }
-                }
-            }
-            if (kids.size() == 3 && kids.get(1) instanceof Pane selLayer) {
-                for (Node n : selLayer.getChildren()) {
-                    if (n instanceof Rectangle r8 && r8.isVisible()) {
-                        selFill = (Color) r8.getFill();
-                        break;
-                    }
-                }
+                    && kids.get(3) instanceof javafx.scene.layout.HBox;
+            matchFill = firstRectFill(kids, 0, ".html-source-match");
+            hitFill = firstRectFill(kids, 1, ".html-source-hit");
+            selFill = firstRectFill(kids, 2, ".html-source-selected");
+        }
+        check("step5 S8 cell layers are [all-matches, current-match, selection, glyphs] ("
+                        + layerKind + ")", layerOrder);
+        check("step5 S8 命中配色对齐 Chrome：全部命中 #FFFF00、当前命中 #FF9632、选区 BLACK ("
+                        + hex(matchFill) + " / " + hex(hitFill) + " / " + hex(selFill) + ")",
+                matchFill != null && hitFill != null && selFill != null
+                        && Math.abs(matchFill.getRed() - 1.0) < 0.01
+                        && Math.abs(matchFill.getGreen() - 1.0) < 0.01
+                        && Math.abs(matchFill.getBlue()) < 0.01
+                        && Math.abs(hitFill.getRed() - 1.0) < 0.01
+                        && Math.abs(hitFill.getGreen() - 150.0 / 255.0) < 0.01
+                        && Math.abs(hitFill.getBlue() - 50.0 / 255.0) < 0.01
+                        && selFill == Color.BLACK);
+        // S8b 用户的诉求（2026-10-05）：<b>所有</b>命中都要有底色，只有当前那一处是另一种颜色。
+        //     用 2 处命中的查询取证（本夹具的 "body" 出现在第 1、5 行），取证后恢复原查询。
+        vQuery(viewer).setText("body");
+        vFindButtons(viewer).get(0).fire();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
+        int hits2 = vInt(viewer, "hitCount");
+        int curLine = vInt(viewer, "currentHitLine");
+        Node curCell = curLine < 0 ? null : revealCellForLine(curLine);
+        long curYellow = curCell == null ? -1 : curCell.lookupAll(".html-source-match").stream().filter(Node::isVisible).count();
+        long curOrange = curCell == null ? -1 : curCell.lookupAll(".html-source-hit").stream().filter(Node::isVisible).count();
+        Node otherCell = null;
+        for (Node n : vList(viewer).lookupAll(".list-cell")) {
+            if (n instanceof javafx.scene.control.ListCell<?> c && c.getIndex() >= 0 && c.getIndex() != curLine
+                    && c.lookupAll(".html-source-match").stream().anyMatch(Node::isVisible)) {
+                otherCell = n;
+                break;
             }
         }
-        check("step5 S8 cell layers are [hit, selection, glyphs] (" + layerKind + ")", layerOrder);
-        check("step5 S8 the hit rect is yellow #ffe680 and the selection rect is BLACK ("
-                        + hex(hitFill) + " / " + hex(selFill) + ")",
-                hitFill != null && selFill != null
-                        && Math.abs(hitFill.getRed() - 1.0) < 0.01
-                        && Math.abs(hitFill.getGreen() - 0.9) < 0.01
-                        && Math.abs(hitFill.getBlue() - 0.5) < 0.01
-                        && selFill == Color.BLACK);
+        long otherYellow = otherCell == null ? -1 : otherCell.lookupAll(".html-source-match").stream().filter(Node::isVisible).count();
+        long otherOrange = otherCell == null ? -1 : otherCell.lookupAll(".html-source-hit").stream().filter(Node::isVisible).count();
+        check("S8b all matches carry the yellow layer while ONLY the current one carries the orange "
+                        + "layer (hits=" + hits2 + "; current[yellow=" + curYellow + " orange=" + curOrange
+                        + "]; other[yellow=" + otherYellow + " orange=" + otherOrange + "])",
+                hits2 >= 2 && curYellow > 0 && curOrange > 0 && otherYellow > 0 && otherOrange == 0);
+        vQuery(viewer).setText(SEARCH_TOKEN);
+        vFindButtons(viewer).get(0).fire();
+        vNode(viewer).applyCss();
+        vNode(viewer).layout();
         // S9 黑底白字（2026-10-05 修复后语义）：只有<b>被选中的列</b>变白 ——
         //   完全落在选区内的 run 整体 WHITE；<b>部分相交</b>的 run 必须是"区间内白、区间外基础色"的
         //   硬边界渐变，绝不能整段变白（整段变白会让未选中的字白底白字而消失 —— 用户报的缺陷）；
@@ -1593,13 +1613,39 @@ public class HtmlViewerProbe extends Application {
         return out;
     }
 
+    /**
+     * wrapper 里的<b>字形层</b> HBox：按类型找，不写死下标 —— 覆盖层数量会变
+     * （2026-10-05 起是 [全部命中, 当前命中, 选区, 字形] 四层）。
+     */
+    private static javafx.scene.layout.HBox glyphBox(Node cell) {
+        if (cell instanceof javafx.scene.control.ListCell<?> lc
+                && lc.getGraphic() instanceof StackPane wrapper) {
+            for (Node k : wrapper.getChildren()) {
+                if (k instanceof javafx.scene.layout.HBox hb) {
+                    return hb;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** 第 {@code idx} 个覆盖层里第一个可见矩形的填充色（层序/配色断言用）。 */
+    private static Color firstRectFill(List<Node> kids, int idx, String styleClass) {
+        if (idx >= kids.size() || !(kids.get(idx) instanceof Pane layer)) {
+            return null;
+        }
+        for (Node n : layer.lookupAll(styleClass)) {
+            if (n instanceof Rectangle r && r.isVisible()) {
+                return (Color) r.getFill();
+            }
+        }
+        return null;
+    }
+
     /** wrapper → HBox → VBox 的第 {@code vRow} 个视觉行节点（自适应折行后行数逐行不同）。 */
     private static Node visualRowNode(Node cell, int vRow) {
-        if (!(cell instanceof javafx.scene.control.ListCell<?> lc)
-                || !(lc.getGraphic() instanceof StackPane wrapper)
-                || wrapper.getChildren().size() < 3
-                || !(wrapper.getChildren().get(2) instanceof javafx.scene.layout.HBox hb)
-                || hb.getChildren().size() < 2
+        javafx.scene.layout.HBox hb = glyphBox(cell);
+        if (hb == null || hb.getChildren().size() < 2
                 || !(hb.getChildren().get(1) instanceof VBox vb)) {
             return null;
         }
@@ -1976,13 +2022,11 @@ public class HtmlViewerProbe extends Application {
         Bounds gb = null;
         Bounds firstFlow = null;
         Bounds secondFlow = null;
-        if (cell instanceof javafx.scene.control.ListCell<?> lc
-                && lc.getGraphic() instanceof StackPane wrapper
-                && wrapper.getChildren().size() >= 3
-                && wrapper.getChildren().get(2) instanceof javafx.scene.layout.HBox hb
-                && hb.getChildren().size() == 2
-                && hb.getChildren().get(0) instanceof Label gutterLabel
-                && hb.getChildren().get(1) instanceof VBox vb && vb.getChildren().size() >= 2) {
+        javafx.scene.layout.HBox hbRow = glyphBox(cell);
+        if (hbRow != null
+                && hbRow.getChildren().size() == 2
+                && hbRow.getChildren().get(0) instanceof Label gutterLabel
+                && hbRow.getChildren().get(1) instanceof VBox vb && vb.getChildren().size() >= 2) {
             gb = gutterLabel.localToScene(gutterLabel.getBoundsInLocal());
             firstFlow = vb.getChildren().get(0).localToScene(vb.getChildren().get(0).getBoundsInLocal());
             secondFlow = vb.getChildren().get(1).localToScene(vb.getChildren().get(1).getBoundsInLocal());

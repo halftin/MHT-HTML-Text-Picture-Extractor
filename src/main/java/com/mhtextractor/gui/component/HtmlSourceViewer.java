@@ -157,8 +157,15 @@ public final class HtmlSourceViewer {
     /** 选择高亮背景色（决策 3.1：黑底白字，对齐日志 TextArea 的观感；白字由 cell 的
      *  {@code paintSelection} 按 run 真实宽度负责）。 */
     private static final Color SELECTION_FILL = Color.BLACK;
-    /** 查找命中高亮背景色（R5；黄底 —— 与 custom.css 的 {@code .html-source-hit} 同值）。 */
-    private static final Color HIT_FILL = Color.web("#ffe680");
+    /**
+     * 查找命中底色（R5；<b>全部</b>命中，画在最底层）。
+     *
+     * <p>配色对齐 Chrome 的 find-in-page：全部命中黄 {@code #FFFF00}、当前命中橙 {@code #FF9632}；
+     * 与 {@code custom.css} 的 {@code .html-source-match} / {@code .html-source-hit} 同值。</p>
+     */
+    private static final Color MATCH_FILL = Color.web("#ffff00");
+    /** 查找命中底色：<b>当前</b>那一处用橙 {@code #FF9632}（叠在黄底之上、选区之下）。 */
+    private static final Color HIT_FILL = Color.web("#ff9632");
 
     private final SidePanelHost host;
     private final ListView<Row> listView = new ListView<>();
@@ -198,6 +205,11 @@ public final class HtmlSourceViewer {
     private HtmlFindIndex hits = HtmlFindIndex.EMPTY;
     /** 当前命中下标（-1 = 没有命中）。 */
     private int hitIndex = -1;
+    /**
+     * 每行上的全部命中区间（最底层黄底用）。随 {@link #hits} 一起重建：cell 重绘只查<b>本行</b>的键，
+     * 所以代价与"命中总数"无关（决策 3.9/R2.7 的"代价只与可见区域有关"不变）。
+     */
+    private Map<Integer, List<int[]>> matchesByLine = Map.of();
     /** 成功把内容装上 {@code ListView} 的次数（单调递增；探针用它等"这一次载入真的落地了"）。 */
     private long loadCount;
     /**
@@ -531,6 +543,7 @@ public final class HtmlSourceViewer {
     private void resetFind() {
         hits = HtmlFindIndex.EMPTY;
         hitIndex = -1;
+        rebuildMatchesByLine();
     }
 
     // ==================== 场景 ====================
@@ -742,11 +755,13 @@ public final class HtmlSourceViewer {
 
     /** 用输入框里的内容重建索引并跳到第 1 处（「查」按钮 / ENTER）。 */
     private void runSearch() {
-        int[] before = activeLines();
+        // 查询变化会改动<b>所有命中行</b>的黄底（不只是当前命中行），重绘集合取"命中行并集"
+        int[] before = matchLines();
         hits = HtmlFindIndex.build(source, lines, queryField.getText());
         hitIndex = hits.isEmpty() ? -1 : 0;
+        rebuildMatchesByLine();
         updateCount();
-        onActiveLineChanged(before, activeLines());
+        onActiveLineChanged(before, matchLines());
         scrollToCurrent();
     }
 
@@ -765,11 +780,11 @@ public final class HtmlSourceViewer {
 
     /** 关闭查找栏：清掉命中与高亮，计数归零（无命中不报错，R5.4）。 */
     private void closeFind() {
-        int[] before = activeLines();
+        int[] before = matchLines();
         queryField.clear();
         resetFind();
         countLabel.setText(I18n.get("viewer.findCount", "current", 0, "total", 0));
-        onActiveLineChanged(before, activeLines());
+        onActiveLineChanged(before, matchLines());
     }
 
     private void updateCount() {
@@ -783,10 +798,40 @@ public final class HtmlSourceViewer {
         }
     }
 
-    /** 有高亮的行：当前命中所在行（没有命中 → 空数组）。 */
+    /** 有高亮的行：当前命中所在行（没有命中 → 空数组）。{@link #step(int)} 用它做定点重绘。 */
     private int[] activeLines() {
         int line = currentHitLine();
         return line < 0 ? new int[0] : new int[]{line};
+    }
+
+    /** 重建"行 → 命中区间"索引（{@link #hits} 变化后必须调用）。 */
+    private void rebuildMatchesByLine() {
+        if (hits.isEmpty()) {
+            matchesByLine = Map.of();
+            return;
+        }
+        Map<Integer, List<int[]>> map = new HashMap<>();
+        for (int i = 0; i < hits.size(); i++) {
+            HtmlFindIndex.Match m = hits.get(i);
+            map.computeIfAbsent(m.line(), k -> new ArrayList<>()).add(new int[]{m.startCol(), m.endCol()});
+        }
+        matchesByLine = Map.copyOf(map);
+    }
+
+    /** 某一逻辑行上的全部命中区间（没有 → {@code null}）。 */
+    private List<int[]> matchesOnLine(int line) {
+        return matchesByLine.get(line);
+    }
+
+    /** 有命中的<b>全部</b>行（升序；查询变化时的定点重绘集合）。 */
+    private int[] matchLines() {
+        int[] out = new int[matchesByLine.size()];
+        int i = 0;
+        for (int line : matchesByLine.keySet()) {
+            out[i++] = line;
+        }
+        java.util.Arrays.sort(out);
+        return out;
     }
 
     /**
@@ -935,12 +980,14 @@ public final class HtmlSourceViewer {
         /** 一视觉行一个 {@link TextFlow}（软换行：cell 高度 = 视觉行数 × 行高）。 */
         private final VBox flows = new VBox();
         private final HBox box = new HBox();
-        /** 查找命中层（R5）：最底层的透明 Pane，当前命中按折行切成黄色矩形（决策 3.7：命中在下）。 */
+        /** 全部命中层（R5；最底层）：除当前命中外，每一处命中都按折行切成黄色矩形（Chrome 黄 #FFFF00）。 */
+        private final Pane matchPane = new Pane();
+        /** 当前命中层（R5）：叠在黄底之上，当前那一处切成橙色矩形（Chrome 橙 #FF9632）。 */
         private final Pane hitPane = new Pane();
-        /** 选区背景层（决策 3.1/3.7）：中层，黑色矩形；在命中层之上、字形层之下（不再盖字）。 */
+        /** 选区背景层（决策 3.1）：叠在两层命中之上，黑色矩形；仍在字形层之下（不盖字）。 */
         private final Pane selPane = new Pane();
-        /** cell 内容 = [命中层, 选区层, 字形层（行号 + 视觉行流）]（层序即决策 3.7 的叠加次序）。 */
-        private final StackPane wrapper = new StackPane(hitPane, selPane, box);
+        /** cell 内容 = [全部命中层, 当前命中层, 选区层, 字形层]（层序即 3.7 起的叠加次序）。 */
+        private final StackPane wrapper = new StackPane(matchPane, hitPane, selPane, box);
 
         private SourceCell() {
             gutter.getStyleClass().add("html-source-gutter");
@@ -955,7 +1002,8 @@ public final class HtmlSourceViewer {
             box.getStyleClass().add("html-source-row");
             box.setAlignment(Pos.TOP_LEFT);
             box.getChildren().addAll(gutter, flows);
-            // 两个覆盖层对鼠标完全透明：命中测试仍落到下面的 Text 上（与没有覆盖层时一致）
+            // 三个覆盖层对鼠标完全透明：命中测试仍落到下面的 Text 上（与没有覆盖层时一致）
+            matchPane.setMouseTransparent(true);
             hitPane.setMouseTransparent(true);
             selPane.setMouseTransparent(true);
             setText(null);
@@ -1034,6 +1082,7 @@ public final class HtmlSourceViewer {
             gutter.setPrefWidth(gutterWidth());
             flows.getChildren().setAll(buildVisualRows(row));
             setGraphic(wrapper);
+            paintMatches(row.number() - 1);
             paintHit(row.number() - 1);
             paintSelection(row.number() - 1);
         }
@@ -1061,7 +1110,7 @@ public final class HtmlSourceViewer {
             int vRow = 0;
             for (Node rowNode : flows.getChildren()) {
                 if (rowNode instanceof TextFlow flow) {
-                    paintRunRects(flow, vRow, from, to, SELECTION_FILL, selPane, true);
+                    paintRunRects(flow, vRow, from, to, SELECTION_FILL, selPane, "html-source-selected", true);
                 }
                 vRow++;
             }
@@ -1072,12 +1121,13 @@ public final class HtmlSourceViewer {
          * 见 {@link #paintSelection} 的说明）。选区（{@code whiteText=true}）同时把选中列的字形置白；
          * 查找命中只要背景。
          *
-         * @param fill      矩形颜色（选区黑 / 命中黄）
-         * @param target    覆盖图层（{@code selPane} / {@code hitPane}）
+         * @param fill      矩形颜色（选区黑 / 全部命中黄 / 当前命中橙）
+         * @param styleClass 矩形的样式类（{@code html-source-selected} / {@code -match} / {@code -hit}）
+         * @param target    覆盖图层（{@code matchPane} / {@code hitPane} / {@code selPane}）
          * @param whiteText true = 选区语义：先还原基础色再按区间置白；false = 只要背景
          */
         private void paintRunRects(TextFlow flow, int vRow, int from, int to,
-                                   Color fill, Pane target, boolean whiteText) {
+                                   Color fill, Pane target, String styleClass, boolean whiteText) {
             double x = gutterWidth();
             for (Node child : flow.getChildren()) {
                 if (!(child instanceof Text t)) {
@@ -1102,7 +1152,7 @@ public final class HtmlSourceViewer {
                     double x1 = x + off[a];
                     double x2 = x + off[b];
                     Rectangle rect = new Rectangle(0, 0, 0, 0);
-                    rect.getStyleClass().add(whiteText ? "html-source-selected" : "html-source-hit");
+                    rect.getStyleClass().add(styleClass);
                     rect.setFill(fill);
                     rect.setX(x1);
                     rect.setY(vRow * ROW_HEIGHT);
@@ -1185,6 +1235,27 @@ public final class HtmlSourceViewer {
          * 样式不再包在字形流里（旧实现是 {@code TextFlow} 里的 {@code StackPane}，会盖在选区
          * 黑底<b>之上</b>），改成与选区同一套折行几何的独立层。
          */
+        /**
+         * 全部命中的黄底（最底层）：本行每一处命中都画一遍。当前那一处由 {@link #paintHit}
+         * 在其上方画成橙色 —— 两层同源几何（都走 {@link #paintRunRects}），所以不会错位。
+         */
+        private void paintMatches(int line) {
+            matchPane.getChildren().clear();
+            List<int[]> ranges = HtmlSourceViewer.this.matchesOnLine(line);
+            if (ranges == null || ranges.isEmpty()) {
+                return;
+            }
+            int vRow = 0;
+            for (Node rowNode : flows.getChildren()) {
+                if (rowNode instanceof TextFlow flow) {
+                    for (int[] r : ranges) {
+                        paintRunRects(flow, vRow, r[0], r[1], MATCH_FILL, matchPane, "html-source-match", false);
+                    }
+                }
+                vRow++;
+            }
+        }
+
         private void paintHit(int line) {
             hitPane.getChildren().clear();
             int[] hit = line == currentHitLine() ? currentHitColumns() : null;
@@ -1195,7 +1266,7 @@ public final class HtmlSourceViewer {
             int vRow = 0;
             for (Node rowNode : flows.getChildren()) {
                 if (rowNode instanceof TextFlow flow) {
-                    paintRunRects(flow, vRow, hit[0], hit[1], HIT_FILL, hitPane, false);
+                    paintRunRects(flow, vRow, hit[0], hit[1], HIT_FILL, hitPane, "html-source-hit", false);
                 }
                 vRow++;
             }
