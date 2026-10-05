@@ -16,7 +16,7 @@ JavaFX 25 桌面 GUI：把 `.mht` / `.mhtml` / `.html` / `.htm`（含 HTML 侧�
 
 | 项 | 现状（2026-10-05 实测） |
 |---|---|
-| 重构阶段 | A1 / A2 / B / C / D / E / F **全部实施并验收**；第二批 **S0–S6（E1–E5）** 亦已实施并验收；《UI可切换重构方案》**P0（三条度量/不变式）与 P1-1/P1-2（全局参数缓存 + 预览缓存构造 + 侧边栏会话基线下沉 app）已实施并验收**（2026-10-06，未收口项见《遗留目标与未完成事项.md》） |
+| 重构阶段 | A1 / A2 / B / C / D / E / F **全部实施并验收**；第二批 **S0–S6（E1–E5）** 亦已实施并验收；《UI可切换重构方案》**P0（三条度量/不变式）与 P1-1/P1-2/P1-3（全局参数缓存 + 预览缓存构造 + 侧边栏会话基线 + 参数剪贴板下沉 app，闸门 2 已归零）已实施并验收**（2026-10-06，未收口项见《遗留目标与未完成事项.md》） |
 | `MainController` | **1706** 行（上限常量 **2240**，只减不增；为不变式自报口径） |
 | 测试 | 默认执行 **771**（+ `headless-layer-b` **68**）；架构不变式 **16** 条；产物黄金基线 **42** 份 |
 | GUI 自动化 | zh / en **各 34 passed / 0 failed**；`tools/probes/` 探针全绿 |
@@ -151,8 +151,8 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | `testAccessSurfaceIsFrozen` | 测试访问面冻结：`src/test/resources/test-access-surface.tsv` **124** 条（direct 95 / reflect 9 / reflect-dynamic 20；S2 一次性上调并记账）**只减不增**；发现集合 ⊆ 清单、清单无陈旧条目、`com.mhtextractor.gui` 同包驱动必须登记。扫描器 `baseline.TestAccessSurface`（字节码成员库 + 驱动类常量池引用；不用反射 API） |
 | `allowlistOnlyTargetsBusinessPackages` · `baselineHarnessIsPresent` | 防白名单滥用 / 基线与夹具在位 |
 | `uiportHasNoJavaFxDependency` | **P0 新增**：`uiport` 端口层字节码常量池零 `javafx/`（字节码扫描；当前包不存在 = 0/0，P3 建立后强制）。基线违规数 **0**，扫描器 `baseline.UiportSignature` |
-| `guiBusinessStateDoesNotGrow` | **P0 新增**：`gui` 层业务状态持有/构造点（`AppConfig` / `Map<String,AppConfig>` 字段 + 缓存/剪贴板/撤销载荷构造点）**只减不增**；基线 **3**（P1-2 后 a=2 b=0 c=1 d=0；P0 时 9 → P1-1 7），P1–P3 逐阶段下调，P3 目标 0。扫描器 `baseline.GuiCoupling` |
-| `guiDirectBusinessPackageUsageDoesNotGrow` | **P0 新增**：`gui` 源码直连业务包 distinct (包, 类型) 数 **只减不增**；基线 **34**（业务 import 118 仅作诊断），P1–P3 逐阶段下调，P3 目标 0。扫描器 `baseline.GuiCoupling` |
+| `guiBusinessStateDoesNotGrow` | **P0 新增**：`gui` 层业务状态持有/构造点（`AppConfig` / `Map<String,AppConfig>` 字段 + 缓存/剪贴板/撤销载荷构造点）**只减不增**；基线 **0**（P1-3 后 a=b=c=d=0；P0 时 9 → P1-1 7 → P1-2 3 → P1-3 0，已提前达 P3 目标并保持只减不增）。扫描器 `baseline.GuiCoupling` |
+| `guiDirectBusinessPackageUsageDoesNotGrow` | **P0 新增**：`gui` 源码直连业务包 distinct (包, 类型) 数 **只减不增**；基线 **34**（业务 import 115 仅作诊断），P1–P3 逐阶段下调，P3 目标 0。扫描器 `baseline.GuiCoupling` |
 
 **其余硬约束**：主源集不出现 `java.awt`；不引入 `WebView`（**仅 JavaFX 前端生效**，换框架后重新评估）；不新增事件总线 / DI 容器 / 通用工作流引擎。
 

@@ -536,7 +536,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void updateProgressStatus() { preparseController.updateProgressStatus(parseToken); }
     });
     /** Q10：参数剪贴板（R7.1-R7.7）—— 复制快照 + 批量应用编排；路由与应用本体注入参数域协作者的那两份实现 */
-    private final ParamClipboard paramClipboard = new ParamClipboard(ws::push, paramDomain::paramScopeTarget, paramDomain::applyTargetParams);
+    private final com.mhtextractor.app.ParamClipboard paramClipboard = com.mhtextractor.app.ParamClipboardFactory.create(ws::push, paramDomain::paramScopeTarget, paramDomain::applyTargetParams);
 
     /**
      * 分组命令协作者（C3a）：分组/拆组命令与折叠/展开动画状态从本类原样外迁到
@@ -1041,7 +1041,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             @Override public boolean isLiveTarget(Object item) {
                 return !(item instanceof PreviewItem it && it.removed);
             }
-            @Override public FileListContextMenu.ParamsInfo paramsInfo(Object target) {
+            @Override public com.mhtextractor.app.ParamsInfo paramsInfo(Object target) {
                 List<Object> targets = paramDomain.resolveParamTargets(target);
                 ParamDomainController.TargetCounts counts = ParamDomainController.countTargets(targets);
                 return paramClipboard.paramsInfo(targets, hasIndependentParams(target),

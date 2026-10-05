@@ -1,4 +1,4 @@
-package com.mhtextractor.gui.controller;
+package com.mhtextractor.app;
 
 import java.util.HashMap;
 import java.util.List;
@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.ParamScope;
@@ -97,11 +96,11 @@ public final class ParamClipboard {
      * @param targets     本次"所选"集合（宿主按勾选优先 → 右键目标解析）
      * @param independent 目标是否有独立参数（宿主的既有判定）
      */
-    public FileListContextMenu.ParamsInfo paramsInfo(List<Object> targets, boolean independent,
-                                                     EffectiveParamsService service,
-                                                     EffectiveParamsService.Context ctx,
-                                                     int topLevelCount, int distinctGroupCount) {
-        return new FileListContextMenu.ParamsInfo(independent,
+    public ParamsInfo paramsInfo(List<Object> targets, boolean independent,
+                                 EffectiveParamsService service,
+                                 EffectiveParamsService.Context ctx,
+                                 int topLevelCount, int distinctGroupCount) {
+        return new ParamsInfo(independent,
                 service.anyHasEffectiveParams(targets, ctx), service.isUniform(targets, ctx), !isEmpty(),
                 topLevelCount, distinctGroupCount);
     }

@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.mhtextractor.app.EffectiveParamsService;
+import com.mhtextractor.app.ParamsInfo;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
@@ -146,8 +147,8 @@ class FileListContextMenuTest {
     // ==================== 3. 启用规则（四种目标 × 独立参数两种取值） ====================
 
     /** 参数判定快照：既有 13 位只看 {@code independent}；R7 两位在本方法里另有专门断言 */
-    private static FileListContextMenu.ParamsInfo info(boolean independent) {
-        return new FileListContextMenu.ParamsInfo(independent, false, true, false, 0, 0);
+    private static ParamsInfo info(boolean independent) {
+        return new ParamsInfo(independent, false, true, false, 0, 0);
     }
 
     /**
@@ -227,17 +228,17 @@ class FileListContextMenuTest {
         FileListContextMenu.TargetType item = FileListContextMenu.TargetType.TOP_ITEM;
 
         FileListContextMenu.State none = FileListContextMenu.stateFor(item,
-                new FileListContextMenu.ParamsInfo(false, false, true, false, 0, 0));
+                new ParamsInfo(false, false, true, false, 0, 0));
         assertFalse(none.copyParams(), "无生效参数 ⇒ 禁用");
         assertEquals(FileListContextMenu.KEY_COPY_NO_PARAMS, none.copyParamsTextKey(), "理由一：无参数");
 
         FileListContextMenu.State mixed = FileListContextMenu.stateFor(item,
-                new FileListContextMenu.ParamsInfo(true, true, false, false, 0, 0));
+                new ParamsInfo(true, true, false, false, 0, 0));
         assertFalse(mixed.copyParams(), "参数不统一 ⇒ 禁用");
         assertEquals(FileListContextMenu.KEY_COPY_MIXED_PARAMS, mixed.copyParamsTextKey(), "理由二：参数不统一");
 
         FileListContextMenu.State ok = FileListContextMenu.stateFor(item,
-                new FileListContextMenu.ParamsInfo(true, true, true, false, 0, 0));
+                new ParamsInfo(true, true, true, false, 0, 0));
         assertTrue(ok.copyParams(), "有生效参数且统一 ⇒ 可用");
         assertEquals(FileListContextMenu.KEY_COPY_PARAMS, ok.copyParamsTextKey(), "可用时的文案");
 
@@ -254,18 +255,18 @@ class FileListContextMenuTest {
     void applyToSelectionIsDisabledUntilSomethingWasCopied() {
         FileListContextMenu.TargetType item = FileListContextMenu.TargetType.TOP_ITEM;
         assertFalse(FileListContextMenu.stateFor(item,
-                new FileListContextMenu.ParamsInfo(true, true, true, false, 0, 0)).applyToSelection(),
+                new ParamsInfo(true, true, true, false, 0, 0)).applyToSelection(),
                 "未复制过 ⇒ 不可交互");
         assertTrue(FileListContextMenu.stateFor(item,
-                new FileListContextMenu.ParamsInfo(true, true, true, true, 0, 0)).applyToSelection(),
+                new ParamsInfo(true, true, true, true, 0, 0)).applyToSelection(),
                 "复制过 ⇒ 可用");
         // 与"是否有参数"无关：无参数目标 + 已复制过 ⇒ 仍可用（应用是写，不要求目标自己有参数）
         assertTrue(FileListContextMenu.stateFor(item,
-                new FileListContextMenu.ParamsInfo(false, false, true, true, 0, 0)).applyToSelection(),
+                new ParamsInfo(false, false, true, true, 0, 0)).applyToSelection(),
                 "已复制过 ⇒ 可用（与目标自身是否有参数无关）");
         // 清空剪贴板 → 回到禁用（ParamClipboard.clear 的语义在下一条用例里钉住）
         assertFalse(FileListContextMenu.stateFor(item,
-                new FileListContextMenu.ParamsInfo(true, true, true, false, 0, 0)).applyToSelection(),
+                new ParamsInfo(true, true, true, false, 0, 0)).applyToSelection(),
                 "清空（copied=false）⇒ 回到禁用");
     }
 
@@ -301,7 +302,7 @@ class FileListContextMenuTest {
         // stateFor 必须把分类结果带出来（不能只在辅助函数里对）
         FileListContextMenu.State s = FileListContextMenu.stateFor(
                 FileListContextMenu.TargetType.BLANK,
-                new FileListContextMenu.ParamsInfo(false, false, true, true, 2, 1));
+                new ParamsInfo(false, false, true, true, 2, 1));
         assertEquals(FileListContextMenu.KEY_APPLY_GROUP_AND_MANY, s.applyToSelectionTextKey());
         assertTrue(s.applyToSelection(), "启用规则不变：copied=true ⇒ 可用");
     }
@@ -404,7 +405,7 @@ class FileListContextMenuTest {
     private static FileListContextMenu.State stateFor(EffectiveParamsService service, List<Object> targets,
                                                       EffectiveParamsService.Context ctx) {
         return FileListContextMenu.stateFor(FileListContextMenu.TargetType.TOP_ITEM,
-                new FileListContextMenu.ParamsInfo(false,
+                new ParamsInfo(false,
                         service.anyHasEffectiveParams(targets, ctx), service.isUniform(targets, ctx), false, 0, 0));
     }
 
@@ -426,7 +427,7 @@ class FileListContextMenuTest {
     /** 桩宿主：目标类型与参数判定快照由测试预置；14 个动作只记名字。 */
     private static final class Stub implements FileListContextMenu.Actions {
         FileListContextMenu.TargetType kind = FileListContextMenu.TargetType.BLANK;
-        FileListContextMenu.ParamsInfo info = info(false);
+        ParamsInfo info = info(false);
         final List<String> calls = new ArrayList<>();
 
         @Override public boolean isDragActive() { return false; }
@@ -434,7 +435,7 @@ class FileListContextMenuTest {
         @Override public void selectRow(Object target) { }
         @Override public FileListContextMenu.TargetType targetType(Object target) { return kind; }
         @Override public boolean isLiveTarget(Object item) { return true; }
-        @Override public FileListContextMenu.ParamsInfo paramsInfo(Object target) { return info; }
+        @Override public ParamsInfo paramsInfo(Object target) { return info; }
         @Override public void select(Object target) { calls.add("select"); }
         @Override public void selectAll(Object target) { calls.add("selectAll"); }
         @Override public void openFolder(Object target) { calls.add("openFolder"); }
@@ -520,9 +521,9 @@ class FileListContextMenuTest {
         for (String key : List.of(FileListContextMenu.KEY_COPY_NO_PARAMS,
                 FileListContextMenu.KEY_COPY_MIXED_PARAMS, FileListContextMenu.KEY_COPY_PARAMS)) {
             stub.info = switch (key) {
-                case FileListContextMenu.KEY_COPY_NO_PARAMS -> new FileListContextMenu.ParamsInfo(false, false, true, false, 0, 0);
-                case FileListContextMenu.KEY_COPY_MIXED_PARAMS -> new FileListContextMenu.ParamsInfo(false, true, false, false, 0, 0);
-                default -> new FileListContextMenu.ParamsInfo(false, true, true, false, 0, 0);
+                case FileListContextMenu.KEY_COPY_NO_PARAMS -> new ParamsInfo(false, false, true, false, 0, 0);
+                case FileListContextMenu.KEY_COPY_MIXED_PARAMS -> new ParamsInfo(false, true, false, false, 0, 0);
+                default -> new ParamsInfo(false, true, true, false, 0, 0);
             };
             stub.kind = FileListContextMenu.TargetType.TOP_ITEM;
             menu.updateState("target");

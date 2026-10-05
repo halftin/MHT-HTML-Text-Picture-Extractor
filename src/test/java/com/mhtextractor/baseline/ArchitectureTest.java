@@ -234,12 +234,12 @@ class ArchitectureTest {
 
     /**
      * 闸门 2：gui 层业务状态持有/构造点上限（只减不增，P1–P3 逐阶段下调，P3 目标 0）。
-     * 基线 3 = (a) AppConfig/Map&lt;String,AppConfig&gt; 字段 2（P1-2 侧边栏会话基线两字段
-     * 下沉 app 层 {@code SessionParamBaseline}，-2）+ (b) 预览缓存构造 0（P1-2 下沉
-     * app 层 {@code PreviewCacheFactory}，-2）+ (c) 参数剪贴板构造 1 + (d) 撤销载荷构造 0
-     * （逐条清单见 {@link GuiCoupling#scanBusinessState}）。
+     * 基线 0 = (a) AppConfig/Map&lt;String,AppConfig&gt; 字段 0（P1-3 参数剪贴板下沉 app 层
+     * {@code ParamClipboard}，-2）+ (b) 预览缓存构造 0（P1-2 下沉 app 层 {@code PreviewCacheFactory}）
+     * + (c) 参数剪贴板构造 0（P1-3 构造下沉 app 层 {@code ParamClipboardFactory}，-1）
+     * + (d) 撤销载荷构造 0（逐条清单见 {@link GuiCoupling#scanBusinessState}）。
      */
-    private static final int GUI_BUSINESS_STATE_MAX = 3;
+    private static final int GUI_BUSINESS_STATE_MAX = 0;
 
     /**
      * 闸门 3：gui 层直连业务包 distinct (包, 类型) 数上限（只减不增，P1–P3 逐阶段下调，P3 目标 0）。
