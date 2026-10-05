@@ -51,3 +51,7 @@ build/
 ### Python 缓存（bug_tests.py 运行后产生） ###
 __pycache__/
 *.pyc
+
+# 临时文档（本地保留、不随 git 推送；推送时只带 CLAUDE.md 与打包手册）
+/遗留目标与未完成事项.md
+/UI可切换重构方案.md

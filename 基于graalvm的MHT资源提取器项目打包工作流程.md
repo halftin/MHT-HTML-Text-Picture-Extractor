@@ -2,12 +2,12 @@
 
 > **目标**: 将 JavaFX 25 + Maven 项目编译为 GraalVM Native Image 绿色免安装 Windows EXE。
 > **适用场景**: 从 Git 拉取代码后，在任何 Windows 设备上完成打包。
-> **最后更新**: 2026-10-02 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
+> **最后更新**: 2026-10-05 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
 > **项目版本**: 以 `pom.xml` 的 `<version>` 为**唯一来源**（当前 `3.0.0`）。所有构建脚本（`build-native.cmd` / `.ps1` / `.sh` / `run-native-image.bat`）均从 pom 动态读取，**禁止**在脚本里硬编码 jar 名（历史问题：曾写死 `mhtExtractor-2.3.1.jar` / `-2.2-SNAPSHOT.jar`，与 pom 不一致导致打包找不到 jar）。
 
 > ## 📌 状态更新（2026-09-27 实测）—— **以脚本与 CLAUDE.md 为准**
 >
-> **权威来源**：`build-native.cmd`（脚本本身）与 `CLAUDE.md` 的「native 打包现状」。本文件是**参考手册**（环境清单 / 元数据体系 / 构建细节）；**打包机上的最短路径**见《改动后待验证的graalvml流程说明.md》。
+> **权威来源**：`build-native.cmd`（脚本本身）与 `CLAUDE.md` 的「native 打包现状」。本文件是**打包参考手册 + 打包机操作手册**（环境清单 / 元数据体系 / 构建细节 / 验收清单）；**打包机上的最短路径**见 **§10.2**，**打包后人工验收清单**见 **§10.5.6**。
 > 本文档其余章节保留为**背景与原理**；其中的示例路径 / 版本号可能已过时（下表已逐条标注）。
 >
 > | 项 | 状态 |
@@ -30,7 +30,7 @@
 > 它由 VS Installer 放在那里，**与 VS 本体装在哪块盘无关**（本机 VS 在 `E:\msvc\community` 也能被找到）。
 > 装完先跑 `check-env.cmd` 确认退出码为 0。
 >
-> **另需知**：项目已完成架构重构（新增零 JavaFX 的 `app` 应用层）与全量国际化（276 键 + 20 错误码）。
+> **另需知**：项目已完成架构重构（新增零 JavaFX 的 `app` 应用层）与全量国际化（**547 键 × 2 locale** + 22 错误码）。
 > **这带来两类新的 native 元数据需求**：① Jackson 序列化的纯 DTO（如 `PreviewCacheMeta` 及其嵌套 record）
 > 需反射条目；② i18n bundle 需**资源注册** `{"bundle": "i18n/messages"}`。
 > **两者均已备齐**，但**改动后必须重采**——见 §4.3 与 §4.9。
@@ -48,10 +48,10 @@
 | 主类 | `com.mhtextractor.App` |
 | 关键依赖 | Jackson, Ikonli, AtlantaFX, Jakarta Mail, Jsoup, Logback, Lombok 1.18.44, **glavo webp 0.2.0**（纯 Java，无 JNI） |
 | 打包路径 | pom.xml → fat JAR → native-image → EXE + DLLs |
-| **架构分层**（2026-09 重构后） | `gui → app → {core, extractor, processor, output, util, cache, config, i18n}`；`model` 为纯数据模型。**业务层与 app 层零 JavaFX**，由 `ArchitectureTest` 的 11 条不变式强制 |
-| **国际化** | zh_CN / en_US，276 键（`src/main/resources/i18n/messages_*.properties`）+ 20 错误码 → **native 需资源注册**（见 §4.9） |
+| **架构分层**（2026-09 重构后） | `gui → app → {core, extractor, processor, output, util, cache, config, i18n}`；`model` 为纯数据模型。**业务层与 app 层零 JavaFX**，由 `ArchitectureTest` 的 **13 条**不变式强制 |
+| **国际化** | zh_CN / en_US，**各 547 键**（`src/main/resources/i18n/messages_*.properties`，两份键集与占位符集合必须一致）+ **22** 个 `ErrorCode` → **native 需资源注册**（见 §4.9） |
 | **预览缓存** | 会话级 `<java.io.tmpdir>/mht-extractor-preview/`，Jackson 读写 `PreviewCacheMeta` → **native 需反射条目**（见 §4.9） |
-| **测试** | 374 单测 / 33 类；32 份产物黄金基线；30 项 GUI 自动化（`test.mode`，zh/en 各 30/0） |
+| **测试** | **768** 单测（默认执行）+ **68** 无头（`headless-layer-b`）；**42 份**产物黄金基线（21 例 × zh/en）；GUI 自动化 **zh/en 各 34/0**（入口见 §10.5.5）。当前回归基线汇总见 **§10.11** |
 
 > **v2.3.1 升级说明**: 编译器升级至 JDK 25（`maven.compiler.release=25`），Lombok 升级至 1.18.44（兼容 JDK 25），JavaFX 升级至 25.0.3。编译和 native-image 不再需要两套 JDK 切换。Liberica NIK 25.0.3 的静态链接与项目现有的 JNI 配置存在兼容性问题（`glass.lib` 缺少符号），当前仍推荐用 GraalVM 25.0.2 执行 native-image 步骤。
 
@@ -1234,8 +1234,23 @@ java -agentlib:native-image-agent=config-output-dir=target/agent-out \
 | `reflect-config.json` | 旧分离格式（291 条） | ⚠️ **已过时**：不含 `com.mhtextractor.cache.*`，也不含 `ImageBatchProcessor` / `ImageSource` 等近期类 |
 
 两种格式**可以共存**，native-image 对同一 type 取**并集**。因此补齐统一格式即可，**无需同步维护旧文件**。
-**🚨 该"建议删除"已被实测推翻（2026-09-27 实测，详见 `CLAUDE.md`）**：旧格式 **291** 个类型、统一格式 **194** 个，其中 **231 个仅存在于旧格式**；native-image 对同一 type 取**并集**，**直接删旧文件会丢 231 条**。且本机 native 被 MSVC 阻塞、**无法验证**，在无法验证时改元数据风险 > 收益。正解是"并集合并 + 方法/字段级对账（丢失数=0）"。另：该文件里指向 `JavaFxUtil$SmoothProgressProperty` 的条目已**悬空**（该类已被删除）。
-（§4.4 的手工模板仅作历史参考；若仍保留该文件，注意其条目会与统一格式合并。）
+**🚨 该"建议删除"已被实测推翻（2026-09-27 实测，详见 `CLAUDE.md`）**：旧格式 **291** 个类型、统一格式 **194** 个，其中 **231 个仅存在于旧格式**；native-image 对同一 type 取**并集**，**直接删旧文件会丢 231 条**。正解是"并集合并 + 方法/字段级对账（丢失数=0）"。
+
+**📌 2026-10-04 更新：过时条目已清理（策略从"只并集"升级为"并集 + 过时项审计"）**
+
+- 判据：该注册的类在 native 构建真正看得到的产物里是否**存在** —— `target/lib/*.jar`、shaded jar、
+  `target/classes`，以及两台 JDK 的模块镜像。
+- 清理结果（提交 `cea00c3`）：删掉 **65 个"类已不存在"的注册**（reflect-config / reachability / jni 共 72 条），
+  含 JavaFX 8 时代的 `com.sun.javafx.scene.control.skin.*Skin`、包名写错的
+  `javafx.scene.control.{BorderPane,HBox,…}`、`prism.*` 内部类，以及本项目已删类
+  `JavaFxUtil$SmoothProgressProperty` 的悬空条目（即上面那条"悬空"已消除）。
+  **类型级对账 loss = 0**；另补注册了效果用的 HLSL 着色器资源 `LinearConvolveShadow_8.obj`。
+- **审计脚本（随仓库分发）**：`tools/native/audit-native-metadata.ps1` —— 过时项扫描 +
+  `-AgentDir` 差集（自动过滤 FXMLLoader 失败查找造成的幻影条目）。
+- **清理后回归**：native 产物基线 **42 passed / 0 failed**（2026-10-05 复核；21 例 × zh/en）。
+- ⚠️ **仍然不要"整文件重写"**：任何元数据改动都按 §4.9.3 的纯增量 + 方法/字段级对账执行。
+
+（§4.4 的手工模板仅作历史参考；若仍保留旧格式文件，注意其条目会与统一格式合并。）
 
 ---
 
@@ -1414,7 +1429,17 @@ build-native.cmd --no-editbin    保留控制台子系统（便于看启动期�
 ```
 
 环境变量覆盖（不设则自动探测）：`BUILD_JAVA_HOME` / `GRAALVM_HOME` / `MAVEN_CMD` /
-`OUTPUT_DIR`（默认 `<仓库>\dist`）/ `NATIVE_XMX`（默认 4G）/ `VSWHERE` / `LOG_DIR`。
+`OUTPUT_DIR`（默认 **`<仓库同级>\<仓库名>-dist`，即项目树外**；旧默认 `<仓库>\dist` 已废弃，理由见 §10.7.1）/
+`NATIVE_RECIPE`（**`dynamic` 默认** ≈70 MB / `static` ≈98 MB，见 §10.3.4）/ `NATIVE_XMX`（默认 4G）/ `VSWHERE` / `LOG_DIR`。
+
+**配方（`NATIVE_RECIPE`）决定三件事**：用哪个 native-image JDK、抽不抽那 7 个 JavaFX DLL、dist 是 22 个文件还是 15 个。
+三档开关的期望产物：
+
+| 命令 | 期望 |
+|---|---|
+| `build-native.cmd --prepare-only` | exit 0；`mvn package` 成功；`target\jfx-dlls` 下 **12 个 DLL**（dynamic = 7 JavaFX + 5 VC++；static 只有 5 个）；`logs\native-build-<stamp>.{log,steps.tsv,report.json}` 三件套 |
+| `build-native.cmd` | 上表 + native-image 链接 + 组装 dist；**`[STEP SMOKE]` 还会在 native 镜像里渲染一次提醒卡片**（防"native 下卡片不渲染"这类专属回归，见 §8.7） |
+| 失败时 | 打印 `=== FAILURE ===`（失败步 + 退出码 + 日志末 40 行），**仍然产出报告** |
 
 **退出码**：`0` 成功 / `1` 其它失败 / **`20` 缺 MSVC 工具链**（与 native-image 同码，便于脚本判断）。
 
@@ -1855,6 +1880,22 @@ target/dist/
 
 ---
 
+### 8.7 症状 → 排查速查（2026-10 之后新增/变动项）
+
+> 上面 §8.1–8.6 与 §八 其余条目仍然有效；本节只列**最近几轮改动后**新增或已变动的排查方向。
+
+| 症状 | 排查方向 |
+|---|---|
+| 界面出现 `!key!` 字样 | i18n **bundle 未注册** → 检查 `reachability-metadata.json` 是否含 `{"bundle": "i18n/messages"}` 与各 locale glob（§4.9.2） |
+| 预览报错 / 缩略图全部"无法加载" | ① `PreviewCacheMeta` 及其嵌套 record 的**反射条目缺失**（§4.9.1，用 agent 重采）；② 图片是 WebP 时缺 `org.glavo.webp` 相关条目 |
+| FXML 加载失败（`LoadException` / 控件构造器 `NoSuchMethodException`） | 资源模式缺该 FXML（§4.9.2）；`<fx:define>` 实例化的控件需反射构造器（§10.3.5）。⚠️ **模态参数窗口类已删除**，参数表单仍由 `ParamDialog.fxml` + `ParamFormPane` 装载，该 FXML 仍需注册 |
+| 找 `ParamDialogController` / 参数窗口 `Stage` | 已不存在（阶段 D 删除）：参数编辑只有**右侧非模态侧边栏**一条路径（`ParamSidePanel` / `ParamFormPane` / `ParamPanelActions`） |
+| GUI 自动化"跑过了"但结果可疑 | 入口是**测试源集**的 `com.mhtextractor.gui.acceptance.TestMain`（生产启动器 `App` **已不含**任何测试分支）。跑前删 `logs/test-results.txt`、跑后核对 **mtime**；locale 由 `logs/gui-state.json` 决定（**覆盖** `-Duser.language`） |
+| native 下提醒卡片不渲染 / 界面变黑卡死 | JavaFX **效果 peer** 的反射注册缺口（2026-10-03 已修）；`build-native.cmd` 已内置 `[STEP SMOKE]` 卡片渲染冒烟，正常跑一次构建即可拦住该回归 |
+| "无 JavaFX classpath"断言在本机跑不通 | Liberica **Full** JDK 把 JavaFX 内置为 JDK 运行时模块 —— 该断言在本机**物理不可达**，见 §8.6 |
+
+---
+
 ## 九、给 Claude Code CLI 的提示
 
 如果在新的会话或新设备上使用 Claude Code CLI 打包此项目：
@@ -1865,12 +1906,13 @@ target/dist/
 3. **检查配置文件**（第四章），`src/main/resources/META-INF/native-image/com.mhtextractor/` 下的配置文件需存在；
    **但注意**：`reflect-config.json` 已过时且与 `reachability-metadata.json` 不一致（见 §4.9.4），
    统一格式才是权威
-4. **编译用 NIK 25 的 JDK；native-image 用 NIK 自带的**（已实测走通）。若遇 §8.5 的 LNK2001，**不要**换 GraalVM，加 `-H:NativeLinkerOption=...prism_common.lib` 即可
+4. **编译 JDK 与 native-image JDK 是分开解析的**：默认 `NATIVE_RECIPE=dynamic` 用 Oracle GraalVM（JavaFX 随包 DLL，≈70 MB）；`set NATIVE_RECIPE=static` 换 NIK Full（JavaFX 静态链接，≈98 MB）。若遇 §8.5 的 LNK2001，**不要**换 GraalVM，加 `-H:NativeLinkerOption=...prism_common.lib` 即可（脚本已内置）
 5. **所有工具路径必须纯 ASCII**，含中文的路径会导致模块加载失败（`Module org.graalvm.nativeimage.builder not found`）
 6. **`--initialize-at-run-time` 参数一个都不能少**，缺失任何一个 JavaFX 子包都会崩溃
 7. **"DLL 放同目录"这条要分开看**：
-   - native-image **自动落地**的 JDK DLL（`awt`/`fontmanager`/`freetype`/`java`/`javaaccessbridge`/`javajpeg`/`jawt`/`jvm`/`lcms`）+ 5 个 VC++ 运行库 DLL → **必须随包**（本机交付目录就是这 15 个文件）；
-   - JavaFX 的 `glass`/`prism_*`/`javafx_font`/`javafx_iio`/`decora_sse` → **NIK Full 下绝不能放**（会段错误，§十）
+   - native-image **自动落地**的 JDK DLL（`awt`/`java`/`javaaccessbridge`/`javajpeg`/`jawt`/`jvm`/`lcms`，个别配方还会多 `fontmanager`/`freetype`）+ 5 个 VC++ 运行库 DLL → **必须随包**；
+   - JavaFX 的 `glass`/`prism_*`/`javafx_font`/`javafx_iio`/`decora_sse` → **只有 dynamic 配方随包**；**static（NIK Full）下绝不能放**（会段错误，§十）。
+   > 两份清单的**权威来源**是构建报告 `logs/native-build-<stamp>.report.json` 的 `artifacts`（带每个文件的 SHA256），不要照抄本文档的历史清单
 8. **构建后用 `editbin /SUBSYSTEM:WINDOWS`** 隐藏控制台窗口
 9. **遇到 `Failed to delete target\lib`**: 跳过 clean，用 `mvn package` 而非 `mvn clean package`
 10. **本机 `mvn` 不在 PATH**：用 Maven wrapper，并令 `JAVA_HOME` 指向 NIK 25
@@ -1887,7 +1929,7 @@ Claude Code CLI 可以通过以下步骤在新设备上自动完成全部打包�
 3. 如果没有找到，提示用户提供路径或自行安装（**MSVC 缺失则无法继续，务必先明确告知用户**）
 4. 检查 `src/main/resources/META-INF/native-image/` 目录是否存在
 5. 如果配置文件不存在或不完整，**用 tracing agent 采集**（§4.9.3），不要手工推断
-6. 按第五章命令执行构建（**先把 `build-native.cmd` 的 4 处 `X:\` 路径改成本机实际值**）
+6. 按第五章命令执行构建（**`build-native.cmd` 已自动探测路径，无需手工改任何路径**；要覆盖用环境变量）
 7. 如果构建失败，根据错误信息对照第八章排查
 8. **构建成功后务必冒烟验证**：启动 → 导入 → 预览（确认缓存目录生成）→ 提取 →
    切换语言（zh/en 各一次）→ 退出（确认缓存清空）。这些路径正是元数据缺失时才会崩的地方
@@ -1930,6 +1972,18 @@ build-native.cmd --no-editbin       :: 保留控制台子系统（排启动期�
 ```
 
 本机实测耗时：`mvn clean package` 约 1–2 分钟 + `native-image` 约 **1 分 26 秒**。
+
+**打包机标准操作流程（按顺序，别跳步）**
+
+1. **预检**：`check-env.cmd` → **exit 0**（`20` = 只缺 MSVC，`1` = 缺其它关键项）。
+2. **只准备不链接**：`build-native.cmd --prepare-only` → exit 0；确认 `target\jfx-dlls` 下 DLL 数符合配方
+   （dynamic 12 / static 5）、`logs\` 下三件套已生成。这一步不依赖 MSVC，用来先排环境问题。
+3. **元数据**：**仅当元数据相关代码有改动**（新增 Jackson DTO / FXML / properties / 图片资源）才重采，
+   按 §4.9.3 的并集合并 + 方法/字段级对账（丢失 = 0）执行。
+4. **先跑 JVM 侧回归**（基线见 §10.11）：确认真实功能没坏，再花时间做 native —— native 只会掩盖问题，不会暴露它。
+5. **完整构建**：`build-native.cmd` → exit 0；核对 `logs\native-build-<stamp>.report.json` 的
+   `status=OK` / `failedStep` 与 `artifacts`，**不要只看退出码**。
+6. **验收**：§10.5 的三档机制验证（启动 / 产物黄金基线 / 交叉复核）+ **§10.5.6 的人工验收清单**。
 
 ### 10.3 五个真缺陷（根因 + 修法，别再重踩）
 
@@ -2012,8 +2066,13 @@ static 配方对路径无要求，直接双击 exe 即可。
 两者都：
 - **没有** `logs/`（应用首次运行才创建；打包时不要带）
 - 整个目录**拷走即用**：无需 JDK/JRE，也无需预装 VC 运行库。
-- **产物逐字节等价**：两种配方在 native 下都跑出 **32/0** 的产物黄金基线（§10.5.2），
-  且与 JVM 产物树 288/288 同名同内容。**选配方只影响体积，不影响产物。**
+- **产物逐字节等价**：两种配方在 native 下都跑出 **42/0** 的产物黄金基线（§10.5.2），
+  且与 JVM 产物树同名同内容。**选配方只影响体积，不影响产物。**
+
+> 📌 **清单里的 JDK DLL 集合会随 native-image / JDK 版本略有出入**（例如本机 2026-10-04 用
+> dynamic 配方复跑时是 `awt / java / javaaccessbridge / javajpeg / jawt / jvm / lcms` **7 个**，
+> 没有 `fontmanager` / `freetype`；dist 共 **22 个文件**，`MhtExtractor.exe` **70,242,304 B**）。
+> **以构建报告 `artifacts` 为准**，上表只用于"心里有数"。
 
 ### 10.5 验证配方（**三档，跑完才算验完**）
 
@@ -2035,7 +2094,7 @@ $p.CloseMainWindow()        # 期望 ~2 秒内 HasExited=True 且 ExitCode=0（�
 #### 10.5.2 第二档：跑仓库自己的产物黄金基线（**最强的一档**）
 
 `src/test/java/com/mhtextractor/baseline/BaselineCases.java` 是一个**零 JavaFX、可复用**的无头运行器
-（16 个用例 × zh/en = 32 份基线，每份含**逐产物 SHA-256 + 内容摘要**）。把它包进 native 镜像跑一遍，
+（**21 个用例 × zh/en = 42 份基线**，每份含**逐产物 SHA-256 + 内容摘要**）。把它包进 native 镜像跑一遍，
 就等于"让 native 二进制去对黄金基线"：
 
 ```
@@ -2055,10 +2114,15 @@ $p.CloseMainWindow()        # 期望 ~2 秒内 HasExited=True 且 ExitCode=0（�
 ```
 [PASS] [text-merged-chapter/zh]  products=1 total=2 success=2 fail=0 skip=0
 [PASS] [text-separate-titled/zh] products=2 total=3 success=2 fail=0 skip=1
-... （共 32 行）
-NATIVE-BASELINE: 32 passed, 0 failed     ← native 二进制
-NATIVE-BASELINE: 32 passed, 0 failed     ← JVM 对照（同一探针）
+... （共 40 行）
+NATIVE-BASELINE: 42 passed, 0 failed     ← native 二进制
+NATIVE-BASELINE: 42 passed, 0 failed     ← JVM 对照（同一探针）
 ```
+
+> 📌 **2026-10-04 复核**：在元数据清理（§4.9.4 的 `cea00c3`）之后重建探针并重跑 ——
+> **`NATIVE-BASELINE: 42 passed, 0 failed`**。⚠️ **探针的工作根必须传一个干净目录**
+> （默认 `.claude-work/native-baseline-run` 不清空，而 `BaselineCases` 的会话目录名是固定的，
+> 第二次运行会**追加/翻倍**已有文件 → 假失败）。`ProductBaselineTest` 用 JUnit `@TempDir`，不受影响。
 
 覆盖到的**参数驱动行为**：章节编号（中文数字/西文）、标题标记提取命名、内容区域限定（字面量+正则）、
 模板变量 `{filename}/{date}/{time}`、边界路径（不可解析/缺 CTE/递归超限）、图片单独/合并、
@@ -2092,25 +2156,94 @@ System.out.println("FONT=" + Font.loadFont(s, 12.0));
 - 项目树**外**运行：`STREAM=avail=202744` + `FONT=family='Font Awesome 5 Free Solid'` → 图标正常
 - 项目树**内**运行：`STREAM=avail=202744` 但 `FONT=null` → 图标全变空心方框
 
-#### 10.5.5 GUI 自动化（`test.mode`）
+#### 10.5.5 GUI 自动化（`test.mode`，**入口在测试源集**）
 
-```powershell
-# 需要 target\test-classes（FeatureExercise 在测试源码里，生产 jar 不含）
-# classpath = target\classes;target\test-classes;<cp.txt>；JavaFX 走 --module-path
-java --module-path <jfx-win jars> --add-modules javafx.controls,javafx.fxml `
-     -Dtest.mode=true -Duser.language=zh -Duser.country=CN `
-     -cp "..." com.mhtextractor.App
-# 结果落 logs/test-results.txt，末行应为 "=== RESULTS: 31 passed, 0 failed ==="
+> 🚩 **P7（2026-10-02）起入口变了**：生产启动器 `com.mhtextractor.App` **不再读 `test.mode`**，也不再反射
+> 调用演练类。GUI 自动化/演练的入口是**测试源集**的 `com.mhtextractor.gui.acceptance.TestMain`
+> （按与 `App.start()` 相同的装配起真窗口，再驱动 `FeatureExercise`）。
+
+```bat
+:: 需要 target\test-classes（演练类在测试源码里，生产 jar 不含）
+:: classpath = target\classes;target\test-classes;<target\cp.txt 的内容>；JavaFX 走 --module-path
+java --module-path <jfx-win jars> --add-modules javafx.controls,javafx.fxml ^
+     -Dtest.mode=true -Duser.language=zh -Duser.country=CN ^
+     -cp "target\classes;target\test-classes;<cp.txt>" com.mhtextractor.gui.acceptance.TestMain
+:: 结果落 logs/test-results.txt，末行应为 "=== RESULTS: 33 passed, 0 failed ==="
 ```
 
-同一套断言**搬进 native 镜像**也能过（主类仍是 `App`，classpath 多带 test-classes 与一份给
-`FeatureExercise` 开反射的元数据）—— 本机实测 **zh 31/0 + en 31/0**。
-但注意：GUI 断言验的是**控件状态**，**不验落盘产物**，所以它**替代不了** §10.5.2。
+🚨 三条纪律（本项目真被坑过）：
+
+- **跑前删 `logs/test-results.txt`，跑后核对它的 mtime** —— 否则读到的可能是上一次的 33/0；
+  并确认日志里没有 `Exception in Application start method`。
+- **locale 由 `logs/gui-state.json` 决定**，它**覆盖** `-Duser.language`：要跑 en 就先播种/移走该文件，
+  并断言"英文运行的日志里中文字符数 = 0"。
+- **不要**用 `mvn javafx:run -Dtest.mode=true` —— `-D` 会被 Maven 吃掉，测试根本不会启动。
+
+zh 与 en 各 **33 passed / 0 failed** 是当前基线。把该入口打进 native 镜像在历史上也验过（zh/en 各 31/0，为旧基线值）；
+**当前 `build-native.cmd` 内置的是更小的 `[STEP SMOKE]` 卡片渲染冒烟**（`tools/probes/AppCardProbe.java`），
+native 侧的全量 GUI 自动化仍以 JVM 侧这份为准。
+⚠️ GUI 断言验的是**控件状态**，**不验落盘产物**，所以它**替代不了** §10.5.2。
 
 > 🚨 踩过的坑：`FeatureExercise.runAutomatedTests()` 里 `new FileWriter("logs/test-results.txt")`
 > 在 `logs\` 不存在时会抛 `FileNotFoundException`，而异常被外层 `catch (Exception)` 吞掉 →
 > 方法"正常"返回 → `System.exit(0)` → 现象是**2.4 秒静默退出、零产物、零堆栈**，极易被误判成"跑过了"。
 > 已修（自建 `logs\` + 结果通道自足 + 退出码诚实）。判据仍然是**核对 `logs/test-results.txt` 的 mtime**。
+
+#### 10.5.6 打包后人工验收清单（在 native EXE 上逐项过）
+
+> §10.5.1–10.5.5 是**机制层**验证；本节是**功能层**清单，用于"机制都过了，功能是否真的没坏"。
+> ⭐ = 直接命中 native 元数据风险点（i18n 资源注册 / Jackson 反射），**这几项必须做**。
+> 运行前提：**从项目树外启动**（否则图标空心方框，§10.7.1）；dynamic 配方在中文路径下用 `启动.cmd`（§10.8）。
+
+**A. ⭐ 元数据与生命周期（本项目的重点）**
+
+| # | 验收项 | 为什么重要 |
+|---|---|---|
+| 1 | ⭐ 启动后切换语言（zh ⇄ en）：界面全量跟随、**无 `!key!` 残留** | 验证 i18n **bundle 资源注册**生效（最易漏） |
+| 2 | ⭐ 点「查看预览效果」后，`%TEMP%\mht-extractor-preview\<64位hex>\` 下出现 `meta.json` + `images\` + `.complete` | 验证 Jackson 对 `PreviewCacheMeta` 的**反射构造**生效 |
+| 3 | ⭐ 再次预览同一文件（命中缓存）：立即出缩略图、不再重新解析 | 验证 `meta.json` **反序列化**路径 |
+| 4 | ⭐ 有未提取的预览缓存时点 X：出现「清空缓存」等待卡片 → 清完自动关窗 → **进程无残留** | 验证关窗链路与"有未答确认卡不许关窗"守卫 |
+| 5 | ⭐ 单击缩略图 → 用系统默认查看器打开缓存图片（被系统策略阻断时按应用内兜底：`platform.FileOpener` 的两级协议，失败会如实报错而非谎报"已打开"） | 验证 `PreviewCacheStore.imageFileFor` + `platform.FileOpener` |
+
+**B. 文本提取**
+
+| # | 验收项 |
+|---|---|
+| 1 | 合并输出：多文件 → 单个 TXT，章号连续（中文数字 / 西文随 locale） |
+| 2 | 单独输出：每来源一个 TXT，可含标题命名 |
+| 3 | 内容区域限定：起止标记的**字面量与正则两种模式都要试**；模板变量 `{filename}`/`{datetime}`/`{date}`/`{time}` |
+| 4 | 标题提取、编码自动修复、章节序号勾选 |
+
+**C. 图片提取**
+
+| # | 验收项 |
+|---|---|
+| 1 | 合并输出（单目录）/ 单独输出（每文件一目录） |
+| 2 | 流式 与 高速内存（预加载）两种模式 |
+| 3 | 名称提取、区域限定、批量重命名 |
+| 4 | ZIP / CBZ 打包 + 归档后删源目录 |
+| 5 | 广告过滤、Data URI、魔数扩展名纠正 |
+
+**D. 列表 / 分组 / 撤销 / 拖拽**
+
+| # | 验收项 |
+|---|---|
+| 1 | 文件列表、勾选、全选三态、位置序号、章节徽标 |
+| 2 | 合并为组 / 拆分组 / 组名编辑 / 组参数独立与继承 |
+| 3 | 撤销（移除 / 导入 / 拖拽 / 组合并 / 拆分 / 参数 / 清除 / 应用全局） |
+| 4 | 拖拽：组内排序、跨组、出组、组行移动、两组合并 |
+| 5 | 移除（含整组、空组自动销毁） |
+
+**E. 界面与其它**
+
+| # | 验收项 |
+|---|---|
+| 1 | **参数侧边栏**（右侧非模态）：打开/收起、确定提交、**折叠保留草稿**、目标切换确认、高速模式确认；命名配置保存/加载/删除 |
+| 2 | HTML 源码查看器（左侧非模态）：语法高亮、查找栏、**鼠标选择 + 复制**、软换行与行号对齐 |
+| 3 | 输入/输出目录选择、浏览按钮、完成后自动打开输出文件夹 |
+| 4 | 在浏览器中打开 / 查看源码（CDP 原生查看器或回退源码页） |
+| 5 | 进度条三态配色、取消提取、失败/跳过/警告可视化回写 |
+| 6 | `logs/gui-state.json` 持久化与启动恢复（含 `locale`） |
 
 ### 10.6 元数据采集与合并（本次的实际做法）
 
@@ -2195,9 +2328,13 @@ java --module-path <jfx-win jars> --add-modules javafx.controls,javafx.fxml `
 - 判断"构建是否真跑过"：看 `logs/native-build-<stamp>.report.json` 的 `status/steps` 与
   `logs/native-build-<stamp>.log` 里的 `[STEP k/n] END … exit=`，不要只看退出码。
 - 统计测试数不要读执行方日志，直接聚合 `target/surefire-reports/*.txt`
-  （本次独立聚合：**420 tests / 0 failures / 36 类** + `headless-layer-b` **53/0**）。
+  （2026-10-05 复核的独立聚合：**768 tests / 0 failures**（75 个类汇总）+ `headless-layer-b` **68/0**）。
 
 ### 10.8 🚨 非 ASCII（中文）路径：dynamic 配方会**启动失败** —— 已随包启动器
+
+> **2026-10-05 实测复验**：把 dynamic 产物复制到 `D:\中文目录实验\提取器\` 直接运行 → 进程立即退出，stderr 为
+> `Exception in thread "main" java.lang.RuntimeException: No toolkit found`（`com.sun.javafx.tk.Toolkit.getToolkit` → `PlatformImpl.startup`）。
+> 与本节根因**完全一致**（JavaFX 原生库 `glass/prism_*.dll` 从非 ASCII 的 EXE 目录加载失败），故该限制**只与 JavaFX 有关**。
 
 **症状**：把 dynamic 产物放进中文目录，双击 exe → **窗口一闪即逝**，stderr 里是：
 
@@ -2273,6 +2410,29 @@ static 配方不生成启动器（不需要）。
 | 交付目录 | dynamic：22 个文件 / ~70 MB，**含** 7 个 JavaFX DLL；static：15 个文件 / ~98 MB，**不含**。两者都**不含** `logs/` |
 | 能不能启动 | 从无关 cwd 启动 → 标题 `MHT 资源提取器`；关窗 exit 0 无残留 |
 | 图标对不对 | **必须**从项目树外运行；症状是"全空心方框"（§10.7.1） |
-| 能不能真提取 | native 跑 `BaselineCases` → **32 passed / 0 failed**（§10.5.2） |
-| 元数据够不够 | FXML / Jackson / 资源三处不炸；`git diff --numstat` 纯增量 |
-| 回归门槛 | `mvn test`：**420/0（36 类）+ headless-layer-b 53/0**；GUI 自动化 zh 31/0、en 31/0 |
+| 能不能真提取 | native 跑 `BaselineCases` → **42 passed / 0 failed**（§10.5.2） |
+| 元数据够不够 | FXML / Jackson / 资源三处不炸；`git diff --numstat` 纯增量；过时项用 `tools/native/audit-native-metadata.ps1` 审计 |
+| 功能有没有坏 | 按 **§10.5.6 人工验收清单**逐项过（A 组 ⭐ 必做） |
+| 回归门槛 | `mvn test`：**768/0** + `headless-layer-b` **68/0**；产物基线 42 份；架构不变式 13 条；GUI 自动化 zh/en 各 34/0（明细见 §10.11） |
+
+### 10.11 当前回归基线（2026-10-05 独立复核）
+
+> 打包前拿这张表对照；**任何一项变红都先查清再打包**。项目版本 **3.0.0**（以 `pom.xml` 为唯一来源）。
+
+| 项 | 命令 / 手段 | 实测 |
+|---|---|---|
+| 编译 + 全量单测 | `mvnw.cmd clean test`（不加 `-q`） | 默认 **768 / 0**、`headless-layer-b` **68 / 0**、`BUILD SUCCESS` |
+| 独立聚合（不读执行方日志） | 聚合 `target/surefire-reports/*.txt` | **768 passed / 0 failed**（75 个类汇总） |
+| 产物黄金基线 | `ProductBaselineTest` | **42 / 0**（zh+en × 21 例 × 2 遍确定性自检） |
+| 结构不变式 | `ArchitectureTest` | **13 / 0**；`MainController` **1709** 行 / 上限 **2240**；`test-support` 标记 **0**；GUI 直写 **0** / 间接写 **0** |
+| GUI 自动化 | §10.5.5 入口，zh 与 en 各跑一次 | **各 34 passed / 0 failed**；`logs/test-results.txt` 的 **mtime** 与本轮一致 |
+| UI / 交互探针 | `tools\probes\run-probe.ps1 <Probe> [-Locale …]` | ContextMenu **121/0**、SidePanel **153/0**（+E1.2 运行时观测 6 条）、HtmlViewer **163/0**、ParamDraft **14/0**、AppCard **5/0**、NotificationAcceptance / BusyCloseProbe `ALL CHECKS PASSED`、PendingConfirmClose `PROBE DONE`；UiProbe 截断 **0**（en 屏上中文 **0**） |
+| 生产日志键 | 扫描 `I18n.get` / `I18n.msg` 字面量 | `log.*` **236 键 / 247 调用点**逐键不变；全部键调用点 **442**（E4.1 起 7 个业务警告键改产 `ExtractWarning` 码值） |
+| i18n bundle | 两份 properties 对账 | **547 / 547**，键集与占位符集合一致 |
+| native 构建 | `build-native.cmd`（默认 dynamic） | exit 0；report `status=OK`、全部步骤 exit 0（含 `[STEP SMOKE]`）；dist **22 个文件** |
+| native 产物基线 | 重建 `NativeBaselineProbe` 后运行（§10.5.2） | **42 passed / 0 failed** |
+| 第三方依赖 | `pom.xml` | 自基线以来**零改动**（`noNewThirdPartyDependencies` 仍绿） |
+
+**已知不在本表覆盖范围内的项**（详见根目录《遗留目标与未完成事项.md》）：
+截图链（JVM vs native 像素对比）、真实 OS 级鼠标交互、`NATIVE_RECIPE=static` 配方的最近一轮复跑、
+以及"英文运行日志中文字符数 = 0"的日志级测量。
