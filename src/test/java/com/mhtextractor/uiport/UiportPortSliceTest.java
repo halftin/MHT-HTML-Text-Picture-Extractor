@@ -9,7 +9,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,7 +40,7 @@ class UiportPortSliceTest {
         groups.add(new GroupVm(1, "组1", true, false, List.of()));
         List<ItemVm> top = new ArrayList<>();
         top.add(new ItemVm("a", "a.mht", true, false, null, UpdateKind.NONE));
-        WorkspaceVm vm = new WorkspaceVm(groups, top, true, 3, true, false, TriState.SOME, null);
+        WorkspaceVm vm = new WorkspaceVm(groups, top, true, 3, TriState.SOME);
 
         groups.clear();
         top.clear();
@@ -49,7 +48,9 @@ class UiportPortSliceTest {
         assertEquals(1, vm.topLevelItems().size());
         assertThrows(UnsupportedOperationException.class, () -> vm.groups().clear());
         assertThrows(UnsupportedOperationException.class, () -> vm.topLevelItems().clear());
-        assertNull(vm.lastStats());
+        assertTrue(vm.canUndo());
+        assertEquals(3, vm.undoDepth());
+        assertEquals(TriState.SOME, vm.selection());
     }
 
     @Test
@@ -108,21 +109,12 @@ class UiportPortSliceTest {
                     @Override
                     public void clearItems() {
                     }
-
-                    @Override
-                    public void setChecked(List<String> itemIds, boolean checked) {
-                    }
-
-                    @Override
-                    public void cancelWorkspaceActivity() {
-                    }
                 };
             }
 
             @Override
             public WorkspaceQueries queries() {
-                return () -> new WorkspaceVm(List.of(), List.of(), false, 0, false, false,
-                        TriState.NONE, null);
+                return () -> new WorkspaceVm(List.of(), List.of(), false, 0, TriState.NONE);
             }
 
             @Override
@@ -145,10 +137,10 @@ class UiportPortSliceTest {
             }
         };
 
-        // 门面四通道可装配、可调用
+        // 门面四通道可装配、可调用（P3-3a 收敛后命令切片只剩撤销 / 清场）
         assertEquals(TriState.NONE, uiport.queries().workspace().selection());
         assertEquals(0, uiport.queries().workspace().groups().size());
         uiport.commands().undo();
-        uiport.commands().setChecked(List.of("a"), true);
+        uiport.commands().clearItems();
     }
 }
