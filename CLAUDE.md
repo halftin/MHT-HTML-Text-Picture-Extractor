@@ -129,7 +129,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 - **参数 UI**：右侧非模态侧边栏（`ParamSidePanel` / `ParamFormPane` / `ParamPanelActions` / `ParamClipboard` /
   `ParamTargetBar` + `ParamTargetText`）。**模态参数窗口已彻底删除，不得以弹窗作为兜底路径。**
 - **HTML 源码查看器**：`HtmlSourceViewer` + `HtmlFindIndex` + `platform.HtmlTextSelection` + `platform.HtmlWrapMap`
-  （软换行；行号每逻辑行一次并与折行对齐；选择/查找/复制共用同一套逻辑偏移）。**不引入 `WebView`**，不另造 tokenizer。
+  （软换行；行号每逻辑行一次并与折行对齐；选择/查找/复制共用同一套逻辑偏移）。**不引入 `WebView`**（**仅约束 JavaFX 前端**；换框架后按新框架实际评估 —— 见《UI可切换重构方案》§14 决策 16），不另造 tokenizer。
 - **提醒**：`gui.component.NotificationHost` 是**应用内提醒唯一入口**（生产代码**零模态 `Alert`**）。
 - **日志进界面**：`LogTextArea` + `TextAreaAppender`（Logback consumer）。
 - `MainView.fxml` / `ParamDialog.fxml` 文案全部是 `%key`（`loader.setResources(I18n.bundle())`），**不得出现中文字面量**。
@@ -151,7 +151,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | `testAccessSurfaceIsFrozen` | 测试访问面冻结：`src/test/resources/test-access-surface.tsv` **124** 条（direct 95 / reflect 9 / reflect-dynamic 20；S2 一次性上调并记账）**只减不增**；发现集合 ⊆ 清单、清单无陈旧条目、`com.mhtextractor.gui` 同包驱动必须登记。扫描器 `baseline.TestAccessSurface`（字节码成员库 + 驱动类常量池引用；不用反射 API） |
 | `allowlistOnlyTargetsBusinessPackages` · `baselineHarnessIsPresent` | 防白名单滥用 / 基线与夹具在位 |
 
-**其余硬约束**：主源集不出现 `java.awt`；不引入 `WebView`；不新增事件总线 / DI 容器 / 通用工作流引擎。
+**其余硬约束**：主源集不出现 `java.awt`；不引入 `WebView`（**仅 JavaFX 前端生效**，换框架后重新评估）；不新增事件总线 / DI 容器 / 通用工作流引擎。
 
 ---
 
