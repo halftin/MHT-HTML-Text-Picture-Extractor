@@ -2,6 +2,7 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.ExtractionPlanService;
 import com.mhtextractor.app.ExtractionPreconditions;
+import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.app.PreStartGate;
 import com.mhtextractor.app.PreStartGateContext;
 import com.mhtextractor.app.PreStartGates;
@@ -11,7 +12,6 @@ import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
@@ -91,7 +91,7 @@ public final class ExtractionTaskCoordinator {
         void extractionStarted();
 
         /** 结果一次性回写列表条目（{@code MainController.applyExtractResults}）。 */
-        void applyResults(BatchProcessor.ProcessStats stats);
+        void applyResults(ExtractionStats stats);
 
         /** 状态栏文案（成功 = 摘要行；失败 = {@code extract.statusError}）。 */
         void setStatusText(String text);
@@ -169,7 +169,7 @@ public final class ExtractionTaskCoordinator {
         void setProgressBarActivity(String styleClass);
 
         /** 提取结果一次性回写（原 {@code infoPresenter.applyExtractResults(stats)}）。 */
-        void applyExtractResults(BatchProcessor.ProcessStats stats);
+        void applyExtractResults(ExtractionStats stats);
 
         /** 进度条控件（原 {@code refs.progressBar()}）。 */
         ProgressBar progressBar();
@@ -222,8 +222,8 @@ public final class ExtractionTaskCoordinator {
      * 最近一次提取统计的唯一 holder：{@code Task.call()} 在服务返回后写一次，经 {@link #extractStats()}
      * 供只读访问器读取（GUI 自动化据此断言提取完成与结果内容）。取消回写不经此 holder（见 {@link RunChannel}）。
      */
-    final AtomicReference<BatchProcessor.ProcessStats> lastExtractStats = new AtomicReference<>();
-    private volatile Task<BatchProcessor.ProcessStats> currentTask;
+    final AtomicReference<ExtractionStats> lastExtractStats = new AtomicReference<>();
+    private volatile Task<ExtractionStats> currentTask;
     /** 每 run 递增的运行代数（<b>只在 FX 线程上读写</b>）：旧任务迟到的终态回调凭它识别自己是陈旧调用 */
     private long runGeneration;
     /**
@@ -317,7 +317,7 @@ public final class ExtractionTaskCoordinator {
         /** 本次 run 的序号（每 run 递增一次；旧任务回调凭它识别自己是陈旧调用） */
         final long runId;
         /** 本次 run 的结果容器：worker 完成处理后在 {@code call()} 里完成，<b>恰好一次</b>（异常路径完成 null） */
-        final CompletableFuture<BatchProcessor.ProcessStats> result = new CompletableFuture<>();
+        final CompletableFuture<ExtractionStats> result = new CompletableFuture<>();
         /** 到"UI 线程"的派发器（生产 = {@code Platform::runLater}；测试注入由测试线程按序 drain 的队列） */
         final Consumer<Runnable> dispatcher;
 
@@ -348,7 +348,7 @@ public final class ExtractionTaskCoordinator {
          * @param onFx         UI 回写动作（只收非 null 统计）
          */
         void deliverAfterWorkerFinished(LongSupplier currentRunId,
-                                        Consumer<BatchProcessor.ProcessStats> onFx) {
+                                        Consumer<ExtractionStats> onFx) {
             result.whenComplete((stats, error) -> dispatcher.accept(() -> {
                 if (currentRunId.getAsLong() != runId) {
                     return;                     // 陈旧 run 的迟到回写：no-op
@@ -378,14 +378,14 @@ public final class ExtractionTaskCoordinator {
         // B：每次 run 建立新的运行上下文（序号 + 结果通道）；旧任务的迟到回调据此识别陈旧
         long runId = ++runGeneration;
         RunChannel channel = new RunChannel(runId, Platform::runLater);
-        Task<BatchProcessor.ProcessStats> task = new Task<>() {
+        Task<ExtractionStats> task = new Task<>() {
             @Override
-            protected BatchProcessor.ProcessStats call() {
+            protected ExtractionStats call() {
                 try {
                     // 限定名：匿名 Task 继承自 FutureTask，裸 run(...) 会被解析成 FutureTask.run()；
                     // 进度适配用 lambda 而非 this::updateProgress（后者在匿名 Task 内无法绑到单参 void 目标）
-                    BatchProcessor.ProcessStats stats = ExtractionTaskCoordinator.this.extractionService
-                            .run(request, () -> isCancelled(), v -> updateProgress(v, 1.0)).stats();
+                    ExtractionStats stats = ExtractionStats.from(ExtractionTaskCoordinator.this.extractionService
+                            .run(request, () -> isCancelled(), v -> updateProgress(v, 1.0)).stats());
                     // 时点②：worker 停止并产出 partial —— 先落只读 holder，再完成本 run 的结果通道
                     ExtractionTaskCoordinator.this.lastExtractStats.set(stats);
                     channel.result.complete(stats);
@@ -406,13 +406,13 @@ public final class ExtractionTaskCoordinator {
             landTerminalState();
             ui.setProgress(1.0);
             ui.setStatusText(I18n.get("extract.done"));
-            BatchProcessor.ProcessStats stats = task.getValue();
+            ExtractionStats stats = task.getValue();
             if (stats != null) {
-                ui.setStatusText(stats.getSummaryLine());
+                ui.setStatusText(stats.summaryLine());
                 // 满格条按结果配色（拍板 2026-09-24）：有失败/跳过 → 浅红；有警告 → 黄；否则保持绿
-                ui.setProgressBarOutcome(stats.getFailCount() + stats.getSkipCount() > 0
+                ui.setProgressBarOutcome(stats.failCount() + stats.skipCount() > 0
                         ? ExtractOutcomeStyle.FAILED
-                        : stats.getWarnCount() > 0 ? ExtractOutcomeStyle.WARNED
+                        : stats.warnCount() > 0 ? ExtractOutcomeStyle.WARNED
                         : ExtractOutcomeStyle.SUCCESS);
                 ui.applyResults(stats);
             }
@@ -448,14 +448,14 @@ public final class ExtractionTaskCoordinator {
 
     /** 取消在途提取任务（无任务时为空操作）。 */
     public void cancel() {
-        Task<BatchProcessor.ProcessStats> task = currentTask;
+        Task<ExtractionStats> task = currentTask;
         if (task != null) {
             task.cancel(true);
         }
     }
 
     /** 供 UI 侧读取"最近一次提取统计"的唯一 holder（只读入口；写入只发生在 {@link #run} 内）。 */
-    public AtomicReference<BatchProcessor.ProcessStats> extractStats() {
+    public AtomicReference<ExtractionStats> extractStats() {
         return lastExtractStats;
     }
 
@@ -715,7 +715,7 @@ public final class ExtractionTaskCoordinator {
             }
 
             @Override
-            public void applyResults(BatchProcessor.ProcessStats stats) {
+            public void applyResults(ExtractionStats stats) {
                 host.applyExtractResults(stats);
             }
 

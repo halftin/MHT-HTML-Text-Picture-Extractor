@@ -17,7 +17,7 @@ import com.mhtextractor.gui.util.JavaFxUtil;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.processor.BatchProcessor;
+import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.util.ParamScope;
@@ -238,7 +238,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 @Override public Label statusLabel() { return refs.statusLabel(); }
                 @Override public void setStatusText(String text) { refs.statusLabel().setText(text); }
                 @Override public void setProgressBarActivity(String styleClass) { MainController.this.setProgressBarActivity(styleClass); }
-                @Override public void applyExtractResults(BatchProcessor.ProcessStats stats) { infoPresenter.applyExtractResults(stats); }
+                @Override public void applyExtractResults(ExtractionStats stats) { infoPresenter.applyExtractResults(stats); }
                 @Override public ProgressBar progressBar() { return refs.progressBar(); }
                 @Override public Button startButton() { return refs.startButton(); }
                 @Override public Button stopButton() { return refs.stopButton(); }
@@ -1213,7 +1213,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * 最近一次提取的 partial/完整统计（测试支撑）：<b>只读</b>投影到协调器持有的唯一 holder ——
      * 写入只发生在 {@code ExtractionTaskCoordinator.run} 一处（服务返回值落一次）。
      */
-    AtomicReference<BatchProcessor.ProcessStats> extractStats() {
+    AtomicReference<ExtractionStats> extractStats() {
         return extractionCoordinator.lastExtractStats;
     }
 

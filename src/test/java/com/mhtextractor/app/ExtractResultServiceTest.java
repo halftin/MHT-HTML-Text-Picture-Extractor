@@ -18,6 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * P3-3b-13：{@link ExtractResultService} 回写口径 —— 按 path 匹配、message 空跳过、
  * warnings 逐个渲染拼接、无内容 → null、返回命中数（{@code byPath.size()} 口径）。
  * 零 JavaFX、零 I18n（渲染与分隔符经入参注入），可在 headless 上下文执行。
+ *
+ * <p>P3-3b-22 起回写入参为 {@link ExtractionStats}：夹具仍按生产路径先建
+ * {@code BatchProcessor.ProcessStats} 再经 {@link ExtractionStats#from} 搬运，顺带覆盖搬运口径。</p>
  */
 class ExtractResultServiceTest {
 
@@ -37,7 +40,7 @@ class ExtractResultServiceTest {
                 new ExtractWarning("w.key", Map.of("name", "x"))));
         List<PreviewItem> items = List.of(item("C:\\a.mht"), item("C:\\b.mht"));
 
-        int matched = ExtractResultService.apply(stats, items,
+        int matched = ExtractResultService.apply(ExtractionStats.from(stats), items,
                 w -> "[" + w.key() + "]", ";");
 
         assertEquals(1, matched, "命中数 = byPath.size()（与 log.maincontroller.29 同口径）");
@@ -54,7 +57,7 @@ class ExtractResultServiceTest {
         stats.addFileResult(result("C:\\b.mht", ExtractOutcome.SUCCESS, null));
         List<PreviewItem> items = List.of(item("C:\\a.mht"), item("C:\\b.mht"));
 
-        int matched = ExtractResultService.apply(stats, items, w -> "!", " | ");
+        int matched = ExtractResultService.apply(ExtractionStats.from(stats), items, w -> "!", " | ");
 
         assertEquals(2, matched);
         assertEquals(ExtractOutcome.SKIPPED, items.get(0).extractOutcome);
@@ -70,7 +73,7 @@ class ExtractResultServiceTest {
                 new ExtractWarning("w1", Map.of()), new ExtractWarning("w2", Map.of())));
         List<PreviewItem> items = List.of(item("C:\\a.mht"));
 
-        int matched = ExtractResultService.apply(stats, items, w -> "R(" + w.key() + ")", "、");
+        int matched = ExtractResultService.apply(ExtractionStats.from(stats), items, w -> "R(" + w.key() + ")", "、");
 
         assertEquals(1, matched);
         assertEquals("R(w1)、R(w2)", items.get(0).extractDetail, "警告逐个经 renderWarning 渲染后按序连接");
@@ -83,7 +86,7 @@ class ExtractResultServiceTest {
         stats.addFileResult(result("C:\\a.mht", ExtractOutcome.FAILED, "second"));
         List<PreviewItem> items = List.of(item("C:\\a.mht"));
 
-        int matched = ExtractResultService.apply(stats, items, w -> "!", ";");
+        int matched = ExtractResultService.apply(ExtractionStats.from(stats), items, w -> "!", ";");
 
         assertEquals(1, matched, "byPath.size() 按去重后的 key 数");
         assertEquals(ExtractOutcome.FAILED, items.get(0).extractOutcome);

@@ -1,12 +1,12 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.app.PreStartGate;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.processor.BatchProcessor;
 import javafx.application.Platform;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -91,7 +91,7 @@ class ExtractionTaskCoordinatorGateTest {
         @Override public Label statusLabel() { return statusLabel; }
         @Override public void setStatusText(String text) { events.add("status:" + text); }
         @Override public void setProgressBarActivity(String styleClass) { events.add("style:" + styleClass); }
-        @Override public void applyExtractResults(BatchProcessor.ProcessStats stats) { events.add("results"); }
+        @Override public void applyExtractResults(ExtractionStats stats) { events.add("results"); }
         @Override public ProgressBar progressBar() { return progressBar; }
         @Override public Button startButton() { return startButton; }
         @Override public Button stopButton() { return stopButton; }

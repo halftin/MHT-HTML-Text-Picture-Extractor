@@ -6,8 +6,7 @@ import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.processor.BatchProcessor;
-import com.mhtextractor.processor.FileResult;
+import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.model.ChangeListener;
 import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.model.ExtractOutcome;
@@ -699,7 +698,7 @@ public boolean runAutomatedTests() {
             listView().getSelectionModel().select(unnamed.get(0)); Thread.sleep(300);
             groupNameField().setText(I18n.get("test.autoGroup")); Thread.sleep(300);
             if (unnamed.get(0).isDefaultNamed()) { throw new IllegalStateException("用户改名后标记未清除"); }
-            BatchProcessor.ProcessStats before = this.view.extractStats().get();
+            ExtractionStats before = this.view.extractStats().get();
             // ③ 的提取禁用过开始按钮，完成路径已会重新启用（步骤 7 终态落地）；此处重算同一派生函数仅作兜底
             this.view.updateStartButtonState();
             startButton().fire();
@@ -757,12 +756,12 @@ public boolean runAutomatedTests() {
                     && (this.view.extractStats().get() == null || startButton().isDisabled())) {
                 pumpFxEvents();
             }
-            BatchProcessor.ProcessStats merged = this.view.extractStats().get();
-            if (merged == null || merged.getFileResults().size() != this.view.visibleCount()
-                    || !merged.getFileResults().stream()
+            ExtractionStats merged = this.view.extractStats().get();
+            if (merged == null || merged.files().size() != this.view.visibleCount()
+                    || !merged.files().stream()
                             .allMatch(r -> r.outcome() == ExtractOutcome.SUCCESS)) {
                 throw new IllegalStateException("单元合并后 fileResults 缺失或状态异常："
-                        + (merged == null ? "null" : merged.getFileResults().size()));
+                        + (merged == null ? "null" : merged.files().size()));
             }
             // 进度条配色拍板：全部成功 → 满格绿色
             if (!progressBar().isVisible() || Math.abs(progressBar().getProgress() - 1.0) > 0.001
@@ -915,13 +914,13 @@ public boolean runAutomatedTests() {
                 pumpFxEvents();
             }
             pumpFxEvents();
-            BatchProcessor.ProcessStats partial = this.view.extractStats().get();
+            ExtractionStats partial = this.view.extractStats().get();
             if (partial == null) {
                 throw new IllegalStateException("取消后 worker 未产出 partial 统计（回写未生效）");
             }
-            if (partial.getSuccessCount() < 1) {
-                throw new IllegalStateException("中途取消应有已完成文件的 partial 成功计数，实际 "
-                        + partial.getSuccessCount());
+            if (partial.files().isEmpty()) {
+                throw new IllegalStateException("中途取消应有已完成文件（partial files 非空），实际 "
+                        + partial.files().size());
             }
             if (this.view.running().get()) {
                 throw new IllegalStateException("取消终态必须复位运行标记");

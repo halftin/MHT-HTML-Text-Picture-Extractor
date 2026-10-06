@@ -1,12 +1,12 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.util.OutputUnitPlanner;
 import javafx.scene.Node;
@@ -346,7 +346,7 @@ public final class AcceptanceDriver {
         }
 
         /** 最近一次提取的统计（协调器只读投影，包级方法）。 */
-        public AtomicReference<BatchProcessor.ProcessStats> extractStats() {
+        public AtomicReference<ExtractionStats> extractStats() {
             return mc.extractStats();
         }
 

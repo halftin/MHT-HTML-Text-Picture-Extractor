@@ -1,12 +1,12 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.ExtractResultService;
+import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.app.OutputNameService;
 import com.mhtextractor.app.WorkspaceStructure;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.model.GroupItem;
 import javafx.scene.control.Label;
@@ -172,7 +172,7 @@ public final class WorkspaceInfoPresenter {
 
     /** 提取结果一次性回写（拍板：提取结束/取消后统一回写，非逐文件实时更新）：
      *  按路径匹配条目写入结果字段（下沉 {@code app.ExtractResultService}），列表一次刷新，选中条目 banner 同步 */
-    void applyExtractResults(BatchProcessor.ProcessStats stats) {
+    void applyExtractResults(ExtractionStats stats) {
         int matched = ExtractResultService.apply(stats, host.allPreviewItems(),
                 I18n::render, I18n.get("list.itemSeparator"));
         host.refreshList();

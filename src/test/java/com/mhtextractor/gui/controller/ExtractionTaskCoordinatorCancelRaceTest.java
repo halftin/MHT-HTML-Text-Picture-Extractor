@@ -1,11 +1,11 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.util.OutputUnitPlanner;
 import javafx.application.Platform;
 import javafx.scene.control.Button;
@@ -75,7 +75,7 @@ class ExtractionTaskCoordinatorCancelRaceTest {
     /** 只记录调用的桩（在 FX 线程上被调用）：断言用 applied 列表（同步） */
     private static final class FakeUi implements ExtractionTaskCoordinator.ExtractionUi {
 
-        final List<BatchProcessor.ProcessStats> applied = Collections.synchronizedList(new ArrayList<>());
+        final List<ExtractionStats> applied = Collections.synchronizedList(new ArrayList<>());
         final List<String> statusTexts = Collections.synchronizedList(new ArrayList<>());
         final List<Double> progress = Collections.synchronizedList(new ArrayList<>());
         final List<ExtractionTaskCoordinator.ExtractOutcomeStyle> outcomes =
@@ -108,7 +108,7 @@ class ExtractionTaskCoordinatorCancelRaceTest {
         }
 
         @Override
-        public void applyResults(BatchProcessor.ProcessStats stats) {
+        public void applyResults(ExtractionStats stats) {
             applied.add(stats);
         }
 
@@ -156,7 +156,7 @@ class ExtractionTaskCoordinatorCancelRaceTest {
         @Override public Label statusLabel() { return null; }
         @Override public void setStatusText(String text) { }
         @Override public void setProgressBarActivity(String styleClass) { }
-        @Override public void applyExtractResults(BatchProcessor.ProcessStats stats) { }
+        @Override public void applyExtractResults(ExtractionStats stats) { }
         @Override public ProgressBar progressBar() { return null; }
         @Override public Button startButton() { return null; }
     }
@@ -382,7 +382,7 @@ class ExtractionTaskCoordinatorCancelRaceTest {
         runOnFx(() -> coordinator.run(request(List.of(simple), () -> true, session1.toString()), label, ui));
         waitUntil("run 1 自然完成并回写", () -> !ui.applied.isEmpty());
         drainFx();
-        BatchProcessor.ProcessStats run1Stats = ui.applied.get(0);
+        ExtractionStats run1Stats = ui.applied.get(0);
 
         // run 2：deep 文件在闸门上取消
         Gate gate = new Gate();
@@ -427,7 +427,7 @@ class ExtractionTaskCoordinatorCancelRaceTest {
         runOnFx(() -> coordinator.run(request(List.of(simple0), () -> true, session0.toString()), label, ui));
         waitUntil("run 0 自然完成并回写", () -> !ui.applied.isEmpty());
         drainFx();
-        BatchProcessor.ProcessStats run0Stats = ui.applied.get(0);
+        ExtractionStats run0Stats = ui.applied.get(0);
 
         // run 1：闸门上取消，随后不排空 FX 立即开 run 2 —— onCancelled(run 1) 可能落在 run 2 前后
         Gate gate = new Gate();
@@ -441,7 +441,7 @@ class ExtractionTaskCoordinatorCancelRaceTest {
 
             waitUntil("run 2 自然完成并回写", () -> ui.applied.size() >= 2);
             drainFx();
-            BatchProcessor.ProcessStats run2Stats = ui.applied.get(1);
+            ExtractionStats run2Stats = ui.applied.get(1);
 
             gate.open();                     // run 1 worker 迟到完成 → 其回写必须 no-op
             waitUntil("run 1 worker 迟到完成", () -> coordinator.extractStats().get() != run2Stats);

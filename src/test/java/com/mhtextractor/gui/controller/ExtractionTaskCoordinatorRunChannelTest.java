@@ -1,5 +1,6 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;
@@ -55,13 +56,14 @@ class ExtractionTaskCoordinatorRunChannelTest {
     /** "worker 仍未完成"的观察窗口：窗口内队列必须保持为空 */
     private static final long QUIET_PROBE_MILLIS = 300;
 
-    private static BatchProcessor.ProcessStats stats(int success, int fail, int skip, int warn) {
+    /** 构造 worker 统计（与生产同径：先建 {@code ProcessStats} 再经 {@link ExtractionStats#from} 搬运） */
+    private static ExtractionStats stats(int success, int fail, int skip, int warn) {
         BatchProcessor.ProcessStats s = new BatchProcessor.ProcessStats();
         s.setSuccessCount(success);
         s.setFailCount(fail);
         s.setSkipCount(skip);
         s.setWarnCount(warn);
-        return s;
+        return ExtractionStats.from(s);
     }
 
     /** 把队列里已投递的回写动作全部跑掉，返回执行过的动作数 */
@@ -82,7 +84,7 @@ class ExtractionTaskCoordinatorRunChannelTest {
     void cancelWriteBackWaitsForWorkerAndAppliesExactlyOnce() throws Exception {
         AtomicLong generation = new AtomicLong(1);
         BlockingQueue<Runnable> q = new LinkedBlockingQueue<>();
-        List<BatchProcessor.ProcessStats> applied = new ArrayList<>();
+        List<ExtractionStats> applied = new ArrayList<>();
         ExtractionTaskCoordinator.RunChannel channel =
                 new ExtractionTaskCoordinator.RunChannel(1, q::add);
 
@@ -94,7 +96,7 @@ class ExtractionTaskCoordinatorRunChannelTest {
                 "worker 未完成时不得提前回写");
 
         // 时点②：worker 停止并产出 partial
-        BatchProcessor.ProcessStats partial = stats(2, 1, 0, 0);
+        ExtractionStats partial = stats(2, 1, 0, 0);
         channel.result.complete(partial);
 
         // 时点③：派发器上恰好投递一次
@@ -110,19 +112,20 @@ class ExtractionTaskCoordinatorRunChannelTest {
     void cancelBeforeAnyUnitStillWritesBackEmptyStatsOnce() throws Exception {
         AtomicLong generation = new AtomicLong(1);
         BlockingQueue<Runnable> q = new LinkedBlockingQueue<>();
-        List<BatchProcessor.ProcessStats> applied = new ArrayList<>();
+        List<ExtractionStats> applied = new ArrayList<>();
         ExtractionTaskCoordinator.RunChannel channel =
                 new ExtractionTaskCoordinator.RunChannel(1, q::add);
 
         channel.deliverAfterWorkerFinished(generation::get, applied::add);
-        BatchProcessor.ProcessStats empty = stats(0, 0, 0, 0);
+        ExtractionStats empty = stats(0, 0, 0, 0);
         channel.result.complete(empty);
 
         assertEquals(1, drain(q), "应恰好投递一次");
         assertEquals(1, applied.size());
         assertSame(empty, applied.get(0), "空统计也要原样回写");
-        assertEquals(0, applied.get(0).getSuccessCount());
-        assertEquals(0, applied.get(0).getFailCount());
+        assertEquals(0, applied.get(0).failCount());
+        assertEquals(0, applied.get(0).skipCount());
+        assertEquals(0, applied.get(0).warnCount());
     }
 
     /** ② 处理若干单元后取消：partial 恰回写一次，各计数与 worker 返回值逐字段一致；重复 complete 不再投递。 */
@@ -130,22 +133,21 @@ class ExtractionTaskCoordinatorRunChannelTest {
     void cancelAfterSeveralUnitsWritesBackPartialExactlyOnceWithExactCounts() throws Exception {
         AtomicLong generation = new AtomicLong(1);
         BlockingQueue<Runnable> q = new LinkedBlockingQueue<>();
-        List<BatchProcessor.ProcessStats> applied = new ArrayList<>();
+        List<ExtractionStats> applied = new ArrayList<>();
         ExtractionTaskCoordinator.RunChannel channel =
                 new ExtractionTaskCoordinator.RunChannel(1, q::add);
 
         channel.deliverAfterWorkerFinished(generation::get, applied::add);
-        BatchProcessor.ProcessStats partial = stats(2, 1, 3, 1);
+        ExtractionStats partial = stats(2, 1, 3, 1);
         channel.result.complete(partial);
 
         assertEquals(1, drain(q), "应恰好投递一次");
         assertEquals(1, applied.size(), "partial 只回写一次");
-        BatchProcessor.ProcessStats got = applied.get(0);
+        ExtractionStats got = applied.get(0);
         assertSame(partial, got, "回写载荷必须是 worker 返回的同一份统计");
-        assertEquals(2, got.getSuccessCount(), "success 计数逐字段一致");
-        assertEquals(1, got.getFailCount(), "fail 计数逐字段一致");
-        assertEquals(3, got.getSkipCount(), "skip 计数逐字段一致");
-        assertEquals(1, got.getWarnCount(), "warn 计数逐字段一致");
+        assertEquals(1, got.failCount(), "fail 计数逐字段一致");
+        assertEquals(3, got.skipCount(), "skip 计数逐字段一致");
+        assertEquals(1, got.warnCount(), "warn 计数逐字段一致");
 
         // CompletableFuture 语义：第二次 complete 被忽略，不得再投递
         channel.result.complete(stats(9, 9, 9, 9));
@@ -157,12 +159,12 @@ class ExtractionTaskCoordinatorRunChannelTest {
     void cancelRacingWithNaturalCompletionStillDeliversOnce() throws Exception {
         AtomicLong generation = new AtomicLong(1);
         BlockingQueue<Runnable> q = new LinkedBlockingQueue<>();
-        List<BatchProcessor.ProcessStats> applied = new ArrayList<>();
+        List<ExtractionStats> applied = new ArrayList<>();
         ExtractionTaskCoordinator.RunChannel channel =
                 new ExtractionTaskCoordinator.RunChannel(1, q::add);
 
         // 时点②先发生：worker 已完成
-        BatchProcessor.ProcessStats partial = stats(5, 0, 0, 0);
+        ExtractionStats partial = stats(5, 0, 0, 0);
         channel.result.complete(partial);
         // onCancelled 迟到注册（取消请求到达时 worker 刚好已停）
         channel.deliverAfterWorkerFinished(generation::get, applied::add);
@@ -178,7 +180,7 @@ class ExtractionTaskCoordinatorRunChannelTest {
     void lateWriteBackOfStaleRunIsNoOpAndNewRunWritesOnce() throws Exception {
         AtomicLong generation = new AtomicLong(1);
         BlockingQueue<Runnable> q = new LinkedBlockingQueue<>();
-        List<BatchProcessor.ProcessStats> applied = new ArrayList<>();
+        List<ExtractionStats> applied = new ArrayList<>();
         ExtractionTaskCoordinator.RunChannel run1 =
                 new ExtractionTaskCoordinator.RunChannel(1, q::add);
 
@@ -198,10 +200,11 @@ class ExtractionTaskCoordinatorRunChannelTest {
                 new ExtractionTaskCoordinator.RunChannel(2, q::add);
         assertTrue(run2.isCurrent(generation.get()));
         run2.deliverAfterWorkerFinished(generation::get, applied::add);
-        run2.result.complete(stats(3, 0, 0, 0));
+        ExtractionStats run2Stats = stats(3, 0, 0, 0);
+        run2.result.complete(run2Stats);
         assertEquals(1, drain(q), "新 run 应恰好回写一次");
         assertEquals(1, applied.size());
-        assertEquals(3, applied.get(0).getSuccessCount());
+        assertSame(run2Stats, applied.get(0), "新 run 回写载荷 == worker 返回的统计");
     }
 
     // ==================== ⑤⑥ 中断响应慢 / 失败路径 ====================
@@ -211,13 +214,14 @@ class ExtractionTaskCoordinatorRunChannelTest {
     void slowInterruptWorkerDeliversOnlyAfterItActuallyFinishes() throws Exception {
         AtomicLong generation = new AtomicLong(1);
         BlockingQueue<Runnable> q = new LinkedBlockingQueue<>();
-        List<BatchProcessor.ProcessStats> applied = new ArrayList<>();
+        List<ExtractionStats> applied = new ArrayList<>();
         ExtractionTaskCoordinator.RunChannel channel =
                 new ExtractionTaskCoordinator.RunChannel(1, q::add);
 
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch interruptSwallowed = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
+        ExtractionStats workerStats = stats(4, 0, 0, 0);
         Thread worker = new Thread(() -> {
             entered.countDown();
             try {
@@ -230,7 +234,7 @@ class ExtractionTaskCoordinatorRunChannelTest {
                     // 只会再来一次中断，不会再被吞
                 }
             }
-            channel.result.complete(stats(4, 0, 0, 0));
+            channel.result.complete(workerStats);
         }, "run-channel-slow-worker");
         worker.setDaemon(true);
 
@@ -249,7 +253,7 @@ class ExtractionTaskCoordinatorRunChannelTest {
         assertFalse(worker.isAlive(), "worker 应在放行后退出");
         assertEquals(1, drain(q), "worker 完成后恰好投递一次");
         assertEquals(1, applied.size());
-        assertEquals(4, applied.get(0).getSuccessCount());
+        assertSame(workerStats, applied.get(0), "回写载荷 == worker 返回的统计");
     }
 
     /** ⑥ 失败路径：worker 异常 → 通道完成 null → 回写动作投递但不调用 applyResults（无统计可回写）。 */
@@ -257,7 +261,7 @@ class ExtractionTaskCoordinatorRunChannelTest {
     void failedWorkerCompletesNullAndAppliesNothing() throws Exception {
         AtomicLong generation = new AtomicLong(1);
         BlockingQueue<Runnable> q = new LinkedBlockingQueue<>();
-        List<BatchProcessor.ProcessStats> applied = new ArrayList<>();
+        List<ExtractionStats> applied = new ArrayList<>();
         ExtractionTaskCoordinator.RunChannel channel =
                 new ExtractionTaskCoordinator.RunChannel(1, q::add);
 
@@ -276,7 +280,7 @@ class ExtractionTaskCoordinatorRunChannelTest {
     /** 记录终态落地动作的桩 UI（零 JavaFX）：E1.1 起停止按钮禁用走 host（本测试 host 为 null，
      *  跳过），落地契约的观测点是运行标记 + 注入派生函数 + 状态栏文案零写入。 */
     private static final class LandingUi implements ExtractionTaskCoordinator.ExtractionUi {
-        final List<BatchProcessor.ProcessStats> applied = new ArrayList<>();
+        final List<ExtractionStats> applied = new ArrayList<>();
         int statusTextCalls;
 
         @Override public File sessionOutputFolder() { return new File("."); }
@@ -284,7 +288,7 @@ class ExtractionTaskCoordinatorRunChannelTest {
         @Override public void setProgress(double value) { }
         @Override public void setProgressBarOutcome(ExtractionTaskCoordinator.ExtractOutcomeStyle style) { }
         @Override public void extractionStarted() { }
-        @Override public void applyResults(BatchProcessor.ProcessStats stats) { applied.add(stats); }
+        @Override public void applyResults(ExtractionStats stats) { applied.add(stats); }
         @Override public void setStatusText(String text) { statusTextCalls++; }
     }
 
@@ -353,7 +357,7 @@ class ExtractionTaskCoordinatorRunChannelTest {
                 "worker 未完成时不得提前回写（落地与回写解耦）");
 
         // 时点②：worker 停止并产出 partial → 时点③：派发器上恰好一次
-        BatchProcessor.ProcessStats partial = stats(2, 1, 0, 0);
+        ExtractionStats partial = stats(2, 1, 0, 0);
         channel.result.complete(partial);
         assertEquals(1, drain(q), "取消回写应恰好投递一次");
         assertEquals(List.of(partial), ui.applied, "回写载荷 == worker 返回的 partial");
