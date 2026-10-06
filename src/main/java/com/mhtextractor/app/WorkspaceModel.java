@@ -545,6 +545,81 @@ public final class WorkspaceModel {
         return members.size();
     }
 
+    // ==================== 变更：勾选 / 组名 / 展开状态（B3） ====================
+
+    /**
+     * 批量勾选写入（F1）—— 「勾选」这一提取输入事实的<b>唯一写入口</b>（B3-1）：
+     * 逐条写 {@link PreviewItem#setSelected}（仅在值确实变化时通知监听器，与既有语义一致）。
+     *
+     * <p><b>静默写入</b>：不发布 {@link WorkspaceChange}（勾选不改变数据序/分组结构；
+     * 发布会让订阅方做全量投影重建，破坏「勾选不触发滚动/焦点」的既有语义）；
+     * 本类也不触碰任何 UI 选中/焦点状态。三态推导（{@code TriState}）仍由读取方
+     * （端口 {@code workspace().selection()} / GUI 的 {@code SelectionRules}）按当前
+     * {@code selected} 事实导出。</p>
+     */
+    public void setChecked(List<PreviewItem> targets, boolean value) {
+        for (PreviewItem t : distinctNonNull(targets)) {
+            t.setSelected(value);
+        }
+    }
+
+    /**
+     * 组改名（B3-2）：新名按<b>模型组名集合</b>（排除自身）唯一化后写入 —— 组名唯一化的唯一来源
+     * 是 {@link #groupNames()} 所代表的顶层组集合，调用方不再自行收集其它组名；
+     * 成功后该组<b>永久退出</b>「未命名组」提醒（{@code defaultNamed=false}，与 GUI 提交改名的既有语义一致）。
+     *
+     * <p><b>不发布变更</b>：组名不改变数据序/结构；改名后的列表刷新走
+     * {@link GroupItem#addNameChangeListener} 的既有通知（值确实变化才触发）。</p>
+     *
+     * @param newName 期望的新名（null / 空白名原样透传，与 {@code GroupStructure.uniqueGroupName} 一致）
+     * @return 实际生效的组名（唯一化之后）；组不在顶层时返回 {@code null} 且不产生任何变更
+     */
+    public String renameGroup(long groupNo, String newName) {
+        GroupItem<PreviewItem> g = groupByNo(groupNo);
+        if (g == null) {
+            return null;
+        }
+        Set<String> others = new LinkedHashSet<>();
+        for (Object o : topLevel) {
+            if (o instanceof GroupItem<?> og && og != g) {
+                others.add(og.getName());
+            }
+        }
+        String unique = GroupStructure.uniqueGroupName(newName, others);
+        g.setName(unique);
+        g.setDefaultNamed(false);
+        return unique;
+    }
+
+    /**
+     * 折叠/展开翻转（B3-2）—— 「展开状态」的<b>唯一写入口</b>：每调用恰好翻转一次
+     * {@link GroupItem#isExpanded()}。幂等语义 = 翻转由后端按<b>当前状态</b>原子完成，
+     * 调用方不传目标值 —— 快速连续调用（双击连点）是「翻过去再翻回来」，
+     * 不会基于陈旧读数把同一个目标值应用两次。
+     *
+     * <p><b>不发布变更</b>：展开/折叠不改变数据序本身；显示序投影（展开成员进/出
+     * {@link #displayOrder()}）由调用方显式重建（GUI 的抽屉动画在动画起始帧重建）。</p>
+     *
+     * @return true = 确实翻转；false = 组不在顶层（no-op）
+     */
+    public boolean toggleGroupExpanded(long groupNo) {
+        GroupItem<PreviewItem> g = groupByNo(groupNo);
+        if (g == null) {
+            return false;
+        }
+        g.setExpanded(!g.isExpanded());
+        return true;
+    }
+
+    /**
+     * 按组号拆分组（B3-2）：{@link #ungroup(GroupItem)} 的组号寻址重载（端口命令
+     * {@code ungroup(long)} 的底座）；组不在顶层时为 no-op（返回空列表且不产生任何变更）。
+     */
+    public List<PreviewItem> ungroup(long groupNo) {
+        GroupItem<PreviewItem> g = groupByNo(groupNo);
+        return g == null ? List.of() : ungroup(g);
+    }
+
     // ==================== 变更：拖拽落点（REORDER / MERGE_GROUPS） ====================
 
     /**
@@ -908,6 +983,24 @@ public final class WorkspaceModel {
     }
 
     // ==================== 内部工具 ====================
+
+    /**
+     * 按组号找顶层组（组号由 {@link #nextGroupNo()} 全局单调递增、唯一；不在顶层返回 null）。
+     *
+     * <p>组号寻址（而非对象寻址）是端口命令 {@code ungroup/renameGroup/toggleGroupExpanded} 的
+     * 底座 —— 端口层不持有 {@code GroupItem} 引用，只传组号。</p>
+     */
+    private GroupItem<PreviewItem> groupByNo(long groupNo) {
+        for (Object o : topLevel) {
+            if (o instanceof GroupItem<?> raw) {
+                GroupItem<PreviewItem> g = GroupStructure.asPreviewGroup(raw);
+                if (g.getGroupNo() == groupNo) {
+                    return g;
+                }
+            }
+        }
+        return null;
+    }
 
     /** 默认组名前缀（zh "组" / en "Group"；产物命名属"产物本地化"，由 bundle 决定） */
     private String defaultGroupName() {

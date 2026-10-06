@@ -19,6 +19,7 @@ import com.mhtextractor.uiport.WorkspaceVm;
 import com.mhtextractor.util.GroupStructure;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +39,9 @@ import java.util.function.Consumer;
  *
  * <p><b>通道语义</b>：</p>
  * <ul>
- *   <li>{@link #commands()} —— 撤销 / 清场，直接转发 {@link WorkspaceModel} 命令；</li>
+ *   <li>{@link #commands()} —— 撤销 / 清场直接转发 {@link WorkspaceModel} 命令；
+ *       勾选与分组命令集（B3）按路径 / 组号解析后转发（{@code setChecked/group/ungroup/
+ *       renameGroup/toggleGroupExpanded}，未知路径静默跳过、未知组号 no-op）；</li>
  *   <li>{@link #queries()} —— 每次调用<b>重新组装</b>只读快照（{@link WorkspaceVm}），
  *       <b>不缓存</b>：快照必须总是当前模型状态；</li>
  *   <li>{@link #events()} —— {@link WorkspaceModel#addListener} 桥接：{@link WorkspaceChange.Kind}
@@ -139,6 +142,33 @@ public final class InProcessUiport implements Uiport {
             public void clearItems() {
                 model.clearItems();
             }
+
+            // ---- B3：勾选命令 + 分组命令集（处置项 6 / 5）----
+
+            @Override
+            public void setChecked(List<String> paths, boolean checked) {
+                model.setChecked(resolveItems(paths), checked);
+            }
+
+            @Override
+            public void group(List<String> paths, String namePrefix) {
+                model.group(resolveItems(paths), namePrefix);
+            }
+
+            @Override
+            public void ungroup(long groupNo) {
+                model.ungroup(groupNo);
+            }
+
+            @Override
+            public void renameGroup(long groupNo, String newName) {
+                model.renameGroup(groupNo, newName);
+            }
+
+            @Override
+            public void toggleGroupExpanded(long groupNo) {
+                model.toggleGroupExpanded(groupNo);
+            }
         };
     }
 
@@ -221,5 +251,24 @@ public final class InProcessUiport implements Uiport {
             return TriState.NONE;
         }
         return selected == candidates.size() ? TriState.ALL : TriState.SOME;
+    }
+
+    /** 按路径解析条目（保持入参顺序；未知路径静默跳过）。路径是导入去重后的唯一键。 */
+    private List<PreviewItem> resolveItems(List<String> paths) {
+        if (paths == null || paths.isEmpty()) {
+            return List.of();
+        }
+        Map<String, PreviewItem> byPath = new HashMap<>();
+        for (PreviewItem it : model.allItems()) {
+            byPath.putIfAbsent(it.path, it);
+        }
+        List<PreviewItem> out = new ArrayList<>();
+        for (String p : paths) {
+            PreviewItem it = p == null ? null : byPath.get(p);
+            if (it != null) {
+                out.add(it);
+            }
+        }
+        return out;
     }
 }

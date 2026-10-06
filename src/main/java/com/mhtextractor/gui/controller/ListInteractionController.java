@@ -55,6 +55,8 @@ public final class ListInteractionController implements MainViewActions {
         void hideRow(Object item);                                     // = adapter.hideRow(item)
         com.mhtextractor.app.WorkspaceModel.DropResult applyResolvedDrop(com.mhtextractor.app.DropResolver.Operation op);
         void rebuildDisplay();                                         // 仍由 MainController 提供（含动画快进）
+        // 勾选唯一写入口（B3-1）：= ws.setChecked(...)，本类所有勾选写入都经它，不得直写 PreviewItem.setSelected
+        void setChecked(List<PreviewItem> targets, boolean value);
         // ---- 选中读写 ----
         Object currentSelection();
         void selectRow(Object row);
@@ -148,6 +150,11 @@ public final class ListInteractionController implements MainViewActions {
         return host.extractionRunning();
     }
 
+    @Override
+    public void setChecked(List<PreviewItem> targets, boolean value) {
+        host.setChecked(targets, value);
+    }
+
     // ===== MainViewActions：选择 / 勾选交互 =====
 
     /**
@@ -191,7 +198,7 @@ public final class ListInteractionController implements MainViewActions {
             return;
         }
         if (e.isControlDown() && !e.isShiftDown()) {
-            it.setSelected(!it.selected);
+            host.setChecked(List.of(it), !it.selected);
             selectionAnchor = it;
             refreshSelectionUi();
             host.updateListButtons();
@@ -242,16 +249,18 @@ public final class ListInteractionController implements MainViewActions {
         return true;
     }
 
-    /** 区间内行设置勾选值：项目行设自身；组行设全部有效成员 */
+    /** 区间内行设置勾选值：项目行设自身；组行设全部有效成员（写入一律经勾选唯一写入口） */
     private void setRangeRow(Object o, boolean target) {
         if (o instanceof PreviewItem it && !it.removed) {
-            it.setSelected(target);
+            host.setChecked(List.of(it), target);
         } else if (o instanceof GroupItem<?> g) {
+            List<PreviewItem> members = new ArrayList<>();
             for (Object m : g.getMembers()) {
                 if (m instanceof PreviewItem p && !p.removed) {
-                    p.setSelected(target);
+                    members.add(p);
                 }
             }
+            host.setChecked(members, target);
         }
     }
 
@@ -275,7 +284,7 @@ public final class ListInteractionController implements MainViewActions {
             }
         } else if (item instanceof PreviewItem it && !it.removed) {
             if (e.getX() >= 50) {
-                it.setSelected(!it.selected);
+                host.setChecked(List.of(it), !it.selected);
                 selectionAnchor = it;
             }
         }
@@ -311,7 +320,7 @@ public final class ListInteractionController implements MainViewActions {
         updatingSelection = true;
         for (PreviewItem m : g.getMembers()) {
             if (!m.removed) {
-                m.setSelected(target);
+                host.setChecked(List.of(m), target);
             }
         }
         updatingSelection = false;
@@ -326,9 +335,7 @@ public final class ListInteractionController implements MainViewActions {
         }
         boolean target = SelectionRules.computeToggleTarget(currentSelectionState());
         updatingSelection = true;
-        for (PreviewItem item : host.allVisibleItems()) {
-            item.setSelected(target);
-        }
+        host.setChecked(host.allVisibleItems(), target);
         updatingSelection = false;
         refreshSelectionUi();
     }
@@ -345,13 +352,12 @@ public final class ListInteractionController implements MainViewActions {
      * 批量勾选写入（C2）：原先散在 onContextSelect / onContextSelectAll / onGroupClicked 里的
      * "updatingSelection=true → 批量 setSelected → finally 复位"段的收口点 ——
      * <b>不</b>做刷新，刷新由调用点显式调 {@link #refreshSelectionUi()}，与搬迁前逐字一致。
+     * 写入本身经 {@code Host.setChecked}（B3-1：勾选唯一写入口在后端模型）。
      */
     void setCheckedSilently(List<PreviewItem> targets, boolean value) {
         updatingSelection = true;
         try {
-            for (PreviewItem t : targets) {
-                t.setSelected(value);
-            }
+            host.setChecked(targets, value);
         } finally {
             updatingSelection = false;
         }

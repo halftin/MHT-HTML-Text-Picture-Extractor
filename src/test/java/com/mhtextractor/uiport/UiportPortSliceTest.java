@@ -110,6 +110,11 @@ class UiportPortSliceTest {
                     public void refreshPreparseProgress() {}
                     public void loadPreview(String path, boolean confirmed) {}
                     public void awaitPreviewInFlight(long millis) {}
+                    public void setChecked(List<String> paths, boolean checked) {}
+                    public void group(List<String> paths, String namePrefix) {}
+                    public void ungroup(long groupNo) {}
+                    public void renameGroup(long groupNo, String newName) {}
+                    public void toggleGroupExpanded(long groupNo) {}
                     @Override
                     public void undo() {
                     }

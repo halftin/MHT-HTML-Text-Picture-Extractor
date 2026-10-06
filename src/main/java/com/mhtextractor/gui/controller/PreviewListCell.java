@@ -272,10 +272,10 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         checkBox.setIndeterminate(false);
         // 会话 18 · E1.3a：原 checkBox.selectedProperty().bindBidirectional(it.selected)
         // 改为两条单向绑定，语义与双向绑定等价且更清晰：
-        //   ① 用户点击复选框 → 写回条目勾选状态（经 setSelected 触发 onSelectionChanged）
+        //   ① 用户点击复选框 → 写回条目勾选状态（经勾选唯一写入口 setChecked → setSelected 触发 onSelectionChanged）
         //   ② 条目勾选状态被程序修改 → 回写复选框显示
         // 单元格复用时靠上面的解挂切断旧联动（原先靠 unbindBidirectional）。
-        checkBox.setOnAction(_ -> it.setSelected(checkBox.isSelected()));
+        checkBox.setOnAction(_ -> actions.setChecked(java.util.List.of(it), checkBox.isSelected()));
         selectedMirror = () -> checkBox.setSelected(it.selected);
         it.addSelectedChangeListener(selectedMirror);
         boundItem = it;

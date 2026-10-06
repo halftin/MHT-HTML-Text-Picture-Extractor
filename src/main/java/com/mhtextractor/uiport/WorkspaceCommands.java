@@ -1,10 +1,14 @@
 package com.mhtextractor.uiport;
 
 /**
- * 工作区命令（最小切片，P3-3a 诚实化收敛）：撤销、清场。
+ * 工作区命令（P3-3a 最小切片起，B3 扩至勾选与分组命令集）：撤销、清场、
+ * 勾选（{@code setChecked}）、分组（{@code group/ungroup/renameGroup}）与
+ * 展开状态（{@code toggleGroupExpanded}）。
  *
- * <p>命令语义由后端保证（数据序 / 分组关系 / 撤销命令的唯一所有者是后端模型）；
- * 命令生效后经 {@link PortEvents} 推送变更事件，前端据此刷新投影。</p>
+ * <p>命令语义由后端保证（数据序 / 分组关系 / 勾选 / 展开状态 / 撤销命令的唯一所有者是后端模型）；
+ * 命令生效后经 {@link PortEvents} 推送变更事件，前端据此刷新投影。B3 的勾选 / 组名 /
+ * 展开写入是<b>静默</b>的（不发布事件）：它们不改变数据序/结构，投影刷新由前端
+ * 在命令返回后显式重建（GUI 的抽屉动画在动画起始帧重建显示序）。</p>
  *
  * <p>后台活动代际、预解析和预览加载由应用层持有。</p>
  */
@@ -17,6 +21,33 @@ public interface WorkspaceCommands {
     void refreshPreparseProgress();
     void loadPreview(String path, boolean largeFileConfirmed);
     void awaitPreviewInFlight(long millis);
+
+    // ---- B3：勾选命令 + 分组命令集（处置项 6 / 5）----
+
+    /**
+     * 勾选写入 —— 提取输入事实的<b>唯一写入口</b>：按路径解析条目并批量写入
+     * （路径是导入去重后的唯一键）。
+     *
+     * <p><b>静默写入</b>：不触发任何变更事件 / 滚动 / 焦点；未知路径<b>静默跳过</b>。
+     * 三态（{@link TriState}）由查询 {@code workspace().selection()} 按当前勾选事实导出。</p>
+     */
+    void setChecked(java.util.List<String> paths, boolean checked);
+
+    /** 建组：按路径解析条目（保持入参顺序）合并为一个新组；组名唯一化由后端保证。目标为空或均不可解析时为 no-op。 */
+    void group(java.util.List<String> paths, String namePrefix);
+
+    /** 拆分组：组从顶层移除，成员按原组内顺序插回原位置（组参数下发为成员条目级参数）；组不存在时为 no-op。 */
+    void ungroup(long groupNo);
+
+    /** 组改名：新名按后端组名集合唯一化后写入并永久退出「未命名组」提醒；组不存在时为 no-op。 */
+    void renameGroup(long groupNo, String newName);
+
+    /**
+     * 折叠/展开翻转（幂等）：每调用恰好翻转一次展开标志 —— 状态由后端持有并按其当前值原子翻转，
+     * 调用方不传目标值；快速连续调用（双击连点）=「翻过去再翻回来」，不会基于陈旧读数
+     * 重复应用同一目标值。组不存在时为 no-op。
+     */
+    void toggleGroupExpanded(long groupNo);
 
     /** 撤销上一条工作区命令（无可撤销时为 no-op）。 */
     void undo();

@@ -51,6 +51,8 @@ public final class WorkspaceLifecycleController {
         // 模型命令（唯一入口 WorkspaceModel）
         void removeModelItems(List<PreviewItem> targets);
         void removeModelGroup(GroupItem<PreviewItem> group);
+        // 勾选唯一写入口（B3-1）：= ws.setChecked(...)，撤销恢复后的取消勾选也经它
+        void setChecked(List<PreviewItem> targets, boolean value);
         boolean canUndo();
         UndoManager.Record<PreviewItem> popRecord();
         void applyUndo(UndoManager.Record<PreviewItem> record);
@@ -231,9 +233,7 @@ public final class WorkspaceLifecycleController {
                 case REMOVE, REMOVE_GROUP -> {
                     // 结构恢复（removed 复位 + 被销毁的空组/整组按原顶层索引插回）由模型负责
                     host.applyUndo(record);
-                    for (PreviewItem it : record.items()) {
-                        it.setSelected(false);      // 选中态属 UI 职责，模型不管
-                    }
+                    host.setChecked(record.items(), false);   // 恢复后取消勾选（勾选唯一写入口在模型，B3-1）
                     log.info(Texts.msg("log.maincontroller.48", record.items().size(), record.destroyedGroups().size()));
                 }
                 case IMPORT -> {
@@ -244,8 +244,8 @@ public final class WorkspaceLifecycleController {
                     // 结构摘除（从组内与顶层两处 + 致空组销毁）交由模型——原先本类手写了等价的两段
                     for (PreviewItem it : record.items()) {
                         it.removed = true;
-                        it.setSelected(false);
                     }
+                    host.setChecked(record.items(), false);   // 勾选唯一写入口在模型（B3-1）
                     // 规则 (c)：撤销导入 = 从列表移除这批项目 → 删其缓存目录
                     host.cacheRulesForRemovedItems(record.items());
                     host.applyUndo(record);

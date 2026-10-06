@@ -382,6 +382,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void hideRow(Object item) { adapter.hideRow(item); }
         @Override public WorkspaceModel.DropResult applyResolvedDrop(DropResolver.Operation op) { return ws.applyResolvedDrop(op); }
         @Override public void rebuildDisplay() { MainController.this.rebuildDisplay(); }
+        @Override public void setChecked(List<PreviewItem> targets, boolean value) { ws.setChecked(targets, value); }
         @Override public Object currentSelection() { return MainController.this.currentSelection(); }
         @Override public void selectRow(Object row) { refs.fileListView().getSelectionModel().select(row); }
         @Override public List<PreviewItem> allVisibleItems() { return MainController.this.allVisibleItems(); }
@@ -426,6 +427,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public boolean isAnimating() { return groupCommand.isAnimating(); }
         @Override public void removeModelItems(List<PreviewItem> targets) { ws.removeItems(targets); }
         @Override public void removeModelGroup(GroupItem<PreviewItem> group) { ws.removeGroup(group); }
+        @Override public void setChecked(List<PreviewItem> targets, boolean value) { ws.setChecked(targets, value); }
         @Override public boolean canUndo() { return ws.canUndo(); }
         @Override public UndoManager.Record<PreviewItem> popRecord() { return ws.popRecord(); }
         @Override public void applyUndo(UndoManager.Record<PreviewItem> record) { ws.applyUndo(record); }
@@ -513,6 +515,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void rebuildDisplay() { MainController.this.rebuildDisplay(); }
         @Override public void registerGroupNameRefresh(GroupItem<PreviewItem> group) { MainController.this.registerGroupNameRefresh(group); }
         @Override public void setCheckedSilently(List<PreviewItem> targets, boolean value) { listInteraction.setCheckedSilently(targets, value); }
+        @Override public void toggleGroupExpanded(GroupItem<PreviewItem> group) { ws.toggleGroupExpanded(group.getGroupNo()); }
     });
 
     // ==================== 初始化 ====================
@@ -1398,7 +1401,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
     }
 
-    /** 组名输入即生效；重名时自动追加序号直至唯一并日志提示（R7） */
+    /** 组名输入即生效；重名时自动追加序号直至唯一并日志提示（R7）。唯一化与「未命名组」标记由后端模型负责（B3-2） */
     void onGroupNameEdited(String newVal) {
         GroupItem<PreviewItem> g = nameEditingGroup;
         if (g == null || updatingGroupName) {
@@ -1406,18 +1409,20 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         String trimmed = newVal.trim();
         if (trimmed.isEmpty()) {
-            // 编辑中允许临时清空，失焦时恢复最近有效组名
+            // 编辑中允许临时清空，失焦时恢复最近有效组名（瞬态编辑态，不属改名命令）
             g.setName("");
             return;
         }
-        String unique = WorkspaceStructure.uniqueGroupName(trimmed, otherGroupNames(g));
+        String unique = ws.renameGroup(g.getGroupNo(), trimmed);
+        if (unique == null) {
+            return;   // 组不在工作区（编辑挂接的组必然在；纯防御）
+        }
         if (!unique.equals(trimmed)) {
             log.info(Texts.msg("log.maincontroller.09", trimmed, unique));
             updatingGroupName = true;
             refs.groupNameField().setText(unique);
             updatingGroupName = false;
         }
-        g.setName(unique); g.setDefaultNamed(false);   // 用户提交改名：永久退出「未命名组」提醒（步骤 3 · 功能一）
         lastValidGroupName = unique;
     }
 
@@ -1462,17 +1467,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 离开标题编辑（换条目 / 组条目 / 未就绪）：切断挂接，避免误写到旧条目 */
     private void clearTitleEditingItem() {
         titleEditingItem = null;
-    }
-
-    /** 其它组（排除自身）的组名集合 */
-    private List<String> otherGroupNames(GroupItem<PreviewItem> g) {
-        List<String> names = new ArrayList<>();
-        for (Object o : items) {
-            if (o instanceof GroupItem<?> og && og != g) {
-                names.add(og.getName());
-            }
-        }
-        return names;
     }
 
     // ==================== 选择与联动 ====================

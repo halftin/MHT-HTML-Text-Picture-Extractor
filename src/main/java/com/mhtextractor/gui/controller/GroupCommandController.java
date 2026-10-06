@@ -53,6 +53,7 @@ public final class GroupCommandController {
         javafx.collections.ObservableList<Object> displayItems();      // = adapter.displayItems()
         GroupItem<PreviewItem> createGroup(List<PreviewItem> targets); // = ws.group(targets, 本地化默认名前缀 core.groupDefault)
         List<PreviewItem> ungroupGroup(GroupItem<PreviewItem> group);  // = ws.ungroup(group)
+        void toggleGroupExpanded(GroupItem<PreviewItem> group);        // = ws.toggleGroupExpanded(group.getGroupNo())（展开状态唯一写入口，B3-2）
 
         // ---- 查询 / 选中读写 ----
         List<PreviewItem> allVisibleItems();                           // = allVisibleItems()
@@ -170,21 +171,26 @@ public final class GroupCommandController {
      * 组条目折叠/展开（方案 B 拍板）：抽屉式滑出/滑入——内容不裁切，成员行整体平移，
      * 下方行同步补位/让位（快照动画手法与拖拽一致）。200ms ease-out。
      * 动画期间列表项目不可交互（按钮可点但无效果）；快速连点/拖拽会话中直接忽略。
+     *
+     * <p>展开标志的翻转（B3-2）先经 {@code Host.toggleGroupExpanded} 在后端模型原子完成
+     * （幂等：每调用恰好翻转一次），本类只按翻转后的状态选动画方向 —— 不再直写
+     * {@code GroupItem.setExpanded}。</p>
      */
     void toggleGroupExpanded(GroupItem<PreviewItem> g) {
         if (listAnimating || host.isDragActive()) {
             return;
         }
+        host.toggleGroupExpanded(g);
         if (g.isExpanded()) {
-            collapseGroupAnimated(g);
-        } else {
             expandGroupAnimated(g);
+        } else {
+            collapseGroupAnimated(g);
         }
     }
 
     /**
      * 折叠动画（抽屉收起）：成员行快照整体下滑滑出，下方行快照上滑补位。
-     * 数据终态（expanded=false + 显示序移除成员）在动画开始时立即生效；
+     * 数据终态（显示序移除成员）在动画开始时立即生效（expanded=false 已由后端翻转）；
      * 外部重建触发快进兜底时只清理快照即可。
      */
     private void collapseGroupAnimated(GroupItem<PreviewItem> g) {
@@ -244,14 +250,12 @@ public final class GroupCommandController {
             log.warn(Texts.msg("log.maincontroller.58", ex.getMessage()), ex);
             host.dragOverlay().getChildren().removeAll(memberViews);
             host.dragOverlay().getChildren().removeAll(belowViews);
-            g.setExpanded(false);
             host.rebuildDisplay();
             finishExpandAnim();
             return;
         }
 
-        // 数据终态：成员行移出显示序
-        g.setExpanded(false);
+        // 数据终态：成员行移出显示序（展开标志已由后端翻转）
         suppressAnimRebuild = true;
         try {
             host.rebuildDisplay();
@@ -302,7 +306,7 @@ public final class GroupCommandController {
         animExpanding = true;
         animLockedSelection = host.currentSelection();
         host.groupNameField().setDisable(true);
-        g.setExpanded(true);
+        // 展开标志已由后端翻转；这里只重建显示序到展开终态
         suppressAnimRebuild = true;
         try {
             host.rebuildDisplay();

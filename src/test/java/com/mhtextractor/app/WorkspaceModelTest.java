@@ -844,4 +844,97 @@ class WorkspaceModelTest {
         m.removeItems(List.of(c));
         assertFalse(m.displayOrder().contains(c), "已移除项不应出现在显示序");
     }
+
+    // ==================== 勾选 / 组名 / 展开状态（B3） ====================
+
+    /** B3-1：勾选唯一写入口 —— 批量写入生效，且<b>不发布</b>任何变更（静默写入，勾选不触发投影重建）。 */
+    @Test
+    void setCheckedWritesSilentlyWithoutPublishingChange() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht");
+        m.addItems(List.of(a, b));
+        a.setSelected(true);
+        List<WorkspaceChange> events = new ArrayList<>();
+        m.addListener(events::add);
+
+        m.setChecked(List.of(a, b), true);
+        m.setChecked(List.of(a, b), false);
+        m.setChecked(List.of(), true);
+
+        assertFalse(a.selected, "setChecked 应逐条写入目标值");
+        assertFalse(b.selected);
+        assertTrue(events.isEmpty(),
+                "控制组 A：勾选写入是静默的 —— 不发布 WorkspaceChange（发布会被前端当作全量重建投影的信号）");
+    }
+
+    /** B3-2：组改名唯一化的唯一来源是模型组名集合（排除自身）；成功后永久退出「未命名组」提醒。 */
+    @Test
+    void renameGroupUniquifiesAgainstModelGroupNamesAndExitsDefaultNamed() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht"), c = item("c.mht"), d = item("d.mht");
+        m.addItems(List.of(a, b, c, d));
+        GroupItem<PreviewItem> g1 = m.group(List.of(a, b), "组");   // 组1（defaultNamed）
+        GroupItem<PreviewItem> g2 = m.group(List.of(c, d), "组");   // 组2（defaultNamed）
+        assertTrue(g1.isDefaultNamed() && g2.isDefaultNamed());
+
+        assertEquals("组1(2)", m.renameGroup(g2.getGroupNo(), "组1"),
+                "与既有组重名 → 自动追加序号（R7），与 GUI 的 uniqueGroupName(trimmed, otherGroupNames(g)) 一致；返回值为实际生效名");
+        assertEquals("组1(2)", g2.getName());
+        assertFalse(g2.isDefaultNamed(), "提交改名 → 永久退出「未命名组」提醒（步骤 3 · 功能一）");
+        assertTrue(g1.isDefaultNamed(), "改名不影响其它组");
+
+        assertEquals("组1(2)", m.renameGroup(g2.getGroupNo(), "组1(2)"),
+                "改回自己当前的名字：排除自身后不冲突，唯一化结果就是原名");
+        assertEquals("组1(2)", g2.getName());
+    }
+
+    /** B3-2：未知组号的改名是 no-op（不产生任何变更）。 */
+    @Test
+    void renameGroupOfUnknownGroupNoReturnsNullAndChangesNothing() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht");
+        m.addItems(List.of(a, b));
+        GroupItem<PreviewItem> g = m.group(List.of(a), "组");
+
+        assertNull(m.renameGroup(9999, "组X"), "未知组号 → null 且不产生任何变更");
+        assertEquals(1, m.groups().size());
+        assertNull(m.renameGroup(g.getGroupNo(), null), "null 新名原样透传（uniqueGroupName 口径），但仍写入");
+        assertNull(g.getName());
+    }
+
+    /** B3-2：展开状态唯一写入口 —— 每调用恰好翻转一次（幂等 = 后端按当前状态原子翻转，快速连点 = 翻过去再翻回来）。 */
+    @Test
+    void toggleGroupExpandedFlipsExactlyOncePerCall() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht"), c = item("c.mht");
+        m.addItems(List.of(a, b, c));
+        GroupItem<PreviewItem> g = m.group(List.of(a, b), "组");
+        assertTrue(g.isExpanded(), "默认展开");
+
+        assertTrue(m.toggleGroupExpanded(g.getGroupNo()));
+        assertFalse(g.isExpanded(), "第一次调用：展开 → 折叠");
+        assertFalse(m.displayOrder().contains(a), "折叠后成员离开显示序投影");
+
+        assertTrue(m.toggleGroupExpanded(g.getGroupNo()));
+        assertTrue(g.isExpanded(), "第二次调用：折叠 → 展开（控制组 B：若后端实现为恒置 true/恒置 false，此处会红）");
+        assertTrue(m.displayOrder().contains(a));
+
+        assertFalse(m.toggleGroupExpanded(9999), "未知组号 → no-op（返回 false）");
+        assertTrue(g.isExpanded());
+    }
+
+    /** B3-2：组号寻址的拆分组重载 —— 解析后委托 {@link WorkspaceModel#ungroup(GroupItem)}；未知组号 no-op。 */
+    @Test
+    void ungroupByGroupNoResolvesAndDelegates() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht"), b = item("b.mht");
+        m.addItems(List.of(a, b));
+        GroupItem<PreviewItem> g = m.group(List.of(a, b), "组");
+
+        List<PreviewItem> members = m.ungroup(g.getGroupNo());
+        assertEquals(List.of(a, b), members, "成员按组内顺序插回顶层");
+        assertTrue(m.groups().isEmpty());
+        assertEquals(3, m.undoDepth(), "导入 + 建组 + 拆组各压一条撤销记录");
+        assertTrue(m.ungroup(g.getGroupNo()).isEmpty(), "组已不在顶层 → no-op（空列表且不产生变更）");
+    }
 }

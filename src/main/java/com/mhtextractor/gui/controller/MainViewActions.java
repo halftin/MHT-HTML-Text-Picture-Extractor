@@ -24,6 +24,8 @@ interface MainViewActions {
     void onCellPressed(Object item, MouseEvent e);
     void onCellDoubleClicked(Object item, MouseEvent e);
     void onGroupCheckToggled(GroupItem<PreviewItem> group);
+    /** 勾选唯一写入口（B3-1）：单元格复选框写入也经它，不得直写 PreviewItem.setSelected。 */
+    void setChecked(List<PreviewItem> targets, boolean value);
     // 拖拽会话
     boolean isDragActive();
     Object draggedObject();

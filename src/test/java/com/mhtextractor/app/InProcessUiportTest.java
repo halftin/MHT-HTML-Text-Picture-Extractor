@@ -218,4 +218,61 @@ class InProcessUiportTest {
         InProcessUiport uiport = new InProcessUiport(model, stub);
         assertSame(stub, uiport.confirmer(), "确认往返由前端注入，适配器原样透传（本类不实现卡片）");
     }
+
+    // ==================== B3：勾选命令 + 分组命令集 ====================
+
+    /** B3-1：端口命令 {@code setChecked} —— 按路径解析批量写入、未知路径静默跳过、不推送事件、三态随事实导出。 */
+    @Test
+    void setCheckedCommandResolvesPathsWritesSilentlyAndUpdatesSelection() {
+        WorkspaceModel model = new WorkspaceModel();
+        InProcessUiport uiport = new InProcessUiport(model, stubConfirmer());
+        PreviewItem a = item("a.mht"), b = item("b.mht");
+        model.addItems(List.of(a, b));
+        List<PortEvent> received = new ArrayList<>();
+        uiport.events().subscribe(received::add);
+
+        uiport.commands().setChecked(java.util.Arrays.asList("C:/x/a.mht", "C:/x/ghost.mht", null), true);
+
+        assertTrue(a.selected, "按路径解析并写入");
+        assertFalse(b.selected, "未在命令路径内的条目不受影响");
+        assertEquals(TriState.SOME, uiport.queries().workspace().selection(),
+                "三态由勾选事实导出（候选 = 全部可见条目）");
+        assertTrue(received.isEmpty(),
+                "控制组：勾选命令是静默的 —— 不推送任何端口事件（不触发滚动/焦点语义）");
+
+        uiport.commands().setChecked(List.of("C:/x/b.mht"), true);
+        assertEquals(TriState.ALL, uiport.queries().workspace().selection());
+    }
+
+    /** B3-2：端口命令 {@code group/renameGroup/toggleGroupExpanded/ungroup} —— 组号寻址 + 唯一化 + 展开幂等。 */
+    @Test
+    void groupCommandSetResolvesPathsAndGroupNumbers() {
+        WorkspaceModel model = new WorkspaceModel();
+        InProcessUiport uiport = new InProcessUiport(model, stubConfirmer());
+        PreviewItem a = item("a.mht"), b = item("b.mht");
+        model.addItems(List.of(a, b));
+
+        uiport.commands().group(List.of("C:/x/a.mht", "C:/x/b.mht", "C:/x/ghost.mht"), "组");
+        WorkspaceVm vm = uiport.queries().workspace();
+        assertEquals(1, vm.groups().size(), "未知路径静默跳过，其余按路径建组");
+        GroupVm g = vm.groups().get(0);
+        assertEquals("组1", g.name(), "组名唯一化由后端保证");
+        assertTrue(g.expanded());
+
+        uiport.commands().renameGroup(g.no(), "组1");
+        assertEquals("组1", uiport.queries().workspace().groups().get(0).name(),
+                "改回自己当前名：排除自身后不冲突，唯一化结果就是原名");
+
+        uiport.commands().toggleGroupExpanded(g.no());
+        assertFalse(uiport.queries().workspace().groups().get(0).expanded(), "第一次调用：展开 → 折叠");
+        uiport.commands().toggleGroupExpanded(g.no());
+        assertTrue(uiport.queries().workspace().groups().get(0).expanded(),
+                "第二次调用：折叠 → 展开（幂等 = 每调用恰好翻转一次）");
+        uiport.commands().toggleGroupExpanded(9999);   // 未知组号 no-op
+
+        uiport.commands().ungroup(g.no());
+        WorkspaceVm after = uiport.queries().workspace();
+        assertTrue(after.groups().isEmpty());
+        assertEquals(2, after.topLevelItems().size(), "成员按组内顺序插回顶层");
+    }
 }
