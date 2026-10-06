@@ -1,6 +1,6 @@
 package com.mhtextractor.processor;
 
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.core.ChapterGenerator;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.core.SourceParsers;

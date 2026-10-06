@@ -4,7 +4,7 @@ import com.mhtextractor.cache.PreviewCacheKey;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.cache.PreviewCacheStore;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.ExtractOutcome;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

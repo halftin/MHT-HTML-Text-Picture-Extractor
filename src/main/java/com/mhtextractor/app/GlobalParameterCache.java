@@ -1,6 +1,6 @@
 package com.mhtextractor.app;
 
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 
 /**
  * 两套全局「已确认参数」缓存（P1-1）：从 {@code gui.controller.ParamDomainController} 的包级字段

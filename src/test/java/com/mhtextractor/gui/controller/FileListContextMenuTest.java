@@ -14,7 +14,7 @@ import java.util.List;
 
 import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.app.ParamsInfo;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;

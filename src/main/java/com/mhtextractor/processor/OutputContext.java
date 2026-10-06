@@ -1,6 +1,6 @@
 package com.mhtextractor.processor;
 
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 
 /**
  * 输出阶段的显式上下文（Q12 / 指南 §3 表格对 {@code ImageOutputStrategy} 的要求：

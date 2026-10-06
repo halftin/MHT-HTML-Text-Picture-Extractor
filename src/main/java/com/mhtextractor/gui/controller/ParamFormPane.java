@@ -4,7 +4,7 @@ import atlantafx.base.controls.ToggleSwitch;
 import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.app.ParamDraft;
 import com.mhtextractor.app.Texts;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.ParamTargetBar;
 import com.mhtextractor.uicore.ParamTargetText;
 import com.mhtextractor.model.ParamScope;

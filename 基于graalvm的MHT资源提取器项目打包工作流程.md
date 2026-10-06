@@ -1121,7 +1121,7 @@ JavaFX 通过 JNI 与原生窗口系统通信。Native code 调用 `FindClass`�
 
 ```json
 [
-  {"name": "com.mhtextractor.config.AppConfig"},
+  {"name": "com.mhtextractor.model.AppConfig"},
   {"name": "java.lang.String"},
   {"name": "java.lang.Boolean"},
   {"name": "java.util.ArrayList"}
@@ -1173,7 +1173,7 @@ Jackson 靠反射构造 record / POJO。**任何新增的"被 Jackson 读写的 
 | `com.mhtextractor.cache.PreviewCacheMeta` | `<init>(int, Source, String, boolean, List, List)` + 6 个访问器 | 预览缓存 `meta.json` |
 | `PreviewCacheMeta$Source` | `<init>(String, long, long)` + 3 个访问器 | 同上（嵌套 record） |
 | `PreviewCacheMeta$ImageEntry` | `<init>(String, String, String, String, List)` + 5 个访问器 | 同上（嵌套 record） |
-| `com.mhtextractor.config.AppConfig` | 全部 getter/setter（字段较多） | 命名配置 `config/*.json` |
+| `com.mhtextractor.model.AppConfig` | 全部 getter/setter（字段较多） | 命名配置 `config/*.json` |
 | `com.mhtextractor.config.GuiState` | `<init>` + 各 getter/setter（含 `getLocale`/`setLocale`） | `logs/gui-state.json` |
 
 > **新增 DTO 时怎么做**：写一个最小 driver（或用 `test.mode`）走一遍该 DTO 的序列化 + **反序列化**，

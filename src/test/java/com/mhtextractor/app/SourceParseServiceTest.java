@@ -1,6 +1,6 @@
 package com.mhtextractor.app;
 
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

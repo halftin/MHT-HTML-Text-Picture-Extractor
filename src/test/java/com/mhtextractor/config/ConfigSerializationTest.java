@@ -1,5 +1,6 @@
 package com.mhtextractor.config;
 
+import com.mhtextractor.model.AppConfig;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;

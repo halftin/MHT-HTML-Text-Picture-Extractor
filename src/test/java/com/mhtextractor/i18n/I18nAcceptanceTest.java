@@ -101,12 +101,12 @@ class I18nAcceptanceTest {
         }
 
         @Override
-        public com.mhtextractor.config.AppConfig textItemParams(Item item) {
+        public com.mhtextractor.model.AppConfig textItemParams(Item item) {
             return null;
         }
 
         @Override
-        public com.mhtextractor.config.AppConfig imageItemParams(Item item) {
+        public com.mhtextractor.model.AppConfig imageItemParams(Item item) {
             return null;
         }
     };

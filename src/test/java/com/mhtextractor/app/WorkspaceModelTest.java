@@ -371,7 +371,7 @@ class WorkspaceModelTest {
         m.addItems(List.of(a, b));
         GroupItem<PreviewItem> g = m.group(List.of(a, b));
         assertNotNull(g);
-        var groupCfg = new com.mhtextractor.config.AppConfig();
+        var groupCfg = new com.mhtextractor.model.AppConfig();
         g.setTextParamsCache(groupCfg);
 
         List<PreviewItem> members = m.ungroup(g);
@@ -691,7 +691,7 @@ class WorkspaceModelTest {
         GroupItem<PreviewItem> g2 = m.group(List.of(c));
         assertNotNull(g1);
         assertNotNull(g2);
-        var g1Params = new com.mhtextractor.config.AppConfig();
+        var g1Params = new com.mhtextractor.model.AppConfig();
         g1.setTextParamsCache(g1Params);
         List<Object> beforeOrder = m.topLevel();
         int g1Index = beforeOrder.indexOf(g1);
@@ -749,7 +749,7 @@ class WorkspaceModelTest {
         m.addItems(List.of(a, b));
         GroupItem<PreviewItem> g = m.group(List.of(a));
         assertNotNull(g);
-        var gParams = new com.mhtextractor.config.AppConfig();
+        var gParams = new com.mhtextractor.model.AppConfig();
         g.setTextParamsCache(gParams);
         List<Object> beforeOrder = m.topLevel();
         int gIndex = beforeOrder.indexOf(g);

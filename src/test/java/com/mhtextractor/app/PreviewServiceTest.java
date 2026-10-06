@@ -6,7 +6,7 @@ import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.cache.SourceFingerprint;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

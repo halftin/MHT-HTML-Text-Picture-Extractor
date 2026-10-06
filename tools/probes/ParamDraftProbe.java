@@ -1,4 +1,4 @@
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.ParamTargetBar;
 import com.mhtextractor.gui.controller.ParamFormPane;
 import com.mhtextractor.i18n.I18n;

@@ -2,7 +2,7 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.SourceParseService;
 import com.mhtextractor.app.Texts;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import javafx.application.Platform;

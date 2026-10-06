@@ -277,9 +277,10 @@ class ArchitectureTest {
      * P3-3b-18 分组结构规则经 {@code app.WorkspaceStructure} 收口，-1（GroupStructure 退出 gui）；
      * P3-3b-21 {@code DropResolver} 与 {@code UndoManager} 迁入 app 包，-2（两者退出 gui 直连）；
      * P3-3b-22 提取统计经 app 层中性 DTO {@code ExtractionStats} 收口，-1（BatchProcessor 退出 gui 直连）；
-     * P3-3b-24 文案能力经 app 层门面 {@code Texts} 收口，-1（I18n 退出 gui 直连）。
+     * P3-3b-24 文案能力经 app 层门面 {@code Texts} 收口，-1（I18n 退出 gui 直连）；
+     * P3-3b-25 {@code AppConfig} 迁入 model 包，-1（AppConfig 退出 gui 直连，归零）。
      */
-    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 1;
+    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 0;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

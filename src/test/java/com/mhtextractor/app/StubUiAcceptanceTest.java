@@ -6,7 +6,7 @@ import com.mhtextractor.cache.PreviewCacheKey;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.cache.PreviewCacheStore;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.i18n.ErrorCode;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.GroupItem;

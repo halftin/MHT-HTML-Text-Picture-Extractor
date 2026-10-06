@@ -1,6 +1,6 @@
 package com.mhtextractor.util;
 
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.ParamScope;
 import org.junit.jupiter.api.Test;

@@ -1,7 +1,7 @@
 package com.mhtextractor.model;
 
 import com.mhtextractor.cache.PreviewCacheMeta;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.extractor.ImageExtractor;
 
 import java.time.LocalDateTime;

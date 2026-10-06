@@ -42,6 +42,6 @@ interface ImageOutputStrategy {
      * <p>这里没有"当前文件"上下文（循环已结束），所以只传批级所需的三样：配置、输出根、统计。
      * 合并输出需要的已解析目录名是自己的字段 —— 不要求一个 {@code OutputContext} 里塞 null 文件。</p>
      */
-    void onAllFilesProcessed(com.mhtextractor.config.AppConfig config, String outputFolder,
+    void onAllFilesProcessed(com.mhtextractor.model.AppConfig config, String outputFolder,
                              BatchProcessor.ProcessStats stats);
 }

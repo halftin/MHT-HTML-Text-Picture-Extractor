@@ -3,7 +3,7 @@ package com.mhtextractor.processor;
 import com.mhtextractor.cache.PreviewCacheKey;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheMeta;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import lombok.extern.slf4j.Slf4j;
 

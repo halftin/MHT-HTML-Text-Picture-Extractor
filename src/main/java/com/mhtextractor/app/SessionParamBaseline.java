@@ -1,6 +1,6 @@
 package com.mhtextractor.app;
 
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 
 /**
  * 参数侧边栏<b>会话起点</b>基线（P1-2）—— 两份全局参数缓存的<b>纯引用持有</b>（不复制）。

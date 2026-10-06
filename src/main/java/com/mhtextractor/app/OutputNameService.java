@@ -1,6 +1,6 @@
 package com.mhtextractor.app;
 
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.util.SanitizeUtils;

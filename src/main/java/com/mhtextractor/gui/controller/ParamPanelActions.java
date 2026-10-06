@@ -2,7 +2,7 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.NamedConfigService;
 import com.mhtextractor.app.Texts;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.NotificationHost;
 import javafx.scene.control.TextInputDialog;
 import lombok.extern.slf4j.Slf4j;

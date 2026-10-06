@@ -70,7 +70,7 @@ final class SeparateImageOutput implements ImageOutputStrategy {
     }
 
     @Override
-    public void onAllFilesProcessed(com.mhtextractor.config.AppConfig config, String outputFolder,
+    public void onAllFilesProcessed(com.mhtextractor.model.AppConfig config, String outputFolder,
                                     BatchProcessor.ProcessStats stats) {
         // 逐文件归档，无需批量操作
     }

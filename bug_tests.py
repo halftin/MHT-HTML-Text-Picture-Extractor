@@ -271,7 +271,7 @@ public class Bug2_ImageNamingTest {
 TEST3_SOURCE = r"""
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.ImageExtractor;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.processor.BatchProcessor;
 import java.io.File;

@@ -5,7 +5,7 @@ import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.cache.SourceFingerprint;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.core.SourceParser;
 import com.mhtextractor.core.SourceParsers;

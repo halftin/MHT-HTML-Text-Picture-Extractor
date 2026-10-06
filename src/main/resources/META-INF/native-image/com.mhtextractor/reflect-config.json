@@ -341,7 +341,7 @@
   "allDeclaredFields": true
  },
  {
-  "name": "com.mhtextractor.config.AppConfig",
+  "name": "com.mhtextractor.model.AppConfig",
   "allDeclaredFields": true,
   "allDeclaredMethods": true,
   "allDeclaredConstructors": true

@@ -2,7 +2,7 @@ package com.mhtextractor.processor;
 
 import com.mhtextractor.cache.DirectoryImageSource;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.core.SourceParser;
 import com.mhtextractor.core.SourceParsers;

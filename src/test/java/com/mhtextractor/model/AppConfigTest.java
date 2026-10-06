@@ -1,4 +1,4 @@
-package com.mhtextractor.config;
+package com.mhtextractor.model;
 
 import org.junit.jupiter.api.Test;
 

@@ -4,7 +4,7 @@ import com.mhtextractor.app.PreviewImageData;
 import com.mhtextractor.app.PreviewNamingService;
 import com.mhtextractor.app.PreviewSession;
 import com.mhtextractor.app.Texts;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.util.ThumbnailFxBridge;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ThumbnailData;

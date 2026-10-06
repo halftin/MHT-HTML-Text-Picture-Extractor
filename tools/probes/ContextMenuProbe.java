@@ -8,7 +8,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 import com.mhtextractor.App;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.controller.FileListContextMenu;
 import com.mhtextractor.gui.controller.MainController;
 import com.mhtextractor.i18n.I18n;

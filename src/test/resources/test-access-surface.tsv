@@ -92,7 +92,7 @@ direct	com.mhtextractor.gui.controller.ParamSidePanel	pane	同包直访（驱动
 direct	com.mhtextractor.gui.controller.PreparseController	updateProgressStatus	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.PreviewLoader	imageLoadActive	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 reflect	com.mhtextractor.app.WorkspaceModel	undoManager	src/test/java/com/mhtextractor/app/WorkspaceModelTest.java:41 getDeclaredField("undoManager")
-reflect	com.mhtextractor.config.AppConfig	imageModeEnabled	src/test/java/com/mhtextractor/app/EffectiveParamsServiceTest.java:474 getDeclaredField("imageModeEnabled")
+reflect	com.mhtextractor.model.AppConfig	imageModeEnabled	src/test/java/com/mhtextractor/app/EffectiveParamsServiceTest.java:474 getDeclaredField("imageModeEnabled")
 reflect	com.mhtextractor.gui.controller.FileListContextMenu	actions	tools/probes/ContextMenuProbe.java:143 getDeclaredField("actions")
 reflect	com.mhtextractor.gui.controller.FileListContextMenu	pickFrom(1)	tools/probes/ContextMenuProbe.java:228 getDeclaredMethod("pickFrom")
 reflect	com.mhtextractor.gui.controller.FileListContextMenu	target	tools/probes/ContextMenuProbe.java:416 getDeclaredField("target")

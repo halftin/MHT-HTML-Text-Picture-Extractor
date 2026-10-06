@@ -15,7 +15,7 @@ import java.util.Map;
 import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.app.ParamClipboard;
 import com.mhtextractor.app.ParamsInfo;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uicore.FileMenuModel;

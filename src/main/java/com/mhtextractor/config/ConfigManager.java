@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.AppConfig;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;

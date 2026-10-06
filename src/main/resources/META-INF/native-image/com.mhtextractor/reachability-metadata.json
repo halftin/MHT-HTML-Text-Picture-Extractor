@@ -584,7 +584,7 @@
      ]
     }
    ],
-   "type": "com.mhtextractor.config.AppConfig"
+   "type": "com.mhtextractor.model.AppConfig"
   },
   {
    "methods": [

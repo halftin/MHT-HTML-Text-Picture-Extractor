@@ -4,7 +4,7 @@ import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.app.DropResolver;

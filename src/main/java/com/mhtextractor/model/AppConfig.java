@@ -1,6 +1,6 @@
-package com.mhtextractor.config;
+package com.mhtextractor.model;
 
-import com.mhtextractor.util.FingerprintEncoder;
+import com.mhtextractor.model.FingerprintEncoder;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;

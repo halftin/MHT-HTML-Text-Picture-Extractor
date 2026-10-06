@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.controller;
 
 import atlantafx.base.controls.ToggleSwitch;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.ParamScope;
 import javafx.application.Platform;

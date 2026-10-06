@@ -12,6 +12,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import com.mhtextractor.app.EffectiveParamsService;
+import com.mhtextractor.model.AppConfig;
 
 import org.junit.jupiter.api.Test;
 

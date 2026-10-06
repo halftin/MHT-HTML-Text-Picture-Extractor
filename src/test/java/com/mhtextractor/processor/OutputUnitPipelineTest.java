@@ -1,6 +1,6 @@
 package com.mhtextractor.processor;
 
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.model.GroupItem;

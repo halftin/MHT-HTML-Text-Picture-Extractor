@@ -8,7 +8,7 @@ import com.mhtextractor.app.PreStartGateContext;
 import com.mhtextractor.app.PreStartGates;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.app.WorkspaceExtractionService;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.model.PreviewItem;

@@ -5,7 +5,7 @@ import com.mhtextractor.app.PreStartGate;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.PreviewItem;
 import javafx.application.Platform;
 import javafx.scene.control.Button;

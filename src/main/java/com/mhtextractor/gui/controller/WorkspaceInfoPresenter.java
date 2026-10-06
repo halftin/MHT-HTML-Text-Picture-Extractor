@@ -5,7 +5,7 @@ import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.app.OutputNameService;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.app.WorkspaceStructure;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.model.GroupItem;

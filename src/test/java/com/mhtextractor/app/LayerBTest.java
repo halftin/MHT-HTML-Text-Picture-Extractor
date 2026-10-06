@@ -2,7 +2,7 @@ package com.mhtextractor.app;
 
 import com.mhtextractor.baseline.BaselineCases;
 import com.mhtextractor.baseline.BaselineHasher;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

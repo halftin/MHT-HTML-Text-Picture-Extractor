@@ -1,5 +1,7 @@
 package com.mhtextractor.util;
 
+import com.mhtextractor.model.FingerprintEncoder;
+
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

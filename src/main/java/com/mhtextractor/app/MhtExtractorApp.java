@@ -1,7 +1,7 @@
 package com.mhtextractor.app;
 
 import com.mhtextractor.cache.PreviewCacheLifecycle;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.processor.TextBatchProcessor;

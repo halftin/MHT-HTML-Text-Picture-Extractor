@@ -2,7 +2,7 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
 import com.mhtextractor.i18n.I18n;

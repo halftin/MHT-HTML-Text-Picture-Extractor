@@ -1,6 +1,6 @@
 package com.mhtextractor.processor;
 
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.output.Archiver;
 import com.mhtextractor.util.FileUtils;

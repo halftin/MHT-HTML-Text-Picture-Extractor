@@ -5,7 +5,7 @@ import com.mhtextractor.cache.PreviewCacheKey;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.cache.PreviewCacheStore;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.core.SourceParser;
 import com.mhtextractor.core.SourceParsers;
 import com.mhtextractor.model.ExtractOutcome;

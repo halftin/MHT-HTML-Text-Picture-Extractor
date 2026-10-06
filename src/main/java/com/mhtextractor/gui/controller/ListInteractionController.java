@@ -3,7 +3,7 @@ package com.mhtextractor.gui.controller;
 import com.mhtextractor.app.SelectionRules;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.app.WorkspaceStructure;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.GroupItem;

@@ -12,7 +12,7 @@ import java.util.Objects;
 /**
  * 预览缓存的不可变键（需求 2 P1/P9/P10）：四要素（绝对路径、size、mtime、参数指纹）
  * + <b>来源附属指纹</b> + 格式版本。
- * 参数指纹是「算好的不可变字符串」（{@link com.mhtextractor.config.AppConfig#imageExtractionFingerprint()}
+ * 参数指纹是「算好的不可变字符串」（{@link com.mhtextractor.model.AppConfig#imageExtractionFingerprint()}
  * 的产出），本类不持有、也不依赖 AppConfig（AppConfig 是 @Data 可变对象，不能当键用）。
  *
  * <p><b>R6.5：为什么多一个 {@code extraFingerprint}</b> —— HTML 的图片不在 HTML 文件里，

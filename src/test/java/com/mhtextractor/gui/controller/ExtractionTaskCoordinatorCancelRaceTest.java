@@ -4,7 +4,7 @@ import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.OutputUnitPlanner;
 import javafx.application.Platform;

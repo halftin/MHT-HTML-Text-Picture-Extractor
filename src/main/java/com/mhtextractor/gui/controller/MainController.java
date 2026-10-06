@@ -9,7 +9,7 @@ import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.app.WorkspaceImportService;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.app.WorkspaceStructure;
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.WorkspaceFxAdapter;

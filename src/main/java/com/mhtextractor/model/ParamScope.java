@@ -1,6 +1,6 @@
 package com.mhtextractor.model;
 
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.GroupItem;
 
 /**

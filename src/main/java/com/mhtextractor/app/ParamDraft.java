@@ -1,6 +1,6 @@
 package com.mhtextractor.app;
 
-import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.AppConfig;
 
 /**
  * 参数草稿状态机（R1.5）：只做「载入基线 vs 当前值」的<b>纯值比较</b>，零 JavaFX、零控件引用，

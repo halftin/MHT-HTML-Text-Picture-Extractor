@@ -1,6 +1,6 @@
 [
   {
-    "name": "com.mhtextractor.config.AppConfig"
+    "name": "com.mhtextractor.model.AppConfig"
   },
   {
     "name": "java.lang.String"
