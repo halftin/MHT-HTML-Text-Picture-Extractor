@@ -13,7 +13,6 @@ import com.mhtextractor.i18n.ErrorCode;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
-import com.mhtextractor.processor.PerFileOverrides;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
@@ -27,9 +26,7 @@ import java.io.File;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -621,15 +618,6 @@ public final class ExtractionTaskCoordinator {
                 host.inputFolder(), host.outputFolder(), host.openFolderAfterComplete());
     }
 
-    private Map<String, PerFileOverrides> overrides() {
-        Map<String, PerFileOverrides> map = new LinkedHashMap<>();
-        for (PreviewItem item : host.allVisibleItems()) {
-            // 标题覆盖 = 用户在查看器「提取标题」文本框里的编辑值（null/空白 = 用提取值）
-            map.put(item.path, new PerFileOverrides(item.chapterEnabled, item.titleOverride));
-        }
-        return map;
-    }
-
     /**
      * 执行正式提取任务（6.4/6.8：按输出单元拆分批次——未分组按来源 + 各组；
      * 进度跨单元聚合、取消传播、stats 汇总、单元失败不中断整体）
@@ -665,7 +653,7 @@ public final class ExtractionTaskCoordinator {
         log.info(I18n.msg("log.maincontroller.33", units.stream()
                 .map(u -> I18n.get("extract.groupFileCount", "group", u.label(),
                         "count", u.fileCount())).toList()));
-        Map<String, PerFileOverrides> overrides = overrides();
+        var overrides = ExtractionPlanService.overrides(host.allVisibleItems());
 
         run(new WorkspaceExtractionService.ExtractionRequest(sessionOutputFolder, units, overrides, imageMode,
                         recursionDecision()),

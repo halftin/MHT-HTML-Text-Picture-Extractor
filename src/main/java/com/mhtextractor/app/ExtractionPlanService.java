@@ -2,9 +2,12 @@ package com.mhtextractor.app;
 
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.processor.PerFileOverrides;
 import com.mhtextractor.util.OutputUnitPlanner;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 提取运行时配置与输出单元计划（P3-3b-3，矩阵缺口 7/8）：把
@@ -113,5 +116,19 @@ public final class ExtractionPlanService {
             params.setOpenFolderAfterComplete(openFolderAfterComplete);
         }
         return units;
+    }
+
+    /**
+     * 构建「每文件覆盖」映射（原 {@code ExtractionTaskCoordinator.overrides}，逐条照搬）：
+     * 按传入顺序放入 {@link LinkedHashMap}，键为 {@code item.path}，值为
+     * {@code chapterEnabled} / {@code titleOverride} 两字段的覆盖。
+     */
+    public static Map<String, PerFileOverrides> overrides(List<PreviewItem> items) {
+        Map<String, PerFileOverrides> map = new LinkedHashMap<>();
+        for (PreviewItem item : items) {
+            // 标题覆盖 = 用户在查看器「提取标题」文本框里的编辑值（null/空白 = 用提取值）
+            map.put(item.path, new PerFileOverrides(item.chapterEnabled, item.titleOverride));
+        }
+        return map;
     }
 }

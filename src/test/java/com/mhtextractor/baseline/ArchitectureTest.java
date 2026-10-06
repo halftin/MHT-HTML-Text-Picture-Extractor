@@ -270,7 +270,7 @@ class ArchitectureTest {
      * P3-3b-8 命名配置与像素打包下沉 app 层 {@code NamedConfigService} / {@code PreviewPixelService}，
      * -2（ConfigManager / ThumbnailPixels 退出 gui）。
      */
-    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 18;
+    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 17;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

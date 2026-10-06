@@ -139,6 +139,26 @@ class ExtractionPlanServiceTest {
         }
     }
 
+    // ==================== overrides ====================
+
+    /** 每文件覆盖映射（P3-3b-9）：按传入顺序落 LinkedHashMap、键 = item.path、
+     * 值 = chapterEnabled / titleOverride 两字段（与搬迁前 gui 侧 overrides() 同构）。 */
+    @Test
+    void overridesBuildsPerFileMapInInsertionOrder() {
+        PreviewItem a = item("C:/x/a.mht", "C:/x", "a.mht");
+        PreviewItem b = item("C:/y/b.mht", "C:/y", "b.mht");
+        a.chapterEnabled = false;
+        a.titleOverride = "自定义标题";
+        b.chapterEnabled = true;
+        b.titleOverride = null;
+        var map = ExtractionPlanService.overrides(List.of(a, b));
+        assertEquals(List.of("C:/x/a.mht", "C:/y/b.mht"), List.copyOf(map.keySet()));
+        assertFalse(map.get("C:/x/a.mht").chapterEnabled());
+        assertEquals("自定义标题", map.get("C:/x/a.mht").titleOverride());
+        assertTrue(map.get("C:/y/b.mht").chapterEnabled());
+        assertNull(map.get("C:/y/b.mht").titleOverride());
+    }
+
     // ==================== itemView ====================
 
     /** 基础视图 checked 恒 true；勾选视图 checked = 条目勾选；字段映射（路径/来源/移除标记/条目参数）两者一致。 */
