@@ -3,7 +3,7 @@ package com.mhtextractor.gui.controller;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.util.DropResolver;
+import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.util.ParamScope;
 import java.util.List;
 import javafx.scene.input.MouseEvent;

@@ -1,4 +1,4 @@
-package com.mhtextractor.util;
+package com.mhtextractor.app;
 
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.GroupItem;

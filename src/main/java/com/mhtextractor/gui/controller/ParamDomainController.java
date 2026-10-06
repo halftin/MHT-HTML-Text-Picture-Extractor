@@ -8,7 +8,7 @@ import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.ParamScope;
-import com.mhtextractor.util.UndoManager;
+import com.mhtextractor.app.UndoManager;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ListView;

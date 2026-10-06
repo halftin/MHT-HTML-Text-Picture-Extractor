@@ -4,7 +4,7 @@ import com.mhtextractor.app.WorkspaceChange;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.util.DropResolver;
+import com.mhtextractor.app.DropResolver;
 import javafx.application.Platform;
 import javafx.scene.control.ListView;
 import org.junit.jupiter.api.Test;

@@ -1,5 +1,6 @@
 package com.mhtextractor.util;
 
+import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.model.GroupItem;
 import org.junit.jupiter.api.Test;
 

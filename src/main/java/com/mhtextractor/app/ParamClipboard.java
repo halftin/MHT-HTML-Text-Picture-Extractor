@@ -9,7 +9,6 @@ import java.util.function.Function;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.ParamScope;
-import com.mhtextractor.util.UndoManager;
 
 /**
  * 参数剪贴板（Q10 / R7.1–R7.7）：右键「复制参数」与「应用到所选」之间的<b>唯一</b>状态载体，

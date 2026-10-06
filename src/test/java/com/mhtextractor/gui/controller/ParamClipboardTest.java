@@ -20,7 +20,7 @@ import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uicore.FileMenuModel;
 import com.mhtextractor.util.ParamScope;
-import com.mhtextractor.util.UndoManager;
+import com.mhtextractor.app.UndoManager;
 
 import org.junit.jupiter.api.Test;
 

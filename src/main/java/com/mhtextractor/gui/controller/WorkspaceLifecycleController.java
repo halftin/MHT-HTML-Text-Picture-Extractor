@@ -7,7 +7,7 @@ import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.util.UndoManager;
+import com.mhtextractor.app.UndoManager;
 import javafx.collections.ObservableList;
 import javafx.scene.Node;
 import javafx.scene.control.ListView;

@@ -7,7 +7,7 @@ import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
-import com.mhtextractor.util.DropResolver;
+import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.util.OutputUnitPlanner;
 import javafx.scene.Node;
 import javafx.scene.control.Button;

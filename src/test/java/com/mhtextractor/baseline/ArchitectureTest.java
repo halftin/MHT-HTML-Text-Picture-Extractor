@@ -274,9 +274,10 @@ class ArchitectureTest {
      * P3-3b-14 提取结果枚举迁入 model 包 {@code ExtractOutcome}，-1（ExtractOutcome 退出 gui）；
      * P3-3b-16 预览会话缓存生命周期经 {@code app.PreviewSession} 门面收口，
      * -1（PreviewCacheLifecycle 退出 gui）；
-     * P3-3b-18 分组结构规则经 {@code app.WorkspaceStructure} 收口，-1（GroupStructure 退出 gui）。
+     * P3-3b-18 分组结构规则经 {@code app.WorkspaceStructure} 收口，-1（GroupStructure 退出 gui）；
+     * P3-3b-21 {@code DropResolver} 与 {@code UndoManager} 迁入 app 包，-2（两者退出 gui 直连）。
      */
-    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 6;
+    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 4;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {
