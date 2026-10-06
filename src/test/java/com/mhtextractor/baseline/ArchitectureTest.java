@@ -268,7 +268,7 @@ class ArchitectureTest {
      * P3-3b-5 会话状态持久化下沉 app 层 {@code SessionStateService}，-2（GuiState / GuiStateManager 退出 gui）；
      * P3-3b-6 预览渲染命名/扩展名下沉 app 层 {@code PreviewNamingService}，-3（FileWriter / ImageWriter / SanitizeUtils 退出 gui）。
      */
-    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 23;
+    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 20;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

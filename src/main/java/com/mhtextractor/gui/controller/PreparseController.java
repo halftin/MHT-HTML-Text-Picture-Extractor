@@ -1,10 +1,7 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.SourceParseService;
 import com.mhtextractor.config.AppConfig;
-import com.mhtextractor.core.MimeParser;
-import com.mhtextractor.core.SourceParsers;
-import com.mhtextractor.extractor.ImageExtractor;
-import com.mhtextractor.extractor.TextExtractor;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
@@ -97,42 +94,21 @@ public final class PreparseController {
                     continue;
                 }
                 try {
-                    var parser = SourceParsers.forPath(item.path);
-                    MimeParser.ParsedMht parsed = parser.parse(item.path, true, () -> false, null, null);   // 来源由扩展名选
-                    if (parsed.getHtmlContent() == null) {
+                    boolean textMode = host.isTextMode();
+                    SourceParseService.ItemParse result = SourceParseService.parse(item.path, params, textMode);
+                    if (result.kind() == SourceParseService.Kind.UNPARSEABLE) {
                         setItemStatus(token, item, PreviewItem.Status.FAILED, I18n.get("preview.unparseable"));
                         continue;
                     }
-                    if (host.isTextMode()) {
-                        TextExtractor textExtractor = new TextExtractor(parsed);
-                        String text = textExtractor.extractText(params.isAutoFixEncoding(),
-                                params.getStartMarker(), params.getEndMarker(), params.isUseRegex());
-                        item.cachedText = text;
-                        // 标题缓存：与正式提取共用同一 extractTitle 调用（从完整 HTML 提取）
-                        if (params.isEnableTitleExtraction()
-                                && params.getTitleStartMarker() != null
-                                && !params.getTitleStartMarker().isEmpty()) {
-                            try {
-                                String title = textExtractor.extractTitle(params.getTitleStartMarker(),
-                                        params.getTitleEndMarker(), params.isTitleUseRegex());
-                                item.cachedTitle = (title != null && !title.isEmpty()) ? title : null;
-                            } catch (Exception e) {
-                                item.cachedTitle = null;
-                            }
-                        }
-                        setItemStatus(token, item,
-                                (text == null || text.trim().isEmpty()) ? PreviewItem.Status.EMPTY : PreviewItem.Status.READY,
-                                null);
-                    } else {
-                        if (params.isEnableNameExtraction()) {
-                            ImageExtractor imageExtractor = new ImageExtractor(parsed,
-                                    params.getImageNameStartMarker(), params.getImageNameEndMarker(),
-                                    null, null);
-                            String title = imageExtractor.extractTitle();
-                            item.cachedTitle = (title != null && !title.isEmpty()) ? title : null;
-                        }
-                        setItemStatus(token, item, PreviewItem.Status.READY, null);
+                    if (textMode) {
+                        item.cachedText = result.text();
                     }
+                    if (result.titleAssigned()) {
+                        item.cachedTitle = result.title();
+                    }
+                    setItemStatus(token, item,
+                            result.kind() == SourceParseService.Kind.EMPTY ? PreviewItem.Status.EMPTY : PreviewItem.Status.READY,
+                            null);
                 } catch (Exception e) {
                     setItemStatus(token, item, PreviewItem.Status.FAILED, I18n.get("preview.parseFailed") + e.getMessage());
                 }
