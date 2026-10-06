@@ -1,5 +1,6 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.SelectionRules;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.i18n.I18n;
@@ -10,7 +11,6 @@ import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.ParamScope;
-import com.mhtextractor.util.SelectionState;
 import javafx.event.Event;
 import lombok.extern.slf4j.Slf4j;
 import javafx.geometry.Insets;
@@ -222,9 +222,9 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         int total = actions.visibleMemberCount(g);
         int selected = (int) g.getMembers().stream()
                 .filter(m -> !m.removed && m.selected).count();
-        SelectionState.TriState state = SelectionState.computeState(selected, total);
-        checkBox.setSelected(state == SelectionState.TriState.ALL);
-        checkBox.setIndeterminate(state == SelectionState.TriState.SOME);
+        SelectionRules.TriState state = SelectionRules.computeState(selected, total);
+        checkBox.setSelected(state == SelectionRules.TriState.ALL);
+        checkBox.setIndeterminate(state == SelectionRules.TriState.SOME);
         checkBox.setOnAction(e -> {
             e.consume();
             actions.onGroupCheckToggled(g);

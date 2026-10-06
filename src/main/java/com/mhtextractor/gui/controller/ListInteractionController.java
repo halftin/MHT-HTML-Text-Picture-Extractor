@@ -1,5 +1,6 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.SelectionRules;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.util.DragGeometry;
@@ -9,7 +10,6 @@ import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.ParamScope;
-import com.mhtextractor.util.SelectionState;
 import com.mhtextractor.util.UndoManager;
 import javafx.animation.ParallelTransition;
 import javafx.animation.TranslateTransition;
@@ -207,11 +207,11 @@ public final class ListInteractionController implements MainViewActions {
      * 否则全部勾选（项目行 = 自身；组行 = 全部有效成员）。
      */
     private void applyShiftRange(Object anchor, Object current) {
-        List<Object> range = SelectionState.shiftSelectRange(host.displayItems(), anchor, current);
+        List<Object> range = SelectionRules.shiftSelectRange(host.displayItems(), anchor, current);
         if (range.isEmpty()) {
             return;
         }
-        boolean allChecked = SelectionState.rangeAllChecked(range, this::isRowFullyChecked);
+        boolean allChecked = SelectionRules.rangeAllChecked(range, this::isRowFullyChecked);
         boolean target = !allChecked;
         updatingSelection = true;
         try {
@@ -282,18 +282,18 @@ public final class ListInteractionController implements MainViewActions {
     }
 
     /** 按当前列表统计三态：有效项 = removed == false 的项目（含组内成员） */
-    private SelectionState.TriState currentSelectionState() {
+    private SelectionRules.TriState currentSelectionState() {
         List<PreviewItem> vis = host.allVisibleItems();
         int total = vis.size();
         int selected = (int) vis.stream().filter(i -> i.selected).count();
-        return SelectionState.computeState(selected, total);
+        return SelectionRules.computeState(selected, total);
     }
 
     /** 列头三态刷新 + 列表单元格（含组复选框）联动刷新 */
     void refreshSelectionUi() {
-        SelectionState.TriState state = currentSelectionState();
-        host.selectAllCheck().setIndeterminate(state == SelectionState.TriState.SOME);
-        host.selectAllCheck().setSelected(state == SelectionState.TriState.ALL);
+        SelectionRules.TriState state = currentSelectionState();
+        host.selectAllCheck().setIndeterminate(state == SelectionRules.TriState.SOME);
+        host.selectAllCheck().setSelected(state == SelectionRules.TriState.ALL);
         host.fileListView().refresh();
     }
 
@@ -306,8 +306,8 @@ public final class ListInteractionController implements MainViewActions {
         int total = host.visibleMemberCount(g);
         int selected = (int) g.getMembers().stream()
                 .filter(m -> !m.removed && m.selected).count();
-        boolean target = SelectionState.computeToggleTarget(
-                SelectionState.computeState(selected, total));
+        boolean target = SelectionRules.computeToggleTarget(
+                SelectionRules.computeState(selected, total));
         updatingSelection = true;
         for (PreviewItem m : g.getMembers()) {
             if (!m.removed) {
@@ -324,7 +324,7 @@ public final class ListInteractionController implements MainViewActions {
         if (updatingSelection || host.isListAnimating()) {
             return;
         }
-        boolean target = SelectionState.computeToggleTarget(currentSelectionState());
+        boolean target = SelectionRules.computeToggleTarget(currentSelectionState());
         updatingSelection = true;
         for (PreviewItem item : host.allVisibleItems()) {
             item.setSelected(target);
