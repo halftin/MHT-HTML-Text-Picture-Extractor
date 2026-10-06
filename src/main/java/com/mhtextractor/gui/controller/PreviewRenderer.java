@@ -2,7 +2,7 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.PreviewImageData;
 import com.mhtextractor.app.PreviewNamingService;
-import com.mhtextractor.cache.PreviewCacheLifecycle;
+import com.mhtextractor.app.PreviewSession;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.util.ThumbnailFxBridge;
 import com.mhtextractor.i18n.I18n;
@@ -73,8 +73,8 @@ public final class PreviewRenderer {
         /** 条目在输出单元规划中的序号（搬迁前是 {@code unitIndex(PreviewItem)}）。 */
         int unitIndex(Object item);
 
-        /** 预览会话缓存生命周期（搬迁前是 {@code previewCacheLifecycle} 字段）。 */
-        PreviewCacheLifecycle cacheLifecycle();
+        /** 预览会话缓存（搬迁前是 {@code previewCacheLifecycle} 字段，P3-3b-16 起经 {@code app.PreviewSession} 门面）。 */
+        PreviewSession session();
     }
 
     private final Host host;
@@ -176,7 +176,7 @@ public final class PreviewRenderer {
         // E1.2：cachedMeta 为 null（参数变更后清空 / 从未落盘）时安全返回，warn 复用既有
         // file == null 分支（同一日志键 log.maincontroller.65，不新增日志调用点）。
         Path file = item.cachedMeta == null ? null
-                : host.cacheLifecycle().store().imageFileFor(item.cachedMeta, index);
+                : host.session().store().imageFileFor(item.cachedMeta, index);
         if (file == null || !Files.isRegularFile(file)) {
             log.warn(I18n.msg("log.maincontroller.65", item.name));
             return;

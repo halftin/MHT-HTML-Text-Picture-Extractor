@@ -271,9 +271,11 @@ class ArchitectureTest {
      * -2（ConfigManager / ThumbnailPixels 退出 gui）；
      * P3-3b-12 列表选择规则下沉 app 层 {@code SelectionRules}，-1（SelectionState 退出 gui）；
      * P3-3b-13 提取结果回写下沉 app 层 {@code ExtractResultService}，-1（FileResult 退出 gui）；
-     * P3-3b-14 提取结果枚举迁入 model 包 {@code ExtractOutcome}，-1（ExtractOutcome 退出 gui）。
+     * P3-3b-14 提取结果枚举迁入 model 包 {@code ExtractOutcome}，-1（ExtractOutcome 退出 gui）；
+     * P3-3b-16 预览会话缓存生命周期经 {@code app.PreviewSession} 门面收口，
+     * -1（PreviewCacheLifecycle 退出 gui）。
      */
-    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 11;
+    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 10;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

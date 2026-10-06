@@ -151,9 +151,9 @@ public final class AcceptanceDriver {
             return mc.ctxClearParams;
         }
 
-        /** 预览缓存生命周期（生产字段 {@code MainController.previewCacheLifecycle}，包级）。 */
+        /** 预览缓存生命周期（生产字段 {@code MainController.previewCacheLifecycle}，包级；P3-3b-16 起字段类型为门面，经 {@code lifecycle()} 取出底层）。 */
         public PreviewCacheLifecycle previewCacheLifecycle() {
-            return mc.previewCacheLifecycle;
+            return mc.previewCacheLifecycle.lifecycle();
         }
 
         /** 双击 / 单元格交互用：返回条目对应的 {@link PreviewListCell}（包级类型，同包直接引用）。 */

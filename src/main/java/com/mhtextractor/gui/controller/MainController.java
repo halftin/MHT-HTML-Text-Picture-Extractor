@@ -2,11 +2,11 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.ExtractionPlanService;
 import com.mhtextractor.app.PreviewService;
+import com.mhtextractor.app.PreviewSession;
 import com.mhtextractor.app.SessionStateService;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.app.WorkspaceImportService;
 import com.mhtextractor.app.WorkspaceModel;
-import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
@@ -168,20 +168,20 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 列表选择代次：切换选择时自增，取消过期的图片懒加载 */
     private int requestToken = 0;
     /** 预览会话缓存（需求 2 会话 9）：存储层 + 四条生命周期规则；root = <java.io.tmpdir>/mht-extractor-preview（P6/P8，与 HtmlExportBuilder 的 mht-extractor-view 并列） */
-    final PreviewCacheLifecycle previewCacheLifecycle = com.mhtextractor.app.PreviewCacheFactory.create();
+    final PreviewSession previewCacheLifecycle = PreviewSession.create();
     /**
      * 工作区缓存失效服务（E2.2）：把原先散落在 12 处的"规则 (a)/(c)"调用收敛为具名操作，
      * 并成为 {@code com.mhtextractor.app}（无头应用层）的第一块砖。零 JavaFX 依赖。
      */
     private final com.mhtextractor.app.WorkspaceParamService workspaceParamService =
-            new com.mhtextractor.app.WorkspaceParamService(previewCacheLifecycle);
+            new com.mhtextractor.app.WorkspaceParamService(previewCacheLifecycle.lifecycle());
     /**
      * 预览服务（步骤 2）：把「算缓存键 → 查缓存 → 未命中则解析+抽图+原子落盘 → 组装缩略图元数据」
      * 这条<b>业务链路</b>从本控制器搬进无头应用层（{@code com.mhtextractor.app.PreviewService}）。
      * 控制器此后只负责：起线程、解码像素、上屏、弹窗、进度。
      */
     private final com.mhtextractor.app.PreviewService previewService =
-            new com.mhtextractor.app.PreviewService(previewCacheLifecycle);
+            new com.mhtextractor.app.PreviewService(previewCacheLifecycle.lifecycle());
     /**
      * 生效参数服务（R8-①）：把「生效参数是什么」「一组目标是否统一 / 是否混合」「是否存在独立参数」
      * 收敛为唯一实现点，本控制器与 {@code PreviewListCell} 只调用。服务本身无状态，模式与两个全局
@@ -194,7 +194,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * 单元失败不中断整批 —— 全部搬进无头应用层（{@code com.mhtextractor.app.WorkspaceExtractionService}）。
      */
     private final WorkspaceExtractionService extractionService =
-            new WorkspaceExtractionService(previewCacheLifecycle);
+            new WorkspaceExtractionService(previewCacheLifecycle.lifecycle());
     /**
      * 提取任务协调器（Q3 / P2；步骤 2 起兼作提取启动编排收口）：JavaFX {@code Task} 生命周期与
      * UI 回调的宿主，{@link ExtractionTaskCoordinator#begin()} 从 {@code onStartProcessing} 接下
@@ -310,7 +310,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public AppConfig effectiveParams(Object item) { return MainController.this.effectiveForObject(item); }
         @Override public int visibleCount() { return (int) MainController.this.visibleCount(); }
         @Override public int unitIndex(Object item) { return (int) MainController.this.unitIndex((PreviewItem) item); }
-        @Override public PreviewCacheLifecycle cacheLifecycle() { return previewCacheLifecycle; }
+        @Override public PreviewSession session() { return previewCacheLifecycle; }
     });
     /** 预览按需加载编排协作者（C1c）：原 {@code onPreviewEffect()} 主体原样外迁到 {@link PreviewLoader}，
      *  宿主能力经 {@link PreviewLoader.Host} 收窄；文案键、日志键（log.maincontroller.61/62/63）、
@@ -1666,7 +1666,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * （会话 19：原非模态 Alert 换成应用内提醒；连续跨台阶由 toast 图层自行限流，不再需要"先关再弹"）。
      */
     void onSizeAlertStep(int step) {
-        long stepGiB = step * PreviewCacheLifecycle.SIZE_ALERT_STEP_BYTES / (1024L * 1024 * 1024);
+        long stepGiB = step * previewCacheLifecycle.sizeAlertStepBytes() / (1024L * 1024 * 1024);
         double actualGiB = previewCacheLifecycle.lastObservedTotalBytes() / (1024.0 * 1024 * 1024);
         String message = I18n.get("cache.sizeAlert",
                         "step", stepGiB, "actual", String.format("%.1f", actualGiB),
