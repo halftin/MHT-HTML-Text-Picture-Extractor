@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.NamedConfigService;
 import com.mhtextractor.config.AppConfig;
-import com.mhtextractor.config.ConfigManager;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.i18n.ErrorCode;
 import com.mhtextractor.i18n.I18n;
@@ -31,7 +31,7 @@ import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 final class ParamPanelActions {
 
     private final ParamFormPane pane;
-    private final ConfigManager configManager = new ConfigManager();
+    private final NamedConfigService namedConfigService = new NamedConfigService();
 
     ParamPanelActions(ParamFormPane pane) {
         this.pane = pane;
@@ -58,7 +58,7 @@ final class ParamPanelActions {
         dialog.setContentText(I18n.get("dialog.saveConfigNote"));
         dialog.showAndWait().ifPresent(name -> {
             try {
-                configManager.saveConfig(name, pane.collect());
+                namedConfigService.save(name, pane.collect());
                 refreshConfigList();
                 pane.configComboBox.getSelectionModel().select(name);
                 log.info(I18n.msg("log.paramdialogcontroller.01", name));
@@ -76,7 +76,7 @@ final class ParamPanelActions {
             return;
         }
         try {
-            AppConfig config = configManager.loadConfig(selected);
+            AppConfig config = namedConfigService.load(selected);
             // 只填充当前模式参数组，另一组保持隔离（确定后才生效）
             pane.applyLoadedConfig(config);
             log.info(I18n.msg("log.paramdialogcontroller.03", selected));
@@ -98,7 +98,7 @@ final class ParamPanelActions {
                         return;
                     }
                     try {
-                        configManager.deleteConfig(selected);
+                        namedConfigService.delete(selected);
                         refreshConfigList();
                         log.info(I18n.msg("log.paramdialogcontroller.05", selected));
                     } catch (Exception e) {
@@ -109,7 +109,7 @@ final class ParamPanelActions {
     }
 
     private void refreshConfigList() {
-        pane.setConfigNames(configManager.getConfigNames());
+        pane.setConfigNames(namedConfigService.names());
     }
 
     /** 高速内存模式确认（会话 19：窗口内居中确认卡片，取代嵌套模态 Alert） */

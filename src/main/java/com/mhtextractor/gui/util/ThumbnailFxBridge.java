@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.util;
 
+import com.mhtextractor.app.PreviewPixelService;
 import com.mhtextractor.model.ThumbnailData;
-import com.mhtextractor.util.ThumbnailPixels;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
@@ -41,12 +41,12 @@ public final class ThumbnailFxBridge {
     /** 缩略图纯数据 → JavaFX 图像（渲染层唯一的 JavaFX 转换点；失败返回 null 表示无法加载） */
     public static Image toFxImage(ThumbnailData d) {
         int[] px = d.pixels();
-        if (!ThumbnailPixels.isUsable(px, d.width(), d.height())) {
+        if (!PreviewPixelService.isUsable(px, d.width(), d.height())) {
             return null;
         }
         try {
             WritableImage img = new WritableImage(d.width(), d.height());
-            // stride == width：像素为行优先连续的 ARGB int（打包/解包契约见 ThumbnailPixels）
+            // stride == width：像素为行优先连续的 ARGB int（打包/解包契约见 PreviewPixelService）
             img.getPixelWriter().setPixels(0, 0, d.width(), d.height(),
                     PixelFormat.getIntArgbInstance(), px, 0, d.width());
             return img;
@@ -67,11 +67,11 @@ public final class ThumbnailFxBridge {
             if (w <= 0 || h <= 0) {
                 return new ThumbnailData(coreName, 0, 0, null);
             }
-            // 经 IntBuffer 接收，再交由纯 Java 的 ThumbnailPixels 打包 —— 该段逻辑有零 JavaFX 单测
+            // 经 IntBuffer 接收，再交由纯 Java 的 PreviewPixelService 打包 —— 该段逻辑有零 JavaFX 单测
             IntBuffer buf = IntBuffer.allocate(w * h);
             img.getPixelReader().getPixels(0, 0, w, h,
                     PixelFormat.getIntArgbInstance(), buf, w);
-            int[] px = ThumbnailPixels.pack(buf, w, h);
+            int[] px = PreviewPixelService.pack(buf, w, h);
             if (px == null) {
                 return new ThumbnailData(coreName, 0, 0, null);
             }

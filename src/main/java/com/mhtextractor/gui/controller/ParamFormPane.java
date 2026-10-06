@@ -72,7 +72,7 @@ import java.util.function.Consumer;
  *       {@link ParamSidePanel}（D 起唯一的宿主）与其宿主窗口。</li>
  *   <li>「高速内存模式」的确认提醒卡片：它需要窗口内的提醒层锚点，故监听由共用的宿主动作件
  *       {@link ParamPanelActions} 挂载（<b>产品行为不变</b>：仍在勾选时弹出、取消仍回退勾选）。</li>
- *   <li>命名配置的文件 IO 与提醒文案（{@code ConfigManager} + {@code TextInputDialog} +
+ *   <li>命名配置的文件 IO 与提醒文案（{@code NamedConfigService} + {@code TextInputDialog} +
  *       {@code NotificationHost}）：本类只转发三个动作，<b>不决定</b>用模态窗口问用户配置名。</li>
  * </ul>
  */
