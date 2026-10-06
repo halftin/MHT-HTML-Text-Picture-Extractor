@@ -1,6 +1,7 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.ExtractionPlanService;
+import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.app.PreviewService;
 import com.mhtextractor.app.PreviewSession;
 import com.mhtextractor.app.SessionStateService;
@@ -19,7 +20,6 @@ import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.util.DropResolver;
-import com.mhtextractor.util.MhtImportPlanner;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.UndoManager;
 import javafx.application.Platform;

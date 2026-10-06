@@ -1,7 +1,6 @@
 package com.mhtextractor.app;
 
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.util.MhtImportPlanner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

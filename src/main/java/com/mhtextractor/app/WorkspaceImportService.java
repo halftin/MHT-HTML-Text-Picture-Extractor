@@ -4,7 +4,6 @@ import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.IncrementalImport;
-import com.mhtextractor.util.MhtImportPlanner;
 import com.mhtextractor.util.SanitizeUtils;
 
 import java.io.File;

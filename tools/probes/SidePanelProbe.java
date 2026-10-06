@@ -1292,12 +1292,12 @@ public class SidePanelProbe extends Application {
             Path b = Files.createDirectories(root.resolve("sub2"));
             Files.copy(Path.of(FIXTURES_DIR, "simple-text.mht"), a.resolve("g1.mht"));
             Files.copy(Path.of(FIXTURES_DIR, "titles.mht"), b.resolve("g2.mht"));
-            Object plan = invokeStatic("com.mhtextractor.util.MhtImportPlanner", "scanner",
+            Object plan = invokeStatic("com.mhtextractor.app.MhtImportPlanner", "scanner",
                     new Class<?>[]{List.class, int.class, int.class, int.class},
                     List.of(root.toString()), 6, 50, 5000);
             Object next = invoke(plan, "nextRound", new Class<?>[]{});
             invoke(controller, "applyImportPlan",
-                    new Class<?>[]{Class.forName("com.mhtextractor.util.MhtImportPlanner$Plan")}, next);
+                    new Class<?>[]{Class.forName("com.mhtextractor.app.MhtImportPlanner$Plan")}, next);
             sleep(400);
             System.out.println("Q6b: created fixture groups -> groups=" + topLevelGroups().size()
                     + " visibleCount=" + visibleCount());

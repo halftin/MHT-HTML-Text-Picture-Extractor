@@ -1,6 +1,7 @@
-package com.mhtextractor.util;
+package com.mhtextractor.app;
 
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.util.SourceKinds;
 
 import java.io.File;
 import java.io.IOException;

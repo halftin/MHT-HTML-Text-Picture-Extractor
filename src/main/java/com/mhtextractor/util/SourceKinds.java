@@ -6,11 +6,11 @@ import java.util.Locale;
 /**
  * 可导入来源的<b>扩展名与侧车后缀</b>口径（R6.1 / R6.4 / R6.6）—— <b>全项目唯一入口</b>。
  *
- * <p>导入识别（{@code MhtImportPlanner} / {@code MhtExtractorApp.importPaths}）、解析器选择
+ * <p>导入识别（{@code app.MhtImportPlanner} / {@code MhtExtractorApp.importPaths}）、解析器选择
  * （{@code core.SourceParsers}）与输出命名（{@link #stripKnownExtension}）三处必须用同一套
  * 扩展名集合，否则会出现"能导入但不认识扩展名（选不出解析器）""能提取但输出名带着扩展名"这类错位。
  * 侧车目录后缀（{@link #sidecarSuffix}）同理：指纹（{@code cache.SourceFingerprint}）、解析器
- * resolve（{@code core.HtmlFolderParser}）、导入排除（{@code MhtImportPlanner} /
+ * resolve（{@code core.HtmlFolderParser}）、导入排除（{@code app.MhtImportPlanner} /
  * {@code MhtExtractorApp}）四处必须用同一份后缀口径。本类的职责就是把这两套口径收敛成
  * 一份可无头单测的纯函数。</p>
  *
@@ -70,7 +70,7 @@ public final class SourceKinds {
 
     /**
      * HTML 组的扩展名字面量（小写、含点），供"侧车同基名文件"判定
-     * （{@code MhtImportPlanner.isSidecarDir} / {@code MhtExtractorApp.isInSidecarDir}）复用。
+     * （{@code app.MhtImportPlanner.isSidecarDir} / {@code MhtExtractorApp.isInSidecarDir}）复用。
      *
      * <p>返回<b>不可变</b>副本。其余实现点一律用 {@link #isMht} / {@link #isHtml} / {@link #isImportable}
      * 等判定函数或 {@link #stripKnownExtension}，不要自行持有扩展名集合 —— 本类是来源扩展名的唯一入口。</p>
@@ -83,7 +83,7 @@ public final class SourceKinds {
 
     /**
      * 侧车目录后缀字面量。仅用于"基名 + 后缀"拼接（{@link #sidecarDirName}）或按长度反推基名
-     * （{@code MhtImportPlanner.isSidecarDir} / {@code MhtExtractorApp.isInSidecarDir}）；
+     * （{@code app.MhtImportPlanner.isSidecarDir} / {@code MhtExtractorApp.isInSidecarDir}）；
      * 目录名判定请优先用 {@link #isSidecarDirName}，不要自行持有后缀字面量。
      */
     public static String sidecarSuffix() {

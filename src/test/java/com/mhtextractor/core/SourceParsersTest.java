@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * R6.3 解析器抽象 + R6.6 输出命名口径的无头测试。
  *
  * <p><b>大小写口径是本步被拍板的重点</b>（提示词 §0）：HTML 组大小写不敏感，而 MHT 组的判定
- * <b>保持原样</b>。⚠️ "原样" = <b>本来就大小写不敏感</b>（{@code MhtImportPlanner} 改动前即
+ * <b>保持原样</b>。⚠️ "原样" = <b>本来就大小写不敏感</b>（{@code app.MhtImportPlanner} 改动前即
  * {@code toLowerCase().endsWith(".mht")}，且 {@code MhtImportPlannerTest} 一直在断言
  * {@code a.MHTML} 命中）—— 所以这里对 {@code .MHT} 的断言是
  * <b>"不变"</b>而不是"为假"。详见类 {@link SourceKinds} 的 javadoc 与交付报告。</p>

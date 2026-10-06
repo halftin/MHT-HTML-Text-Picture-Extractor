@@ -1,4 +1,4 @@
-package com.mhtextractor.util;
+package com.mhtextractor.app;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 否则"不计入"可能是因为统计本来就恒为 0（假通过）。</p>
  *
  * <p>⚠️ 关于大小写：本步的拍板是"只放宽 .html/.htm"，而 {@code .mht/.mhtml} 的既有判定
- * <b>本来就是大小写不敏感</b>（见 {@code MhtImportPlannerTest.upperCaseMhtmlExtensionIsMatched}）。
+ * <b>本来就是大小写不敏感</b>（见 {@code util.MhtImportPlannerTest.upperCaseMhtmlExtensionIsMatched}）。
  * 因此这里的 {@code .MHT} 断言是"<b>维持既有行为</b>"，不是"为假"。</p>
  */
 class MhtImportPlannerSidecarTest {

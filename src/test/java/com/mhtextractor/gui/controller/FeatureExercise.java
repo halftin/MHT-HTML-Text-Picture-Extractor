@@ -1,5 +1,6 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.config.GuiState;
@@ -11,7 +12,6 @@ import com.mhtextractor.model.ChangeListener;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.model.GroupItem;
-import com.mhtextractor.util.MhtImportPlanner;
 import com.mhtextractor.util.OutputUnitPlanner;
 import com.mhtextractor.util.ParamScope;
 import javafx.application.Platform;
