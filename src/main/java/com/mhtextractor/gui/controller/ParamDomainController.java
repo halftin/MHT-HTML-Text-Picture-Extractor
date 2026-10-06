@@ -1,12 +1,12 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.GlobalParameterCache;
+import com.mhtextractor.app.WorkspaceStructure;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.GroupItem;
-import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.UndoManager;
 import javafx.scene.Node;
@@ -124,7 +124,7 @@ public final class ParamDomainController {
     /** 确认路径的应用本体（R7.4 唯一实现点）：组 → 组参数；条目 → 条目参数；其余 → 全局参数 */
     void applyTargetParams(ParamScope.Target target, boolean imageMode, AppConfig params) {
         switch (target) {
-            case ParamScope.GroupTarget(GroupItem<?> g) -> applyGroupParams(GroupStructure.asPreviewGroup(g), imageMode, params);
+            case ParamScope.GroupTarget(GroupItem<?> g) -> applyGroupParams(WorkspaceStructure.asPreviewGroup(g), imageMode, params);
             case ParamScope.ItemTarget<?> it -> applyItemParams((PreviewItem) it.item(), imageMode, params);
             default -> {
                 applyConfirmedParams(imageMode, params);
@@ -304,7 +304,7 @@ public final class ParamDomainController {
                         topLevel++;
                     }
                 } else if (o instanceof GroupItem<?> g) {
-                    groups.add(GroupStructure.asPreviewGroup(g));
+                    groups.add(WorkspaceStructure.asPreviewGroup(g));
                 }
             }
         }
@@ -330,7 +330,7 @@ public final class ParamDomainController {
                     topItems.add(it);
                 }
             } else if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> grp = GroupStructure.asPreviewGroup(g);
+                GroupItem<PreviewItem> grp = WorkspaceStructure.asPreviewGroup(g);
                 if ((imageMode ? grp.getImageParamsCache() : grp.getTextParamsCache()) != null) {
                     groups.add(grp);
                 }
@@ -467,7 +467,7 @@ public final class ParamDomainController {
                     for (Object o : host.dataOrder()) {
                         if (o instanceof GroupItem<?> g
                                 && g.getGroupNo() == record.paramTargetGroupNo()) {
-                            GroupItem<PreviewItem> grp = GroupStructure.asPreviewGroup(g);
+                            GroupItem<PreviewItem> grp = WorkspaceStructure.asPreviewGroup(g);
                             if (im) {
                                 grp.setImageParamsCache(record.paramBefore());
                             } else {
@@ -566,7 +566,7 @@ public final class ParamDomainController {
         List<PreviewItem> affected = new ArrayList<>(restoredItems);
         for (Object o : host.dataOrder()) {
             if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> grp = GroupStructure.asPreviewGroup(g);
+                GroupItem<PreviewItem> grp = WorkspaceStructure.asPreviewGroup(g);
                 if (groupBefore.containsKey(grp.getGroupNo())) {
                     if (im) grp.setImageParamsCache(groupBefore.get(grp.getGroupNo()));
                     else grp.setTextParamsCache(groupBefore.get(grp.getGroupNo()));

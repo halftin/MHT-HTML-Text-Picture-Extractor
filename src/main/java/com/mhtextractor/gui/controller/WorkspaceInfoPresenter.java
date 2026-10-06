@@ -2,13 +2,13 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.ExtractResultService;
 import com.mhtextractor.app.OutputNameService;
+import com.mhtextractor.app.WorkspaceStructure;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
-import com.mhtextractor.util.GroupStructure;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
@@ -77,7 +77,7 @@ public final class WorkspaceInfoPresenter {
             host.outputNameLabel().setManaged(false);
             host.groupNameBox().setVisible(true);
             host.groupNameBox().setManaged(true);
-            host.attachGroupNameEditor(GroupStructure.asPreviewGroup(g));
+            host.attachGroupNameEditor(WorkspaceStructure.asPreviewGroup(g));
             return;
         }
         AppConfig params = host.effectiveParams(item);

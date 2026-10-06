@@ -1,10 +1,10 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.WorkspaceStructure;
 import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.GroupItem;
-import com.mhtextractor.util.GroupStructure;
 import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
 import javafx.animation.TranslateTransition;
@@ -152,7 +152,7 @@ public final class GroupCommandController {
         if (!(sel instanceof GroupItem<?> g)) {
             return;
         }
-        GroupItem<PreviewItem> group = GroupStructure.asPreviewGroup(g);
+        GroupItem<PreviewItem> group = WorkspaceStructure.asPreviewGroup(g);
         if (host.indexInDataOrder(group) < 0) {
             return;
         }

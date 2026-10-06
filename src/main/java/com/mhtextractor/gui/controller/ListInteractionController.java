@@ -2,13 +2,13 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.SelectionRules;
 import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.app.WorkspaceStructure;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.GroupItem;
-import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.UndoManager;
 import javafx.animation.ParallelTransition;
@@ -169,7 +169,7 @@ public final class ListInteractionController implements MainViewActions {
             return;
         }
         if (item instanceof GroupItem<?> g) {
-            GroupItem<PreviewItem> group = GroupStructure.asPreviewGroup(g);
+            GroupItem<PreviewItem> group = WorkspaceStructure.asPreviewGroup(g);
             // 箭头槽位（cell x 22-46）：折叠/展开，优先于 Ctrl/Shift 多选手势；
             // pressed 判定比 released 可靠（released 会被 checkbox 吞掉导致间歇丢失）
             if (e.getX() >= 22 && e.getX() <= 46) {
@@ -271,7 +271,7 @@ public final class ListInteractionController implements MainViewActions {
         }
         if (item instanceof GroupItem<?> g) {
             if (e.getX() >= 46) {
-                onGroupCheckToggled(GroupStructure.asPreviewGroup(g));
+                onGroupCheckToggled(WorkspaceStructure.asPreviewGroup(g));
             }
         } else if (item instanceof PreviewItem it && !it.removed) {
             if (e.getX() >= 50) {

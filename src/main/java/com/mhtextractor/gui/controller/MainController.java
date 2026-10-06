@@ -7,6 +7,7 @@ import com.mhtextractor.app.SessionStateService;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.app.WorkspaceImportService;
 import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.app.WorkspaceStructure;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
@@ -18,7 +19,6 @@ import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.util.GroupItem;
-import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.MhtImportPlanner;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.UndoManager;
@@ -1433,7 +1433,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             g.setName("");
             return;
         }
-        String unique = GroupStructure.uniqueGroupName(trimmed, otherGroupNames(g));
+        String unique = WorkspaceStructure.uniqueGroupName(trimmed, otherGroupNames(g));
         if (!unique.equals(trimmed)) {
             log.info(I18n.msg("log.maincontroller.09", trimmed, unique));
             updatingGroupName = true;
@@ -1547,7 +1547,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         // 组条目：预览区显示组信息与参数状态提示（6.5）
         if (item instanceof GroupItem<?> g) {
-            GroupItem<PreviewItem> group = GroupStructure.asPreviewGroup(g);
+            GroupItem<PreviewItem> group = WorkspaceStructure.asPreviewGroup(g);
             String info = I18n.get("preview.groupInfo") + group.getName()
                     + I18n.get("preview.groupItemCount", "count", visibleMemberCount(group))
                     + I18n.get("preview.paramsLabel") + groupParamStatusText(group);
