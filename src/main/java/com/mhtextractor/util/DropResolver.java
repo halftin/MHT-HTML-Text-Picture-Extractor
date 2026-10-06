@@ -1,5 +1,7 @@
 package com.mhtextractor.util;
 
+import com.mhtextractor.model.GroupItem;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;

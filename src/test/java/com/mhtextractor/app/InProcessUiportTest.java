@@ -1,5 +1,6 @@
 package com.mhtextractor.app;
 
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uiport.Confirmer;
 import com.mhtextractor.uiport.ConfirmToken;
@@ -9,7 +10,6 @@ import com.mhtextractor.uiport.PortEvent;
 import com.mhtextractor.uiport.TriState;
 import com.mhtextractor.uiport.UpdateKind;
 import com.mhtextractor.uiport.WorkspaceVm;
-import com.mhtextractor.util.GroupItem;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;

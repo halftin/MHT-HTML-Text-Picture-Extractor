@@ -8,7 +8,7 @@ import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.model.ExtractOutcome;
-import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.model.GroupItem;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;

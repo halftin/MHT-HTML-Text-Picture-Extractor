@@ -2,6 +2,7 @@ package com.mhtextractor.util;
 
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.GroupItem;
 
 import java.io.File;
 import java.util.ArrayList;

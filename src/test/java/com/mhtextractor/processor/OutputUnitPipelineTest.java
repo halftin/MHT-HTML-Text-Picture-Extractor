@@ -3,7 +3,7 @@ package com.mhtextractor.processor;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.ExtractOutcome;
-import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.util.OutputUnitPlanner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

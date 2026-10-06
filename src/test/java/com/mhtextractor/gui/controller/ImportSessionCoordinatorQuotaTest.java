@@ -2,8 +2,8 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.util.GroupItem;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

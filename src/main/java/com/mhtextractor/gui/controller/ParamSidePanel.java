@@ -6,7 +6,7 @@ import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.util.ParamScope;
 import javafx.scene.Node;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;

@@ -1,7 +1,7 @@
 package com.mhtextractor.app;
 
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.util.GroupItem;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;

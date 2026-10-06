@@ -9,7 +9,7 @@ import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.model.ChangeListener;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.model.ExtractOutcome;
-import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.util.ParamScope;
 import javafx.event.Event;
 import lombok.extern.slf4j.Slf4j;

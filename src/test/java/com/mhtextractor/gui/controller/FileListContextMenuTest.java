@@ -16,9 +16,9 @@ import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.app.ParamsInfo;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uicore.FileMenuModel;
-import com.mhtextractor.util.GroupItem;
 
 import javafx.scene.control.MenuItem;
 import javafx.scene.layout.Pane;

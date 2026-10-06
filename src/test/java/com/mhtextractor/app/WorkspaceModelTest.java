@@ -1,8 +1,8 @@
 package com.mhtextractor.app;
 
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.DropResolver;
-import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.UndoManager;
 import org.junit.jupiter.api.Test;
 

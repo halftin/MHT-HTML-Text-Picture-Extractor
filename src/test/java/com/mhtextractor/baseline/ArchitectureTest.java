@@ -276,7 +276,7 @@ class ArchitectureTest {
      * -1（PreviewCacheLifecycle 退出 gui）；
      * P3-3b-18 分组结构规则经 {@code app.WorkspaceStructure} 收口，-1（GroupStructure 退出 gui）。
      */
-    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 8;
+    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 7;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

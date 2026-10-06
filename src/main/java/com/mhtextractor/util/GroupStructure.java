@@ -1,5 +1,6 @@
 package com.mhtextractor.util;
 
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 
 import java.util.ArrayList;

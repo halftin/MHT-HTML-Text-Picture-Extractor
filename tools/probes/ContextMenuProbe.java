@@ -13,7 +13,7 @@ import com.mhtextractor.gui.controller.FileListContextMenu;
 import com.mhtextractor.gui.controller.MainController;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.uicore.FileMenuModel;
 
 import atlantafx.base.controls.ToggleSwitch;

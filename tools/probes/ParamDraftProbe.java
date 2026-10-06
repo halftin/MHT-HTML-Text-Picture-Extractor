@@ -3,7 +3,7 @@ import com.mhtextractor.gui.component.ParamTargetBar;
 import com.mhtextractor.gui.controller.ParamFormPane;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.util.ParamScope;
 import javafx.application.Application;
 import javafx.application.Platform;

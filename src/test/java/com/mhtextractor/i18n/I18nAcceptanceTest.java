@@ -2,7 +2,7 @@ package com.mhtextractor.i18n;
 
 import com.mhtextractor.baseline.SourceScanUtils;
 import com.mhtextractor.core.ChapterGenerator;
-import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.util.OutputUnitPlanner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

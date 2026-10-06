@@ -1,8 +1,8 @@
 package com.mhtextractor.app;
 
 import com.mhtextractor.i18n.ErrorCode;
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.util.GroupItem;
 
 import java.io.File;
 import java.util.ArrayList;

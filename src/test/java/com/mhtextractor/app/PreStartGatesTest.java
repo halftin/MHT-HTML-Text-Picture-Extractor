@@ -1,8 +1,8 @@
 package com.mhtextractor.app;
 
 import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.OutputUnitPlanner;
 import org.junit.jupiter.api.Test;
 

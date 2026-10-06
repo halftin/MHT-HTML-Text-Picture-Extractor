@@ -1,6 +1,7 @@
 package com.mhtextractor.util;
 
 import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.GroupItem;
 
 /**
  * 参数作用域纯逻辑（F5 阶段 5 / 6.5 / 8.1 / 8.5 + 条目独立参数需求）：

@@ -1,9 +1,9 @@
 package com.mhtextractor.app;
 
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.DropResolver;
-import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
 import com.mhtextractor.util.UndoManager;
 import lombok.extern.slf4j.Slf4j;

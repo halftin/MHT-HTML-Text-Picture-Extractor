@@ -10,7 +10,7 @@ import com.mhtextractor.processor.FileResult;
 import com.mhtextractor.model.ChangeListener;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.model.ExtractOutcome;
-import com.mhtextractor.util.GroupItem;
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.util.MhtImportPlanner;
 import com.mhtextractor.util.OutputUnitPlanner;
 import com.mhtextractor.util.ParamScope;

@@ -1,5 +1,6 @@
 package com.mhtextractor.app;
 
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uiport.Confirmer;
 import com.mhtextractor.uiport.GroupVm;
@@ -12,7 +13,6 @@ import com.mhtextractor.uiport.Uiport;
 import com.mhtextractor.uiport.WorkspaceCommands;
 import com.mhtextractor.uiport.WorkspaceQueries;
 import com.mhtextractor.uiport.WorkspaceVm;
-import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
 
 import java.util.ArrayList;

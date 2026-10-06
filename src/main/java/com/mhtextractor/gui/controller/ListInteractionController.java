@@ -6,9 +6,9 @@ import com.mhtextractor.app.WorkspaceStructure;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.DropResolver;
-import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.ParamScope;
 import com.mhtextractor.util.UndoManager;
 import javafx.animation.ParallelTransition;
@@ -63,7 +63,7 @@ public final class ListInteractionController implements MainViewActions {
         boolean isTextMode();
         AppConfig effectiveForObject(Object item);
         com.mhtextractor.util.ParamScope.Status effectiveStatus(Object item);
-        int visibleMemberCount(com.mhtextractor.util.GroupItem<com.mhtextractor.model.PreviewItem> group);
+        int visibleMemberCount(GroupItem<com.mhtextractor.model.PreviewItem> group);
         long unitIndex(com.mhtextractor.model.PreviewItem item);
         boolean isListAnimating();                                     // C3 动画锁（仍留在 MainController）
         boolean extractionRunning();                                   // 功能一：提取运行中锁定勾选框
@@ -79,7 +79,7 @@ public final class ListInteractionController implements MainViewActions {
         void renderThumbnails(com.mhtextractor.model.PreviewItem item); // = previewRenderer.renderThumbnails(item)
         void startPreParseFor(List<com.mhtextractor.model.PreviewItem> items);
         void clearPreviewCache(com.mhtextractor.model.PreviewItem item);
-        void toggleGroupExpanded(com.mhtextractor.util.GroupItem<com.mhtextractor.model.PreviewItem> group);
+        void toggleGroupExpanded(GroupItem<com.mhtextractor.model.PreviewItem> group);
     }
 
     private final Host host;
