@@ -1,12 +1,11 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.ExtractResultService;
 import com.mhtextractor.app.OutputNameService;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.model.ExtractWarning;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
-import com.mhtextractor.processor.FileResult;
 import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
@@ -15,10 +14,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 工作区信息呈现协作者（C5）：模式摘要 / 选中信息区 / 提取结果展示从 {@code MainController}
@@ -175,34 +171,13 @@ public final class WorkspaceInfoPresenter {
     }
 
     /** 提取结果一次性回写（拍板：提取结束/取消后统一回写，非逐文件实时更新）：
-     *  按路径匹配条目写入结果字段，列表一次刷新，选中条目 banner 同步 */
+     *  按路径匹配条目写入结果字段（下沉 {@code app.ExtractResultService}），列表一次刷新，选中条目 banner 同步 */
     void applyExtractResults(BatchProcessor.ProcessStats stats) {
-        Map<String, FileResult> byPath = new HashMap<>();
-        for (FileResult r : stats.getFileResults()) {
-            byPath.put(r.path(), r);
-        }
-        for (PreviewItem it : host.allPreviewItems()) {
-            FileResult r = byPath.get(it.path);
-            if (r != null) {
-                it.extractOutcome = r.outcome();
-                it.extractDetail = buildExtractDetail(r);
-            }
-        }
+        int matched = ExtractResultService.apply(stats, host.allPreviewItems(),
+                I18n::render, I18n.get("list.itemSeparator"));
         host.refreshList();
         updateExtractBanner(host.currentSelection());
-        log.info(I18n.msg("log.maincontroller.29", byPath.size()));
-    }
-
-    /** 结果详情拼接：失败/跳过原因 + 警告（逐条按当前 locale 渲染），分号分隔；无内容返回 null */
-    private String buildExtractDetail(FileResult r) {
-        List<String> parts = new ArrayList<>();
-        if (r.message() != null && !r.message().isEmpty()) {
-            parts.add(r.message());
-        }
-        for (ExtractWarning warning : r.warnings()) {
-            parts.add(I18n.render(warning));
-        }
-        return parts.isEmpty() ? null : String.join(I18n.get("list.itemSeparator"), parts);
+        log.info(I18n.msg("log.maincontroller.29", matched));
     }
 
     /** 提取结果色清除（拍板）：重新确认参数后旧结果失效，回到参数色/解析状态色 */
