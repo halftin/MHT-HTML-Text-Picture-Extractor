@@ -275,7 +275,7 @@ class ArchitectureTest {
      * P3-3b-16 预览会话缓存生命周期经 {@code app.PreviewSession} 门面收口，
      * -1（PreviewCacheLifecycle 退出 gui）。
      */
-    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 10;
+    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 9;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

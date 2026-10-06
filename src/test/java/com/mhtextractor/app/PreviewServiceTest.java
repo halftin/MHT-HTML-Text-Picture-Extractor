@@ -113,6 +113,24 @@ class PreviewServiceTest {
     }
 
     @Test
+    void imagesProjectionMatchesMetaEntriesItemByItem() throws Exception {
+        Path mht = fixture("multi-image.mht");
+        PreviewService svc = service();
+        PreviewService.PreviewResult pr = svc.ensureCached(mht, new AppConfig(), null);
+        assertNotNull(pr);
+
+        // P3-3b-17：中性投影 images() 必须与 meta().images() 逐条一致（顺序 + 三字段）
+        assertEquals(pr.meta().images().size(), pr.images().size(), "投影条数应与 meta 一致");
+        for (int i = 0; i < pr.meta().images().size(); i++) {
+            PreviewCacheMeta.ImageEntry e = pr.meta().images().get(i);
+            PreviewService.PreviewResult.ImageRef ref = pr.images().get(i);
+            assertEquals(e.file(), ref.file(), "file 不一致（下标 " + i + "）");
+            assertEquals(e.originalName(), ref.originalName(), "originalName 不一致（下标 " + i + "）");
+            assertEquals(e.sourceId(), ref.sourceId(), "sourceId 不一致（下标 " + i + "）");
+        }
+    }
+
+    @Test
     void paramChangeMissesAndRebuildsUnderDifferentKey() throws Exception {
         Path mht = fixture("single-image.mht");
         PreviewService svc = service();

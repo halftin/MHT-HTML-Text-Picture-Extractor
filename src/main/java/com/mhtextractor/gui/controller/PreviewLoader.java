@@ -1,7 +1,6 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.PreviewImageData;
-import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.i18n.I18n;
@@ -198,13 +197,12 @@ public final class PreviewLoader {
                 }
                 // C2：缩略图从磁盘真实图片逐张解码，内存只留缩略图 + meta，不驻留全尺寸字节。
                 // 元数据（coreName）由无头服务给出；像素解码仍在此处（JavaFX 缩放解码 + PixelReader）。
-                final PreviewCacheMeta meta = pr.meta();
                 List<ThumbnailData> thumbs = new ArrayList<>();
-                for (int i = 0; i < meta.images().size(); i++) {
+                for (int i = 0; i < pr.images().size(); i++) {
                     if (token != host.requestToken()) {
                         return;
                     }
-                    PreviewCacheMeta.ImageEntry entry = meta.images().get(i);
+                    var entry = pr.images().get(i);
                     final ThumbnailData thumb;
                     try {
                         byte[] data = Files.readAllBytes(pr.imagesDir().resolve(entry.file()));
@@ -261,9 +259,9 @@ public final class PreviewLoader {
                     imageLoadActive = false;
                     loadingItem = null;
                     item.cachedThumbs = thumbs;
-                    item.cachedMeta = meta;
+                    item.cachedMeta = pr.meta();
                     item.cachedImages = null;
-                    if (meta.images().isEmpty()) {
+                    if (pr.images().isEmpty()) {
                         // 全量解析确认无图片 → 空内容标记
                         item.status = PreviewItem.Status.EMPTY;
                         host.refreshList();

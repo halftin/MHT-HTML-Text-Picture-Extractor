@@ -60,6 +60,22 @@ public final class PreviewService {
      *               顺序与 {@code meta.images()} 一致
      */
     public record PreviewResult(PreviewCacheMeta meta, Path imagesDir, List<ThumbnailData> thumbs) {
+
+        /**
+         * 图片清单的<b>中性</b>投影：与 {@code meta().images()} 逐条对应、顺序与字段逐字一致，
+         * 但不暴露 cache 类型（供 gui 层读取图片字节做解码，P3-3b-17）。
+         */
+        public List<ImageRef> images() {
+            List<ImageRef> refs = new ArrayList<>(meta.images().size());
+            for (PreviewCacheMeta.ImageEntry entry : meta.images()) {
+                refs.add(new ImageRef(entry.file(), entry.originalName(), entry.sourceId()));
+            }
+            return refs;
+        }
+
+        /** 单条图片的中性引用（file = 缓存内图片文件名，originalName/sourceId 与 ImageEntry 逐字一致）。 */
+        public record ImageRef(String file, String originalName, String sourceId) {
+        }
     }
 
     /**
