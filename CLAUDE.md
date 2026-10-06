@@ -16,9 +16,9 @@ JavaFX 25 桌面 GUI：把 `.mht` / `.mhtml` / `.html` / `.htm`（含 HTML 侧�
 
 | 项 | 现状（2026-10-05 实测） |
 |---|---|
-| 重构阶段 | A1 / A2 / B / C / D / E / F **全部实施并验收**；第二批 **S0–S6（E1–E5）** 亦已实施并验收；《UI可切换重构方案》**P0（三条度量/不变式）与 P1-1…P1-5（全局参数缓存 + 预览缓存构造 + 侧边栏会话基线 + 参数剪贴板 + 撤销载荷 + 启动前顺序门链下沉 app，闸门 2 已归零）已实施并验收**；**P2-1/P2-2（抽 ui-core：`ExtractOutcomeStyles` / `HtmlFindIndex` / `ParamTargetText` / `FileMenuModel` 下沉 `com.mhtextractor.uicore`，零 JavaFX）已实施并验收**；**P3-1（端口能力覆盖矩阵草案：167 条 → 覆盖 42 / 前端 92 / 缺口 33）· P3-2（`com.mhtextractor.uiport` 最小切片 API 定稿，19 类 / 0 违规）· P3-3a（`app.InProcessUiport` 进程内适配器，工作区可回答子集 + 端口诚实化收敛）· P3-3b-1（产物命名规则下沉 `app.OutputNameService`；gui 直连业务类型 34 → 32）· P3-3b-2（预览缓存键计算与每项目写锁下沉 `app.PreviewService`；直连 32 → 30；`MainController` 1706 → 1705）· P3-3b-3（提取运行时配置 + 输出单元计划下沉 `app.ExtractionPlanService`；直连 30 → 29；`MainController` 1705 → **1679**）· P3-3b-4（「查看源码」导出下沉 `app.SourceViewService`；直连 29 → 28）· P3-3b-5（会话状态持久化下沉 `app.SessionStateService`；直连 28 → 26；`MainController` 1679 → 1677）· P3-3b-6（预览命名/扩展名纯函数下沉 `app.PreviewNamingService`；直连 26 → 23）· P3-3b-7（预解析解析+取正文/标题下沉 `app.SourceParseService`；直连 23 → 20）· P3-3b-8（命名配置 + 像素打包两单例收口 `app.NamedConfigService`/`app.PreviewPixelService`；直连 20 → 18）· P3-3b-9（提取每文件覆盖映射构造下沉 `app.ExtractionPlanService.overrides`；直连 18 → 17）· P3-3b-10（gui 去除 `i18n.ErrorCode` 直连，改写为 `I18n.get("error.<NAME>")`；直连 17 → 16）· P3-3b-11（gui 去除 `extractor.ImageExtractor` 直连，改用 `app.PreviewImageData`；直连 16 → 15）· P3-3b-12（gui 去除 `util.SelectionState` 直连，改用 `app.SelectionRules`；直连 15 → 14）· P3-3b-13（提取结果回写下沉 `app.ExtractResultService`；直连 14 → 13）· P3-3b-14（`util.ExtractOutcome` 迁入 `model`；直连 13 → 12）· P3-3b-15（`util.ChangeListener` 迁入 `model`；直连 12 → 11）· P3-3b-16（预览缓存生命周期经 `app.PreviewSession` 门面收口；直连 11 → 10）· P3-3b-17（`PreviewResult` 增中性 `ImageRef`/`images()`，gui 去除 `cache.PreviewCacheMeta` 直连；直连 10 → 9）· P3-3b-18（gui 去除 `util.GroupStructure` 直连，改用 `app.WorkspaceStructure` 包装；直连 9 → 8）· P3-3b-19（`util.GroupItem` 迁入 `model`；直连 8 → 7）· P3-3b-20（`util.MhtImportPlanner` 迁入 `app`；直连 7 → 6）· P3-3b-21（`util.DropResolver` 与 `util.UndoManager` 迁入 `app`；直连 6 → 4）· P3-3b-22（新增中性 `app.ExtractionStats` DTO，gui 去除 `processor.BatchProcessor` 直连；直连 4 → 3）· P3-3b-23（`util.ParamScope` 迁入 `model`；直连 3 → 2）· P3-3b-24（新增 `app.Texts` 文案门面，gui 去除 `i18n.I18n` 直连；直连 2 → 1）· P3-3b-25（`config.AppConfig` + `util.FingerprintEncoder` 迁入 `model`；直连 1 → **0，P3 目标达成**）· **P3-B1（端口查询三件 `runtimeConfig`/`outputUnitPlan`/`paramSchema`；表单改 schema 驱动；访问面 119 → 118；测试 863 → 869；`MainController` 1677 → 1670）· P3-B2（端口活动编排三件：取消工作区活动 + 预解析编排/事件 + 预览加载编排/事件；新增 `uiport.PreparseResult`/`app.WorkspaceActivityService`；`PreparseController` −184 行、`PreviewLoader` −315 行；访问面 118 → 116；测试 869 → 877；`MainController` 1670 → 1654）已实施并验收**（2026-10-06，未收口项见《遗留目标与未完成事项.md》） |
-| `MainController` | **1654** 行（上限常量 **2240**，只减不增；为不变式自报口径） |
-| 测试 | 默认执行 **877**（+ `headless-layer-b` **68**）；架构不变式 **16** 条；产物黄金基线 **42** 份 |
+| 重构阶段 | A1 / A2 / B / C / D / E / F **全部实施并验收**；第二批 **S0–S6（E1–E5）** 亦已实施并验收；《UI可切换重构方案》**P0（三条度量/不变式）与 P1-1…P1-5（全局参数缓存 + 预览缓存构造 + 侧边栏会话基线 + 参数剪贴板 + 撤销载荷 + 启动前顺序门链下沉 app，闸门 2 已归零）已实施并验收**；**P2-1/P2-2（抽 ui-core：`ExtractOutcomeStyles` / `HtmlFindIndex` / `ParamTargetText` / `FileMenuModel` 下沉 `com.mhtextractor.uicore`，零 JavaFX）已实施并验收**；**P3-1（端口能力覆盖矩阵草案：167 条 → 覆盖 42 / 前端 92 / 缺口 33）· P3-2（`com.mhtextractor.uiport` 最小切片 API 定稿，19 类 / 0 违规）· P3-3a（`app.InProcessUiport` 进程内适配器，工作区可回答子集 + 端口诚实化收敛）· P3-3b-1（产物命名规则下沉 `app.OutputNameService`；gui 直连业务类型 34 → 32）· P3-3b-2（预览缓存键计算与每项目写锁下沉 `app.PreviewService`；直连 32 → 30；`MainController` 1706 → 1705）· P3-3b-3（提取运行时配置 + 输出单元计划下沉 `app.ExtractionPlanService`；直连 30 → 29；`MainController` 1705 → **1679**）· P3-3b-4（「查看源码」导出下沉 `app.SourceViewService`；直连 29 → 28）· P3-3b-5（会话状态持久化下沉 `app.SessionStateService`；直连 28 → 26；`MainController` 1679 → 1677）· P3-3b-6（预览命名/扩展名纯函数下沉 `app.PreviewNamingService`；直连 26 → 23）· P3-3b-7（预解析解析+取正文/标题下沉 `app.SourceParseService`；直连 23 → 20）· P3-3b-8（命名配置 + 像素打包两单例收口 `app.NamedConfigService`/`app.PreviewPixelService`；直连 20 → 18）· P3-3b-9（提取每文件覆盖映射构造下沉 `app.ExtractionPlanService.overrides`；直连 18 → 17）· P3-3b-10（gui 去除 `i18n.ErrorCode` 直连，改写为 `I18n.get("error.<NAME>")`；直连 17 → 16）· P3-3b-11（gui 去除 `extractor.ImageExtractor` 直连，改用 `app.PreviewImageData`；直连 16 → 15）· P3-3b-12（gui 去除 `util.SelectionState` 直连，改用 `app.SelectionRules`；直连 15 → 14）· P3-3b-13（提取结果回写下沉 `app.ExtractResultService`；直连 14 → 13）· P3-3b-14（`util.ExtractOutcome` 迁入 `model`；直连 13 → 12）· P3-3b-15（`util.ChangeListener` 迁入 `model`；直连 12 → 11）· P3-3b-16（预览缓存生命周期经 `app.PreviewSession` 门面收口；直连 11 → 10）· P3-3b-17（`PreviewResult` 增中性 `ImageRef`/`images()`，gui 去除 `cache.PreviewCacheMeta` 直连；直连 10 → 9）· P3-3b-18（gui 去除 `util.GroupStructure` 直连，改用 `app.WorkspaceStructure` 包装；直连 9 → 8）· P3-3b-19（`util.GroupItem` 迁入 `model`；直连 8 → 7）· P3-3b-20（`util.MhtImportPlanner` 迁入 `app`；直连 7 → 6）· P3-3b-21（`util.DropResolver` 与 `util.UndoManager` 迁入 `app`；直连 6 → 4）· P3-3b-22（新增中性 `app.ExtractionStats` DTO，gui 去除 `processor.BatchProcessor` 直连；直连 4 → 3）· P3-3b-23（`util.ParamScope` 迁入 `model`；直连 3 → 2）· P3-3b-24（新增 `app.Texts` 文案门面，gui 去除 `i18n.I18n` 直连；直连 2 → 1）· P3-3b-25（`config.AppConfig` + `util.FingerprintEncoder` 迁入 `model`；直连 1 → **0，P3 目标达成**）· **P3-B1（端口查询三件 `runtimeConfig`/`outputUnitPlan`/`paramSchema`；表单改 schema 驱动；访问面 119 → 118；测试 863 → 869；`MainController` 1677 → 1670）· P3-B2（端口活动编排三件：取消工作区活动 + 预解析编排/事件 + 预览加载编排/事件；新增 `uiport.PreparseResult`/`app.WorkspaceActivityService`；`PreparseController` −184 行、`PreviewLoader` −315 行；访问面 118 → 116；测试 869 → 877；`MainController` 1670 → 1654）· **P3-B3（端口勾选 `setChecked` + 分组命令集 `group/ungroup/renameGroup/toggleGroupExpanded`；勾选唯一写入口收口到模型、组名唯一化以模型为源、展开状态后端化且幂等；测试 877 → 884、headless 68 → 73、`MainController` 1654 → 1648）已实施并验收**（2026-10-06，未收口项见《遗留目标与未完成事项.md》） |
+| `MainController` | **1648** 行（上限常量 **2240**，只减不增；为不变式自报口径） |
+| 测试 | 默认执行 **884**（+ `headless-layer-b` **73**）；架构不变式 **16** 条；产物黄金基线 **42** 份 |
 | GUI 自动化 | zh / en **各 34 passed / 0 failed**；`tools/probes/` 探针全绿 |
 | i18n | zh_CN / en_US **各 547 键**（两份键集与占位符集合必须一致）+ **22** 个 `ErrorCode`（本轮新增 `NO_CHECKED_ITEMS`） |
 | 日志键 | `log.*` **236 键 / 247 调用点**（逐键不变，重构不得偷改日志文案；2026-10-05 重数，本轮新增 `log.maincontroller.39`）；全部 `I18n.get/msg` 调用点 **442** |
@@ -121,7 +121,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 
 ### GUI 层
 
-- **`MainController`（1654 行）** —— 只做 FXML 事件接线、协作者装配、UI 状态呈现；**行数只减不增**。
+- **`MainController`（1648 行）** —— 只做 FXML 事件接线、协作者装配、UI 状态呈现；**行数只减不增**。
   列表单元格渲染/拖拽、预览渲染/加载、分组动画、移除/撤销/窗口生命周期、预解析、信息展示均已外迁。
 - **既有协作者（沿用，不要重造平行框架）**：`MainViewRefs` / `MainViewInstaller` / `ListInteractionController` +
   `MainViewActions` / `PreviewListCell` / `PreviewRenderer` / `PreviewLoader` / `SourceViewActions` /
@@ -142,7 +142,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 |---|---|
 | `businessPackagesHaveNoUiFrameworkDependency` | 业务包 + `app` + `platform` + `model` **不得依赖 `javafx.*`**（字节码常量池口径，带白名单腐化检测） |
 | `applicationLayerDoesNotDependOnViewOrShell` | `app` 不得 import `gui` / `logging` / `App` |
-| `mainControllerIsShrinking` | `MainController` 行数（实测 **1654**）≤ 上限 **2240**，**只减不增** |
+| `mainControllerIsShrinking` | `MainController` 行数（实测 **1648**）≤ 上限 **2240**，**只减不增** |
 | `reflectionAgainstMainControllerIsZero` | 测试对 `MainController` 私有成员的**反射 = 0**（改用测试源集的同包 acceptance driver） |
 | `testSupportSurfaceDoesNotGrow` | `/* test-support */` 标记 = **0**。⚠️ 该计数**只覆盖 `MainController` 文本** |
 | `headlessTestPackagesHaveNoJavaFx` | 无头测试包源码不得出现 UI 框架字面量 |
@@ -223,7 +223,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
   （进程起来但无窗口、**退出码仍 0**，资源管理器里双击图片也打不开）。凡"用系统默认程序打开文件"一律走 `platform.FileOpener`。
 - 🚨 **运行时/测试产物一律放 H 盘（2026-10-05 起）**：本项目产物放 `H:\TEST\mht\`、临时放 `H:\TEST\temp\`；跑 GUI / native / 探针 / 黑盒前设 **`-Djava.io.tmpdir=H:\TEST\temp`**（否则预览缓存 `mht-extractor-preview`、浏览器查看页 `mht-extractor-view` 会写进 `C:\Users\Admin\AppData\Local\Temp`）。**不要再把生成数据塞到 C 盘**，验收时断言 C 盘无新增生成数据。宿主目录 `.dsh` / `.agents-anywhere` / `.m2` / `.openjfx` 已是指向 `H:\TEST\*` 的 **junction**（旧 C 路径仍可用，新脚本请用 H 路径）；详见 `H:\TEST\MIGRATION-BRIEF.md`。
 - **任何 `mvn clean` 不得与 GUI 自动化 / native 构建并发**（会互删 `target/`）。
-- **不要整文件读取 `MainController.java`**（1654 行）：`grep -n` 定位 + 区间读。
+- **不要整文件读取 `MainController.java`**（1648 行）：`grep -n` 定位 + 区间读。
   **文档里的行号会漂移**，引用前先复核。
 - **git 身份未配置**：提交需内联 `git -c user.name=… -c user.email=… commit`（不要改用户环境）。
 - `.gitignore` 的 `/config/`、`/logs/`、`/temp/`、`/输出文件/` 已锚定仓库根，**不要去掉前导 `/`**
@@ -260,7 +260,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | 档 | 内容 | 判据 |
 |---|---|---|
 | **A**（分钟级） | `compile` + 定向单测 + 结构事实（行数 / 标记 / 直写） | 全绿；无"重排整文件"型 diff |
-| **B**（每阶段） | `mvn clean test` + 独立聚合 + `ProductBaselineTest` + `ArchitectureTest` + GUI 自动化 + 探针 + 日志键对账 | 默认 **877/0** + headless **68/0**；产物基线 **42/0**；不变式 **16/0**；GUI zh/en **34/0**；`log.*` 键逐键不变 |
+| **B**（每阶段） | `mvn clean test` + 独立聚合 + `ProductBaselineTest` + `ArchitectureTest` + GUI 自动化 + 探针 + 日志键对账 | 默认 **884/0** + headless **73/0**；产物基线 **42/0**；不变式 **16/0**；GUI zh/en **34/0**；`log.*` 键逐键不变 |
 | **C**（阶段收尾） | native 构建 + native 产物基线 + 截图对比 + i18n 键 | `build-native.cmd` exit 0、report `status=OK`；native 基线 **42/0** |
 
 **没实际跑过的项目要明确标为"未验证"，不许推断通过。**
@@ -328,7 +328,7 @@ AtlantaFX 2.1.0（主题）· Logback 1.5.26 · Ikonli 12.3.1 · JUnit 6.0.3 · 
   `PreviewCacheMeta.warnings` 语言中立，展示层经 `I18n.render(...)` 按当前 locale 渲染；`FORMAT_VERSION` 已 2 → 3。
 - ✅ **已修复（E4.2 / S4）**：`AD_KEYWORDS` 仍硬编码，但 `AppConfig.IMAGE_EXTRACTION_RULES_VERSION` 已参与
   `imageExtractionFingerprint()`；**改关键词清单 / 去重口径时必须 +1**，否则预览缓存串味。
-- `MainController` 已从 3875 行降到 **1654** 行：参数域随**步骤 1** 外迁到 `ParamDomainController`（579 行）、
+- `MainController` 已从 3875 行降到 **1648** 行：参数域随**步骤 1** 外迁到 `ParamDomainController`（579 行）、
   提取编排随**步骤 2** 收口到 `ExtractionTaskCoordinator`（854 行），残余为 GUI 事件接线与状态呈现；
   `FeatureExercise` 已于步骤 6 拆分（演练 → `AgentExercise`、共享底座 → `FeatureExerciseSupport`、
   业务断言 → 各业务包 JUnit；1633 → 当前 **1058** 行）。
