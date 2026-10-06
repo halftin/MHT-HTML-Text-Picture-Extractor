@@ -3,7 +3,6 @@ package com.mhtextractor.gui.controller;
 import com.mhtextractor.app.NamedConfigService;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.NotificationHost;
-import com.mhtextractor.i18n.ErrorCode;
 import com.mhtextractor.i18n.I18n;
 import javafx.scene.control.TextInputDialog;
 import lombok.extern.slf4j.Slf4j;
@@ -64,7 +63,7 @@ final class ParamPanelActions {
                 log.info(I18n.msg("log.paramdialogcontroller.01", name));
             } catch (Exception e) {
                 log.error(I18n.msg("log.paramdialogcontroller.02"), e);
-                NotificationHost.error(pane.configComboBox, ErrorCode.CONFIG_SAVE_FAILED.message(), FontAwesomeSolid.SAVE);
+                NotificationHost.error(pane.configComboBox, I18n.get("error.CONFIG_SAVE_FAILED"), FontAwesomeSolid.SAVE);
             }
         });
     }
@@ -72,7 +71,7 @@ final class ParamPanelActions {
     private void loadNamedConfig() {
         String selected = pane.configComboBox.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            NotificationHost.toastWarning(pane.configComboBox, ErrorCode.CONFIG_SELECT_TO_LOAD.message(), FontAwesomeSolid.HAND_POINTER);
+            NotificationHost.toastWarning(pane.configComboBox, I18n.get("error.CONFIG_SELECT_TO_LOAD"), FontAwesomeSolid.HAND_POINTER);
             return;
         }
         try {
@@ -82,18 +81,18 @@ final class ParamPanelActions {
             log.info(I18n.msg("log.paramdialogcontroller.03", selected));
         } catch (Exception e) {
             log.error(I18n.msg("log.paramdialogcontroller.04"), e);
-            NotificationHost.error(pane.configComboBox, ErrorCode.CONFIG_LOAD_FAILED.message(), FontAwesomeSolid.FILE_DOWNLOAD);
+            NotificationHost.error(pane.configComboBox, I18n.get("error.CONFIG_LOAD_FAILED"), FontAwesomeSolid.FILE_DOWNLOAD);
         }
     }
 
     private void deleteNamedConfig() {
         String selected = pane.configComboBox.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            NotificationHost.toastWarning(pane.configComboBox, ErrorCode.CONFIG_SELECT_TO_DELETE.message(), FontAwesomeSolid.HAND_POINTER);
+            NotificationHost.toastWarning(pane.configComboBox, I18n.get("error.CONFIG_SELECT_TO_DELETE"), FontAwesomeSolid.HAND_POINTER);
             return;
         }
         NotificationHost.confirm(pane.configComboBox,
-                ErrorCode.CONFIG_DELETE_CONFIRM.message("name", selected), FontAwesomeSolid.TRASH_ALT, ok -> {
+                I18n.get("error.CONFIG_DELETE_CONFIRM", "name", selected), FontAwesomeSolid.TRASH_ALT, ok -> {
                     if (!ok) {
                         return;
                     }
@@ -103,7 +102,7 @@ final class ParamPanelActions {
                         log.info(I18n.msg("log.paramdialogcontroller.05", selected));
                     } catch (Exception e) {
                         log.error(I18n.msg("log.paramdialogcontroller.06"), e);
-                        NotificationHost.error(pane.configComboBox, ErrorCode.CONFIG_DELETE_FAILED.message(), FontAwesomeSolid.TRASH_ALT);
+                        NotificationHost.error(pane.configComboBox, I18n.get("error.CONFIG_DELETE_FAILED"), FontAwesomeSolid.TRASH_ALT);
                     }
                 });
     }

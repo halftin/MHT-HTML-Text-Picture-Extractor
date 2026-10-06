@@ -9,7 +9,6 @@ import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
-import com.mhtextractor.i18n.ErrorCode;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
@@ -428,7 +427,7 @@ public final class ExtractionTaskCoordinator {
             ui.setStatusText(I18n.get("extract.statusError"));
             Throwable ex = task.getException();
             log.error(I18n.msg("log.maincontroller.37"), ex);
-            NotificationHost.error(statusLabel, ErrorCode.PROCESS_FAILED.message(),
+            NotificationHost.error(statusLabel, I18n.get("error.PROCESS_FAILED"),
                     FontAwesomeSolid.FILE_EXPORT);
         });
 
