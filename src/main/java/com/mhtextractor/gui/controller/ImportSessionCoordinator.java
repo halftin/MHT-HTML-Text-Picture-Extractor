@@ -3,7 +3,7 @@ package com.mhtextractor.gui.controller;
 import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.app.WorkspaceImportService;
 import com.mhtextractor.app.WorkspaceModel;
-import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import javafx.application.Platform;
@@ -177,7 +177,7 @@ public final class ImportSessionCoordinator {
         for (WorkspaceImportService.ResolvedBatch rb : outcome.batches()) {
             if (rb.skipped()) {
                 // RISK-1 硬约束：无新文件则该批次不建组（此日志保持 debug 级别，不升级）
-                log.debug(I18n.msg("log.maincontroller.08", rb.dirPath()));
+                log.debug(Texts.msg("log.maincontroller.08", rb.dirPath()));
                 continue;
             }
             if (rb.grouped()) {
@@ -234,9 +234,9 @@ public final class ImportSessionCoordinator {
         int groupNo = ws.nextGroupNo();
         // ②③ 组名：sanitize → 空名退化为"默认前缀 + 组号" → 唯一化（复用既有实现 F7；组名集合唯一来源在模型 R8-①）
         WorkspaceImportService.GroupName name = service.resolveGroupName(
-                folderName, groupNo, I18n.get("core.groupDefault"), ws.groupNames());
+                folderName, groupNo, Texts.get("core.groupDefault"), ws.groupNames());
         if (!name.unique().equals(name.base())) {
-            log.info(I18n.msg("log.maincontroller.09", name.base(), name.unique()));
+            log.info(Texts.msg("log.maincontroller.09", name.base(), name.unique()));
         }
         // ④ 建组 + 注册名字刷新监听（F8——漏了会导致改名后列表不刷新）
         GroupItem<PreviewItem> group = new GroupItem<>(groupNo, name.unique());
@@ -265,15 +265,15 @@ public final class ImportSessionCoordinator {
                 if (!round.quotaHit()) {
                     continue;                     // 防御：无配额命中却还有剩余
                 }
-                log.info(I18n.msg("log.maincontroller.10", maxGroupsPerRound, maxFilesPerRound));
+                log.info(Texts.msg("log.maincontroller.10", maxGroupsPerRound, maxFilesPerRound));
                 boolean go = awaitQuotaConfirm(counts);
                 if (!go) {
-                    log.info(I18n.msg("log.maincontroller.11"));
+                    log.info(Texts.msg("log.maincontroller.11"));
                     break;
                 }
             }
         } catch (Exception ex) {
-            log.error(I18n.msg("log.maincontroller.12"), ex);
+            log.error(Texts.msg("log.maincontroller.12"), ex);
             dispatcher.accept(ui::showImportFailed);
         } finally {
             dispatcher.accept(this::finishImport);   // 唯一恢复点
@@ -293,11 +293,11 @@ public final class ImportSessionCoordinator {
     /** 后台线程阻塞等待 FX 线程上的配额确认（会话 19：窗口内居中确认卡片；等待方是导入后台线程，不冻结界面） */
     private boolean awaitQuotaConfirm(QuotaCounts counts) {
         CompletableFuture<Boolean> future = new CompletableFuture<>();
-        String msg = I18n.get("import.quotaReached",
+        String msg = Texts.get("import.quotaReached",
                         "groups", maxGroupsPerRound,
                         "files", maxFilesPerRound)
-                + I18n.get("import.quotaContinue")
-                + I18n.get("import.quotaStop",
+                + Texts.get("import.quotaContinue")
+                + Texts.get("import.quotaStop",
                         "files", counts.files(),
                         "groups", counts.groups());
         dispatcher.accept(() -> ui.confirmQuotaReached(msg, future::complete));
@@ -316,7 +316,7 @@ public final class ImportSessionCoordinator {
             if (!accumulated.isEmpty() && ui.hasConfirmedParams()) {
                 ui.startPreParse(new ArrayList<>(accumulated));
             }
-            log.info(I18n.msg("log.maincontroller.13", accumulated.size(), service.groupCount(session),
+            log.info(Texts.msg("log.maincontroller.13", accumulated.size(), service.groupCount(session),
                     session.ignoredNonMht(), session.hiddenDirs(), session.emptyDirs(),
                     session.unreadable(), session.depthLimited()));
         } finally {

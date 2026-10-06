@@ -1,9 +1,9 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.PreviewImageData;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
-import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ThumbnailData;
 import javafx.application.Platform;
@@ -150,8 +150,8 @@ public final class PreviewLoader {
 
         File f = new File(item.path);
         if (!largeFileOk && f.length() > LARGE_FILE_THRESHOLD) {
-            String msg = I18n.get("preview.largeFileConfirmHeader") + "\n"
-                    + item.name + I18n.get("preview.largeFileConfirmBody",
+            String msg = Texts.get("preview.largeFileConfirmHeader") + "\n"
+                    + item.name + Texts.get("preview.largeFileConfirmBody",
                             "size", f.length() / 1024 / 1024);
             GuiNotifications.largeFileConfirm(host.statusLabel(), msg, ok -> {
                 if (ok) {
@@ -167,7 +167,7 @@ public final class PreviewLoader {
         try {
             prepared = host.previewService().prepare(Path.of(item.path), params);
         } catch (IOException e) {
-            log.error(I18n.msg("log.maincontroller.61", item.path), e);
+            log.error(Texts.msg("log.maincontroller.61", item.path), e);
             GuiNotifications.readFileInfoFailed(host.statusLabel());
             return;
         }
@@ -175,14 +175,14 @@ public final class PreviewLoader {
         final int token = host.requestToken();
         imageLoadActive = true;
         loadingItem = item;
-        host.imageHintLabel().setText(I18n.get("preview.imageLoading"));
+        host.imageHintLabel().setText(Texts.get("preview.imageLoading"));
         host.previewEffectButton().setDisable(true);
         // 相邻修复：提取运行期间进度条/状态栏归提取任务独占，图片加载不动它们
         if (!host.extractionRunning()) {
             host.progressBar().setVisible(true);
             host.progressBar().setProgress(-1);
             host.setProgressBarActivity(null);   // 预览加载 = 默认色（完成后回落预解析显示）
-            host.statusLabel().setText(I18n.get("preview.loadingImage", "name", item.name));
+            host.statusLabel().setText(Texts.get("preview.loadingImage", "name", item.name));
         }
 
         Thread t = new Thread(() -> {
@@ -209,7 +209,7 @@ public final class PreviewLoader {
                         thumb = host.renderer().decodeThumb(new PreviewImageData(
                                 entry.originalName(), entry.sourceId(), data), i, params);
                     } catch (IOException e) {
-                        log.warn(I18n.msg("log.maincontroller.62", pr.imagesDir().resolve(entry.file())), e);
+                        log.warn(Texts.msg("log.maincontroller.62", pr.imagesDir().resolve(entry.file())), e);
                         continue;
                     }
                     thumbs.add(thumb);
@@ -239,7 +239,7 @@ public final class PreviewLoader {
                                 host.previewService().deleteCacheOf(pr);
                             } catch (IOException e) {
                                 // 目录名经服务入口取：= 写盘键的 64 位目录名（与搬迁前 cacheKey.toDirName() 逐字一致）
-                                log.warn(I18n.msg("log.maincontroller.63",
+                                log.warn(Texts.msg("log.maincontroller.63",
                                         host.previewService().cacheDirName(pr)), e);
                             }
                         }, "preview-cache-stale-delete");
@@ -278,7 +278,7 @@ public final class PreviewLoader {
                     }
                     imageLoadActive = false;
                     loadingItem = null;
-                    host.imageHintLabel().setText(I18n.get("preview.parseFailed") + e.getMessage());
+                    host.imageHintLabel().setText(Texts.get("preview.parseFailed") + e.getMessage());
                     host.imageHintLabel().setVisible(true);
                     host.previewEffectButton().setDisable(false);
                     host.updateProgressStatus(host.parseToken());

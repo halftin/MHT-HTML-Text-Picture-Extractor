@@ -6,11 +6,11 @@ import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.app.PreStartGate;
 import com.mhtextractor.app.PreStartGateContext;
 import com.mhtextractor.app.PreStartGates;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
-import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import javafx.application.Platform;
@@ -257,7 +257,7 @@ public final class ExtractionTaskCoordinator {
         this.host = host;
         this.updateStartButtonState = updateStartButtonState;
         if (host != null) {
-            // 查询全部转发 host；三个展示回调 = 搬迁前私有门类里的 GuiNotifications + I18n.get 文案渲染（逐字）
+            // 查询全部转发 host；三个展示回调 = 搬迁前私有门类里的 GuiNotifications + Texts.get 文案渲染（逐字）
             PreStartGateContext ctx = new PreStartGateContext() {
                 @Override public List<Object> dataOrder() { return host.dataOrder(); }
                 @Override public ExtractionPlanService.ItemView itemView() {
@@ -275,15 +275,15 @@ public final class ExtractionTaskCoordinator {
                 @Override
                 public void confirmUnnamedGroups(List<String> names, Consumer<Boolean> proceed) {
                     GuiNotifications.unnamedGroupConfirm(host.statusLabel(),
-                            I18n.get("group.unnamedConfirm", "names",
-                                    String.join(I18n.get("list.nameSeparator"), names)),
+                            Texts.get("group.unnamedConfirm", "names",
+                                    String.join(Texts.get("list.nameSeparator"), names)),
                             proceed);
                 }
 
                 @Override
                 public void confirmSubsetMergedName(Consumer<Boolean> proceed) {
                     GuiNotifications.subsetMergedNameConfirm(host.statusLabel(),
-                            I18n.get("extract.subsetMergedNameConfirm"), proceed);
+                            Texts.get("extract.subsetMergedNameConfirm"), proceed);
                 }
 
                 @Override
@@ -405,7 +405,7 @@ public final class ExtractionTaskCoordinator {
             }
             landTerminalState();
             ui.setProgress(1.0);
-            ui.setStatusText(I18n.get("extract.done"));
+            ui.setStatusText(Texts.get("extract.done"));
             ExtractionStats stats = task.getValue();
             if (stats != null) {
                 ui.setStatusText(stats.summaryLine());
@@ -424,10 +424,10 @@ public final class ExtractionTaskCoordinator {
                 return; // 陈旧任务的迟到回调：no-op
             }
             landTerminalState();
-            ui.setStatusText(I18n.get("extract.statusError"));
+            ui.setStatusText(Texts.get("extract.statusError"));
             Throwable ex = task.getException();
-            log.error(I18n.msg("log.maincontroller.37"), ex);
-            NotificationHost.error(statusLabel, I18n.get("error.PROCESS_FAILED"),
+            log.error(Texts.msg("log.maincontroller.37"), ex);
+            NotificationHost.error(statusLabel, Texts.get("error.PROCESS_FAILED"),
                     FontAwesomeSolid.FILE_EXPORT);
         });
 
@@ -503,7 +503,7 @@ public final class ExtractionTaskCoordinator {
             // 且按空格切分会拆坏含空格的路径）；native 镜像规避 AWT，不用 Desktop.open
             new ProcessBuilder("explorer.exe", sessionOutputFolder.getAbsolutePath()).start();
         } catch (Exception ex) {
-            log.error(I18n.msg("log.maincontroller.38"), ex);
+            log.error(Texts.msg("log.maincontroller.38"), ex);
         }
     }
 
@@ -576,7 +576,7 @@ public final class ExtractionTaskCoordinator {
             if (params.isEnableZipPackaging() || params.isEnableCbzPackaging()) {
                 File outRoot = new File(outputFolder);
                 if (!outRoot.isDirectory() && !outRoot.mkdirs() && !outRoot.isDirectory()) {
-                    log.warn(I18n.msg("log.maincontroller.30", outputFolder));
+                    log.warn(Texts.msg("log.maincontroller.30", outputFolder));
                 }
             }
         }
@@ -585,8 +585,8 @@ public final class ExtractionTaskCoordinator {
         boolean otherConfirmed = imageMode ? host.textParamsCache() != null : host.imageParamsCache() != null;
         if (!host.currentModeConfirmed()) {
             String msg = otherConfirmed
-                    ? I18n.get("extract.confirmModeSwitch")
-                    : I18n.get("extract.confirmParamsUnset");
+                    ? Texts.get("extract.confirmModeSwitch")
+                    : Texts.get("extract.confirmParamsUnset");
             GuiNotifications.paramTargetConfirm(host.statusLabel(), msg, ok -> {
                 if (ok) {
                     runPreStartGates(0);
@@ -627,12 +627,12 @@ public final class ExtractionTaskCoordinator {
         boolean imageMode = host.imageMode();
 
         // 生成时间戳会话目录，隔离每次提取运行
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern(I18n.get("params.datetimeFormat")));
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern(Texts.get("params.datetimeFormat")));
         String sessionOutputFolder = new File(host.outputFolder(), timestamp).getPath();
         if (!new File(sessionOutputFolder).mkdirs()) {
-            log.warn(I18n.msg("log.maincontroller.31", sessionOutputFolder));
+            log.warn(Texts.msg("log.maincontroller.31", sessionOutputFolder));
         }
-        log.info(I18n.msg("log.maincontroller.32", sessionOutputFolder));
+        log.info(Texts.msg("log.maincontroller.32", sessionOutputFolder));
 
         // 功能一：只提取选中项时，先清空"本次不参与的可见项"的旧提取结果色（避免误读 ✓/✗）
         if (host.extractCheckedOnly()) {
@@ -641,7 +641,7 @@ public final class ExtractionTaskCoordinator {
             if (!nonParticipating.isEmpty()) {
                 host.clearExtractOutcomes(nonParticipating);
             }
-            log.info(I18n.msg("log.maincontroller.39", host.visibleCheckedCount(),
+            log.info(Texts.msg("log.maincontroller.39", host.visibleCheckedCount(),
                     (int) host.visibleCount()));
         }
 
@@ -649,8 +649,8 @@ public final class ExtractionTaskCoordinator {
         var units = ExtractionPlanService.plan(host.dataOrder(), imageMode, host.textParamsCache(),
                 host.imageParamsCache(), sessionOutputFolder, host.inputFolder(), host.outputFolder(),
                 host.openFolderAfterComplete(), host.extractCheckedOnly());
-        log.info(I18n.msg("log.maincontroller.33", units.stream()
-                .map(u -> I18n.get("extract.groupFileCount", "group", u.label(),
+        log.info(Texts.msg("log.maincontroller.33", units.stream()
+                .map(u -> Texts.get("extract.groupFileCount", "group", u.label(),
                         "count", u.fileCount())).toList()));
         var overrides = ExtractionPlanService.overrides(host.allVisibleItems());
 
@@ -667,10 +667,10 @@ public final class ExtractionTaskCoordinator {
     private java.util.function.Supplier<Boolean> recursionDecision() {
         return () -> {
             CompletableFuture<Boolean> future = new CompletableFuture<>();
-            String msg = I18n.get("alert.recursionDepthHeader") + "\n"
-                    + I18n.get("alert.recursionDepthContent")
-                    + I18n.get("alert.recursionDepthContinue")
-                    + I18n.get("alert.recursionDepthSkip");
+            String msg = Texts.get("alert.recursionDepthHeader") + "\n"
+                    + Texts.get("alert.recursionDepthContent")
+                    + Texts.get("alert.recursionDepthContinue")
+                    + Texts.get("alert.recursionDepthSkip");
             Platform.runLater(() -> GuiNotifications.recursionDepthConfirm(host.statusLabel(), msg, future::complete));
             return future.join();
         };

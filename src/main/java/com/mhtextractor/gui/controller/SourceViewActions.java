@@ -1,9 +1,9 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.SourceViewService;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.HtmlSourceViewer;
-import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.platform.BrowserLauncher;
 import javafx.application.Platform;
@@ -71,35 +71,35 @@ public final class SourceViewActions {
     private void openHtmlInBrowser(PreviewItem it, boolean sourceMode) {
         File f = new File(it.path);
         if (!f.exists()) {
-            log.warn(I18n.msg("log.maincontroller.22", it.path));
+            log.warn(Texts.msg("log.maincontroller.22", it.path));
             GuiNotifications.fileMissing(host.anchor(), it.path);
             return;
         }
         if (!browserExporting.compareAndSet(false, true)) {
-            log.info(I18n.msg("log.maincontroller.23"));
+            log.info(Texts.msg("log.maincontroller.23"));
             return;
         }
-        host.setStatusText(I18n.get("browser.generatingPage"));
+        host.setStatusText(Texts.get("browser.generatingPage"));
         Thread t = new Thread(() -> {
             try {
                 SourceViewService.Export result = SourceViewService.export(it.path);
                 switch (result) {
                     case SourceViewService.Export.Unparseable() ->
-                            throw new IllegalStateException(I18n.get("browser.exportUnparseable"));
+                            throw new IllegalStateException(Texts.get("browser.exportUnparseable"));
                     case SourceViewService.Export.Failed(String error) ->
                             throw new IllegalStateException(error);
                     case SourceViewService.Export.Success(Path htmlFile, int imageCount, int warningCount) -> {
-                        log.info(I18n.msg("log.maincontroller.24", htmlFile, imageCount, warningCount));
+                        log.info(Texts.msg("log.maincontroller.24", htmlFile, imageCount, warningCount));
                         // 浏览器启动可能耗时（注册表探测 / CDP 端点等待最长约 15 秒），独立后台线程避免冻结界面
                         Thread launcher = new Thread(() -> {
                             if (sourceMode) {
                                 // R2：源码不再交给外部浏览器，改为应用内左侧覆盖式查看器（禁用 WebView，R2.6）。
-                                HtmlSourceViewer.showFile(host.anchor(), I18n.get("browser.viewerTitle"), htmlFile);
+                                HtmlSourceViewer.showFile(host.anchor(), Texts.get("browser.viewerTitle"), htmlFile);
                                 return;
                             }
                             boolean ok = BrowserLauncher.openHtml(htmlFile);
                             if (!ok) {
-                                log.warn(I18n.msg("log.maincontroller.25", htmlFile));
+                                log.warn(Texts.msg("log.maincontroller.25", htmlFile));
                                 Platform.runLater(() -> GuiNotifications.browserLaunchFailed(host.anchor(), htmlFile));
                             }
                         }, "html-browser-launch");
@@ -108,11 +108,11 @@ public final class SourceViewActions {
                     }
                 }
             } catch (Exception e) {
-                log.error(I18n.msg("log.maincontroller.26", it.path), e);
+                log.error(Texts.msg("log.maincontroller.26", it.path), e);
                 Platform.runLater(() -> GuiNotifications.browserViewFailed(host.anchor()));
             } finally {
                 browserExporting.set(false);
-                Platform.runLater(() -> host.setStatusText(I18n.get("main.statusReady")));
+                Platform.runLater(() -> host.setStatusText(Texts.get("main.statusReady")));
             }
         }, "html-browser-export");
         t.setDaemon(true);

@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.component;
 
-import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.app.Texts;
 import javafx.animation.TranslateTransition;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -168,7 +168,7 @@ public final class SidePanelHost {
         side.collapseButton.setId(side.collapseId);
         side.collapseButton.getStyleClass().add("side-panel-collapse");
         side.collapseButton.setGraphic(new FontIcon(side.icon));
-        side.collapseButton.setTooltip(new Tooltip(I18n.get("sidepanel.collapse")));
+        side.collapseButton.setTooltip(new Tooltip(Texts.get("sidepanel.collapse")));
         side.collapseButton.setOnAction(e -> collapseRequested(side));
 
         HBox header = new HBox(8, side.titleLabel, spacer, side.collapseButton);
@@ -186,7 +186,7 @@ public final class SidePanelHost {
         side.reopen.setId(side.reopenId);
         side.reopen.getStyleClass().add("side-panel-reopen");
         side.reopen.setGraphic(new FontIcon(side.reopenIcon));
-        side.reopen.setTooltip(new Tooltip(I18n.get("sidepanel.reopen")));
+        side.reopen.setTooltip(new Tooltip(Texts.get("sidepanel.reopen")));
         side.reopen.setVisible(false);
         StackPane.setAlignment(side.reopen, side.alignment);
         // 右边缘间距见 REOPEN_EDGE_MARGIN（不得压住主界面滚动条）；左侧镜像（预留）

@@ -3,9 +3,9 @@ package com.mhtextractor.gui.controller;
 import atlantafx.base.controls.ToggleSwitch;
 import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.app.ParamDraft;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.ParamTargetBar;
-import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.uicore.ParamTargetText;
 import com.mhtextractor.model.ParamScope;
 import javafx.collections.FXCollections;
@@ -40,7 +40,7 @@ import java.util.function.Consumer;
  * {@code <fx:root type="javafx.scene.layout.BorderPane">}（没有 {@code fx:controller}），
  * 构造时由本类把 {@code this} 同时交给 {@code setRoot} / {@code setController}，
  * 于是 {@code @FXML} 字段（及其子类继承到的同一批字段）注入到同一个对象上。
- * {@code %key} 文案仍由 {@code loader.setResources(I18n.bundle())} 解析，与拆分前逐字一致。</p>
+ * {@code %key} 文案仍由 {@code loader.setResources(Texts.bundle())} 解析，与拆分前逐字一致。</p>
  *
  * <h2>本类新增的两件事（Q5b：R1.4 / R1.5）</h2>
  * <ul>
@@ -163,7 +163,7 @@ public class ParamFormPane extends BorderPane {
 
     private void loadFxml() {
         FXMLLoader loader = new FXMLLoader(ParamFormPane.class.getResource(FXML_PATH));
-        loader.setResources(I18n.bundle());
+        loader.setResources(Texts.bundle());
         loader.setRoot(this);
         loader.setController(this);
         try {
@@ -485,10 +485,10 @@ public class ParamFormPane extends BorderPane {
         String tooltip;
         if (enableExtract) {
             tooltip = hasChapterNumber
-                    ? I18n.get("dialog.chapterModeNumberTitle")
-                    : I18n.get("dialog.chapterModeTitleOnly");
+                    ? Texts.get("dialog.chapterModeNumberTitle")
+                    : Texts.get("dialog.chapterModeTitleOnly");
         } else {
-            tooltip = I18n.get("dialog.disabled");
+            tooltip = Texts.get("dialog.disabled");
         }
         enableTitleExtractCheck.setTooltip(new Tooltip(tooltip));
     }

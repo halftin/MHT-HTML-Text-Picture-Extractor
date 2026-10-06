@@ -1,11 +1,11 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.SessionParamBaseline;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
-import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.ParamScope;
 import javafx.scene.Node;
@@ -183,12 +183,12 @@ public final class ParamSidePanel {
                 this.sessionBaseline = new SessionParamBaseline(textCache, imageCache);
             }
             host.hideReopen(SidePanelHost.Side.RIGHT);
-            host.showRight(pane, I18n.get("dialog.title"), this::collapse);
+            host.showRight(pane, Texts.get("dialog.title"), this::collapse);
             return;
         }
         if (loadedTarget != null && isDirty()) {
             // 丢弃草稿是不可逆的：先问，确定才 load()（取消路径连 host.showRight 都不走）
-            NotificationHost.confirm(pane, I18n.get("sidepanel.switchDiscardsDraft"),
+            NotificationHost.confirm(pane, Texts.get("sidepanel.switchDiscardsDraft"),
                     FontAwesomeSolid.SLIDERS_H, ok -> {
                         if (ok) {
                             load(target, imageMode, textCache, imageCache, commit);
@@ -210,7 +210,7 @@ public final class ParamSidePanel {
         this.loadedImageMode = imageMode;
         host.hideReopen(SidePanelHost.Side.RIGHT);
         // 决策 2.7/2.8：切换目标时面板保持展开 —— 宿主对已显示面板只做原地换内容（无过渡动画）
-        host.showRight(pane, I18n.get("dialog.title"), this::collapse);
+        host.showRight(pane, Texts.get("dialog.title"), this::collapse);
     }
 
     /** 侧边栏当前是否展开（Q6b 的 R1.7/R1.8 守卫用）。 */
@@ -287,7 +287,7 @@ public final class ParamSidePanel {
      */
     private void expand() {
         host.hideReopen(SidePanelHost.Side.RIGHT);
-        host.showRight(pane, I18n.get("dialog.title"), this::collapse);
+        host.showRight(pane, Texts.get("dialog.title"), this::collapse);
     }
 
     /**

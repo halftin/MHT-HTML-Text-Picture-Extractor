@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.mhtextractor.app.ParamsInfo;
-import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.uicore.FileMenuModel;
 
 import javafx.event.EventHandler;
@@ -133,7 +133,7 @@ public final class FileListContextMenu {
         this.actions = actions;
         for (FileMenuModel.Entry entry : FileMenuModel.LAYOUT) {
             if (!entry.isSeparator()) {
-                items.put(entry, new MenuItem(I18n.get(FileMenuModel.TEXT_KEYS.get(entry))));
+                items.put(entry, new MenuItem(Texts.get(FileMenuModel.TEXT_KEYS.get(entry))));
             }
         }
         wireActions();
@@ -251,13 +251,13 @@ public final class FileListContextMenu {
         items.get(FileMenuModel.Entry.OPEN_IN_BROWSER).setDisable(!state.openInBrowser());
         items.get(FileMenuModel.Entry.VIEW_SOURCE).setDisable(!state.viewSource());
         items.get(FileMenuModel.Entry.PARAMS).setDisable(!state.params());
-        items.get(FileMenuModel.Entry.PARAMS).setText(I18n.get(state.paramsGlobalText() ? FileMenuModel.KEY_PARAMS_GLOBAL : FileMenuModel.KEY_PARAMS));
+        items.get(FileMenuModel.Entry.PARAMS).setText(Texts.get(state.paramsGlobalText() ? FileMenuModel.KEY_PARAMS_GLOBAL : FileMenuModel.KEY_PARAMS));
         items.get(FileMenuModel.Entry.CLEAR_PARAMS).setDisable(!state.clearParams());
         items.get(FileMenuModel.Entry.APPLY_GLOBAL).setDisable(!state.applyGlobal());
         items.get(FileMenuModel.Entry.COPY_PARAMS).setDisable(!state.copyParams());
-        items.get(FileMenuModel.Entry.COPY_PARAMS).setText(I18n.get(state.copyParamsTextKey()));
+        items.get(FileMenuModel.Entry.COPY_PARAMS).setText(Texts.get(state.copyParamsTextKey()));
         items.get(FileMenuModel.Entry.APPLY_TO_SELECTION).setDisable(!state.applyToSelection());
-        items.get(FileMenuModel.Entry.APPLY_TO_SELECTION).setText(I18n.get(state.applyToSelectionTextKey()));
+        items.get(FileMenuModel.Entry.APPLY_TO_SELECTION).setText(Texts.get(state.applyToSelectionTextKey()));
         items.get(FileMenuModel.Entry.GROUP).setDisable(!state.group());
         items.get(FileMenuModel.Entry.UNGROUP).setDisable(!state.ungroup());
         items.get(FileMenuModel.Entry.REMOVE).setDisable(!state.remove());

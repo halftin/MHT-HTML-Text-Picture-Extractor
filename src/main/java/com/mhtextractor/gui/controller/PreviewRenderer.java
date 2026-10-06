@@ -3,9 +3,9 @@ package com.mhtextractor.gui.controller;
 import com.mhtextractor.app.PreviewImageData;
 import com.mhtextractor.app.PreviewNamingService;
 import com.mhtextractor.app.PreviewSession;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.util.ThumbnailFxBridge;
-import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ThumbnailData;
 import com.mhtextractor.platform.FileOpener;
@@ -98,7 +98,7 @@ public final class PreviewRenderer {
         } else {
             host.textPreviewArea().setText(head
                     + text.substring(0, 5000)
-                    + I18n.get("preview.extractedContentDivider")
+                    + Texts.get("preview.extractedContentDivider")
                     + text.substring(text.length() - 5000)
                     + tail);
         }
@@ -106,7 +106,7 @@ public final class PreviewRenderer {
 
     /** 重置图片区：hint 为 null 时显示默认按需预览说明 */
     public void resetImageArea(String hint, boolean showPreviewButton) {
-        host.imageHintLabel().setText(hint != null ? hint : I18n.get("preview.imageLazyHint"));
+        host.imageHintLabel().setText(hint != null ? hint : Texts.get("preview.imageLazyHint"));
         host.imageHintLabel().setVisible(true);
         host.previewEffectButton().setVisible(showPreviewButton);
         host.previewEffectButton().setDisable(false);
@@ -119,7 +119,7 @@ public final class PreviewRenderer {
         List<ThumbnailData> thumbs = item.cachedThumbs;
         host.thumbnailPane().getChildren().clear();
         if (thumbs == null || thumbs.isEmpty()) {
-            host.imageHintLabel().setText(I18n.get("preview.noImages"));
+            host.imageHintLabel().setText(Texts.get("preview.noImages"));
             host.imageHintLabel().setVisible(true);
             host.previewEffectButton().setVisible(false);
             host.imageScrollPane().setVisible(false);
@@ -151,7 +151,7 @@ public final class PreviewRenderer {
         // E1.4：模型只存像素；JavaFX Image 在此（渲染层）按需构造。构造失败等价于原 image == null
         Image fxImage = ThumbnailFxBridge.toFxImage(entry);
         if (fxImage == null) {
-            box.getChildren().add(new Label(I18n.get("preview.loadFailed")));
+            box.getChildren().add(new Label(Texts.get("preview.loadFailed")));
         } else {
             ImageView iv = new ImageView(fxImage);
             iv.setFitWidth(150);
@@ -166,7 +166,7 @@ public final class PreviewRenderer {
         box.getChildren().add(nameLabel);
         // 点击查看（需求：预览区图片可点击查看）：单击缩略图 → 系统默认图片查看器打开缓存目录里对应的那张图
         box.setCursor(Cursor.HAND);
-        Tooltip.install(box, new Tooltip(I18n.get("preview.thumbClickHint")));
+        Tooltip.install(box, new Tooltip(Texts.get("preview.thumbClickHint")));
         box.setOnMouseClicked(e -> { if (e.getButton() == MouseButton.PRIMARY) openCachedImage(item, index); });
         return box;
     }
@@ -178,16 +178,16 @@ public final class PreviewRenderer {
         Path file = item.cachedMeta == null ? null
                 : host.session().store().imageFileFor(item.cachedMeta, index);
         if (file == null || !Files.isRegularFile(file)) {
-            log.warn(I18n.msg("log.maincontroller.65", item.name));
+            log.warn(Texts.msg("log.maincontroller.65", item.name));
             return;
         }
         // index 语义见 renderThumbnails 注释；打开最多等 3 秒（校验退出码）再兜底 → 后台线程，避免冻结 FX 线程
         Thread t = new Thread(() -> {
             FileOpener.Route route = FileOpener.open(file);
             if (route == FileOpener.Route.FAILED) {
-                log.warn(I18n.msg("log.maincontroller.65", item.name));
+                log.warn(Texts.msg("log.maincontroller.65", item.name));
             } else {
-                log.info(I18n.msg(route == FileOpener.Route.PHOTOS_PROTOCOL
+                log.info(Texts.msg(route == FileOpener.Route.PHOTOS_PROTOCOL
                         ? "log.maincontroller.66" : "log.maincontroller.64", file));
             }
         }, "open-cached-image");

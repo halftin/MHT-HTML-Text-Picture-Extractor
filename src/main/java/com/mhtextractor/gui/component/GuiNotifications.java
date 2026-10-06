@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.component;
 
 import com.mhtextractor.app.ExtractionPreconditions;
-import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.app.Texts;
 import javafx.scene.Node;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 
@@ -12,7 +12,7 @@ import java.util.function.Consumer;
  * 收口到 <b>一个地方</b>，调用点只表达<b>意图</b>（"导入失败了" / "文件不见了" / "要清缓存了"）。
  *
  * <p><b>为什么值得一个门面</b>：{@link NotificationHost} 的 27 个调用点原先各自把
- * {@code I18n.get("error.X")} 与 {@code FontAwesomeSolid.Y} 写死在实参里。于是
+ * {@code Texts.get("error.X")} 与 {@code FontAwesomeSolid.Y} 写死在实参里。于是
  * "同一个用途必须给同一个图标"这条约定（{@code CLAUDE.md}「交互提醒约定」那张映射表）
  * 只能靠 22 处人工一致来维持 —— 这正是"两处用的其实是同一件事，却给了两个图标"的温床。
  * 收口后这类不一致在<b>编译期就写不出来</b>。</p>
@@ -67,15 +67,15 @@ public final class GuiNotifications {
 
     /**
      * 关窗前清空预览缓存的<b>无按钮等待卡片</b>（{@link NotificationHost#busy}）：
-     * 标题与说明文案在此拼好（调用点原先自己拼 {@code I18n.get("cache.clearingBeforeExit")}）。
+     * 标题与说明文案在此拼好（调用点原先自己拼 {@code Texts.get("cache.clearingBeforeExit")}）。
      *
      * @param anchor 锚点（主窗口的任意节点）
      * @param root   预览缓存根目录（展示给用户，让"清的是什么"一目了然）
      * @param work   后台清空动作；{@code onDone} 在清完（成功或失败）后于 FX 线程执行（关窗）
      */
     public static void cacheClearing(Node anchor, Object root, Runnable work, Runnable onDone) {
-        String description = I18n.get("cache.clearingBeforeExit") + "\n" + root;
-        NotificationHost.busy(anchor, I18n.get("cache.clearingTitle"), description,
+        String description = Texts.get("cache.clearingBeforeExit") + "\n" + root;
+        NotificationHost.busy(anchor, Texts.get("cache.clearingTitle"), description,
                 FontAwesomeSolid.BROOM, work, onDone);
     }
 
@@ -98,12 +98,12 @@ public final class GuiNotifications {
 
     /** 导入扫描失败：居中错误卡片（必须点"确定"）。 */
     public static void importFailed(Node anchor) {
-        NotificationHost.error(anchor, I18n.get("error.IMPORT_FAILED"), FontAwesomeSolid.FILE_IMPORT);
+        NotificationHost.error(anchor, Texts.get("error.IMPORT_FAILED"), FontAwesomeSolid.FILE_IMPORT);
     }
 
     /** 参数设置窗口打开失败：居中错误卡片。 */
     public static void paramDialogOpenFailed(Node anchor) {
-        NotificationHost.error(anchor, I18n.get("error.PARAM_DIALOG_OPEN_FAILED"), FontAwesomeSolid.SLIDERS_H);
+        NotificationHost.error(anchor, Texts.get("error.PARAM_DIALOG_OPEN_FAILED"), FontAwesomeSolid.SLIDERS_H);
     }
 
     /** 当前模式参数未确认（或检测到模式切换）：居中确认卡片，确认后继续提取。 */
@@ -113,7 +113,7 @@ public final class GuiNotifications {
 
     /** R1.8（步骤 4 · 决策 2.6 起降级为 toast）：收起侧边栏、草稿已保留 —— 文案指向右侧圆钮（非阻塞）。 */
     public static void collapseDraftKept(Node anchor) {
-        NotificationHost.toastInfo(anchor, I18n.get("sidepanel.collapseDraftHint"), FontAwesomeSolid.SLIDERS_H);
+        NotificationHost.toastInfo(anchor, Texts.get("sidepanel.collapseDraftHint"), FontAwesomeSolid.SLIDERS_H);
     }
 
     /**
@@ -127,25 +127,25 @@ public final class GuiNotifications {
      * 「确定」只关卡片。</p>
      */
     public static void draftBlocksStart(Node anchor) {
-        NotificationHost.error(anchor, I18n.get("sidepanel.draftBlocksStart"), FontAwesomeSolid.SLIDERS_H);
+        NotificationHost.error(anchor, Texts.get("sidepanel.draftBlocksStart"), FontAwesomeSolid.SLIDERS_H);
     }
 
     // ==================== 文件 / 文件夹 / 浏览器 ====================
 
     /** 文件所在目录不存在：右上角警告 toast（占位符 {@code path} = 条目路径）。 */
     public static void fileDirMissing(Node anchor, String path) {
-        NotificationHost.toastWarning(anchor, I18n.get("error.FILE_DIR_MISSING", "path", path),
+        NotificationHost.toastWarning(anchor, Texts.get("error.FILE_DIR_MISSING", "path", path),
                 FontAwesomeSolid.FOLDER_OPEN);
     }
 
     /** 打开所在文件夹失败：居中错误卡片（与 {@link #fileDirMissing} <b>同图标</b>：都属"文件夹这一路"）。 */
     public static void openFolderFailed(Node anchor) {
-        NotificationHost.error(anchor, I18n.get("error.OPEN_FOLDER_FAILED"), FontAwesomeSolid.FOLDER_OPEN);
+        NotificationHost.error(anchor, Texts.get("error.OPEN_FOLDER_FAILED"), FontAwesomeSolid.FOLDER_OPEN);
     }
 
     /** 文件不存在（可能已被移动或删除）：右上角警告 toast（占位符 {@code path} = 条目路径）。 */
     public static void fileMissing(Node anchor, String path) {
-        NotificationHost.toastWarning(anchor, I18n.get("error.FILE_MISSING", "path", path), FontAwesomeSolid.FILE);
+        NotificationHost.toastWarning(anchor, Texts.get("error.FILE_MISSING", "path", path), FontAwesomeSolid.FILE);
     }
 
     /**
@@ -153,22 +153,22 @@ public final class GuiNotifications {
      *
      * <p>{@code file} 收 {@code Object} 而不是 {@code String}/{@code Path}：调用点的实参是
      * {@code HtmlExportBuilder.ExportResult.htmlFile()}（{@link java.nio.file.Path}），而
-     * {@link I18n#get} 本就按 {@code String.valueOf} 渲染 —— 与 {@code I18n.get(String, Object...)}
+     * {@link Texts#get} 本就按 {@code String.valueOf} 渲染 —— 与 {@code Texts.get(String, Object...)}
      * 的既有形态一致，收 {@code Object} 可让调用点原样透传、不多一次转换。</p>
      */
     public static void browserLaunchFailed(Node anchor, Object file) {
-        NotificationHost.toastWarning(anchor, I18n.get("error.BROWSER_LAUNCH_FAILED", "file", file),
+        NotificationHost.toastWarning(anchor, Texts.get("error.BROWSER_LAUNCH_FAILED", "file", file),
                 FontAwesomeSolid.GLOBE);
     }
 
     /** 生成浏览器查看页失败：居中错误卡片（与 {@link #browserLaunchFailed} <b>同图标</b>：都属"浏览器这一路"）。 */
     public static void browserViewFailed(Node anchor) {
-        NotificationHost.error(anchor, I18n.get("error.BROWSER_VIEW_FAILED"), FontAwesomeSolid.GLOBE);
+        NotificationHost.error(anchor, Texts.get("error.BROWSER_VIEW_FAILED"), FontAwesomeSolid.GLOBE);
     }
 
     /** 计算缓存键 / 读取文件信息失败：居中错误卡片。 */
     public static void readFileInfoFailed(Node anchor) {
-        NotificationHost.error(anchor, I18n.get("error.READ_FILE_INFO_FAILED"), FontAwesomeSolid.FILE_ALT);
+        NotificationHost.error(anchor, Texts.get("error.READ_FILE_INFO_FAILED"), FontAwesomeSolid.FILE_ALT);
     }
 
     /** 大文件预览确认：居中确认卡片（确认后才解码，避免卡界面）。 */
@@ -227,6 +227,6 @@ public final class GuiNotifications {
 
     /** 移除后列表已空：右上角信息 toast（不是错误 —— 用户自己移除的）。 */
     public static void listEmpty(Node anchor) {
-        NotificationHost.toastInfo(anchor, I18n.get("error.KEEP_AT_LEAST_ONE"), FontAwesomeSolid.LIST);
+        NotificationHost.toastInfo(anchor, Texts.get("error.KEEP_AT_LEAST_ONE"), FontAwesomeSolid.LIST);
     }
 }

@@ -4,7 +4,7 @@ import com.mhtextractor.app.GlobalParameterCache;
 import com.mhtextractor.app.WorkspaceStructure;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
-import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ParamScope;
@@ -128,7 +128,7 @@ public final class ParamDomainController {
             case ParamScope.ItemTarget<?> it -> applyItemParams((PreviewItem) it.item(), imageMode, params);
             default -> {
                 applyConfirmedParams(imageMode, params);
-                log.info(I18n.msg("log.maincontroller.15", modeWord(imageMode)));
+                log.info(Texts.msg("log.maincontroller.15", modeWord(imageMode)));
             }
         }
     }
@@ -147,7 +147,7 @@ public final class ParamDomainController {
                     params -> applyTargetParams(target, imageMode, params));
             updateStartButtonState();   // 本次 show 可能什么都没变（同目标重开 / 取消切换）⇒ 兜底重算
         } catch (Exception e) {
-            log.error(I18n.msg("log.maincontroller.16"), e);
+            log.error(Texts.msg("log.maincontroller.16"), e);
             GuiNotifications.paramDialogOpenFailed(host.anchor());
         }
     }
@@ -165,7 +165,7 @@ public final class ParamDomainController {
         host.clearPreviewCache(item);
         host.paramsChanged(imageMode, item);   // 规则 (a)：参数变化 → 删该项目缓存目录
         host.startPreParseFor(List.of(item));
-        log.info(I18n.msg("log.maincontroller.17", item.name, modeWord(imageMode)));
+        log.info(Texts.msg("log.maincontroller.17", item.name, modeWord(imageMode)));
         host.fileListView().refresh();
         host.updateListButtons();
         host.updateInfoArea(item);
@@ -197,7 +197,7 @@ public final class ParamDomainController {
         } else {
             group.setTextParamsCache(params);
         }
-        log.info(I18n.msg("log.maincontroller.18", group.getName(), modeWord(imageMode)));
+        log.info(Texts.msg("log.maincontroller.18", group.getName(), modeWord(imageMode)));
         // 入撤销栈（PARAM_SET，组参数设置可撤销）
         host.pushParamUndo(imageMode, null, group.getGroupNo(), before);
         // 拍板：组参数重新确认 → 该组成员旧提取结果色失效
@@ -256,7 +256,7 @@ public final class ParamDomainController {
         host.clearExtractOutcomes(host.allPreviewItems());
         // 规则 (a)：全局参数写入 + 全部独立参数清空 → 全部条目生效参数变化 → 删除全部缓存目录
         host.paramsChanged(imageMode, host.allPreviewItems());
-        log.info(I18n.msg("log.maincontroller.27", modeWord(imageMode)));
+        log.info(Texts.msg("log.maincontroller.27", modeWord(imageMode)));
         refreshAfterParamsChanged();
         host.updateListButtons();
         host.updateExtractBanner(host.currentSelection());
@@ -374,7 +374,7 @@ public final class ParamDomainController {
         host.clearExtractOutcomes(affected);
         // 规则 (a)：清除参数也是参数变化（生效参数回落组/全局）→ 受影响条目缓存目录删除
         host.paramsChanged(imageMode, affected);
-        log.info(I18n.msg("log.maincontroller.28", topItems.size(), groups.size(), modeWord(imageMode)));
+        log.info(Texts.msg("log.maincontroller.28", topItems.size(), groups.size(), modeWord(imageMode)));
         refreshAfterTargetedParamsChange(affected);
         host.updateListButtons();
         host.updateExtractBanner(host.currentSelection());
@@ -500,14 +500,14 @@ public final class ParamDomainController {
                 host.updateInfoArea(host.currentSelection());
                 host.updateExtractBanner(host.currentSelection());
                 host.updateListButtons();
-                log.info(I18n.msg("log.maincontroller.53", modeWord(im)));
+                log.info(Texts.msg("log.maincontroller.53", modeWord(im)));
             }
             case CLEAR_PARAMS -> {
                 // 清除参数拍板 Q4：按 before 快照一次恢复全部被清除的条目/组参数，并重走联动刷新
                 boolean im = record.clearImageMode();
                 Map<Integer, AppConfig> groupBefore = record.clearGroupParamsBefore();
                 int restoredItems = restoreParamSnapshots(im, record.clearItemParamsBefore(), groupBefore);
-                log.info(I18n.msg("log.maincontroller.54", modeWord(im), restoredItems, groupBefore.size()));
+                log.info(Texts.msg("log.maincontroller.54", modeWord(im), restoredItems, groupBefore.size()));
             }
             case APPLY_GLOBAL -> {
                 // 条目独立参数需求拍板：恢复应用前的全局参数与全部独立参数快照
@@ -547,7 +547,7 @@ public final class ParamDomainController {
                 refreshAfterParamsChanged();
                 host.updateListButtons();
                 host.updateExtractBanner(host.currentSelection());
-                log.info(I18n.msg("log.maincontroller.55", modeWord(im)));
+                log.info(Texts.msg("log.maincontroller.55", modeWord(im)));
             }
         }
     }
@@ -586,6 +586,6 @@ public final class ParamDomainController {
 
     /** 日志文案里的模式词（图片/文本 → Image/Text），供 log.* 模板的 {0} 占位符使用 */
     private static String modeWord(boolean imageMode) {
-        return I18n.get(imageMode ? "mode.image" : "mode.text");
+        return Texts.get(imageMode ? "mode.image" : "mode.text");
     }
 }

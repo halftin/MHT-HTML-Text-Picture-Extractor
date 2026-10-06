@@ -5,7 +5,7 @@ import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.app.WorkspaceStructure;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.util.DragGeometry;
-import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.app.DropResolver;
@@ -460,7 +460,7 @@ public final class ListInteractionController implements MainViewActions {
         // log.workspacemodel.01 只属于 WorkspaceModel.group(...) 与 removeItems(...) 两条路径，本步未触碰。
         // 合并语义的打点（log.maincontroller.42）文案、实参、调用次数与位置一律保持原样。
         if (drop.changed() && drop.type() == UndoManager.RecordType.MERGE_GROUPS) {
-            log.info(I18n.msg("log.maincontroller.42", drop.merged().getName(),
+            log.info(Texts.msg("log.maincontroller.42", drop.merged().getName(),
                     drop.mergeTarget().getName(), drop.mergedMembers().size(), drop.merged().getName()));
         }
         if (cell != null) {
@@ -528,7 +528,7 @@ public final class ListInteractionController implements MainViewActions {
             }
         } catch (Exception ex) {
             // 快照失败兜底：瞬时重排复位（cancelDrag 会清除 dragActive，防卡死）
-            log.warn(I18n.msg("log.maincontroller.43", ex.getMessage()), ex);
+            log.warn(Texts.msg("log.maincontroller.43", ex.getMessage()), ex);
             host.dragOverlay().getChildren().removeAll(views);
             cancelDrag();
             return;
@@ -590,7 +590,7 @@ public final class ListInteractionController implements MainViewActions {
                 }
             }
         } catch (Exception ex) {
-            log.warn(I18n.msg("log.maincontroller.43", ex.getMessage()), ex);
+            log.warn(Texts.msg("log.maincontroller.43", ex.getMessage()), ex);
             host.dragOverlay().getChildren().removeAll(views);
             host.rebuildDisplay();
             finishDragReset();
@@ -619,7 +619,7 @@ public final class ListInteractionController implements MainViewActions {
                 itemView.setLayoutY(ib.getMinY());
                 host.dragOverlay().getChildren().add(itemView);
             } catch (Exception ex) {
-                log.warn(I18n.msg("log.maincontroller.45", ex.getMessage()), ex);
+                log.warn(Texts.msg("log.maincontroller.45", ex.getMessage()), ex);
             }
             itemCell.setVisible(false);
         }

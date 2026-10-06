@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.PreviewItem;
 import javafx.application.Platform;
 import javafx.geometry.HorizontalDirection;
@@ -48,7 +48,7 @@ final class MainViewInstaller {
     void installShellLabels() {
         refs.extractCheckedOnlyCheck().setLabelPosition(HorizontalDirection.RIGHT);
         refs.openFolderAfterCompleteCheck().setLabelPosition(HorizontalDirection.RIGHT);
-        refs.badgeHeaderLabel().setTooltip(new Tooltip(I18n.get("list.chapterNoTooltip")));
+        refs.badgeHeaderLabel().setTooltip(new Tooltip(Texts.get("list.chapterNoTooltip")));
     }
 
     /** 2. 列表：单元格工厂、投影绑定、外部导入 DnD、右键菜单、勾选/组名/选择/拖拽动画联动。 */
@@ -168,8 +168,8 @@ final class MainViewInstaller {
     /** 5. 日志区欢迎语（延后一帧，等日志 appender 就位）。 */
     void installWelcomeLog() {
         Platform.runLater(() -> {
-            refs.logTextArea().appendText(I18n.get("preview.welcome"));
-            refs.logTextArea().appendText(I18n.get("preview.welcomeHint"));
+            refs.logTextArea().appendText(Texts.get("preview.welcome"));
+            refs.logTextArea().appendText(Texts.get("preview.welcomeHint"));
         });
     }
 }

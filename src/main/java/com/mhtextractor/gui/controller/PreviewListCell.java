@@ -1,9 +1,9 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.SelectionRules;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.util.DragGeometry;
-import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.model.ChangeListener;
@@ -241,7 +241,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         posLabel.setManaged(false);
         posLabel.setText("");
         nameLabel.setPadding(Insets.EMPTY);
-        nameLabel.setText(g.getName() + I18n.get("list.itemCount", "count", total));
+        nameLabel.setText(g.getName() + Texts.get("list.itemCount", "count", total));
         // 组行字体加粗 + 白字（拍板）；-fx-text-background-color 不跨节点继承，须直接作用于 Label
         nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
         statusLabel.setText("");
@@ -320,7 +320,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         } else {
             setStyle(itemParamStyle(it, isSelected));
             setTooltip(it.status == PreviewItem.Status.EMPTY
-                    ? new Tooltip(I18n.get("preview.emptyContent")) : null);
+                    ? new Tooltip(Texts.get("preview.emptyContent")) : null);
         }
         // 深色底需白字（-fx-text-background-color 不跨节点继承，直接设 label 填充色）：
         // 全局参数深蓝底、提取失败/跳过/警告行（Windows 错误红 #E81123 及红绿分割行）
@@ -421,7 +421,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
                     ok = actions.isDropHandled();
                 }
             } catch (Exception ex) {
-                log.warn(I18n.msg("log.previewlistcell.01", ex.getMessage()), ex);
+                log.warn(Texts.msg("log.previewlistcell.01", ex.getMessage()), ex);
             }
             e.setDropCompleted(ok);
             e.consume();

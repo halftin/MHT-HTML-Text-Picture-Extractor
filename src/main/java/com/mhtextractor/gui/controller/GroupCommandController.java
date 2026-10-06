@@ -1,8 +1,8 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.app.WorkspaceStructure;
 import com.mhtextractor.gui.util.DragGeometry;
-import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import javafx.animation.Interpolator;
@@ -140,7 +140,7 @@ public final class GroupCommandController {
         host.setCheckedSilently(targets, false);
         host.selectRow(group);
         host.refreshAfterListChange();
-        log.info(I18n.msg("log.maincontroller.56", group.getName(), targets.size()));
+        log.info(Texts.msg("log.maincontroller.56", group.getName(), targets.size()));
     }
 
     /** 拆分组（F6）：选中组条目时解散该组——成员按组内顺序回顶层原组位置，组名/组参数随组对象留在撤销记录中 */
@@ -163,7 +163,7 @@ public final class GroupCommandController {
         host.refreshAfterListChange();
         // 选中的组已解散：跳转到原组位置的最近有效行（拆分后为原组第一个成员）
         host.selectNearestVisible(displayIdx);
-        log.info(I18n.msg("log.maincontroller.57", group.getName(), members.size()));
+        log.info(Texts.msg("log.maincontroller.57", group.getName(), members.size()));
     }
 
     /**
@@ -241,7 +241,7 @@ public final class GroupCommandController {
                 }
             }
         } catch (Exception ex) {
-            log.warn(I18n.msg("log.maincontroller.58", ex.getMessage()), ex);
+            log.warn(Texts.msg("log.maincontroller.58", ex.getMessage()), ex);
             host.dragOverlay().getChildren().removeAll(memberViews);
             host.dragOverlay().getChildren().removeAll(belowViews);
             g.setExpanded(false);
@@ -353,7 +353,7 @@ public final class GroupCommandController {
                 }
             }
         } catch (Exception ex) {
-            log.warn(I18n.msg("log.maincontroller.59", ex.getMessage()), ex);
+            log.warn(Texts.msg("log.maincontroller.59", ex.getMessage()), ex);
             host.dragOverlay().getChildren().removeAll(memberViews);
             host.dragOverlay().getChildren().removeAll(belowViews);
             hiddenCells.forEach(c -> c.setVisible(true));

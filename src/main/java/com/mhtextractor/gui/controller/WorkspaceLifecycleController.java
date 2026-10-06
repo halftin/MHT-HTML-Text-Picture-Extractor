@@ -1,10 +1,10 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.app.WorkspaceStructure;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
-import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.app.UndoManager;
@@ -124,7 +124,7 @@ public final class WorkspaceLifecycleController {
         if (targets.size() >= host.visibleCount()) {
             // R13 提醒文案：全选含折叠组成员时提示（会话 19：回调式居中确认取代 showAndWait）
             final List<PreviewItem> pending = targets;
-            String msg = I18n.get("list.removeAllConfirm", "count", pending.size())
+            String msg = Texts.get("list.removeAllConfirm", "count", pending.size())
                     + collapsedGroupHint(pending);
             GuiNotifications.removeAllConfirm(host.anchor(), msg, ok -> {
                 if (ok) {
@@ -139,7 +139,7 @@ public final class WorkspaceLifecycleController {
     /** 移除收尾（原确认框之后的同步段）：执行移除 + 日志 + "列表已空"提醒 */
     private void removeSelected(List<PreviewItem> targets) {
         removeItems(targets);
-        log.info(I18n.msg("log.maincontroller.46", targets.size(), host.visibleCount()));
+        log.info(Texts.msg("log.maincontroller.46", targets.size(), host.visibleCount()));
         if (host.visibleCount() == 0) {
             GuiNotifications.listEmpty(host.anchor());
         }
@@ -150,14 +150,14 @@ public final class WorkspaceLifecycleController {
         int memberCount = host.visibleMemberCount(group);
         String collapsedHint = group.isExpanded()
                 ? ""
-                : I18n.get("group.removeNoteCollapsed");
+                : Texts.get("group.removeNoteCollapsed");
         String msg = memberCount >= host.visibleCount()
-                ? I18n.get("group.removeConfirm", "count", memberCount) + collapsedHint
-                : I18n.get("group.removeConfirmSimple", "count", memberCount) + collapsedHint;
+                ? Texts.get("group.removeConfirm", "count", memberCount) + collapsedHint
+                : Texts.get("group.removeConfirmSimple", "count", memberCount) + collapsedHint;
         GuiNotifications.removeGroupConfirm(host.anchor(), msg, ok -> {
             if (ok) {
                 removeGroup(group);
-                log.info(I18n.msg("log.maincontroller.47", group.getName(), memberCount, host.visibleCount()));
+                log.info(Texts.msg("log.maincontroller.47", group.getName(), memberCount, host.visibleCount()));
                 if (host.visibleCount() == 0) {
                     GuiNotifications.listEmpty(host.anchor());
                 }
@@ -207,15 +207,15 @@ public final class WorkspaceLifecycleController {
                     long cnt = group.getMembers().stream()
                             .filter(m -> !m.removed && targets.contains(m)).count();
                     if (cnt > 0) {
-                        parts.add(group.getName() + I18n.get("group.itemCount", "count", cnt));
+                        parts.add(group.getName() + Texts.get("group.itemCount", "count", cnt));
                     }
                 }
             }
         }
         return parts.isEmpty()
                 ? ""
-                : I18n.get("group.removeNoteHidden",
-                        "names", String.join(I18n.get("list.nameSeparator"), parts));
+                : Texts.get("group.removeNoteHidden",
+                        "names", String.join(Texts.get("list.nameSeparator"), parts));
     }
 
     void onUndoClicked() {
@@ -234,7 +234,7 @@ public final class WorkspaceLifecycleController {
                     for (PreviewItem it : record.items()) {
                         it.setSelected(false);      // 选中态属 UI 职责，模型不管
                     }
-                    log.info(I18n.msg("log.maincontroller.48", record.items().size(), record.destroyedGroups().size()));
+                    log.info(Texts.msg("log.maincontroller.48", record.items().size(), record.destroyedGroups().size()));
                 }
                 case IMPORT -> {
                     Object sel = host.currentSelection();
@@ -252,14 +252,14 @@ public final class WorkspaceLifecycleController {
                     if (selRemoved) {
                         host.selectNearestVisible(selIndex);
                     }
-                    log.info(I18n.msg("log.maincontroller.49", record.items().size(), record.groups().size()));
+                    log.info(Texts.msg("log.maincontroller.49", record.items().size(), record.groups().size()));
                 }
                 case GROUP -> {
                     // 撤销建组：结构恢复（组解散、成员回原位置）由模型负责
                     host.applyUndo(record);
                     record.items().stream()
                             .filter(i -> !i.removed).findFirst().ifPresent(firstVisible -> host.selectRow(firstVisible));
-                    log.info(I18n.msg("log.maincontroller.50", record.group().getName()));
+                    log.info(Texts.msg("log.maincontroller.50", record.group().getName()));
                 }
                 case REORDER, MERGE_GROUPS -> {
                     // 拖拽类：结构恢复（顶层顺序 / 组位置 / 组内顺序，组对象复用）自 Q0/P0 起由模型负责；
@@ -270,14 +270,14 @@ public final class WorkspaceLifecycleController {
                         host.clearItemPreviewState(it);
                         reparseAfter.add(it);
                     }
-                    log.info(I18n.msg("log.maincontroller.51", I18n.get(record.type() == UndoManager.RecordType.REORDER
+                    log.info(Texts.msg("log.maincontroller.51", Texts.get(record.type() == UndoManager.RecordType.REORDER
                         ? "reorder.dragSort" : "reorder.groupMerge")));
                 }
                 case UNGROUP -> {
                     // F6：组重建（成员回组、组按原索引插回、条目级参数清除）由模型负责
                     host.applyUndo(record);
                     selectAfter = record.group();
-                    log.info(I18n.msg("log.maincontroller.52", record.group().getName(), record.items().size()));
+                    log.info(Texts.msg("log.maincontroller.52", record.group().getName(), record.items().size()));
                 }
                 case PARAM_SET, CLEAR_PARAMS, APPLY_GLOBAL ->
                     // 参数类撤销分支体在 ParamDomainController（applyParamUndo），这里整体委派

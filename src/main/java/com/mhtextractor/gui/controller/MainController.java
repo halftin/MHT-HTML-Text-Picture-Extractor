@@ -16,7 +16,7 @@ import com.mhtextractor.gui.WorkspaceFxAdapter;
 import com.mhtextractor.gui.util.JavaFxUtil;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.app.DropResolver;
@@ -88,9 +88,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 徽标列/位置序号列/复选框列的固定槽位宽度 */
 
-    private static final String HINT_NO_MODE_OR_DIR = I18n.get("preview.hintSelectMode");
-    private static final String HINT_NEED_PARAMS = I18n.get("preview.hintParamsUnset");
-    private static final String HINT_NO_FILES = I18n.get("preview.hintNoMht");
+    private static final String HINT_NO_MODE_OR_DIR = Texts.get("preview.hintSelectMode");
+    private static final String HINT_NEED_PARAMS = Texts.get("preview.hintParamsUnset");
+    private static final String HINT_NO_FILES = Texts.get("preview.hintNoMht");
 
     /**
      * 输出单元规划的字段视图（路径/来源目录/移除标记，阶段 8）。
@@ -523,7 +523,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public List<Object> dataOrder() { return items; }
         @Override public int indexInDataOrder(Object item) { return items.indexOf(item); }
         @Override public ObservableList<Object> displayItems() { return displayItems; }
-        @Override public GroupItem<PreviewItem> createGroup(List<PreviewItem> targets) { return ws.group(targets, I18n.get("core.groupDefault")); }
+        @Override public GroupItem<PreviewItem> createGroup(List<PreviewItem> targets) { return ws.group(targets, Texts.get("core.groupDefault")); }
         @Override public List<PreviewItem> ungroupGroup(GroupItem<PreviewItem> group) { return ws.ungroup(group); }
         @Override public List<PreviewItem> allVisibleItems() { return MainController.this.allVisibleItems(); }
         @Override public Object currentSelection() { return refs.fileListView().getSelectionModel().getSelectedItem(); }
@@ -587,7 +587,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     void saveGuiState() {
-        Locale loc = I18n.currentLocale();
+        Locale loc = Texts.currentLocale();
         SessionStateService.save(new SessionStateService.Session(
                 refs.inputFolderField().getText(),
                 refs.outputFolderField().getText(),
@@ -604,7 +604,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         String currentPath = refs.inputFolderField().getText();
         String dir = JavaFxUtil.showDirectoryChooser(
                 refs.inputFolderField().getScene().getWindow(),
-                I18n.get("dir.chooseInput"),
+                Texts.get("dir.chooseInput"),
                 currentPath);
         if (dir != null) {
             boolean sameDir = dir.equals(refs.inputFolderField().getText());
@@ -622,7 +622,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         String currentPath = refs.outputFolderField().getText();
         String dir = JavaFxUtil.showDirectoryChooser(
                 refs.outputFolderField().getScene().getWindow(),
-                I18n.get("dir.chooseOutput"),
+                Texts.get("dir.chooseOutput"),
                 currentPath);
         if (dir != null) {
             refs.outputFolderField().setText(dir);
@@ -634,11 +634,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      */
     private void autoSetOutputPath() {
         String projectDir = System.getProperty("user.dir");
-        String outputBaseDir = projectDir + File.separator + I18n.get("core.defaultOutputName");
+        String outputBaseDir = projectDir + File.separator + Texts.get("core.defaultOutputName");
 
         File outDirFile = new File(outputBaseDir);
         if (!outDirFile.isDirectory() && !outDirFile.mkdirs() && !outDirFile.isDirectory()) {
-            log.warn(I18n.msg("log.maincontroller.01", outputBaseDir));
+            log.warn(Texts.msg("log.maincontroller.01", outputBaseDir));
         }
 
         refs.outputFolderField().setText(outputBaseDir);
@@ -652,7 +652,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             return;
         }
         if (!new File(text).isDirectory()) {
-            log.warn(I18n.msg("log.maincontroller.02", text));
+            log.warn(Texts.msg("log.maincontroller.02", text));
             saveGuiState();
             return;
         }
@@ -662,7 +662,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 增量导入：统一入口（BC-1：改为递归扫描 + 自动建组） */
     private void importFromFolder(String dir) {
-        importByPaths(List.of(dir), I18n.get("dir.label", "path", dir), false);
+        importByPaths(List.of(dir), Texts.get("dir.label", "path", dir), false);
     }
 
     // ==================== 统一导入（拖拽 + 浏览共用入口） ====================
@@ -684,7 +684,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             return;
         }
         if (isImporting()) {
-            log.warn(I18n.msg("log.maincontroller.03"));
+            log.warn(Texts.msg("log.maincontroller.03"));
             return;
         }
         // 地址规范化（RISK-6）：祖先/后代包含关系合并为祖先，防重复扫描与重复批次
@@ -693,27 +693,27 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         // ★ 必须在 .04 之前逐条产出 —— 原实现是"规范化过程中打日志，返回后才打 .04"。
         for (WorkspaceImportService.DroppedAddress dropped : normalized.dropped()) {
             if (dropped.ancestor() == null) {
-                log.info(I18n.msg("log.maincontroller.06", dropped.address()));
+                log.info(Texts.msg("log.maincontroller.06", dropped.address()));
             } else {
-                log.info(I18n.msg("log.maincontroller.07", dropped.address(), dropped.ancestor()));
+                log.info(Texts.msg("log.maincontroller.07", dropped.address(), dropped.ancestor()));
             }
         }
         if (normalized.kept().isEmpty()) {
             return;
         }
-        log.info(I18n.msg("log.maincontroller.04", sourceDesc, normalized.kept().size()));
+        log.info(Texts.msg("log.maincontroller.04", sourceDesc, normalized.kept().size()));
 
         // BC-8：仅拖拽来源 + 盘符根目录 → 确认（会话 19：窗口内居中确认卡片，回调式取代 showAndWait）
         if (fromDrag) {
             List<String> roots = MhtImportPlanner.findDriveRoots(normalized.kept());
             if (!roots.isEmpty()) {
-                String msg = I18n.get("import.rootDirConfirmMsg") + String.join("\n", roots)
-                        + I18n.get("import.rootDirConfirmNote");
+                String msg = Texts.get("import.rootDirConfirmMsg") + String.join("\n", roots)
+                        + Texts.get("import.rootDirConfirmNote");
                 GuiNotifications.driveRootConfirm(refs.statusLabel(), msg, ok -> {
                     if (ok) {
                         importSessions.start(normalized.kept(), sourceDesc, fromDrag);
                     } else {
-                        log.info(I18n.msg("log.maincontroller.05", roots));
+                        log.info(Texts.msg("log.maincontroller.05", roots));
                     }
                 });
                 return;
@@ -850,11 +850,11 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 List<String> addresses = dropped.stream().map(File::getAbsolutePath).toList();
                 // ★ 拖放回调在 FX 线程；导入确认（盘符根目录）现在是窗口内回调式卡片，
                 //   仍延后到 runLater，避免在 dragDropped 分发过程中开弹层干扰 DnD 状态机。
-                Platform.runLater(() -> importByPaths(addresses, I18n.get("import.dragDrop"), true));
+                Platform.runLater(() -> importByPaths(addresses, Texts.get("import.dragDrop"), true));
                 ok = true;
             }
         } catch (Exception ex) {
-            log.warn(I18n.msg("log.maincontroller.14", ex.getMessage()), ex);
+            log.warn(Texts.msg("log.maincontroller.14", ex.getMessage()), ex);
         } finally {
             clearImportDropHighlight();
         }
@@ -938,8 +938,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         updateListButtons();
 
         // 预览工作区
-        refs.modeLabel().setText(I18n.get("mode.labelPrefix") + (refs.imageModeToggle().isSelected() ? I18n.get("mode.image")
-                : (refs.textModeToggle().isSelected() ? I18n.get("mode.text") : I18n.get("mode.none"))));
+        refs.modeLabel().setText(Texts.get("mode.labelPrefix") + (refs.imageModeToggle().isSelected() ? Texts.get("mode.image")
+                : (refs.textModeToggle().isSelected() ? Texts.get("mode.text") : Texts.get("mode.none"))));
         Object sel = currentSelection();
         infoPresenter.updateBadgeHeader();
         infoPresenter.updateOutputModeLabel(sel);
@@ -1098,16 +1098,16 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 new ProcessBuilder("cmd", "/c",
                         "start \"\" explorer /select,\"" + f.getAbsolutePath() + "\"").start();
             } else if (dir != null && dir.exists()) {
-                log.warn(I18n.msg("log.maincontroller.19", it.path));
+                log.warn(Texts.msg("log.maincontroller.19", it.path));
                 // 步骤 7：去掉 AWT Desktop.open 改用 explorer.exe（native 对 AWT 支持有限，
                 // CLAUDE.md 有同一处决策记录，native 元数据也未注册 awt 条目）。
                 new ProcessBuilder("explorer.exe", dir.getAbsolutePath()).start();
             } else {
-                log.warn(I18n.msg("log.maincontroller.20", dir == null ? it.path : dir.getAbsolutePath()));
+                log.warn(Texts.msg("log.maincontroller.20", dir == null ? it.path : dir.getAbsolutePath()));
                 GuiNotifications.fileDirMissing(refs.statusLabel(), it.path);
             }
         } catch (Exception ex) {
-            log.error(I18n.msg("log.maincontroller.21"), ex);
+            log.error(Texts.msg("log.maincontroller.21"), ex);
             GuiNotifications.openFolderFailed(refs.statusLabel());
         }
     }
@@ -1224,8 +1224,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         extractionCoordinator.cancelAndReset();
         refs.progressBar().setVisible(false);
         setProgressBarActivity(null);
-        refs.statusLabel().setText(I18n.get("extract.stopped"));
-        log.info(I18n.msg("log.maincontroller.41"));
+        refs.statusLabel().setText(Texts.get("extract.stopped"));
+        log.info(Texts.msg("log.maincontroller.41"));
     }
 
     // ==================== 列表渲染 ====================
@@ -1305,7 +1305,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     }
 
     void updateFileCount() {
-        refs.fileCountLabel().setText(I18n.get("list.fileCount", "count", visibleCount()));
+        refs.fileCountLabel().setText(Texts.get("list.fileCount", "count", visibleCount()));
     }
 
     /* 列表操作按钮可用性：列表为空时移除禁用；撤销栈为空时撤销禁用；合并为组需勾选集合或选中项目；拆分组仅选中组条目时可用（F6） */
@@ -1435,7 +1435,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         }
         String unique = WorkspaceStructure.uniqueGroupName(trimmed, otherGroupNames(g));
         if (!unique.equals(trimmed)) {
-            log.info(I18n.msg("log.maincontroller.09", trimmed, unique));
+            log.info(Texts.msg("log.maincontroller.09", trimmed, unique));
             updatingGroupName = true;
             refs.groupNameField().setText(unique);
             updatingGroupName = false;
@@ -1509,7 +1509,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         refs.adjustCheck().setManaged(checkVisible);
         if (checkVisible) {
             PreviewItem it = (PreviewItem) item;
-            refs.adjustCheck().setText(I18n.get("params.addChapterNumbers"));
+            refs.adjustCheck().setText(Texts.get("params.addChapterNumbers"));
             updatingAdjustCheck = true;
             refs.adjustCheck().setSelected(it.chapterEnabled);
             updatingAdjustCheck = false;
@@ -1533,7 +1533,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (cbz) {
             return "CBZ";
         }
-        return I18n.get("extract.unitFolder");
+        return Texts.get("extract.unitFolder");
     }
 
     // ==================== 内容区渲染 ====================
@@ -1548,9 +1548,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         // 组条目：预览区显示组信息与参数状态提示（6.5）
         if (item instanceof GroupItem<?> g) {
             GroupItem<PreviewItem> group = WorkspaceStructure.asPreviewGroup(g);
-            String info = I18n.get("preview.groupInfo") + group.getName()
-                    + I18n.get("preview.groupItemCount", "count", visibleMemberCount(group))
-                    + I18n.get("preview.paramsLabel") + groupParamStatusText(group);
+            String info = Texts.get("preview.groupInfo") + group.getName()
+                    + Texts.get("preview.groupItemCount", "count", visibleMemberCount(group))
+                    + Texts.get("preview.paramsLabel") + groupParamStatusText(group);
             if (isTextMode()) {
                 refs.imagePreviewBox().setVisible(false);
                 refs.imagePreviewBox().setManaged(false);
@@ -1581,9 +1581,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 return;
             }
             switch (it.status) {
-                case WAITING -> refs.textPreviewArea().setText(I18n.get("preview.imageParsing"));
-                case FAILED -> refs.textPreviewArea().setText(I18n.get("preview.parseFailed") + it.errorMsg);
-                case EMPTY -> refs.textPreviewArea().setText(I18n.get("preview.emptyContentShort"));
+                case WAITING -> refs.textPreviewArea().setText(Texts.get("preview.imageParsing"));
+                case FAILED -> refs.textPreviewArea().setText(Texts.get("preview.parseFailed") + it.errorMsg);
+                case EMPTY -> refs.textPreviewArea().setText(Texts.get("preview.emptyContentShort"));
                 case READY -> previewRenderer.renderTextPreview(it);
             }
         } else {
@@ -1600,7 +1600,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 return;
             }
             if (it.status == PreviewItem.Status.FAILED) {
-                refs.imageHintLabel().setText(I18n.get("preview.parseFailed") + it.errorMsg);
+                refs.imageHintLabel().setText(Texts.get("preview.parseFailed") + it.errorMsg);
                 refs.imageHintLabel().setVisible(true);
                 refs.previewEffectButton().setVisible(true);
                 refs.previewEffectButton().setDisable(true);
@@ -1610,7 +1610,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 previewRenderer.renderThumbnails(it);
             } else if (previewLoader.isLoading(it)) {
                 // 加载中：保留渐进追加的网格，不重置
-                refs.imageHintLabel().setText(I18n.get("preview.imageLoading"));
+                refs.imageHintLabel().setText(Texts.get("preview.imageLoading"));
                 refs.imageHintLabel().setVisible(true);
                 refs.previewEffectButton().setVisible(true);
                 refs.previewEffectButton().setDisable(true);
@@ -1627,10 +1627,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         boolean imageMode = refs.imageModeToggle().isSelected();
         AppConfig own = imageMode ? g.getImageParamsCache() : g.getTextParamsCache();
         if (own != null) {
-            return I18n.get("group.paramsIndependent");
+            return Texts.get("group.paramsIndependent");
         }
         AppConfig global = imageMode ? paramDomain.imageParamsCache() : paramDomain.textParamsCache();
-        return global != null ? I18n.get("group.paramsInherited") : I18n.get("group.paramsInheritedUnconfirmed");
+        return global != null ? Texts.get("group.paramsInherited") : Texts.get("group.paramsInheritedUnconfirmed");
     }
 
     private void updateRenameNote(Object sel) {
@@ -1668,10 +1668,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     void onSizeAlertStep(int step) {
         long stepGiB = step * previewCacheLifecycle.sizeAlertStepBytes() / (1024L * 1024 * 1024);
         double actualGiB = previewCacheLifecycle.lastObservedTotalBytes() / (1024.0 * 1024 * 1024);
-        String message = I18n.get("cache.sizeAlert",
+        String message = Texts.get("cache.sizeAlert",
                         "step", stepGiB, "actual", String.format("%.1f", actualGiB),
                         "dir", previewCacheLifecycle.store().root())
-                + I18n.get("cache.sizeAlertNote");
+                + Texts.get("cache.sizeAlertNote");
         GuiNotifications.cacheStepWarning(refs.statusLabel(), message);
     }
 }

@@ -1,9 +1,9 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.NamedConfigService;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.NotificationHost;
-import com.mhtextractor.i18n.I18n;
 import javafx.scene.control.TextInputDialog;
 import lombok.extern.slf4j.Slf4j;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
@@ -52,18 +52,18 @@ final class ParamPanelActions {
 
     private void saveNamedConfig() {
         TextInputDialog dialog = new TextInputDialog("my_config");
-        dialog.setTitle(I18n.get("dialog.saveConfig"));
-        dialog.setHeaderText(I18n.get("dialog.inputConfigName"));
-        dialog.setContentText(I18n.get("dialog.saveConfigNote"));
+        dialog.setTitle(Texts.get("dialog.saveConfig"));
+        dialog.setHeaderText(Texts.get("dialog.inputConfigName"));
+        dialog.setContentText(Texts.get("dialog.saveConfigNote"));
         dialog.showAndWait().ifPresent(name -> {
             try {
                 namedConfigService.save(name, pane.collect());
                 refreshConfigList();
                 pane.configComboBox.getSelectionModel().select(name);
-                log.info(I18n.msg("log.paramdialogcontroller.01", name));
+                log.info(Texts.msg("log.paramdialogcontroller.01", name));
             } catch (Exception e) {
-                log.error(I18n.msg("log.paramdialogcontroller.02"), e);
-                NotificationHost.error(pane.configComboBox, I18n.get("error.CONFIG_SAVE_FAILED"), FontAwesomeSolid.SAVE);
+                log.error(Texts.msg("log.paramdialogcontroller.02"), e);
+                NotificationHost.error(pane.configComboBox, Texts.get("error.CONFIG_SAVE_FAILED"), FontAwesomeSolid.SAVE);
             }
         });
     }
@@ -71,38 +71,38 @@ final class ParamPanelActions {
     private void loadNamedConfig() {
         String selected = pane.configComboBox.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            NotificationHost.toastWarning(pane.configComboBox, I18n.get("error.CONFIG_SELECT_TO_LOAD"), FontAwesomeSolid.HAND_POINTER);
+            NotificationHost.toastWarning(pane.configComboBox, Texts.get("error.CONFIG_SELECT_TO_LOAD"), FontAwesomeSolid.HAND_POINTER);
             return;
         }
         try {
             AppConfig config = namedConfigService.load(selected);
             // 只填充当前模式参数组，另一组保持隔离（确定后才生效）
             pane.applyLoadedConfig(config);
-            log.info(I18n.msg("log.paramdialogcontroller.03", selected));
+            log.info(Texts.msg("log.paramdialogcontroller.03", selected));
         } catch (Exception e) {
-            log.error(I18n.msg("log.paramdialogcontroller.04"), e);
-            NotificationHost.error(pane.configComboBox, I18n.get("error.CONFIG_LOAD_FAILED"), FontAwesomeSolid.FILE_DOWNLOAD);
+            log.error(Texts.msg("log.paramdialogcontroller.04"), e);
+            NotificationHost.error(pane.configComboBox, Texts.get("error.CONFIG_LOAD_FAILED"), FontAwesomeSolid.FILE_DOWNLOAD);
         }
     }
 
     private void deleteNamedConfig() {
         String selected = pane.configComboBox.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            NotificationHost.toastWarning(pane.configComboBox, I18n.get("error.CONFIG_SELECT_TO_DELETE"), FontAwesomeSolid.HAND_POINTER);
+            NotificationHost.toastWarning(pane.configComboBox, Texts.get("error.CONFIG_SELECT_TO_DELETE"), FontAwesomeSolid.HAND_POINTER);
             return;
         }
         NotificationHost.confirm(pane.configComboBox,
-                I18n.get("error.CONFIG_DELETE_CONFIRM", "name", selected), FontAwesomeSolid.TRASH_ALT, ok -> {
+                Texts.get("error.CONFIG_DELETE_CONFIRM", "name", selected), FontAwesomeSolid.TRASH_ALT, ok -> {
                     if (!ok) {
                         return;
                     }
                     try {
                         namedConfigService.delete(selected);
                         refreshConfigList();
-                        log.info(I18n.msg("log.paramdialogcontroller.05", selected));
+                        log.info(Texts.msg("log.paramdialogcontroller.05", selected));
                     } catch (Exception e) {
-                        log.error(I18n.msg("log.paramdialogcontroller.06"), e);
-                        NotificationHost.error(pane.configComboBox, I18n.get("error.CONFIG_DELETE_FAILED"), FontAwesomeSolid.TRASH_ALT);
+                        log.error(Texts.msg("log.paramdialogcontroller.06"), e);
+                        NotificationHost.error(pane.configComboBox, Texts.get("error.CONFIG_DELETE_FAILED"), FontAwesomeSolid.TRASH_ALT);
                     }
                 });
     }
@@ -114,8 +114,8 @@ final class ParamPanelActions {
     /** 高速内存模式确认（会话 19：窗口内居中确认卡片，取代嵌套模态 Alert） */
     private void onHighSpeedMemoryChanged() {
         if (pane.highSpeedMemoryCheck.isSelected()) {
-            String msg = I18n.get("dialog.highSpeedConfirmTitle") + "\n"
-                    + I18n.get("dialog.highSpeedConfirmMsg");
+            String msg = Texts.get("dialog.highSpeedConfirmTitle") + "\n"
+                    + Texts.get("dialog.highSpeedConfirmMsg");
             NotificationHost.confirm(pane.highSpeedMemoryCheck, msg, FontAwesomeSolid.MEMORY, ok -> {
                 if (!ok) {
                     pane.highSpeedMemoryCheck.setSelected(false);

@@ -5,7 +5,7 @@ import atlantafx.base.controls.Message;
 import atlantafx.base.controls.Notification;
 import atlantafx.base.theme.Styles;
 import atlantafx.base.util.Animations;
-import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.app.Texts;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -91,7 +91,7 @@ public final class NotificationHost {
     /** 在场景上安装宿主。必须传入已包含原本场景根的 StackPane（见类 javadoc 的接线说明）。 */
     public static void install(Scene scene, StackPane shell) {
         if (scene == null || shell == null) {
-            log.error(I18n.msg("log.notificationhost.02"));
+            log.error(Texts.msg("log.notificationhost.02"));
             return;
         }
         if (!HOSTS.containsKey(scene)) {
@@ -106,7 +106,7 @@ public final class NotificationHost {
     private static NotificationHost of(Node anchor) {
         Scene scene = anchor == null ? null : anchor.getScene();
         if (scene == null) {
-            log.error(I18n.msg("log.notificationhost.01"));
+            log.error(Texts.msg("log.notificationhost.01"));
             return null;
         }
         NotificationHost host = HOSTS.get(scene);
@@ -153,7 +153,7 @@ public final class NotificationHost {
     public static void error(Node anchor, String message, FontAwesomeSolid icon) {
         withHost(anchor, h -> {
             Notification ntf = h.card(message, icon, Styles.DANGER);
-            ntf.setPrimaryActions(h.button(I18n.get("notification.ok"), h::hideModal));
+            ntf.setPrimaryActions(h.button(Texts.get("notification.ok"), h::hideModal));
             ntf.setOnClose(e -> {
                 h.flash(ntf);
                 h.hideModal();
@@ -195,7 +195,7 @@ public final class NotificationHost {
         }
         NotificationHost host = of(anchor);
         if (host == null) {
-            log.error(I18n.msg("log.notificationhost.04", "busy"));
+            log.error(Texts.msg("log.notificationhost.04", "busy"));
         } else {
             host.showModal(host.messageCard(title, description, icon));
         }
@@ -205,7 +205,7 @@ public final class NotificationHost {
                     work.run();
                 }
             } catch (Throwable ex) {
-                log.error(I18n.msg("log.notificationhost.03", String.valueOf(ex)), ex);
+                log.error(Texts.msg("log.notificationhost.03", String.valueOf(ex)), ex);
             } finally {
                 Platform.runLater(() -> {
                     if (host != null) {
@@ -259,8 +259,8 @@ public final class NotificationHost {
                 }
             };
             ntf.setPrimaryActions(
-                    h.button(I18n.get("notification.ok"), () -> h.decide(deliver, true), true),
-                    h.button(I18n.get("notification.cancel"), () -> h.decide(deliver, false), false));
+                    h.button(Texts.get("notification.ok"), () -> h.decide(deliver, true), true),
+                    h.button(Texts.get("notification.cancel"), () -> h.decide(deliver, false), false));
             // ✕ 等价于"取消"（persistent 只挡遮挡层与 ESC，不挡显式按钮）
             ntf.setOnClose(e -> h.decide(deliver, false));
             // ⚠️ 顺序不能反：showModal 开头会把"上一张未回答的确认卡"按取消交付，
@@ -269,7 +269,7 @@ public final class NotificationHost {
             h.pendingDecision = deliver;
         }, () -> {
             // 宿主解析不出来（锚点没挂场景）：绝不能静默——调用方可能正阻塞等待这个决定
-            log.error(I18n.msg("log.notificationhost.04", "confirm"));
+            log.error(Texts.msg("log.notificationhost.04", "confirm"));
             if (onDecision != null) {
                 onDecision.accept(false);
             }
@@ -354,7 +354,7 @@ public final class NotificationHost {
         if (pendingDecision != null) {
             Consumer<Boolean> stale = pendingDecision;
             pendingDecision = null;
-            log.warn(I18n.msg("log.notificationhost.05"));
+            log.warn(Texts.msg("log.notificationhost.05"));
             stale.accept(false);
         }
         // 限制最大高度：否则 ModalPane 的内容容器会把卡片拉满整窗高度（实测 Notification 400×761，Message 同理）

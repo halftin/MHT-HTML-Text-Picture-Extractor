@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.component;
 
-import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.platform.HtmlSyntaxPalette;
 import com.mhtextractor.platform.HtmlSyntaxTokens;
 import com.mhtextractor.platform.HtmlTextSelection;
@@ -511,12 +511,12 @@ public final class HtmlSourceViewer {
 
     /** 载入中（计数栏的位置先占住，避免面板高度跳变）。 */
     private void showLoading() {
-        countLabel.setText(I18n.get("viewer.findLoading"));
+        countLabel.setText(Texts.get("viewer.findLoading"));
     }
 
     /** 载入失败：如实显示，不假装空文件。 */
     private void showLoadFailed() {
-        countLabel.setText(I18n.get("viewer.loadFailed"));
+        countLabel.setText(Texts.get("viewer.loadFailed"));
     }
 
     /**
@@ -538,7 +538,7 @@ public final class HtmlSourceViewer {
         rows.setAll(src.rows());
         listView.scrollTo(0);   // 新文档回到顶部（可变行高下不要沿用上一文档的滚动位置）
         loadCount++;
-        countLabel.setText(I18n.get("viewer.findCount", "current", 0, "total", 0));
+        countLabel.setText(Texts.get("viewer.findCount", "current", 0, "total", 0));
     }
 
     private void resetFind() {
@@ -585,14 +585,14 @@ public final class HtmlSourceViewer {
     }
 
     private void wireFindBar() {
-        Label label = new Label(I18n.get("viewer.findLabel"));
+        Label label = new Label(Texts.get("viewer.findLabel"));
         label.setMinWidth(Region.USE_PREF_SIZE);
         queryField.setId("sourceViewerQuery");
-        queryField.setPromptText(I18n.get("viewer.findPlaceholder"));
+        queryField.setPromptText(Texts.get("viewer.findPlaceholder"));
         HBox.setHgrow(queryField, Priority.ALWAYS);
         countLabel.setId("sourceViewerCount");
         countLabel.setMinWidth(Region.USE_PREF_SIZE);
-        countLabel.setText(I18n.get("viewer.findCount", "current", 0, "total", 0));
+        countLabel.setText(Texts.get("viewer.findCount", "current", 0, "total", 0));
 
         findBar.setId("sourceViewerFindBar");
         findBar.getStyleClass().add("html-source-findbar");
@@ -616,7 +616,7 @@ public final class HtmlSourceViewer {
         b.setId(id);
         b.getStyleClass().add("side-panel-collapse");
         b.setGraphic(new FontIcon(icon));
-        b.setTooltip(new Tooltip(I18n.get(tooltipKey)));
+        b.setTooltip(new Tooltip(Texts.get(tooltipKey)));
         return b;
     }
 
@@ -784,12 +784,12 @@ public final class HtmlSourceViewer {
         int[] before = matchLines();
         queryField.clear();
         resetFind();
-        countLabel.setText(I18n.get("viewer.findCount", "current", 0, "total", 0));
+        countLabel.setText(Texts.get("viewer.findCount", "current", 0, "total", 0));
         onActiveLineChanged(before, matchLines());
     }
 
     private void updateCount() {
-        countLabel.setText(I18n.get("viewer.findCount",
+        countLabel.setText(Texts.get("viewer.findCount",
                 "current", currentHitNumber(), "total", hits.size()));
     }
 

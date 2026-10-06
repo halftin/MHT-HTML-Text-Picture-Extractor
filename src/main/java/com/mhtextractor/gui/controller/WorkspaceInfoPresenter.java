@@ -3,9 +3,9 @@ package com.mhtextractor.gui.controller;
 import com.mhtextractor.app.ExtractResultService;
 import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.app.OutputNameService;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.app.WorkspaceStructure;
 import com.mhtextractor.config.AppConfig;
-import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.model.GroupItem;
@@ -112,11 +112,11 @@ public final class WorkspaceInfoPresenter {
             host.attachTitleEditor(readyItem);
         } else if (showTitle) {
             switch (it.status) {
-                case WAITING -> host.titleInfoLabel().setText(I18n.get("preview.titleParsing"));
-                case FAILED, EMPTY -> host.titleInfoLabel().setText(I18n.get("preview.titleNone"));
+                case WAITING -> host.titleInfoLabel().setText(Texts.get("preview.titleParsing"));
+                case FAILED, EMPTY -> host.titleInfoLabel().setText(Texts.get("preview.titleNone"));
                 case READY -> host.titleInfoLabel().setText(it.cachedTitle != null
-                        ? I18n.get("preview.titlePrefix") + it.cachedTitle
-                        : I18n.get("preview.titleNotFound"));
+                        ? Texts.get("preview.titlePrefix") + it.cachedTitle
+                        : Texts.get("preview.titleNotFound"));
             }
         }
         host.outputNameLabel().setVisible(true);
@@ -124,20 +124,20 @@ public final class WorkspaceInfoPresenter {
         if (host.isTextMode()) {
             String outputName = OutputNameService.textOutputName(it, params, host.inputFolderField().getText());
             if (params.isSeparateFiles()) {
-                host.outputNameLabel().setText(I18n.get("preview.outputFilePrefix") + outputName);
+                host.outputNameLabel().setText(Texts.get("preview.outputFilePrefix") + outputName);
             } else {
-                host.outputNameLabel().setText(I18n.get("preview.outputFilePrefix") + outputName
-                        + I18n.get("preview.outputFileTxtSuffix"));
+                host.outputNameLabel().setText(Texts.get("preview.outputFilePrefix") + outputName
+                        + Texts.get("preview.outputFileTxtSuffix"));
             }
         } else {
             OutputNameService.Name name = OutputNameService.imageOutputName(it, params,
                     host.allVisibleItems().stream().findFirst().orElse(null), host.inputFolderField().getText());
-            String dirName = name.parsing() ? I18n.get("preview.parsing") : name.value();
+            String dirName = name.parsing() ? Texts.get("preview.parsing") : name.value();
             if (params.isSingleOutputMode()) {
-                host.outputNameLabel().setText(I18n.get("preview.outputDirPrefix") + dirName
-                        + I18n.get("preview.outputDirMergedNote"));
+                host.outputNameLabel().setText(Texts.get("preview.outputDirPrefix") + dirName
+                        + Texts.get("preview.outputDirMergedNote"));
             } else {
-                host.outputNameLabel().setText(I18n.get("preview.outputDirPrefix") + dirName);
+                host.outputNameLabel().setText(Texts.get("preview.outputDirPrefix") + dirName);
             }
         }
     }
@@ -149,8 +149,8 @@ public final class WorkspaceInfoPresenter {
             params = host.currentParamsOrDefaults();
         }
         host.outputModeLabel().setText(host.isTextMode()
-                ? (params.isSeparateFiles() ? I18n.get("extract.outputModeSeparate") : I18n.get("extract.outputModeMerged"))
-                : (params.isSingleOutputMode() ? I18n.get("extract.outputModeMerged") : I18n.get("extract.outputModeSeparate")));
+                ? (params.isSeparateFiles() ? Texts.get("extract.outputModeSeparate") : Texts.get("extract.outputModeMerged"))
+                : (params.isSingleOutputMode() ? Texts.get("extract.outputModeMerged") : Texts.get("extract.outputModeSeparate")));
     }
 
     void updateBadgeHeader() {
@@ -174,10 +174,10 @@ public final class WorkspaceInfoPresenter {
      *  按路径匹配条目写入结果字段（下沉 {@code app.ExtractResultService}），列表一次刷新，选中条目 banner 同步 */
     void applyExtractResults(ExtractionStats stats) {
         int matched = ExtractResultService.apply(stats, host.allPreviewItems(),
-                I18n::render, I18n.get("list.itemSeparator"));
+                Texts::render, Texts.get("list.itemSeparator"));
         host.refreshList();
         updateExtractBanner(host.currentSelection());
-        log.info(I18n.msg("log.maincontroller.29", matched));
+        log.info(Texts.msg("log.maincontroller.29", matched));
     }
 
     /** 提取结果色清除（拍板）：重新确认参数后旧结果失效，回到参数色/解析状态色 */
@@ -194,20 +194,20 @@ public final class WorkspaceInfoPresenter {
         if (sel instanceof PreviewItem it && it.extractOutcome != ExtractOutcome.NONE
                 && it.extractDetail != null && !it.extractDetail.isEmpty()) {
             String prefix = switch (it.extractOutcome) {
-                case FAILED -> I18n.get("extract.statusFailed");
-                case SKIPPED -> I18n.get("extract.statusSkipped");
-                case SUCCESS_WARNED -> I18n.get("extract.statusWarned");
+                case FAILED -> Texts.get("extract.statusFailed");
+                case SKIPPED -> Texts.get("extract.statusSkipped");
+                case SUCCESS_WARNED -> Texts.get("extract.statusWarned");
                 default -> null;
             };
             if (prefix != null) {
-                host.extractResultBanner().setText(prefix + I18n.get("list.colon") + it.extractDetail);
+                host.extractResultBanner().setText(prefix + Texts.get("list.colon") + it.extractDetail);
                 host.extractResultBanner().setVisible(true);
                 host.extractResultBanner().setManaged(true);
                 return;
             }
         }
         if (sel instanceof PreviewItem it && it.status == PreviewItem.Status.FAILED) {
-            host.extractResultBanner().setText(I18n.get("extract.parseFailed") + it.errorMsg);
+            host.extractResultBanner().setText(Texts.get("extract.parseFailed") + it.errorMsg);
             host.extractResultBanner().setVisible(true);
             host.extractResultBanner().setManaged(true);
             return;

@@ -1,8 +1,8 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.SourceParseService;
+import com.mhtextractor.app.Texts;
 import com.mhtextractor.config.AppConfig;
-import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import javafx.application.Platform;
@@ -97,7 +97,7 @@ public final class PreparseController {
                     boolean textMode = host.isTextMode();
                     SourceParseService.ItemParse result = SourceParseService.parse(item.path, params, textMode);
                     if (result.kind() == SourceParseService.Kind.UNPARSEABLE) {
-                        setItemStatus(token, item, PreviewItem.Status.FAILED, I18n.get("preview.unparseable"));
+                        setItemStatus(token, item, PreviewItem.Status.FAILED, Texts.get("preview.unparseable"));
                         continue;
                     }
                     if (textMode) {
@@ -110,7 +110,7 @@ public final class PreparseController {
                             result.kind() == SourceParseService.Kind.EMPTY ? PreviewItem.Status.EMPTY : PreviewItem.Status.READY,
                             null);
                 } catch (Exception e) {
-                    setItemStatus(token, item, PreviewItem.Status.FAILED, I18n.get("preview.parseFailed") + e.getMessage());
+                    setItemStatus(token, item, PreviewItem.Status.FAILED, Texts.get("preview.parseFailed") + e.getMessage());
                 }
             }
         }, "preview-preparse");
@@ -179,6 +179,6 @@ public final class PreparseController {
             host.progressBar().setProgress((double) done / total);
             host.setProgressBarActivity(ExtractOutcomeStyles.PROGRESS_PREPARSE);
         }
-        host.statusLabel().setText(I18n.get("preview.parseDone") + done + "/" + total);
+        host.statusLabel().setText(Texts.get("preview.parseDone") + done + "/" + total);
     }
 }
