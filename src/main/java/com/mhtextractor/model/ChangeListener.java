@@ -1,4 +1,4 @@
-package com.mhtextractor.util;
+package com.mhtextractor.model;
 
 /**
  * 极简变更监听器（会话 18 · E1.1，用于替换 JavaFX 属性）。

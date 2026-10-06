@@ -7,7 +7,7 @@ import com.mhtextractor.config.GuiStateManager;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.FileResult;
-import com.mhtextractor.util.ChangeListener;
+import com.mhtextractor.model.ChangeListener;
 import com.mhtextractor.util.DropResolver;
 import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;

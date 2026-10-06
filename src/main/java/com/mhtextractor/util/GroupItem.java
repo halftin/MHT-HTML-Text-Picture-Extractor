@@ -1,6 +1,7 @@
 package com.mhtextractor.util;
 
 import com.mhtextractor.config.AppConfig;
+import com.mhtextractor.model.ChangeListener;
 
 import java.util.ArrayList;
 import java.util.List;
