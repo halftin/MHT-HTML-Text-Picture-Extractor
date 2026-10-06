@@ -1,8 +1,8 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.PreviewImageData;
 import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.config.AppConfig;
-import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
@@ -208,7 +208,7 @@ public final class PreviewLoader {
                     final ThumbnailData thumb;
                     try {
                         byte[] data = Files.readAllBytes(pr.imagesDir().resolve(entry.file()));
-                        thumb = host.renderer().decodeThumb(new ImageExtractor.ImageData(
+                        thumb = host.renderer().decodeThumb(new PreviewImageData(
                                 entry.originalName(), entry.sourceId(), data), i, params);
                     } catch (IOException e) {
                         log.warn(I18n.msg("log.maincontroller.62", pr.imagesDir().resolve(entry.file())), e);

@@ -23,6 +23,10 @@ class PreviewNamingServiceTest {
         return new ImageExtractor.ImageData(filename, null, data);
     }
 
+    private static PreviewImageData pimg(String filename, byte[] data) {
+        return new PreviewImageData(filename, null, data);
+    }
+
     // ==================== applyTemplate（→ FileWriter.processTemplate） ====================
 
     @Test
@@ -98,19 +102,21 @@ class PreviewNamingServiceTest {
     void imageFileNameMatchesUnderlying() {
         byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 0};
         ImageExtractor.ImageData d = img("image_0.jpg", jpeg);
+        PreviewImageData p = pimg("image_0.jpg", jpeg);
         // 批量重命名：序号格式 00001.ext（renameIndex 1 起）
-        assertEquals("00002.jpg", PreviewNamingService.imageFileName(d, "jpg", true, 2, ""));
+        assertEquals("00002.jpg", PreviewNamingService.imageFileName(p, "jpg", true, 2, ""));
         assertEquals(ImageWriter.computeFileName(d, "jpg", true, 2, ""),
-                PreviewNamingService.imageFileName(d, "jpg", true, 2, ""));
+                PreviewNamingService.imageFileName(p, "jpg", true, 2, ""));
         // 合并不重命名：文件前缀 + 去扩展名原名
-        assertEquals("f01_image_0.jpg", PreviewNamingService.imageFileName(d, "jpg", false, 1, "f01_"));
+        assertEquals("f01_image_0.jpg", PreviewNamingService.imageFileName(p, "jpg", false, 1, "f01_"));
         assertEquals(ImageWriter.computeFileName(d, "jpg", false, 1, "f01_"),
-                PreviewNamingService.imageFileName(d, "jpg", false, 1, "f01_"));
+                PreviewNamingService.imageFileName(p, "jpg", false, 1, "f01_"));
         // 纯数字原名：加 img_ 前缀
         ImageExtractor.ImageData n = img("123.jpg", jpeg);
-        assertEquals("img_123.jpg", PreviewNamingService.imageFileName(n, "jpg", false, 1, ""));
+        PreviewImageData pn = pimg("123.jpg", jpeg);
+        assertEquals("img_123.jpg", PreviewNamingService.imageFileName(pn, "jpg", false, 1, ""));
         assertEquals(ImageWriter.computeFileName(n, "jpg", false, 1, ""),
-                PreviewNamingService.imageFileName(n, "jpg", false, 1, ""));
+                PreviewNamingService.imageFileName(pn, "jpg", false, 1, ""));
     }
 
     @Test
@@ -119,13 +125,13 @@ class PreviewNamingServiceTest {
         assertEquals(ImageWriter.computeFileName(null, "jpg", false, 1, ""),
                 PreviewNamingService.imageFileName(null, "jpg", false, 1, ""));
         // data 为 null 同样回落 unnamed
-        assertEquals("unnamed.png", PreviewNamingService.imageFileName(img("x.png", null), "png", false, 1, ""));
+        assertEquals("unnamed.png", PreviewNamingService.imageFileName(pimg("x.png", null), "png", false, 1, ""));
         assertEquals(ImageWriter.computeFileName(img("x.png", null), "png", false, 1, ""),
-                PreviewNamingService.imageFileName(img("x.png", null), "png", false, 1, ""));
+                PreviewNamingService.imageFileName(pimg("x.png", null), "png", false, 1, ""));
         // filename 为 null：sanitize → ""，stripExtension 回落 unnamed
         byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 0};
-        assertEquals("unnamed.jpg", PreviewNamingService.imageFileName(img(null, jpeg), "jpg", false, 1, ""));
+        assertEquals("unnamed.jpg", PreviewNamingService.imageFileName(pimg(null, jpeg), "jpg", false, 1, ""));
         assertEquals(ImageWriter.computeFileName(img(null, jpeg), "jpg", false, 1, ""),
-                PreviewNamingService.imageFileName(img(null, jpeg), "jpg", false, 1, ""));
+                PreviewNamingService.imageFileName(pimg(null, jpeg), "jpg", false, 1, ""));
     }
 }

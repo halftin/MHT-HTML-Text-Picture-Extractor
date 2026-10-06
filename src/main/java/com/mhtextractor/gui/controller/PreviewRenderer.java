@@ -1,9 +1,9 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.app.PreviewImageData;
 import com.mhtextractor.app.PreviewNamingService;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.config.AppConfig;
-import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.gui.util.ThumbnailFxBridge;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
@@ -214,7 +214,7 @@ public final class PreviewRenderer {
      * {@link com.mhtextractor.gui.util.ThumbnailFxBridge#toFxImage(ThumbnailData)}。失败时 pixels=null，
      * 渲染层显示"无法加载"占位 —— 与原 {@code image == null} 语义一致。</p>
      */
-    public ThumbnailData decodeThumb(ImageExtractor.ImageData imageData, int index, AppConfig params) {
+    public ThumbnailData decodeThumb(PreviewImageData imageData, int index, AppConfig params) {
         byte[] data = imageData.getData();
         String ext = PreviewNamingService.detectExtension(data, "jpg");
         boolean rename = params != null && params.isEnableBatchRenaming();

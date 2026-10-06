@@ -35,10 +35,13 @@ public final class PreviewNamingService {
     }
 
     /**
-     * 图片最终输出文件名（纯命名逻辑，预览窗口与写盘共用）：1:1 转发 {@link ImageWriter#computeFileName}。
+     * 图片最终输出文件名（纯命名逻辑，预览窗口与写盘共用）：以 {@link PreviewImageData} 为载体
+     * 转成 {@code ImageExtractor.ImageData} 后 1:1 转发 {@link ImageWriter#computeFileName}。
      */
-    public static String imageFileName(ImageExtractor.ImageData imageData, String fallbackExt,
+    public static String imageFileName(PreviewImageData imageData, String fallbackExt,
                                        boolean rename, int renameIndex, String filePrefix) {
-        return ImageWriter.computeFileName(imageData, fallbackExt, rename, renameIndex, filePrefix);
+        ImageExtractor.ImageData underlying = imageData == null ? null
+                : new ImageExtractor.ImageData(imageData.originalName(), imageData.sourceId(), imageData.data());
+        return ImageWriter.computeFileName(underlying, fallbackExt, rename, renameIndex, filePrefix);
     }
 }
