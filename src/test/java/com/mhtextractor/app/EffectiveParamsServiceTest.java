@@ -3,7 +3,7 @@ package com.mhtextractor.app;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;

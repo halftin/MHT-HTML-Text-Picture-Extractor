@@ -8,7 +8,7 @@ import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.util.OutputUnitPlanner;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 import com.mhtextractor.util.UnitProgressAggregator;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;

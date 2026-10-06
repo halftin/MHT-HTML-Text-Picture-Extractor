@@ -4,7 +4,7 @@ import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.app.DropResolver;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 import java.util.List;
 import javafx.scene.input.MouseEvent;
 

@@ -3,7 +3,7 @@ package com.mhtextractor.uicore;
 import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 
 /**
  * 「参数目标信息栏」的<b>纯文案层</b>（R1.4）：把「目标 + 条目显示名 + 组内是否混合」拼成一行文本。

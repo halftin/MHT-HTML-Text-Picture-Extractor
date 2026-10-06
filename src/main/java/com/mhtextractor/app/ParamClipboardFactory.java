@@ -4,7 +4,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 
 /**
  * 参数剪贴板构造工厂（P1-3）：把 {@link ParamClipboard} 的构造点从 gui 层下沉到 app 层，

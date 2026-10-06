@@ -221,7 +221,7 @@ public class UiProbe extends Application {
             // 与侧边栏同一份 ParamFormPane），按旧模态窗口同尺寸放进临时 Stage 体检其内容节点树。
             com.mhtextractor.gui.controller.ParamFormPane pane =
                     new com.mhtextractor.gui.controller.ParamFormPane();
-            pane.load(null, null, false, com.mhtextractor.util.ParamScope.GLOBAL);
+            pane.load(null, null, false, com.mhtextractor.model.ParamScope.GLOBAL);
             Stage dialog = new Stage();
             dialog.initOwner(owner);
             dialog.setTitle(I18n.get("dialog.title"));

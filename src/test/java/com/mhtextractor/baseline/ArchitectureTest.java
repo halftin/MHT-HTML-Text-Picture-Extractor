@@ -278,7 +278,7 @@ class ArchitectureTest {
      * P3-3b-21 {@code DropResolver} 与 {@code UndoManager} 迁入 app 包，-2（两者退出 gui 直连）；
      * P3-3b-22 提取统计经 app 层中性 DTO {@code ExtractionStats} 收口，-1（BatchProcessor 退出 gui 直连）。
      */
-    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 3;
+    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 2;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

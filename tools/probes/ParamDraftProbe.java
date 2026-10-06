@@ -4,7 +4,7 @@ import com.mhtextractor.gui.controller.ParamFormPane;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.GroupItem;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Node;

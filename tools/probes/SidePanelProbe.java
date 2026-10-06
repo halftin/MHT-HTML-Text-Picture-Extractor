@@ -15,7 +15,7 @@ import com.mhtextractor.gui.controller.PreviewRenderer;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ThumbnailData;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;

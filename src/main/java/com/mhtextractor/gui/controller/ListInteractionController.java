@@ -9,7 +9,7 @@ import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.app.DropResolver;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 import com.mhtextractor.app.UndoManager;
 import javafx.animation.ParallelTransition;
 import javafx.animation.TranslateTransition;
@@ -62,7 +62,7 @@ public final class ListInteractionController implements MainViewActions {
         List<com.mhtextractor.model.PreviewItem> allVisibleItems();
         boolean isTextMode();
         AppConfig effectiveForObject(Object item);
-        com.mhtextractor.util.ParamScope.Status effectiveStatus(Object item);
+        com.mhtextractor.model.ParamScope.Status effectiveStatus(Object item);
         int visibleMemberCount(GroupItem<com.mhtextractor.model.PreviewItem> group);
         long unitIndex(com.mhtextractor.model.PreviewItem item);
         boolean isListAnimating();                                     // C3 动画锁（仍留在 MainController）

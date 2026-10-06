@@ -12,7 +12,7 @@ import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.util.OutputUnitPlanner;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 import javafx.application.Platform;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContextMenu;
@@ -59,7 +59,7 @@ import java.util.Set;
  *
  * <p><b>步骤 6 拆分口径</b>：本类内嵌的业务级断言已按组外迁至各业务包 JUnit 测试——
  * 导入规划扫描（原统一导入「阶段一」）→ {@code util.MhtImportPlannerTest}；
- * 输出单元规划与参数作用域语义 → {@code util.OutputUnitPlannerTest / util.ParamScopeTest /
+ * 输出单元规划与参数作用域语义 → {@code util.OutputUnitPlannerTest / ParamScopeTest /
  * app.EffectiveParamsServiceTest}；预览缓存 key/命中 → {@code cache.PreviewCacheKeyTest /
  * cache.PreviewCacheStoreTest / app.PreviewServiceTest}。留在本类的都是用户可观察结果的断言
  * （列表项 / 提醒卡 / 按钮态 / 输出文件），断言总数不因拆分而减少。</p>

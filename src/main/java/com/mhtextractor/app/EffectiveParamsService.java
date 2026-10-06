@@ -4,7 +4,7 @@ import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.util.FingerprintEncoder;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 
 import java.util.ArrayList;
 import java.util.List;

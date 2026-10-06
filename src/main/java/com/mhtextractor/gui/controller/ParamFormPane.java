@@ -7,7 +7,7 @@ import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.gui.component.ParamTargetBar;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.uicore.ParamTargetText;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;

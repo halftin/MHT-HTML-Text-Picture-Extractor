@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.component;
 
 import com.mhtextractor.uicore.ParamTargetText;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;

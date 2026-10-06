@@ -10,7 +10,7 @@ import com.mhtextractor.model.ChangeListener;
 import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.model.GroupItem;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 import javafx.event.Event;
 import lombok.extern.slf4j.Slf4j;
 import javafx.geometry.Insets;

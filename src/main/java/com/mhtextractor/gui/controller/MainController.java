@@ -20,7 +20,7 @@ import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.app.DropResolver;
-import com.mhtextractor.util.ParamScope;
+import com.mhtextractor.model.ParamScope;
 import com.mhtextractor.app.UndoManager;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
