@@ -1,7 +1,7 @@
 package com.mhtextractor.processor;
 
 import com.mhtextractor.model.ExtractWarning;
-import com.mhtextractor.util.ExtractOutcome;
+import com.mhtextractor.model.ExtractOutcome;
 
 import java.util.List;
 

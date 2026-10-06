@@ -2,7 +2,7 @@ package com.mhtextractor.processor;
 
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.util.ExtractOutcome;
+import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.OutputUnitPlanner;
 import org.junit.jupiter.api.Test;

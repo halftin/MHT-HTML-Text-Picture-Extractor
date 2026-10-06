@@ -8,7 +8,7 @@ import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.util.ChangeListener;
 import com.mhtextractor.util.DropResolver;
-import com.mhtextractor.util.ExtractOutcome;
+import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.ParamScope;
 import javafx.event.Event;

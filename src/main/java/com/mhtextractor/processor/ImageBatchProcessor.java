@@ -11,7 +11,7 @@ import com.mhtextractor.extractor.ImageSource;
 import com.mhtextractor.extractor.InMemoryImageSource;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.ExtractWarning;
-import com.mhtextractor.util.ExtractOutcome;
+import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.util.FileUtils;
 import com.mhtextractor.util.SanitizeUtils;
 import lombok.extern.slf4j.Slf4j;

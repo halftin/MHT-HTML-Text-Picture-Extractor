@@ -4,7 +4,7 @@ import com.mhtextractor.model.ExtractWarning;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.FileResult;
-import com.mhtextractor.util.ExtractOutcome;
+import com.mhtextractor.model.ExtractOutcome;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;

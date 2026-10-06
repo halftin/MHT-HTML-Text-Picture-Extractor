@@ -1,6 +1,6 @@
 package com.mhtextractor.uicore;
 
-import com.mhtextractor.util.ExtractOutcome;
+import com.mhtextractor.model.ExtractOutcome;
 
 import java.util.List;
 

@@ -9,7 +9,7 @@ import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.FileResult;
 import com.mhtextractor.util.ChangeListener;
 import com.mhtextractor.util.DropResolver;
-import com.mhtextractor.util.ExtractOutcome;
+import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.MhtImportPlanner;
 import com.mhtextractor.util.OutputUnitPlanner;

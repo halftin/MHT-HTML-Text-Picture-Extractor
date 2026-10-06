@@ -6,7 +6,7 @@ import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
-import com.mhtextractor.util.ExtractOutcome;
+import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 import com.mhtextractor.util.GroupStructure;
 import javafx.scene.control.Label;

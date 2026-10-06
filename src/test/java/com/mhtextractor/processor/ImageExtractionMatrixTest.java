@@ -8,7 +8,7 @@ import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.core.SourceParser;
 import com.mhtextractor.core.SourceParsers;
-import com.mhtextractor.util.ExtractOutcome;
+import com.mhtextractor.model.ExtractOutcome;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

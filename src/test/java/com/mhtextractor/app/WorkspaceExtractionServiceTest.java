@@ -193,7 +193,7 @@ class WorkspaceExtractionServiceTest {
         if (resultPaths != null) {
             for (String p : resultPaths) {
                 s.addFileResult(new com.mhtextractor.processor.FileResult(p,
-                        com.mhtextractor.util.ExtractOutcome.SUCCESS, null, List.of()));
+                        com.mhtextractor.model.ExtractOutcome.SUCCESS, null, List.of()));
             }
         }
         return s;

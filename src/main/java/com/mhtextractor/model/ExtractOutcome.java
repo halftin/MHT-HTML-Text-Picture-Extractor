@@ -1,4 +1,4 @@
-package com.mhtextractor.util;
+package com.mhtextractor.model;
 
 /**
  * 单文件提取结果（《提取结果状态需求文档.md》）：NONE 无结果；SUCCESS 成功；

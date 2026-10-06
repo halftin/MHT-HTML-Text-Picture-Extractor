@@ -4,7 +4,6 @@ import com.mhtextractor.cache.PreviewCacheMeta;
 import com.mhtextractor.config.AppConfig;
 import com.mhtextractor.extractor.ImageExtractor;
 import com.mhtextractor.util.ChangeListener;
-import com.mhtextractor.util.ExtractOutcome;
 import com.mhtextractor.util.GroupItem;
 
 import java.time.LocalDateTime;

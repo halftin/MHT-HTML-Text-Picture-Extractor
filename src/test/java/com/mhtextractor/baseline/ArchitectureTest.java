@@ -270,9 +270,10 @@ class ArchitectureTest {
      * P3-3b-8 命名配置与像素打包下沉 app 层 {@code NamedConfigService} / {@code PreviewPixelService}，
      * -2（ConfigManager / ThumbnailPixels 退出 gui）；
      * P3-3b-12 列表选择规则下沉 app 层 {@code SelectionRules}，-1（SelectionState 退出 gui）；
-     * P3-3b-13 提取结果回写下沉 app 层 {@code ExtractResultService}，-1（FileResult 退出 gui）。
+     * P3-3b-13 提取结果回写下沉 app 层 {@code ExtractResultService}，-1（FileResult 退出 gui）；
+     * P3-3b-14 提取结果枚举迁入 model 包 {@code ExtractOutcome}，-1（ExtractOutcome 退出 gui）。
      */
-    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 13;
+    private static final int GUI_DIRECT_BUSINESS_TYPES_MAX = 12;
 
     @Test
     void testSupportSurfaceDoesNotGrow() throws IOException {

@@ -2,7 +2,7 @@ package com.mhtextractor.gui.component;
 
 import com.mhtextractor.baseline.SourceScanUtils;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
-import com.mhtextractor.util.ExtractOutcome;
+import com.mhtextractor.model.ExtractOutcome;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;

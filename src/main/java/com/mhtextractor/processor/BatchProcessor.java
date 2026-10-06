@@ -4,7 +4,7 @@ import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.extractor.WarningProvider;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.ExtractWarning;
-import com.mhtextractor.util.ExtractOutcome;
+import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.util.FileUtils;
 import com.mhtextractor.util.SourceKinds;
 import lombok.Data;
