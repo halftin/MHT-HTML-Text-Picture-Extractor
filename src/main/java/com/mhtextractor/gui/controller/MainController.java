@@ -156,10 +156,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 显示序：ListView 直接渲染的展平列表，按数据序实时重建（F5 显示序/数据序分离）—— adapter.displayItems() 的只读别名 */
     private final ObservableList<Object> displayItems = adapter.displayItems();
 
-    /** 工作区后台活动代次：预解析/换目录/换模式/开始提取时自增，取消旧任务 */
-    int parseToken = 0;
-    /** 列表选择代次：切换选择时自增，取消过期的图片懒加载 */
-    private int requestToken = 0;
     /** 预览会话缓存（需求 2 会话 9）：存储层 + 四条生命周期规则；root = <java.io.tmpdir>/mht-extractor-preview（P6/P8，与 HtmlExportBuilder 的 mht-extractor-view 并列） */
     final PreviewSession previewCacheLifecycle = PreviewSession.create();
     /**
@@ -305,18 +301,18 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public int unitIndex(Object item) { return (int) MainController.this.unitIndex((PreviewItem) item); }
         @Override public PreviewSession session() { return previewCacheLifecycle; }
     });
-    /** 预览按需加载编排协作者（C1c）：原 {@code onPreviewEffect()} 主体原样外迁到 {@link PreviewLoader}，
-     *  宿主能力经 {@link PreviewLoader.Host} 收窄；文案键、日志键（log.maincontroller.61/62/63）、
-     *  线程名（preview-image-load / preview-cache-stale-delete）与代次语义全部保持不变。 */
+    private final com.mhtextractor.uiport.Uiport activityPort = new com.mhtextractor.app.InProcessUiport(ws,
+            request -> { throw new UnsupportedOperationException("Activity confirmations use port events"); },
+            new com.mhtextractor.app.WorkspaceActivityService(new com.mhtextractor.app.WorkspaceActivityService.Context() {
+                public List<PreviewItem> items() { return ws.allItems(); }
+                public boolean textMode() { return isTextMode(); }
+                public AppConfig effectiveParams(PreviewItem item) { return effectiveForObject(item); }
+                public AppConfig effectiveImageParams(PreviewItem item) {
+                    return ParamScope.effectiveImageParams(item.parentGroup, item.imageItemParams, paramDomain.imageParamsCache());
+                }
+            }, previewService, previewRenderer::decodeThumb, Platform::runLater));
     final PreviewLoader previewLoader = new PreviewLoader(new PreviewLoader.Host() {
-        @Override public int requestToken() { return requestToken; }
-        @Override public int parseToken() { return parseToken; }
         @Override public Object currentSelection() { return MainController.this.currentSelection(); }
-        @Override public AppConfig effectiveParams(Object item) { return MainController.this.effectiveForObject(item); }
-        @Override public AppConfig effectiveImageParams(PreviewItem item) {
-            return ParamScope.effectiveImageParams(item.parentGroup, item.imageItemParams, paramDomain.imageParamsCache());
-        }
-        @Override public PreviewService previewService() { return previewService; }
         @Override public PreviewRenderer renderer() { return previewRenderer; }
         @Override public ProgressBar progressBar() { return refs.progressBar(); }
         @Override public Label statusLabel() { return refs.statusLabel(); }
@@ -324,26 +320,16 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public Button previewEffectButton() { return refs.previewEffectButton(); }
         @Override public boolean extractionRunning() { return running().get(); }
         @Override public void setProgressBarActivity(String styleClass) { MainController.this.setProgressBarActivity(styleClass); }
-        @Override public void updateProgressStatus(int token) { preparseController.updateProgressStatus(token); }
+        @Override public void updateProgressStatus(long token) { preparseController.updateProgressStatus(token); }
         @Override public void refreshList() { refs.fileListView().refresh(); }
-    });
-    /**
-     * 预解析编排协作者（C5）：全量/增量预解析、条目状态回写与预解析进度从本类原样外迁到
-     * {@link PreparseController}；宿主能力经 {@link PreparseController.Host} 收窄为具名方法
-     * （本匿名类逐个转发到下方保留成员）。文案键、线程名（preview-preparse）、代次语义
-     * （parseToken 留在本类）与进度条样式不变。包级字段：测试源集 AcceptanceDriver 经
-     * {@code mc.preparseController.updateProgressStatus(token)} 驱动。
-     */
+    }, activityPort);
+    /** 预解析进度与结果呈现；代际由活动端口持有。 */
     final PreparseController preparseController = new PreparseController(new PreparseController.Host() {
-        @Override public int parseToken() { return parseToken; }
-        @Override public int nextParseToken() { return ++parseToken; }
         @Override public boolean extractionRunning() { return running().get(); }
         @Override public boolean isPreviewLoading() { return previewLoader.isActive(); }
         @Override public boolean isDragActive() { return listInteraction.isDragActive(); }
         @Override public boolean isAnimating() { return groupCommand.isAnimating(); }
-        @Override public boolean isTextMode() { return MainController.this.isTextMode(); }
-        @Override public AppConfig effectiveParams(Object item) { return MainController.this.effectiveForObject(item); }
-        @Override public List<PreviewItem> allVisibleItems() { return MainController.this.allVisibleItems(); }
+        @Override public List<PreviewItem> allItems() { return ws.allItems(); }
         @Override public ProgressBar progressBar() { return refs.progressBar(); }
         @Override public Label statusLabel() { return refs.statusLabel(); }
         @Override public Object currentSelection() { return MainController.this.currentSelection(); }
@@ -352,7 +338,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void updateInfoArea(Object sel) { infoPresenter.updateInfoArea(sel); }
         @Override public void updateContentArea(Object sel) { MainController.this.updateContentArea(sel); }
         @Override public void setProgressBarActivity(String styleClass) { MainController.this.setProgressBarActivity(styleClass); }
-    });
+    }, activityPort);
     /**
      * 工作区信息呈现协作者（C5）：模式摘要、选中信息区与提取结果展示从本类原样外迁到
      * {@link WorkspaceInfoPresenter}；宿主能力经 {@link WorkspaceInfoPresenter.Host} 收窄为具名方法
@@ -408,12 +394,12 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public boolean extractionRunning() { return MainController.this.running().get(); }
         @Override public Object animLockedSelection() { return groupCommand.animLockedSelection(); }
         @Override public boolean isCurrentModeConfirmed() { return currentModeConfirmed(); }
-        @Override public void cancelPreviewLoad() { requestToken++; previewLoader.cancel(); }
+        @Override public void cancelPreviewLoad() { activityPort.commands().cancelPreviewLoad(); }
         @Override public void updateListButtons() { MainController.this.updateListButtons(); }
         @Override public void updateInfoArea(Object sel) { infoPresenter.updateInfoArea(sel); }
         @Override public void updateContentArea(Object sel) { MainController.this.updateContentArea(sel); }
         @Override public void updateAdjustCheck(Object sel) { MainController.this.updateAdjustCheck(sel); }
-        @Override public void updateProgressStatus() { preparseController.updateProgressStatus(parseToken); }
+        @Override public void updateProgressStatus() { preparseController.updateProgressStatus(preparseController.generation()); }
         @Override public void renderThumbnails(PreviewItem item) { previewRenderer.renderThumbnails(item); }
         @Override public void startPreParseFor(List<PreviewItem> items) { preparseController.startPreParseFor(items); }
         @Override public void clearPreviewCache(PreviewItem item) { item.resetPreviewState(); }
@@ -498,7 +484,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void cancelWorkspaceActivity() { MainController.this.cancelWorkspaceActivity(); }
         @Override public void startPreParseFor(List<PreviewItem> items) { preparseController.startPreParseFor(items); }
         @Override public void startPreParse() { preparseController.startPreParse(); }
-        @Override public void updateProgressStatus() { preparseController.updateProgressStatus(parseToken); }
+        @Override public void updateProgressStatus() { preparseController.updateProgressStatus(preparseController.generation()); }
     });
     /** Q10：参数剪贴板（R7.1-R7.7）—— 复制快照 + 批量应用编排；路由与应用本体注入参数域协作者的那两份实现 */
     private final com.mhtextractor.app.ParamClipboard paramClipboard = com.mhtextractor.app.ParamClipboardFactory.create(ws::push, paramDomain::paramScopeTarget, paramDomain::applyTargetParams);
@@ -857,9 +843,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     /** 取消进行中的预解析/图片懒加载等后台工作区活动 */
     void cancelWorkspaceActivity() {
-        parseToken++;
-        requestToken++;
-        previewLoader.cancel();
+        activityPort.commands().cancelWorkspaceActivity();
     }
 
     // ==================== 模式切换与工作区 UI 状态 ====================
@@ -947,7 +931,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             preparseController.startPreParse();
         }
         // 方案A：切模式后同步进度条状态（新模式无参数条目 → 隐藏；否则显示新模式解析进度）
-        preparseController.updateProgressStatus(parseToken);
+        preparseController.updateProgressStatus(preparseController.generation());
     }
 
     private void showCurrentModeArea() {
@@ -1351,7 +1335,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         listInteraction.refreshSelectionUi();
         listInteraction.recomputeBadges();
         // 方案A：无条件刷新——全部无参数时 updateProgressStatus 会隐藏进度条且不动状态栏
-        preparseController.updateProgressStatus(parseToken);
+        preparseController.updateProgressStatus(preparseController.generation());
         Object selAfter = refs.fileListView().getSelectionModel().getSelectedItem();
         infoPresenter.updateInfoArea(selAfter);
         updateContentArea(selAfter);

@@ -10,6 +10,28 @@ import java.util.Objects;
  */
 public sealed interface PortEvent {
 
+    /** 取消或全量预解析推进代际；接收方应丢弃旧代际的排队回调。 */
+    record WorkspaceActivityChanged(long generation) implements PortEvent {}
+
+    record PreparseProgress(long generation, int done, int total) implements PortEvent {}
+
+    record PreparseStarted(long generation) implements PortEvent {}
+
+    /** 每完成一个条目交付一次，包括解析失败；不是整批结束通知。 */
+    record PreparseFinished(long generation, PreparseResult result) implements PortEvent {}
+
+    /** generation 是独立的预览请求代际；旧任务不得终结新任务的在途状态。 */
+    record PreviewLoadStateChanged(long generation, String path, boolean active) implements PortEvent {}
+
+    record PreviewConfirmationRequired(String path, String name, long sizeMiB) implements PortEvent {}
+
+    record PreviewLoadFailed(long generation, String path, boolean fileInfo, String detail) implements PortEvent {}
+
+    record PreviewThumbnail(long generation, String path, int index,
+                            com.mhtextractor.model.ThumbnailData thumbnail) implements PortEvent {}
+
+    record PreviewLoaded(long generation, String path) implements PortEvent {}
+
     /**
      * 工作区结构化变更（数据序 / 分组 / 勾选 / 参数 / 撤销等）。
      *

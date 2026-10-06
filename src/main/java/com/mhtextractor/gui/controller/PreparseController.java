@@ -1,173 +1,91 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.SourceParseService;
 import com.mhtextractor.app.Texts;
-import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
-import javafx.application.Platform;
+import com.mhtextractor.uiport.PortEvent;
+import com.mhtextractor.uiport.Uiport;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
-import lombok.extern.slf4j.Slf4j;
 
-import java.util.ArrayList;
 import java.util.List;
 
-/**
- * 预解析编排协作者（C5）：全量 / 增量预解析、条目状态回写与预解析进度从 {@code MainController}
- * <b>原样外迁</b> —— 文案键（preview.*）、线程名（preview-preparse）、{@code setDaemon(true)}、
- * 代次语义（parseToken 仍归宿主，本类经 {@link Host} 读写）、两处 {@code token != parseToken} 复查、
- * 进度条活动类 {@code ExtractOutcomeStyles.PROGRESS_PREPARSE} 与"提取运行期间进度条/状态栏
- * 归提取任务独占"的守卫全部保持不变。
- *
- * <p>宿主能力经 {@link Host} 收窄为具名方法：本类不持有 {@code MainController} / {@code MainViewRefs} /
- * {@code WorkspaceModel} / FXML namespace，也不得在数据序上直写（条目状态回写只改
- * {@link PreviewItem} 的 {@code status / errorMsg / cachedText / cachedTitle} 字段）。</p>
- *
- * <p>本类含 JavaFX，属 {@code gui} 层。</p>
- */
-@Slf4j
+/** 预解析事件的前端呈现：文案、视图模型和拖拽/提取期间的刷新守卫。 */
 public final class PreparseController {
-
-    /**
-     * 宿主能力面（C5）：对 {@code MainController} 的全部能力需求收窄为具名方法。
-     * 实现由 {@code MainController} 的匿名内部类提供（转发到其保留成员）。
-     */
     public interface Host {
-        int parseToken();                                 // = MainController.parseToken
-        int nextParseToken();                             // = ++parseToken
-        boolean extractionRunning();                      // = running().get()
-        boolean isPreviewLoading();                       // = previewLoader.isActive()
-        boolean isDragActive();                           // = listInteraction.isDragActive()
-        boolean isAnimating();                            // = groupCommand.isAnimating()
-        boolean isTextMode();                             // = isTextMode()
-        AppConfig effectiveParams(Object item);           // = effectiveForObject(item)
-        List<PreviewItem> allVisibleItems();              // = allVisibleItems()
-        ProgressBar progressBar();                        // = refs.progressBar()
-        Label statusLabel();                              // = refs.statusLabel()
-        Object currentSelection();                        // = refs.fileListView().getSelectionModel().getSelectedItem()
-        void refreshList();                               // = refs.fileListView().refresh()
-        void recomputeBadges();                           // = listInteraction.recomputeBadges()
-        void updateInfoArea(Object sel);                  // = infoPresenter.updateInfoArea(sel)
-        void updateContentArea(Object sel);               // = MainController.updateContentArea(sel)
-        void setProgressBarActivity(String styleClass);   // = setProgressBarActivity(...)
+        boolean extractionRunning();
+        boolean isPreviewLoading();
+        boolean isDragActive();
+        boolean isAnimating();
+        List<PreviewItem> allItems();
+        ProgressBar progressBar();
+        Label statusLabel();
+        Object currentSelection();
+        void refreshList();
+        void recomputeBadges();
+        void updateInfoArea(Object sel);
+        void updateContentArea(Object sel);
+        void setProgressBarActivity(String styleClass);
     }
 
     private final Host host;
+    private final Uiport port;
 
-    public PreparseController(Host host) {
+    public PreparseController(Host host, Uiport port) {
         this.host = host;
+        this.port = port;
+        port.events().subscribe(this::accept);
     }
 
-    void startPreParse() {
-        List<PreviewItem> targets = host.allVisibleItems();
-        if (targets.isEmpty()) {
-            return;
-        }
-        // 提取运行期间进度条归提取任务独占（相邻修复），预解析照常跑但不动进度条
-        if (!host.extractionRunning()) {
+    public long generation() { return port.queries().activityGeneration(); }
+
+    void startPreParse() { port.commands().startPreparse(); }
+
+    void startPreParseFor(List<PreviewItem> targets) {
+        port.commands().startPreparseFor(targets.stream().map(i -> i.path).toList());
+    }
+
+    private void accept(PortEvent event) {
+        if (event instanceof PortEvent.PreparseStarted started) {
+            if (started.generation() != generation() || host.extractionRunning()) return;
             host.progressBar().setVisible(true);
             host.progressBar().setProgress(0);
             host.setProgressBarActivity(ExtractOutcomeStyles.PROGRESS_PREPARSE);
-        }
-        // 快照迭代目标，避免解析期间列表被增量导入/移除修改导致并发异常
-        preParseItems(new ArrayList<>(targets), host.nextParseToken());
-    }
-
-    /** 增量导入专用：仅预解析新增项目，沿用当前代次（不打断进行中的全量解析） */
-    void startPreParseFor(List<PreviewItem> targets) {
-        preParseItems(new ArrayList<>(targets), host.parseToken());
-    }
-
-    private void preParseItems(List<PreviewItem> targets, int token) {
-        if (targets.isEmpty()) {
-            return;
-        }
-        Thread t = new Thread(() -> {
-            for (PreviewItem item : targets) {
-                if (token != host.parseToken()) {
-                    return;
-                }
-                // 每条目按生效参数解析（6.5）：组参数已设置用组参数，否则继承全局；无生效参数留待参数确认后解析
-                AppConfig params = host.effectiveParams(item);
-                if (params == null) {
-                    continue;
-                }
-                try {
-                    boolean textMode = host.isTextMode();
-                    SourceParseService.ItemParse result = SourceParseService.parse(item.path, params, textMode);
-                    if (result.kind() == SourceParseService.Kind.UNPARSEABLE) {
-                        setItemStatus(token, item, PreviewItem.Status.FAILED, Texts.get("preview.unparseable"));
-                        continue;
-                    }
-                    if (textMode) {
-                        item.cachedText = result.text();
-                    }
-                    if (result.titleAssigned()) {
-                        item.cachedTitle = result.title();
-                    }
-                    setItemStatus(token, item,
-                            result.kind() == SourceParseService.Kind.EMPTY ? PreviewItem.Status.EMPTY : PreviewItem.Status.READY,
-                            null);
-                } catch (Exception e) {
-                    setItemStatus(token, item, PreviewItem.Status.FAILED, Texts.get("preview.parseFailed") + e.getMessage());
-                }
-            }
-        }, "preview-preparse");
-        t.setDaemon(true);
-        t.start();
-    }
-
-    private void setItemStatus(int token, PreviewItem item, PreviewItem.Status st, String err) {
-        if (token != host.parseToken()) {
-            return;
-        }
-        Platform.runLater(() -> {
-            if (token != host.parseToken()) {
-                return;
-            }
-            item.status = st;
-            item.errorMsg = err == null ? "" : err;
-            if (item.removed) {
-                // 已移除项：状态已记录（撤销恢复后可见），跳过 UI 刷新
-                return;
-            }
+        } else if (event instanceof PortEvent.PreparseFinished finished) {
+            if (finished.generation() != generation()) return;
+            var result = finished.result();
+            // 模型状态已由应用层交付；这里只拼接本地化文案并刷新当前投影。
+            PreviewItem item = host.allItems().stream()
+                    .filter(i -> i.path.equals(result.path())).findFirst().orElse(null);
+            if (item == null) return;
+            item.errorMsg = result.errorKey() == null ? ""
+                    : Texts.get(result.errorKey()) + result.errorDetail();
+            if (item.removed) return;
             if (!host.isDragActive() && !host.isAnimating()) {
-                // 拖拽/折叠动画期间暂停列表刷新，避免打乱动画画面；动画结束后统一重算
                 host.refreshList();
                 host.recomputeBadges();
             }
             Object sel = host.currentSelection();
             host.updateInfoArea(sel);
-            if (sel == item) {
-                host.updateContentArea(item);
-            }
-            updateProgressStatus(token);
-        });
+            if (sel == item) host.updateContentArea(item);
+        } else if (event instanceof PortEvent.PreparseProgress progress) {
+            if (progress.generation() == generation()) renderProgress(progress.done(), progress.total());
+        }
     }
 
-    void updateProgressStatus(int token) {
-        if (token != host.parseToken()) {
-            return;
-        }
-        // 相邻修复（拍板 2026-09-24）：提取运行期间进度条/状态栏归提取任务独占，
-        // 预解析完成等回调一律不更新（避免覆盖提取进度显示）
-        if (host.extractionRunning()) {
-            return;
-        }
+    void updateProgressStatus(long token) {
+        if (token == generation()) port.commands().refreshPreparseProgress();
+    }
+
+    private void renderProgress(int done, int total) {
+        if (host.extractionRunning()) return;
         if (host.isPreviewLoading()) {
             host.progressBar().setVisible(true);
             host.progressBar().setProgress(-1);
             return;
         }
-        // 拍板 2026-09-24（方案A）：只统计有生效参数的条目。无参数条目由 preParseItems 跳过
-        // （留待参数确认后解析），不参与进度，否则独立参数场景下进度条会卡在中间。
-        List<PreviewItem> vis = host.allVisibleItems().stream()
-                .filter(i -> host.effectiveParams(i) != null).toList();
-        long total = vis.size();
-        long done = vis.stream().filter(i -> i.status != PreviewItem.Status.WAITING).count();
         if (total == 0) {
-            host.progressBar().setVisible(false);   // 全部无生效参数：不预解析，不动状态栏文案
+            host.progressBar().setVisible(false);
             host.setProgressBarActivity(null);
             return;
         }

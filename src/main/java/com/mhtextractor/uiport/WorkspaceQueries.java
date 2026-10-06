@@ -8,6 +8,11 @@ import java.util.List;
  */
 public interface WorkspaceQueries {
 
+    long activityGeneration();
+    long previewGeneration();
+    /** null 表示没有在途预览。 */
+    String previewLoadingPath();
+
     /**
      * 工作区视图模型快照（一次性不可变；后续变更经 {@link PortEvents} 送达）。
      *

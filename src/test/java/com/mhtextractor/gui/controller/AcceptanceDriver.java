@@ -303,7 +303,7 @@ public final class AcceptanceDriver {
         }
 
         /** 进度条/状态栏刷新（包级；测试用 parseToken 精确驱动代次语义，手势不可控；C5 起经预解析协作者）。 */
-        public void updateProgressStatus(int token) {
+        public void updateProgressStatus(long token) {
             mc.preparseController.updateProgressStatus(token);
         }
 
@@ -372,18 +372,13 @@ public final class AcceptanceDriver {
         }
 
         /** 工作区后台活动代次（包级字段；内部计数器，无手势）。 */
-        public int parseToken() {
-            return mc.parseToken;
+        public long parseToken() {
+            return mc.preparseController.generation();
         }
 
-        /** 预览图片懒加载在途标记（包级字段 ×2：{@code MainController.previewLoader} +
-         *  {@code PreviewLoader.imageLoadActive}；测试用它做轮询等待语义）。 */
+        /** 从生产预览入口查询应用层在途状态，用于轮询等待。 */
         public boolean imageLoadActive() {
-            return mc.previewLoader.imageLoadActive;
-        }
-
-        public void imageLoadActive(boolean v) {
-            mc.previewLoader.imageLoadActive = v;
+            return mc.previewLoader.isActive();
         }
 
         /** 拖拽目标嵌套深度计数（包级字段；DnD 事件状态，无手势可复现）。 */

@@ -72,13 +72,14 @@ class UiportPortSliceTest {
     }
 
     @Test
-    void sealedHierarchyIsExactlyTheThreeEventRecords() {
+    void sealedHierarchyContainsWorkspaceAndActivityEventRecords() {
         Class<?>[] permitted = PortEvent.class.getPermittedSubclasses();
-        assertEquals(3, permitted.length);
+        assertEquals(12, permitted.length);
         assertTrue(PortEvent.WorkspaceChanged.class.isRecord());
         assertTrue(PortEvent.RunningChanged.class.isRecord());
         assertTrue(PortEvent.Notice.class.isRecord());
         for (Class<?> c : permitted) {
+            assertTrue(c.isRecord());
             assertTrue(PortEvent.class.isAssignableFrom(c));
         }
     }
@@ -102,6 +103,13 @@ class UiportPortSliceTest {
             @Override
             public WorkspaceCommands commands() {
                 return new WorkspaceCommands() {
+                    public void cancelWorkspaceActivity() {}
+                    public void cancelPreviewLoad() {}
+                    public void startPreparse() {}
+                    public void startPreparseFor(List<String> paths) {}
+                    public void refreshPreparseProgress() {}
+                    public void loadPreview(String path, boolean confirmed) {}
+                    public void awaitPreviewInFlight(long millis) {}
                     @Override
                     public void undo() {
                     }
@@ -115,6 +123,9 @@ class UiportPortSliceTest {
             @Override
             public WorkspaceQueries queries() {
                 return new WorkspaceQueries() {
+                    public long activityGeneration() { return 0; }
+                    public long previewGeneration() { return 0; }
+                    public String previewLoadingPath() { return null; }
                     public WorkspaceVm workspace() { return new WorkspaceVm(List.of(), List.of(), false, 0, TriState.NONE); }
                     public com.mhtextractor.model.AppConfig runtimeConfig() { throw new UnsupportedOperationException(); }
                     public List<OutputUnitVm> outputUnitPlan(boolean checkedOnly) { throw new UnsupportedOperationException(); }

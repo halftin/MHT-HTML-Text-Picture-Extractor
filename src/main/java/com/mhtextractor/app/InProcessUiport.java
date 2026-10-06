@@ -65,6 +65,7 @@ public final class InProcessUiport implements Uiport {
     private final WorkspaceModel model;
     private final Confirmer confirmer;
     private final ExtractionPlanService plans;
+    private final WorkspaceActivityService activities;
 
     /**
      * @param model     工作区模型（数据序 / 分组关系 / 撤销命令的唯一所有者）
@@ -83,14 +84,52 @@ public final class InProcessUiport implements Uiport {
     }
 
     public InProcessUiport(WorkspaceModel model, Confirmer confirmer, ExtractionPlanService plans) {
+        this(model, confirmer, plans, new WorkspaceActivityService(new WorkspaceActivityService.Context() {
+            public List<PreviewItem> items() { return model.allItems(); }
+            public boolean textMode() { return !plans.runtimeConfig().isImageModeEnabled(); }
+            public AppConfig effectiveParams(PreviewItem item) {
+                return plans.effectiveParams(item);
+            }
+            public AppConfig effectiveImageParams(PreviewItem item) {
+                return plans.effectiveImageParams(item);
+            }
+        }, new PreviewService(PreviewSession.create().lifecycle()),
+                (image, index, params) -> new com.mhtextractor.model.ThumbnailData(
+                        PreviewNamingService.imageFileName(image, PreviewNamingService.detectExtension(image.data(), "jpg"),
+                                params.isEnableBatchRenaming(), index + 1, ""), 0, 0, null),
+                Runnable::run));
+    }
+
+    public InProcessUiport(WorkspaceModel model, Confirmer confirmer, WorkspaceActivityService activities) {
+        this(model, confirmer, new ExtractionPlanService(new ExtractionPlanService.Context() {
+            public List<Object> dataOrder() { return model.topLevel(); }
+            public boolean imageMode() { return false; }
+            public AppConfig textParamsCache() { return null; }
+            public AppConfig imageParamsCache() { return null; }
+            public String inputFolder() { return null; }
+            public String outputFolder() { return ""; }
+            public boolean openFolderAfterComplete() { return false; }
+        }), activities);
+    }
+
+    public InProcessUiport(WorkspaceModel model, Confirmer confirmer, ExtractionPlanService plans,
+                          WorkspaceActivityService activities) {
         this.model = Objects.requireNonNull(model, "model");
         this.confirmer = Objects.requireNonNull(confirmer, "confirmer");
         this.plans = Objects.requireNonNull(plans, "plans");
+        this.activities = Objects.requireNonNull(activities, "activities");
     }
 
     @Override
     public WorkspaceCommands commands() {
         return new WorkspaceCommands() {
+            public void cancelWorkspaceActivity() { activities.cancelWorkspaceActivity(); }
+            public void cancelPreviewLoad() { activities.cancelPreviewLoad(); }
+            public void startPreparse() { activities.startPreparse(); }
+            public void startPreparseFor(List<String> paths) { activities.startPreparseFor(paths); }
+            public void refreshPreparseProgress() { activities.refreshPreparseProgress(); }
+            public void loadPreview(String path, boolean confirmed) { activities.loadPreview(path, confirmed); }
+            public void awaitPreviewInFlight(long millis) { activities.awaitPreviewInFlight(millis); }
             @Override
             public void undo() {
                 model.undo();
@@ -106,6 +145,9 @@ public final class InProcessUiport implements Uiport {
     @Override
     public WorkspaceQueries queries() {
         return new WorkspaceQueries() {
+            public long activityGeneration() { return activities.generation(); }
+            public long previewGeneration() { return activities.previewGeneration(); }
+            public String previewLoadingPath() { return activities.loadingPath(); }
             public WorkspaceVm workspace() { return snapshot(); }
             public AppConfig runtimeConfig() { return plans.runtimeConfig(); }
             public List<OutputUnitVm> outputUnitPlan(boolean checkedOnly) { return plans.outputUnitPlan(checkedOnly); }
@@ -120,7 +162,11 @@ public final class InProcessUiport implements Uiport {
             Consumer<WorkspaceChange> bridge = change ->
                     listener.accept(new PortEvent.WorkspaceChanged(change.kind().name()));
             model.addListener(bridge);
-            return () -> model.removeListener(bridge);   // 幂等：removeListener 对未订阅者是 no-op
+            AutoCloseable activitySubscription = activities.subscribe(listener);
+            return () -> {
+                model.removeListener(bridge);
+                activitySubscription.close();
+            };
         };
     }
 

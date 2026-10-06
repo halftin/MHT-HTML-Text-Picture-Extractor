@@ -47,6 +47,17 @@ public final class ExtractionPlanService {
                 context.inputFolder(), context.outputFolder(), context.openFolderAfterComplete());
     }
 
+    AppConfig effectiveParams(PreviewItem item) {
+        return com.mhtextractor.model.ParamScope.effectiveParams(item.parentGroup,
+                item.textItemParams, item.imageItemParams, context.imageMode(),
+                context.textParamsCache(), context.imageParamsCache());
+    }
+
+    AppConfig effectiveImageParams(PreviewItem item) {
+        return com.mhtextractor.model.ParamScope.effectiveImageParams(item.parentGroup,
+                item.imageItemParams, context.imageParamsCache());
+    }
+
     public List<OutputUnitVm> outputUnitPlan(boolean checkedOnly) {
         return plan(context.dataOrder(), context.imageMode(), context.textParamsCache(), context.imageParamsCache(),
                 sessionOutputFolder == null ? context.outputFolder() : sessionOutputFolder,

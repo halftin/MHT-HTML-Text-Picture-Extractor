@@ -396,7 +396,7 @@ public final class ParamDomainController {
 
     /**
      * 局部参数变更后刷新（R8 泛化，清除参数功能复用）：受影响条目旧缓存失效、按新生效参数重解析。
-     * 先取消在途后台活动（parseToken +1）作废旧代次在途解析结果；其它项目被代次打断的
+     * 先取消在途后台活动（活动代际 +1）作废旧代次在途解析结果；其它项目被代次打断的
      * 在途解析以同一新代次补偿续跑（只补仍处等待中的项，不重新解析已完成项，不误伤其它项目）。
      */
     private void refreshAfterTargetedParamsChange(List<PreviewItem> affected) {

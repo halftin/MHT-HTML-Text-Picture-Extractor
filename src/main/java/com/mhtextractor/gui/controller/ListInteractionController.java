@@ -70,12 +70,12 @@ public final class ListInteractionController implements MainViewActions {
         Object animLockedSelection();                                  // 动画锁定的选中项（可 null）
         boolean isCurrentModeConfirmed();
         // ---- 派生刷新 / 邻域动作（实现留在 MainController）----
-        void cancelPreviewLoad();                                      // requestToken++; previewLoader.cancel();
+        void cancelPreviewLoad();                                      // = 端口命令 cancelPreviewLoad()
         void updateListButtons();
         void updateInfoArea(Object sel);
         void updateContentArea(Object sel);
         void updateAdjustCheck(Object sel);
-        void updateProgressStatus();                                   // = updateProgressStatus(parseToken)
+        void updateProgressStatus();                                   // = updateProgressStatus(当前代际)
         void renderThumbnails(com.mhtextractor.model.PreviewItem item); // = previewRenderer.renderThumbnails(item)
         void startPreParseFor(List<com.mhtextractor.model.PreviewItem> items);
         void clearPreviewCache(com.mhtextractor.model.PreviewItem item);

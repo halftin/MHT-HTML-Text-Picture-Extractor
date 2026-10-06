@@ -30,7 +30,6 @@ direct	com.mhtextractor.gui.controller.MainController	isImporting	同包直访�
 direct	com.mhtextractor.gui.controller.MainController	listInteraction	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	onInputFolderChanged	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	paramDomain	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
-direct	com.mhtextractor.gui.controller.MainController	parseToken	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	preparseController	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	previewCacheLifecycle	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	previewLoader	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
@@ -89,7 +88,6 @@ direct	com.mhtextractor.gui.controller.ParamFormPane	titleUseRegexCheck	同包�
 direct	com.mhtextractor.gui.controller.ParamFormPane	useRegexCheck	同包直访（驱动类字节码常量池引用）；驱动: AgentExercise, FeatureExercise
 direct	com.mhtextractor.gui.controller.ParamSidePanel	pane	同包直访（驱动类字节码常量池引用）；驱动: FeatureExerciseSupport
 direct	com.mhtextractor.gui.controller.PreparseController	updateProgressStatus	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
-direct	com.mhtextractor.gui.controller.PreviewLoader	imageLoadActive	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 reflect	com.mhtextractor.app.WorkspaceModel	undoManager	src/test/java/com/mhtextractor/app/WorkspaceModelTest.java:41 getDeclaredField("undoManager")
 reflect	com.mhtextractor.model.AppConfig	imageModeEnabled	src/test/java/com/mhtextractor/app/EffectiveParamsServiceTest.java:474 getDeclaredField("imageModeEnabled")
 reflect	com.mhtextractor.gui.controller.FileListContextMenu	actions	tools/probes/ContextMenuProbe.java:143 getDeclaredField("actions")

@@ -1003,8 +1003,10 @@ class ArchitectureTest {
     // ==================== 7. 测试访问面冻结（D2 · 第 13 条不变式） ====================
 
     /** 测试访问面清单条目数上限：2026-10-05 S2（E2.1/E2.2）一次性上调至 124，此后只减不增；
-     *  2026-10-06 P2-1 删除 5 条 HtmlFindIndex（迁入 uicore 并放宽 public，public 成员不入冻结面）→ 119。 */
-    private static final int TEST_ACCESS_SURFACE_MAX = 119;
+     *  2026-10-06 P2-1 删除 5 条 HtmlFindIndex（迁入 uicore 并放宽 public，public 成员不入冻结面）→ 119；
+     *  2026-10-06 P3-B2 活动编排下沉：删除 {@code MainController.parseToken} 与
+     *  {@code PreviewLoader.imageLoadActive}（随类/字段消失）→ 116。 */
+    private static final int TEST_ACCESS_SURFACE_MAX = 116;
 
     /**
      * 「测试访问面冻结」不变式（D2）：三条断言合取 + 驱动文件完整性守卫，失败信息分区列出。
