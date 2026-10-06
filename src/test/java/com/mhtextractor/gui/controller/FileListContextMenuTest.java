@@ -310,8 +310,8 @@ class FileListContextMenuTest {
 
     /**
      * 完整链路（功能二）：勾选集合优先于右键目标 → 实际作用集合 → 计数 → 5 档文案。
-     * 用真实 {@link ParamDomainController#resolveTargets} 与 {@link ParamDomainController#countTargets}，
-     * 覆盖"勾选优先"这一已核实基线。
+     * 用真实 {@link com.mhtextractor.app.ParamTargets#resolve}（B4 起该纯函数下沉 app 层）与
+     * {@link ParamDomainController#countTargets}，覆盖"勾选优先"这一已核实基线。
      */
     @Test
     void checkedSelectionWinsOverContextTargetAndDrivesFiveTierText() {
@@ -323,7 +323,7 @@ class FileListContextMenuTest {
         group.getMembers().add(member);
 
         // 勾选集合为空 → 回退右键目标（1 个组外项）
-        List<Object> byFallback = ParamDomainController.resolveTargets(
+        List<Object> byFallback = com.mhtextractor.app.ParamTargets.resolve(
                 List.of(top1, top2), top1);
         assertEquals(List.of(top1), byFallback, "无勾选 → 回退右键目标");
         assertEquals(FileMenuModel.KEY_APPLY_THIS,
@@ -334,7 +334,7 @@ class FileListContextMenuTest {
         // 有勾选 → 勾选优先，右键目标被忽略
         top1.selected = true;
         top2.selected = true;
-        List<Object> byChecked = ParamDomainController.resolveTargets(List.of(top1, top2), member);
+        List<Object> byChecked = com.mhtextractor.app.ParamTargets.resolve(List.of(top1, top2), member);
         assertEquals(List.of(top1, top2), byChecked, "抓勾选优先于右键目标");
         var c = ParamDomainController.countTargets(byChecked);
         assertEquals(2, c.topLevelCount());
@@ -345,7 +345,7 @@ class FileListContextMenuTest {
         // 组内成员 + 组条目去重到同一组；再叠加 1 个组外项 → "到组及此项"
         top2.selected = false;
         member.selected = true;
-        List<Object> mixedSet = ParamDomainController.resolveTargets(List.of(top1, member), group);
+        List<Object> mixedSet = com.mhtextractor.app.ParamTargets.resolve(List.of(top1, member), group);
         var mc = ParamDomainController.countTargets(mixedSet);
         assertEquals(1, mc.topLevelCount(), "组外项数");
         assertEquals(1, mc.distinctGroupCount(), "去重组数");

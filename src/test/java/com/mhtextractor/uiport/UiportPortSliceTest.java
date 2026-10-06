@@ -74,7 +74,7 @@ class UiportPortSliceTest {
     @Test
     void sealedHierarchyContainsWorkspaceAndActivityEventRecords() {
         Class<?>[] permitted = PortEvent.class.getPermittedSubclasses();
-        assertEquals(12, permitted.length);
+        assertEquals(13, permitted.length, "B4 新增 ParamStateChanged（参数状态变更事件）");
         assertTrue(PortEvent.WorkspaceChanged.class.isRecord());
         assertTrue(PortEvent.RunningChanged.class.isRecord());
         assertTrue(PortEvent.Notice.class.isRecord());
@@ -115,6 +115,11 @@ class UiportPortSliceTest {
                     public void ungroup(long groupNo) {}
                     public void renameGroup(long groupNo, String newName) {}
                     public void toggleGroupExpanded(long groupNo) {}
+                    public void setGlobalParams(boolean imageMode, com.mhtextractor.model.AppConfig params) {}
+                    public void setGroupParams(long groupNo, boolean imageMode, com.mhtextractor.model.AppConfig params) {}
+                    public void setItemParams(String path, boolean imageMode, com.mhtextractor.model.AppConfig params) {}
+                    public void clearParams(List<TargetId> fallbackTargets, boolean imageMode) {}
+                    public void applyGlobalParams(TargetId target, boolean imageMode) {}
                     @Override
                     public void undo() {
                     }

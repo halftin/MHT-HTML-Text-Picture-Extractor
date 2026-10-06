@@ -1,5 +1,6 @@
 package com.mhtextractor.uiport;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -9,6 +10,40 @@ import java.util.Objects;
  * <p>文案一律「键 + 具名参数」（方案 §14 决策 13），渲染属前端；本包不得依赖任何国际化工具类。</p>
  */
 public sealed interface PortEvent {
+
+    /**
+     * 参数状态变更类别（B4）：后端参数命令完成「写入 + 撤销压栈 + 磁盘缓存失效（规则 a）」后
+     * 按此类别发布 {@link ParamStateChanged}；前端据此决定列表刷新与参数色刷新的粒度。
+     */
+    enum ParamChangeKind {
+        /** 全局已确认参数写入（{@code applyConfirmedParams} 语义）：全部条目受影响 */
+        SET_GLOBAL,
+        /** 组参数写入（{@code applyGroupParams} 语义）：该组未移除成员受影响 */
+        SET_GROUP,
+        /** 条目级参数写入（{@code applyItemParams} 语义）：该条目受影响 */
+        SET_ITEM,
+        /** 目标生效参数应用到全局（{@code applyGlobalParamsTo} 语义）：全部条目受影响 */
+        APPLY_GLOBAL,
+        /** 清除参数（{@code clearParamsForTargets} 语义，单条撤销）：被清除目标及组内成员受影响 */
+        CLEAR
+    }
+
+    /**
+     * 参数状态变更（B4）：后端已完成参数写入、撤销压栈与磁盘缓存失效；
+     * 前端按 {@link #kind()} 执行对应的列表刷新与参数色刷新链（事件在命令线程同步送达）。
+     *
+     * @param kind          变更类别
+     * @param imageMode     本次变更作用的模式（true = 图片，false = 文本）
+     * @param affectedPaths 受影响条目路径（SET_GLOBAL / APPLY_GLOBAL = 全部条目含已移除；
+     *                      其余 = 实际受影响条目；不可变副本）
+     */
+    record ParamStateChanged(ParamChangeKind kind, boolean imageMode, List<String> affectedPaths)
+            implements PortEvent {
+        public ParamStateChanged {
+            Objects.requireNonNull(kind, "kind");
+            affectedPaths = List.copyOf(Objects.requireNonNull(affectedPaths, "affectedPaths"));
+        }
+    }
 
     /** 取消或全量预解析推进代际；接收方应丢弃旧代际的排队回调。 */
     record WorkspaceActivityChanged(long generation) implements PortEvent {}

@@ -1,14 +1,17 @@
 package com.mhtextractor.uiport;
 
 /**
- * 工作区命令（P3-3a 最小切片起，B3 扩至勾选与分组命令集）：撤销、清场、
- * 勾选（{@code setChecked}）、分组（{@code group/ungroup/renameGroup}）与
- * 展开状态（{@code toggleGroupExpanded}）。
+ * 工作区命令（P3-3a 最小切片起，B3 扩至勾选与分组命令集，B4 扩至参数命令族）：撤销、清场、
+ * 勾选（{@code setChecked}）、分组（{@code group/ungroup/renameGroup}）、
+ * 展开状态（{@code toggleGroupExpanded}）与参数应用/清除
+ * （{@code setGlobalParams/setGroupParams/setItemParams/clearParams/applyGlobalParams}）。
  *
  * <p>命令语义由后端保证（数据序 / 分组关系 / 勾选 / 展开状态 / 撤销命令的唯一所有者是后端模型）；
  * 命令生效后经 {@link PortEvents} 推送变更事件，前端据此刷新投影。B3 的勾选 / 组名 /
  * 展开写入是<b>静默</b>的（不发布事件）：它们不改变数据序/结构，投影刷新由前端
- * 在命令返回后显式重建（GUI 的抽屉动画在动画起始帧重建显示序）。</p>
+ * 在命令返回后显式重建（GUI 的抽屉动画在动画起始帧重建显示序）。B4 的参数命令
+ * 是<b>事件驱动</b>的：后端完成「写入 + 撤销压栈 + 磁盘缓存失效」后发布
+ * {@link PortEvent.ParamStateChanged}，前端按事件执行列表 / 参数色刷新。</p>
  *
  * <p>后台活动代际、预解析和预览加载由应用层持有。</p>
  */
@@ -48,6 +51,47 @@ public interface WorkspaceCommands {
      * 重复应用同一目标值。组不存在时为 no-op。
      */
     void toggleGroupExpanded(long groupNo);
+
+    // ---- B4：参数命令族（处置项 3 / 4）----
+
+    /**
+     * 全局参数确认写入（{@code applyConfirmedParams} 语义）：整体替换当前模式已确认参数缓存，
+     * 压一条 PARAM_SET 撤销记录（批量应用期间经剪贴板累积为整批一条），失效全部条目磁盘缓存
+     * （规则 a），并发布 {@code ParamStateChanged(SET_GLOBAL, 全部条目路径)}。
+     */
+    void setGlobalParams(boolean imageMode, com.mhtextractor.model.AppConfig params);
+
+    /**
+     * 组参数写入（{@code applyGroupParams} 语义）：写入该组当前模式参数缓存，压 PARAM_SET
+     * 撤销记录，失效该组未移除成员的磁盘缓存，并发布 {@code ParamStateChanged(SET_GROUP, 成员路径)}。
+     * 组不存在时为 no-op（不发布事件、不压撤销记录）。
+     */
+    void setGroupParams(long groupNo, boolean imageMode, com.mhtextractor.model.AppConfig params);
+
+    /**
+     * 条目级参数写入（{@code applyItemParams} 语义）：写入该条目当前模式条目级参数，压 PARAM_SET
+     * 撤销记录，失效该条目磁盘缓存，并发布 {@code ParamStateChanged(SET_ITEM, [路径])}。
+     * 路径不存在时静默跳过（不发布事件、不压撤销记录）。
+     */
+    void setItemParams(String path, boolean imageMode, com.mhtextractor.model.AppConfig params);
+
+    /**
+     * 清除参数（{@code clearParamsForTargets} 语义）：<b>勾选优先</b> —— 后端按当前勾选事实
+     * （可见条目）解析实际作用集合，勾选为空时回退到 {@code fallbackTargets}（右键命中 /
+     * 当前选中的条目或组）；无参数目标自然跳过；一次操作一条 CLEAR_PARAMS 撤销记录
+     * （before 快照，一次撤销全部恢复）。发布 {@code ParamStateChanged(CLEAR, 受影响条目路径)}；
+     * 无任何可清除目标时为 no-op（不发布事件、不压撤销记录）。
+     */
+    void clearParams(java.util.List<TargetId> fallbackTargets, boolean imageMode);
+
+    /**
+     * 应用到全局（{@code applyGlobalParamsTo} 语义）：把目标（条目或组）的生效参数写入当前模式
+     * 全局缓存，并清空当前模式全部独立参数（条目级 + 组，含目标自身），另一模式不受影响；
+     * 压一条 APPLY_GLOBAL 撤销记录（应用前完整参数快照）。发布
+     * {@code ParamStateChanged(APPLY_GLOBAL, 全部条目路径)}；目标不可解析或生效参数为空时为
+     * no-op（不发布事件、不压撤销记录）。
+     */
+    void applyGlobalParams(TargetId target, boolean imageMode);
 
     /** 撤销上一条工作区命令（无可撤销时为 no-op）。 */
     void undo();

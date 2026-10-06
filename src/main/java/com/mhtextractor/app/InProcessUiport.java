@@ -2,9 +2,11 @@ package com.mhtextractor.app;
 
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.AppConfig;
+import com.mhtextractor.model.ParamScope;
 import com.mhtextractor.uiport.OutputUnitVm;
 import com.mhtextractor.uiport.ParamSchemaVm;
 import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uiport.TargetId;
 import com.mhtextractor.uiport.Confirmer;
 import com.mhtextractor.uiport.GroupVm;
 import com.mhtextractor.uiport.ItemVm;
@@ -41,7 +43,9 @@ import java.util.function.Consumer;
  * <ul>
  *   <li>{@link #commands()} —— 撤销 / 清场直接转发 {@link WorkspaceModel} 命令；
  *       勾选与分组命令集（B3）按路径 / 组号解析后转发（{@code setChecked/group/ungroup/
- *       renameGroup/toggleGroupExpanded}，未知路径静默跳过、未知组号 no-op）；</li>
+ *       renameGroup/toggleGroupExpanded}，未知路径静默跳过、未知组号 no-op）；
+ *       参数命令族（B4）转发 {@link WorkspaceParamCommandService}（写入 + 撤销压栈 +
+ *       缓存失效收口于 app 层，前端按 {@code ParamStateChanged} 事件刷新）；</li>
  *   <li>{@link #queries()} —— 每次调用<b>重新组装</b>只读快照（{@link WorkspaceVm}），
  *       <b>不缓存</b>：快照必须总是当前模型状态；</li>
  *   <li>{@link #events()} —— {@link WorkspaceModel#addListener} 桥接：{@link WorkspaceChange.Kind}
@@ -69,6 +73,7 @@ public final class InProcessUiport implements Uiport {
     private final Confirmer confirmer;
     private final ExtractionPlanService plans;
     private final WorkspaceActivityService activities;
+    private final WorkspaceParamCommandService paramCommands;
 
     /**
      * @param model     工作区模型（数据序 / 分组关系 / 撤销命令的唯一所有者）
@@ -117,10 +122,46 @@ public final class InProcessUiport implements Uiport {
 
     public InProcessUiport(WorkspaceModel model, Confirmer confirmer, ExtractionPlanService plans,
                           WorkspaceActivityService activities) {
+        this(model, confirmer, plans, activities, defaultParamCommands(model));
+    }
+
+    /** B4：带参数命令服务的便捷构造（计划用默认实现 —— 与 {@link #InProcessUiport(WorkspaceModel, Confirmer, WorkspaceActivityService)} 同口径）。 */
+    public InProcessUiport(WorkspaceModel model, Confirmer confirmer, WorkspaceActivityService activities,
+                          WorkspaceParamCommandService paramCommands) {
+        this(model, confirmer, new ExtractionPlanService(new ExtractionPlanService.Context() {
+            public List<Object> dataOrder() { return model.topLevel(); }
+            public boolean imageMode() { return false; }
+            public AppConfig textParamsCache() { return null; }
+            public AppConfig imageParamsCache() { return null; }
+            public String inputFolder() { return null; }
+            public String outputFolder() { return ""; }
+            public boolean openFolderAfterComplete() { return false; }
+        }), activities, paramCommands);
+    }
+
+    /**
+     * B4：带参数命令服务的完整构造（GUI 传入共享两套全局参数缓存与剪贴板压栈的服务；
+     * 无头测试用 {@link #defaultParamCommands} 的默认服务）。
+     */
+    public InProcessUiport(WorkspaceModel model, Confirmer confirmer, ExtractionPlanService plans,
+                          WorkspaceActivityService activities, WorkspaceParamCommandService paramCommands) {
         this.model = Objects.requireNonNull(model, "model");
         this.confirmer = Objects.requireNonNull(confirmer, "confirmer");
         this.plans = Objects.requireNonNull(plans, "plans");
         this.activities = Objects.requireNonNull(activities, "activities");
+        this.paramCommands = Objects.requireNonNull(paramCommands, "paramCommands");
+    }
+
+    /**
+     * 默认参数命令服务（无头调用方）：自持两套全局参数缓存、直连模型的撤销压栈与
+     * {@code WorkspaceParamService} 缓存失效（独立预览会话根，与 activities 的默认服务同一形态）。
+     */
+    static WorkspaceParamCommandService defaultParamCommands(WorkspaceModel model) {
+        WorkspaceParamService cacheService = new WorkspaceParamService(PreviewSession.create().lifecycle());
+        ParamClipboard clipboard = new ParamClipboard(model::push,
+                target -> ParamScope.GLOBAL, (target, imageMode, params) -> { });
+        return new WorkspaceParamCommandService(model, cacheService, new GlobalParameterCache(),
+                clipboard::pushParamUndo);
     }
 
     @Override
@@ -169,6 +210,33 @@ public final class InProcessUiport implements Uiport {
             public void toggleGroupExpanded(long groupNo) {
                 model.toggleGroupExpanded(groupNo);
             }
+
+            // ---- B4：参数命令族（处置项 3 / 4）----
+
+            @Override
+            public void setGlobalParams(boolean imageMode, AppConfig params) {
+                paramCommands.setGlobalParams(imageMode, params);
+            }
+
+            @Override
+            public void setGroupParams(long groupNo, boolean imageMode, AppConfig params) {
+                paramCommands.setGroupParams(groupNo, imageMode, params);
+            }
+
+            @Override
+            public void setItemParams(String path, boolean imageMode, AppConfig params) {
+                paramCommands.setItemParams(path, imageMode, params);
+            }
+
+            @Override
+            public void clearParams(List<TargetId> fallbackTargets, boolean imageMode) {
+                paramCommands.clearParams(fallbackTargets, imageMode);
+            }
+
+            @Override
+            public void applyGlobalParams(TargetId target, boolean imageMode) {
+                paramCommands.applyGlobalParams(target, imageMode);
+            }
         };
     }
 
@@ -193,9 +261,11 @@ public final class InProcessUiport implements Uiport {
                     listener.accept(new PortEvent.WorkspaceChanged(change.kind().name()));
             model.addListener(bridge);
             AutoCloseable activitySubscription = activities.subscribe(listener);
+            AutoCloseable paramSubscription = paramCommands.subscribe(listener);
             return () -> {
                 model.removeListener(bridge);
                 activitySubscription.close();
+                paramSubscription.close();
             };
         };
     }

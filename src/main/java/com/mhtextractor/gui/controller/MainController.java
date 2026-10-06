@@ -310,7 +310,17 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 public AppConfig effectiveImageParams(PreviewItem item) {
                     return ParamScope.effectiveImageParams(item.parentGroup, item.imageItemParams, paramDomain.imageParamsCache());
                 }
-            }, previewService, previewRenderer::decodeThumb, Platform::runLater));
+            }, previewService, previewRenderer::decodeThumb, Platform::runLater),
+            new com.mhtextractor.app.WorkspaceParamCommandService(new com.mhtextractor.app.WorkspaceParamCommandService.Context() {
+                public List<PreviewItem> allItems() { return ws.allItems(); }
+                public List<Object> dataOrder() { return items; }
+                public void pushUndo(UndoManager.Record<PreviewItem> record) { ws.push(record); }
+                public void pushParamUndo(boolean imageMode, String path, Integer groupNo, AppConfig before) {
+                    paramClipboard.pushParamUndo(imageMode, path, groupNo, before);
+                }
+                public com.mhtextractor.app.WorkspaceParamService cacheService() { return workspaceParamService; }
+                public com.mhtextractor.app.GlobalParameterCache globalParams() { return paramDomain.globalCache(); }
+            }));
     final PreviewLoader previewLoader = new PreviewLoader(new PreviewLoader.Host() {
         @Override public Object currentSelection() { return MainController.this.currentSelection(); }
         @Override public PreviewRenderer renderer() { return previewRenderer; }
@@ -468,8 +478,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public boolean currentModeConfirmed() { return MainController.this.currentModeConfirmed(); }
         @Override public long visibleCount() { return MainController.this.visibleCount(); }
         @Override public boolean isImporting() { return MainController.this.isImporting(); }
-        @Override public void pushUndo(UndoManager.Record<PreviewItem> record) { ws.push(record); }
-        @Override public void pushParamUndo(boolean imageMode, String path, Integer groupNo, AppConfig before) { paramClipboard.pushParamUndo(imageMode, path, groupNo, before); }
         @Override public void paramsChanged(boolean imageMode, PreviewItem item) { workspaceParamService.paramsChanged(imageMode, item); }
         @Override public void paramsChanged(boolean imageMode, Iterable<PreviewItem> items) { workspaceParamService.paramsChanged(imageMode, items); }
         @Override public void clearPreviewCache(PreviewItem item) { item.resetPreviewState(); }
@@ -487,7 +495,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void startPreParseFor(List<PreviewItem> items) { preparseController.startPreParseFor(items); }
         @Override public void startPreParse() { preparseController.startPreParse(); }
         @Override public void updateProgressStatus() { preparseController.updateProgressStatus(preparseController.generation()); }
-    });
+    }, activityPort);
     /** Q10：参数剪贴板（R7.1-R7.7）—— 复制快照 + 批量应用编排；路由与应用本体注入参数域协作者的那两份实现 */
     private final com.mhtextractor.app.ParamClipboard paramClipboard = com.mhtextractor.app.ParamClipboardFactory.create(ws::push, paramDomain::paramScopeTarget, paramDomain::applyTargetParams);
 
@@ -1137,13 +1145,13 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     // ==================== 清除参数（清除参数功能） ====================
 
-    /** 按钮行"清除参数"：目标 = 勾选集合（若有）否则单选，与"移除"一致 */
+    /** 按钮行"清除参数"：目标 = 勾选集合（若有）否则单选，与"移除"一致（勾选优先解析在 app 层端口命令内） */
     @FXML
     private void onClearParamsClicked() {
         if (groupCommand.isAnimating()) {
             return;
         }
-        paramDomain.clearParamsForTargets(paramDomain.resolveParamTargets(currentSelection()));
+        paramDomain.clearParamsFor(currentSelection());
     }
 
     /** 右键菜单"清除参数"：动作逻辑与按钮一致（勾选优先 → 右键目标；启用看右键目标） */
@@ -1151,7 +1159,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         if (groupCommand.isAnimating()) {
             return;
         }
-        paramDomain.clearParamsForTargets(paramDomain.resolveParamTargets(target));
+        paramDomain.clearParamsFor(target);
     }
 
     // ==================== 参数目标解析 / 清除参数 / 复制与应用（Q10） ====================
