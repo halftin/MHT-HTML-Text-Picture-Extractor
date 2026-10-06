@@ -1,6 +1,9 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.ExtractionPlanService;
+import com.mhtextractor.app.InProcessUiport;
+import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.uiport.WorkspaceQueries;
 import com.mhtextractor.app.ExtractionPreconditions;
 import com.mhtextractor.app.ExtractionStats;
 import com.mhtextractor.app.PreStartGate;
@@ -113,7 +116,7 @@ public final class ExtractionTaskCoordinator {
      * {@code buildRuntimeConfig} / {@code startExtractionTask} / {@code extractionUi} 里对
      * 主窗口状态的一处读取或回写。
      */
-    public interface Host {
+    public interface Host extends ExtractionPlanService.Context {
         /** 列表动画进行中（原 {@code groupCommand.isAnimating()} 入口守卫）。 */
         boolean isAnimating();
 
@@ -203,6 +206,10 @@ public final class ExtractionTaskCoordinator {
 
     private final WorkspaceExtractionService extractionService;
     private final Host host;
+    private final ExtractionPlanService plans;
+    private final WorkspaceQueries queries;
+
+    public WorkspaceQueries queries() { return queries; }
     /**
      * 启动前顺序门（决策 C 的落位）：{@code begin()} 里按插入顺序串行询问。
      * 生产链 = {@link PreStartGates#productionChain(PreStartGateContext)}（草稿门 → 未命名组门 → 合并名门，
@@ -253,16 +260,22 @@ public final class ExtractionTaskCoordinator {
      */
     public ExtractionTaskCoordinator(WorkspaceExtractionService extractionService, Host host,
                                      Runnable updateStartButtonState) {
+        this(extractionService, host, updateStartButtonState, new WorkspaceModel());
+    }
+
+    public ExtractionTaskCoordinator(WorkspaceExtractionService extractionService, Host host,
+                                     Runnable updateStartButtonState, WorkspaceModel model) {
         this.extractionService = extractionService;
         this.host = host;
+        this.plans = host == null ? null : new ExtractionPlanService(host);
+        this.queries = host == null ? null : new InProcessUiport(model, request -> {
+            throw new UnsupportedOperationException("Confirmation is handled by the extraction host");
+        }, plans).queries();
         this.updateStartButtonState = updateStartButtonState;
         if (host != null) {
             // 查询全部转发 host；三个展示回调 = 搬迁前私有门类里的 GuiNotifications + Texts.get 文案渲染（逐字）
             PreStartGateContext ctx = new PreStartGateContext() {
                 @Override public List<Object> dataOrder() { return host.dataOrder(); }
-                @Override public ExtractionPlanService.ItemView itemView() {
-                    return ExtractionPlanService.itemView(host.extractCheckedOnly());
-                }
                 @Override public boolean imageMode() { return host.imageMode(); }
                 @Override public AppConfig textParamsCache() { return host.textParamsCache(); }
                 @Override public AppConfig imageParamsCache() { return host.imageParamsCache(); }
@@ -613,8 +626,7 @@ public final class ExtractionTaskCoordinator {
 
     /** 以已确认参数（未确认时用默认参数）+ 主窗口 GUI 状态构建运行时提取配置（{@code AcceptanceDriver} 公开契约，签名不变；实现已下沉 {@code app.ExtractionPlanService}）。 */
     AppConfig buildRuntimeConfig() {
-        return ExtractionPlanService.runtimeConfig(host.imageMode(), host.imageParamsCache(), host.textParamsCache(),
-                host.inputFolder(), host.outputFolder(), host.openFolderAfterComplete());
+        return queries.runtimeConfig();
     }
 
     /**
@@ -646,15 +658,14 @@ public final class ExtractionTaskCoordinator {
         }
 
         // 构建输出单元计划（FX 线程快照；计划与单元参数补充已下沉 app.ExtractionPlanService，P3-3b-3）
-        var units = ExtractionPlanService.plan(host.dataOrder(), imageMode, host.textParamsCache(),
-                host.imageParamsCache(), sessionOutputFolder, host.inputFolder(), host.outputFolder(),
-                host.openFolderAfterComplete(), host.extractCheckedOnly());
+        plans.setSessionOutputFolder(sessionOutputFolder);
+        var units = queries.outputUnitPlan(host.extractCheckedOnly());
         log.info(Texts.msg("log.maincontroller.33", units.stream()
-                .map(u -> Texts.get("extract.groupFileCount", "group", u.label(),
+                .map(u -> Texts.get("extract.groupFileCount", "group", u.outputName() != null ? u.outputName() : Texts.get(u.labelKey()),
                         "count", u.fileCount())).toList()));
         var overrides = ExtractionPlanService.overrides(host.allVisibleItems());
 
-        run(new WorkspaceExtractionService.ExtractionRequest(sessionOutputFolder, units, overrides, imageMode,
+        run(WorkspaceExtractionService.fromPlan(sessionOutputFolder, units, overrides, imageMode,
                         recursionDecision()),
                 host.statusLabel(),
                 extractionUi(sessionOutputFolder, host.openFolderAfterComplete()));

@@ -46,6 +46,15 @@ import java.util.function.Supplier;
 @Slf4j
 public final class WorkspaceExtractionService {
 
+    /** 端口快照转为既有执行请求；不重新规划，确保执行的就是前端查询所得的计划。 */
+    public static ExtractionRequest fromPlan(String sessionOutputFolder,
+            List<com.mhtextractor.uiport.OutputUnitVm> units, Map<String, PerFileOverrides> overrides,
+            boolean imageMode, Supplier<Boolean> recursionCallback) {
+        return new ExtractionRequest(sessionOutputFolder, units.stream().map(u ->
+                new OutputUnitPlanner.OutputUnit(u.outputName(), u.group(), u.params(), u.paths(), u.outputPath()))
+                .toList(), overrides, imageMode, recursionCallback);
+    }
+
     /**
      * 单元执行器：一次输出单元提取的<b>接缝</b>。生产实现见 {@link #dispatch(PreviewCacheLifecycle)}；
      * 测试可注入桩，从而在不真跑 MHT 解析的前提下驱动统计累计 / 取消 / 失败继续等编排逻辑。

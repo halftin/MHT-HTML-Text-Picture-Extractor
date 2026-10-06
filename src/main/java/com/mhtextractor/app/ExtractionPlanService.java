@@ -4,6 +4,7 @@ import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.PerFileOverrides;
 import com.mhtextractor.util.OutputUnitPlanner;
+import com.mhtextractor.uiport.OutputUnitVm;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,7 +19,40 @@ import java.util.Map;
  */
 public final class ExtractionPlanService {
 
-    private ExtractionPlanService() {
+    /** 当前已确认参数和会话状态；由宿主提供实时读取，不缓存控件值。 */
+    public interface Context {
+        List<Object> dataOrder();
+        boolean imageMode();
+        AppConfig textParamsCache();
+        AppConfig imageParamsCache();
+        String inputFolder();
+        String outputFolder();
+        boolean openFolderAfterComplete();
+    }
+
+    private final Context context;
+    private String sessionOutputFolder;
+
+    public ExtractionPlanService(Context context) {
+        this.context = java.util.Objects.requireNonNull(context);
+    }
+
+    /** 正式运行前绑定已建立的会话目录；查询本身不创建目录。 */
+    public void setSessionOutputFolder(String folder) {
+        sessionOutputFolder = folder;
+    }
+
+    public AppConfig runtimeConfig() {
+        return runtimeConfig(context.imageMode(), context.imageParamsCache(), context.textParamsCache(),
+                context.inputFolder(), context.outputFolder(), context.openFolderAfterComplete());
+    }
+
+    public List<OutputUnitVm> outputUnitPlan(boolean checkedOnly) {
+        return plan(context.dataOrder(), context.imageMode(), context.textParamsCache(), context.imageParamsCache(),
+                sessionOutputFolder == null ? context.outputFolder() : sessionOutputFolder,
+                context.inputFolder(), context.outputFolder(), context.openFolderAfterComplete(), checkedOnly)
+                .stream().map(u -> new OutputUnitVm(u.getOutputName(), u.isGroup(), u.getParams(),
+                        u.getPaths(), u.getOutputPath(), u.getOutputName() == null ? "core.ungrouped" : null)).toList();
     }
 
     /**

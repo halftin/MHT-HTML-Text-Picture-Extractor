@@ -385,11 +385,11 @@ public void exerciseAllFeatures() throws Exception {
         Thread.sleep(1200);
         String sessionDir = new File(System.getProperty("java.io.tmpdir"), "mht-agent-session").getPath();
         List<OutputUnitPlanner.OutputUnit> textUnits = OutputUnitPlanner.plan(
-                this.view.dataOrder(), this.view.itemView(), false, this.view.textParamsCache(), this.view.imageParamsCache(), sessionDir);
+                this.view.dataOrder(), com.mhtextractor.app.ExtractionPlanService.itemView(false), false, this.view.textParamsCache(), this.view.imageParamsCache(), sessionDir);
         log.info("Agent 文本输出单元计划：{}",
                 textUnits.stream().map(u -> u.label() + "(" + u.fileCount() + ")").toList());
         List<OutputUnitPlanner.OutputUnit> imageUnits = OutputUnitPlanner.plan(
-                this.view.dataOrder(), this.view.itemView(), true, this.view.textParamsCache(), this.view.imageParamsCache(), sessionDir);
+                this.view.dataOrder(), com.mhtextractor.app.ExtractionPlanService.itemView(false), true, this.view.textParamsCache(), this.view.imageParamsCache(), sessionDir);
         log.info("Agent 图片输出单元计划：{}",
                 imageUnits.stream().map(u -> u.label() + "(" + u.fileCount() + ")").toList());
         UnitProgressAggregator aggregator = new UnitProgressAggregator(

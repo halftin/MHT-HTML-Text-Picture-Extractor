@@ -651,8 +651,7 @@ public boolean runAutomatedTests() {
                 vis.get(1).setSelected(true);
                 groupButton().fire(); Thread.sleep(400);
             }
-            List<OutputUnitPlanner.OutputUnit> units = OutputUnitPlanner.plan(
-                    this.view.dataOrder(), this.view.itemView(), false, this.view.textParamsCache(), this.view.imageParamsCache(), sessionDir);
+            var units = this.view.outputUnitPlan(false);
             if (units.size() < 2) { throw new IllegalStateException("输出单元数异常: " + units.size()); }
             out.println("[PASS] Output unit plan (" + units.size() + " units)"); p++;
         } catch (Exception e) { out.println("[FAIL] Output unit plan: " + e.getMessage()); f++; }

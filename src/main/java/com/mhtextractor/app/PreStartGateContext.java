@@ -20,7 +20,9 @@ public interface PreStartGateContext {
     List<Object> dataOrder();
 
     /** 输出单元规划的字段视图。 */
-    OutputUnitPlanner.ItemView<PreviewItem> itemView();
+    default OutputUnitPlanner.ItemView<PreviewItem> itemView() {
+        return ExtractionPlanService.itemView(extractCheckedOnly());
+    }
 
     /** 当前是否图片模式。 */
     boolean imageMode();

@@ -1,6 +1,9 @@
 package com.mhtextractor.app;
 
 import com.mhtextractor.model.GroupItem;
+import com.mhtextractor.model.AppConfig;
+import com.mhtextractor.uiport.OutputUnitVm;
+import com.mhtextractor.uiport.ParamSchemaVm;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uiport.Confirmer;
 import com.mhtextractor.uiport.GroupVm;
@@ -61,14 +64,28 @@ public final class InProcessUiport implements Uiport {
 
     private final WorkspaceModel model;
     private final Confirmer confirmer;
+    private final ExtractionPlanService plans;
 
     /**
      * @param model     工作区模型（数据序 / 分组关系 / 撤销命令的唯一所有者）
      * @param confirmer 确认往返实现（由前端注入 —— 卡片是前端的事；无头测试传桩）
      */
     public InProcessUiport(WorkspaceModel model, Confirmer confirmer) {
+        this(model, confirmer, new ExtractionPlanService(new ExtractionPlanService.Context() {
+            public List<Object> dataOrder() { return model.topLevel(); }
+            public boolean imageMode() { return false; }
+            public AppConfig textParamsCache() { return null; }
+            public AppConfig imageParamsCache() { return null; }
+            public String inputFolder() { return null; }
+            public String outputFolder() { return ""; }
+            public boolean openFolderAfterComplete() { return false; }
+        }));
+    }
+
+    public InProcessUiport(WorkspaceModel model, Confirmer confirmer, ExtractionPlanService plans) {
         this.model = Objects.requireNonNull(model, "model");
         this.confirmer = Objects.requireNonNull(confirmer, "confirmer");
+        this.plans = Objects.requireNonNull(plans, "plans");
     }
 
     @Override
@@ -88,7 +105,12 @@ public final class InProcessUiport implements Uiport {
 
     @Override
     public WorkspaceQueries queries() {
-        return this::snapshot;
+        return new WorkspaceQueries() {
+            public WorkspaceVm workspace() { return snapshot(); }
+            public AppConfig runtimeConfig() { return plans.runtimeConfig(); }
+            public List<OutputUnitVm> outputUnitPlan(boolean checkedOnly) { return plans.outputUnitPlan(checkedOnly); }
+            public ParamSchemaVm paramSchema(boolean imageMode) { return ParamSchemaService.schema(imageMode); }
+        };
     }
 
     @Override

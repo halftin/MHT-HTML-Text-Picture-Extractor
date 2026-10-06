@@ -1,5 +1,8 @@
 package com.mhtextractor.uiport;
 
+import com.mhtextractor.model.AppConfig;
+import java.util.List;
+
 /**
  * 工作区查询（最小切片）：视图模型快照。
  */
@@ -11,4 +14,10 @@ public interface WorkspaceQueries {
      * @return 快照；无任何条目时返回空集合而非 null
      */
     WorkspaceVm workspace();
+
+    public AppConfig runtimeConfig();
+
+    public List<OutputUnitVm> outputUnitPlan(boolean checkedOnly);
+
+    public ParamSchemaVm paramSchema(boolean imageMode);
 }

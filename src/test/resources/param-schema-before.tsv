@@ -1,0 +1,26 @@
+# Captured from pre-B1 ParamFormPane and ParamDialog.fxml.
+addChapterNumber	BOOLEAN	param.text.addChapterNumbers	textTitlePane	param.tab.chapter	8	-	-
+enableTitleExtraction	BOOLEAN	param.text.extractTitle	textTitlePane	param.tab.chapter	9	-	-
+titleStartMarker	TEXT	param.text.titleStartMarker	textTitlePane	param.tab.chapter	10	enableTitleExtraction	""
+titleEndMarker	TEXT	param.text.titleEndMarker	textTitlePane	param.tab.chapter	11	enableTitleExtraction	""
+titleUseRegex	BOOLEAN	param.text.titleMarkerRegex	textTitlePane	param.tab.chapter	12	enableTitleExtraction	false
+enableContentLimit	BOOLEAN	param.text.areaEnable	textContentLimitPane	param.text.areaTitle	1	-	-
+startMarker	TEXT	param.text.areaStartMarker	textContentLimitPane	param.text.areaTitle	2	enableContentLimit	""
+endMarker	TEXT	param.text.areaEndMarker	textContentLimitPane	param.text.areaTitle	3	enableContentLimit	""
+useRegex	BOOLEAN	param.text.areaMarkerRegex	textContentLimitPane	param.text.areaTitle	4	enableContentLimit	false
+enableTemplate	BOOLEAN	param.text.templateEnable	textTemplatePane	param.text.templateTitle	5	-	-
+startTemplate	TEXT	param.text.templateStart	textTemplatePane	param.text.templateTitle	6	enableTemplate	"\\n========== START ==========\\n"
+endTemplate	TEXT	param.text.templateEnd	textTemplatePane	param.text.templateTitle	7	enableTemplate	"\\n========== END ==========\\n"
+separateFiles	BOOLEAN	param.text.separateTxt	textOutputModePane	param.text.outputMode	0	-	-
+autoFixEncoding	BOOLEAN	param.text.fixEncoding	textOutputModePane	param.text.outputMode	13	-	-
+enableNameExtraction	BOOLEAN	param.image.extractTitle	imageNamePane	param.image.titleGroup	14	-	-
+imageNameStartMarker	TEXT	param.image.titleStartMarker	imageNamePane	param.image.titleGroup	15	enableNameExtraction	""
+imageNameEndMarker	TEXT	param.image.titleEndMarker	imageNamePane	param.image.titleGroup	16	enableNameExtraction	""
+enableRegionExtraction	BOOLEAN	param.image.areaEnable	imageRegionPane	param.image.areaTitle	17	-	-
+imageRegionStartMarker	TEXT	param.image.areaStartMarker	imageRegionPane	param.image.areaTitle	18	enableRegionExtraction	""
+imageRegionEndMarker	TEXT	param.image.areaEndMarker	imageRegionPane	param.image.areaTitle	19	enableRegionExtraction	""
+enableBatchRenaming	BOOLEAN	param.image.rename	imageProcessPane	param.image.processingTitle	20	-	-
+enableZipPackaging	BOOLEAN	param.image.zip	imageProcessPane	param.image.processingTitle	21	-	-
+enableCbzPackaging	BOOLEAN	param.image.cbz	imageProcessPane	param.image.processingTitle	22	-	-
+singleOutputMode	BOOLEAN	param.image.mergeDir	imageOutputModePane	param.image.outputMode	23	-	-
+highSpeedMemoryMode	BOOLEAN	param.image.highSpeed	imagePerformancePane	param.image.performance	24	-	-

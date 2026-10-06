@@ -15,7 +15,6 @@ direct	com.mhtextractor.gui.controller.GroupCommandController	toggleGroupExpande
 direct	com.mhtextractor.gui.controller.ImportSessionCoordinator	<init>	同包直访（驱动类字节码常量池引用）；驱动: FeatureExercise, ImportSessionCoordinatorQuotaTest
 direct	com.mhtextractor.gui.controller.ListInteractionController	findCell	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.ListInteractionController	setCheckedSilently	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
-direct	com.mhtextractor.gui.controller.MainController	ITEM_VIEW	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	applyImportPlan	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	cancelWorkspaceActivity	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	clearImportDropHighlight	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver

@@ -1,6 +1,5 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.ExtractionPlanService;
 import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.app.PreviewService;
 import com.mhtextractor.app.PreviewSession;
@@ -92,12 +91,6 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     private static final String HINT_NEED_PARAMS = Texts.get("preview.hintParamsUnset");
     private static final String HINT_NO_FILES = Texts.get("preview.hintNoMht");
 
-    /**
-     * 输出单元规划的字段视图（路径/来源目录/移除标记，阶段 8）。
-     * 实现已下沉 {@code app.ExtractionPlanService}（P3-3b-3）；本包级常量仅维持
-     * {@code AcceptanceDriver.itemView()} 的直访契约（测试访问面清单条目不变）。
-     */
-    static final ExtractionPlanService.ItemView ITEM_VIEW = ExtractionPlanService.itemView(false);
 
     /**
      * FXML 加载器（P6-B）：由<b>加载方</b>经 {@code setControllerFactory} 注入
@@ -242,7 +235,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 @Override public ProgressBar progressBar() { return refs.progressBar(); }
                 @Override public Button startButton() { return refs.startButton(); }
                 @Override public Button stopButton() { return refs.stopButton(); }
-            }, () -> this.paramDomain.updateStartButtonState());
+            }, () -> this.paramDomain.updateStartButtonState(), ws);
     boolean updatingAdjustCheck = false;
 
     // ===== 分组状态（F5） =====

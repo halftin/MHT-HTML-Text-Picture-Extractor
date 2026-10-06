@@ -114,7 +114,12 @@ class UiportPortSliceTest {
 
             @Override
             public WorkspaceQueries queries() {
-                return () -> new WorkspaceVm(List.of(), List.of(), false, 0, TriState.NONE);
+                return new WorkspaceQueries() {
+                    public WorkspaceVm workspace() { return new WorkspaceVm(List.of(), List.of(), false, 0, TriState.NONE); }
+                    public com.mhtextractor.model.AppConfig runtimeConfig() { throw new UnsupportedOperationException(); }
+                    public List<OutputUnitVm> outputUnitPlan(boolean checkedOnly) { throw new UnsupportedOperationException(); }
+                    public ParamSchemaVm paramSchema(boolean imageMode) { throw new UnsupportedOperationException(); }
+                };
             }
 
             @Override

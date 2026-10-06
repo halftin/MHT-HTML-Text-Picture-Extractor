@@ -126,9 +126,9 @@ public final class AcceptanceDriver {
             return mc.refs.previewEffectButton();
         }
 
-        /** 数据序规划视图（生产静态字段 {@code MainController.ITEM_VIEW}，包级）。 */
-        public OutputUnitPlanner.ItemView<PreviewItem> itemView() {
-            return MainController.ITEM_VIEW;
+        /** 经生产端口查询输出单元。 */
+        public java.util.List<com.mhtextractor.uiport.OutputUnitVm> outputUnitPlan(boolean checkedOnly) {
+            return mc.extractionCoordinator.queries().outputUnitPlan(checkedOnly);
         }
 
         /** 当前模式下某条目的生效参数（生产方法 {@code MainController.effectiveForObject}，包级）。 */

@@ -105,7 +105,7 @@ public final class OutputUnitPlanner {
         /** 输出路径：合并文本 = 文件路径；其余 = 目录路径 */
         private final String outputPath;
 
-        OutputUnit(String outputName, boolean group, AppConfig params, List<String> paths,
+        public OutputUnit(String outputName, boolean group, AppConfig params, List<String> paths,
                    String outputPath) {
             this.outputName = outputName;
             this.group = group;

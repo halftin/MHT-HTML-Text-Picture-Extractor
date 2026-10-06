@@ -3,6 +3,18 @@ package com.mhtextractor.gui.controller;
 import atlantafx.base.controls.ToggleSwitch;
 import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.app.ParamDraft;
+import com.mhtextractor.app.ParamSchemaService;
+import com.mhtextractor.app.InProcessUiport;
+import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.uiport.WorkspaceQueries;
+import com.mhtextractor.uiport.ParamSchemaVm;
+import java.util.Map;
+import java.util.LinkedHashMap;
+import javafx.scene.control.Control;
+import javafx.scene.control.Label;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.Priority;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.ParamTargetBar;
@@ -150,7 +162,18 @@ public class ParamFormPane extends BorderPane {
     private final ParamTargetBar targetBar = new ParamTargetBar();
 
     /** 独立构造：载入 {@value #FXML_PATH} 并把本对象同时作为根与控制器（{@code fx:root} 用法）。 */
+    private final WorkspaceQueries queries;
+    private final Map<String, Control> fields = new LinkedHashMap<>();
+    private final Map<String, TitledPane> groups = new LinkedHashMap<>();
+
     public ParamFormPane() {
+        this(new InProcessUiport(new WorkspaceModel(), request -> {
+            throw new UnsupportedOperationException("Form confirmations belong to the host");
+        }).queries());
+    }
+
+    public ParamFormPane(WorkspaceQueries queries) {
+        this.queries = queries;
         loadFxml();
         // 信息栏挂在 top（标题栏下方固定一行）：FXML 未改，节点是纯代码加的
         setTop(targetBar);
@@ -259,40 +282,7 @@ public class ParamFormPane extends BorderPane {
 
     /** 以两组控件当前值构建参数快照（仅参数，不含目录/模式/GUI 状态）；字段映射与拆分前逐条一致。 */
     public AppConfig collect() {
-        AppConfig config = new AppConfig();
-
-        // 文本参数
-        config.setSeparateFiles(separateFilesCheck.isSelected());
-        config.setEnableContentLimit(enableLimitCheck.isSelected());
-        config.setStartMarker(startMarkerField.getText());
-        config.setEndMarker(endMarkerField.getText());
-        config.setUseRegex(useRegexCheck.isSelected());
-        config.setEnableTemplate(enableTemplateCheck.isSelected());
-        config.setStartTemplate(startTemplateField.getText());
-        config.setEndTemplate(endTemplateField.getText());
-        config.setAddChapterNumber(addChapterNumberCheck.isSelected());
-        config.setEnableTitleExtraction(enableTitleExtractCheck.isSelected());
-        config.setTitleStartMarker(titleStartMarkerField.getText());
-        config.setTitleEndMarker(titleEndMarkerField.getText());
-        config.setTitleUseRegex(titleUseRegexCheck.isSelected());
-        config.setAutoFixEncoding(autoFixEncodingCheck.isSelected());
-
-        // 图片参数
-        config.setEnableNameExtraction(imageNameExtractCheck.isSelected());
-        config.setImageNameStartMarker(imageNameStartField.getText());
-        config.setImageNameEndMarker(imageNameEndField.getText());
-        config.setEnableRegionExtraction(imageRegionExtractCheck.isSelected());
-        config.setImageRegionStartMarker(
-                config.isEnableRegionExtraction() ? imageRegionStartField.getText() : null);
-        config.setImageRegionEndMarker(
-                config.isEnableRegionExtraction() ? imageRegionEndField.getText() : null);
-        config.setEnableBatchRenaming(imageRenameCheck.isSelected());
-        config.setEnableZipPackaging(imageZipCheck.isSelected());
-        config.setEnableCbzPackaging(imageCbzCheck.isSelected());
-        config.setSingleOutputMode(singleOutputCheck.isSelected());
-        config.setHighSpeedMemoryMode(highSpeedMemoryCheck.isSelected());
-
-        return config;
+        return ParamSchemaService.collect(fieldValues());
     }
 
     /** 切模式：显示当前模式的参数组（另一组隐藏且不占位）；初值载入时由 {@link #load} 调用。 */
@@ -336,6 +326,42 @@ public class ParamFormPane extends BorderPane {
 
     @FXML
     private void initialize() {
+        buildSchema(false, textParamsBox);
+        buildSchema(true, imageParamsBox);
+        separateFilesCheck = (ToggleSwitch) fields.get("separateFiles");
+        enableLimitCheck = (ToggleSwitch) fields.get("enableContentLimit");
+        startMarkerField = (TextField) fields.get("startMarker");
+        endMarkerField = (TextField) fields.get("endMarker");
+        useRegexCheck = (ToggleSwitch) fields.get("useRegex");
+        enableTemplateCheck = (ToggleSwitch) fields.get("enableTemplate");
+        startTemplateField = (TextField) fields.get("startTemplate");
+        endTemplateField = (TextField) fields.get("endTemplate");
+        addChapterNumberCheck = (ToggleSwitch) fields.get("addChapterNumber");
+        enableTitleExtractCheck = (ToggleSwitch) fields.get("enableTitleExtraction");
+        titleStartMarkerField = (TextField) fields.get("titleStartMarker");
+        titleEndMarkerField = (TextField) fields.get("titleEndMarker");
+        titleUseRegexCheck = (ToggleSwitch) fields.get("titleUseRegex");
+        autoFixEncodingCheck = (ToggleSwitch) fields.get("autoFixEncoding");
+        imageNameExtractCheck = (ToggleSwitch) fields.get("enableNameExtraction");
+        imageNameStartField = (TextField) fields.get("imageNameStartMarker");
+        imageNameEndField = (TextField) fields.get("imageNameEndMarker");
+        imageRegionExtractCheck = (ToggleSwitch) fields.get("enableRegionExtraction");
+        imageRegionStartField = (TextField) fields.get("imageRegionStartMarker");
+        imageRegionEndField = (TextField) fields.get("imageRegionEndMarker");
+        imageRenameCheck = (ToggleSwitch) fields.get("enableBatchRenaming");
+        imageZipCheck = (ToggleSwitch) fields.get("enableZipPackaging");
+        imageCbzCheck = (ToggleSwitch) fields.get("enableCbzPackaging");
+        singleOutputCheck = (ToggleSwitch) fields.get("singleOutputMode");
+        highSpeedMemoryCheck = (ToggleSwitch) fields.get("highSpeedMemoryMode");
+        textTitlePane = groups.get("textTitlePane");
+        textContentLimitPane = groups.get("textContentLimitPane");
+        textTemplatePane = groups.get("textTemplatePane");
+        textOutputModePane = groups.get("textOutputModePane");
+        imageNamePane = groups.get("imageNamePane");
+        imageRegionPane = groups.get("imageRegionPane");
+        imageProcessPane = groups.get("imageProcessPane");
+        imageOutputModePane = groups.get("imageOutputModePane");
+        imagePerformancePane = groups.get("imagePerformancePane");
         ToggleSwitch[] toggles = {enableLimitCheck, useRegexCheck, enableTemplateCheck,
                 addChapterNumberCheck, enableTitleExtractCheck, titleUseRegexCheck,
                 separateFilesCheck, autoFixEncodingCheck, imageNameExtractCheck,
@@ -344,6 +370,32 @@ public class ParamFormPane extends BorderPane {
         for (ToggleSwitch t : toggles) {
             t.setLabelPosition(HorizontalDirection.RIGHT);
         }
+
+        separateFilesCheck.setId("separateFilesCheck");
+        enableLimitCheck.setId("enableLimitCheck");
+        startMarkerField.setId("startMarkerField");
+        endMarkerField.setId("endMarkerField");
+        useRegexCheck.setId("useRegexCheck");
+        enableTemplateCheck.setId("enableTemplateCheck");
+        startTemplateField.setId("startTemplateField");
+        endTemplateField.setId("endTemplateField");
+        addChapterNumberCheck.setId("addChapterNumberCheck");
+        enableTitleExtractCheck.setId("enableTitleExtractCheck");
+        titleStartMarkerField.setId("titleStartMarkerField");
+        titleEndMarkerField.setId("titleEndMarkerField");
+        titleUseRegexCheck.setId("titleUseRegexCheck");
+        autoFixEncodingCheck.setId("autoFixEncodingCheck");
+        imageNameExtractCheck.setId("imageNameExtractCheck");
+        imageNameStartField.setId("imageNameStartField");
+        imageNameEndField.setId("imageNameEndField");
+        imageRegionExtractCheck.setId("imageRegionExtractCheck");
+        imageRegionStartField.setId("imageRegionStartField");
+        imageRegionEndField.setId("imageRegionEndField");
+        imageRenameCheck.setId("imageRenameCheck");
+        imageZipCheck.setId("imageZipCheck");
+        imageCbzCheck.setId("imageCbzCheck");
+        singleOutputCheck.setId("singleOutputCheck");
+        highSpeedMemoryCheck.setId("highSpeedMemoryCheck");
 
         // 文本参数组联动
         enableLimitCheck.selectedProperty().addListener((obs, old, newVal) -> toggleLimitSettings());
@@ -403,79 +455,89 @@ public class ParamFormPane extends BorderPane {
 
     // ==================== 从 AppConfig 填充控件 ====================
 
-    private void applyTextParamsToGui(AppConfig config) {
-        separateFilesCheck.setSelected(config.isSeparateFiles());
-        enableLimitCheck.setSelected(config.isEnableContentLimit());
-        startMarkerField.setText(orEmpty(config.getStartMarker()));
-        endMarkerField.setText(orEmpty(config.getEndMarker()));
-        useRegexCheck.setSelected(config.isUseRegex());
-        enableTemplateCheck.setSelected(config.isEnableTemplate());
-        startTemplateField.setText(orEmpty(config.getStartTemplate()));
-        endTemplateField.setText(orEmpty(config.getEndTemplate()));
-        addChapterNumberCheck.setSelected(config.isAddChapterNumber());
-        enableTitleExtractCheck.setSelected(config.isEnableTitleExtraction());
-        titleStartMarkerField.setText(orEmpty(config.getTitleStartMarker()));
-        titleEndMarkerField.setText(orEmpty(config.getTitleEndMarker()));
-        titleUseRegexCheck.setSelected(config.isTitleUseRegex());
-        autoFixEncodingCheck.setSelected(config.isAutoFixEncoding());
+    private void applyTextParamsToGui(AppConfig config) { applyParams(config, false); }
+
+    private void applyImageParamsToGui(AppConfig config) { applyParams(config, true); }
+
+    private void applyParams(AppConfig config, boolean image) {
+        ParamSchemaService.values(config, queries.paramSchema(image)).forEach(this::writeField);
     }
 
-    private void applyImageParamsToGui(AppConfig config) {
-        imageNameExtractCheck.setSelected(config.isEnableNameExtraction());
-        imageNameStartField.setText(orEmpty(config.getImageNameStartMarker()));
-        imageNameEndField.setText(orEmpty(config.getImageNameEndMarker()));
-        imageRegionExtractCheck.setSelected(config.isEnableRegionExtraction());
-        imageRegionStartField.setText(orEmpty(config.getImageRegionStartMarker()));
-        imageRegionEndField.setText(orEmpty(config.getImageRegionEndMarker()));
-        imageRenameCheck.setSelected(config.isEnableBatchRenaming());
-        imageZipCheck.setSelected(config.isEnableZipPackaging());
-        imageCbzCheck.setSelected(config.isEnableCbzPackaging());
-        singleOutputCheck.setSelected(config.isSingleOutputMode());
-        highSpeedMemoryCheck.setSelected(config.isHighSpeedMemoryMode());
+    private Map<String, Object> fieldValues() {
+        Map<String, Object> values = new LinkedHashMap<>();
+        fields.forEach((id, control) -> values.put(id, control instanceof ToggleSwitch toggle
+                ? toggle.isSelected() : ((TextField) control).getText()));
+        return values;
     }
 
-    private static String orEmpty(String s) {
-        return s == null ? "" : s;
+    private void writeField(String id, Object value) {
+        Control control = fields.get(id);
+        if (control instanceof ToggleSwitch toggle) toggle.setSelected((Boolean) value);
+        else ((TextField) control).setText((String) value);
     }
 
-    // ==================== 子控件条件联动 ====================
-
-    /** 内容限定字段联动：未勾选时禁用标记输入框并清空 */
-    private void toggleLimitSettings() {
-        boolean enabled = enableLimitCheck.isSelected();
-        startMarkerField.setDisable(!enabled);
-        endMarkerField.setDisable(!enabled);
-        useRegexCheck.setDisable(!enabled);
-        if (!enabled) {
-            startMarkerField.clear();
-            endMarkerField.clear();
-            useRegexCheck.setSelected(false);
+    private void applyRules(boolean image, String controller) {
+        ParamSchemaVm schema = queries.paramSchema(image);
+        Map<String, Object> values = fieldValues();
+        for (var field : schema.fields()) {
+            if (controller.equals(field.enabledBy()))
+                fields.get(field.id()).setDisable(!Boolean.TRUE.equals(values.get(controller)));
         }
+        ParamSchemaService.disabledValues(schema, values, controller).forEach(this::writeField);
     }
 
-    /** 自定义模板字段联动：未勾选时禁用模板输入框并恢复默认值 */
-    private void toggleTemplateSettings() {
-        boolean enabled = enableTemplateCheck.isSelected();
-        startTemplateField.setDisable(!enabled);
-        endTemplateField.setDisable(!enabled);
-        if (!enabled) {
-            startTemplateField.setText("\\n========== START ==========\\n");
-            endTemplateField.setText("\\n========== END ==========\\n");
-        }
-    }
-
-    /** 标题提取字段联动：未勾选时禁用标记输入框并清空 */
+    private void toggleLimitSettings() { applyRules(false, "enableContentLimit"); }
+    private void toggleTemplateSettings() { applyRules(false, "enableTemplate"); }
     private void toggleTitleSettings() {
-        boolean enabled = enableTitleExtractCheck.isSelected();
-        titleStartMarkerField.setDisable(!enabled);
-        titleEndMarkerField.setDisable(!enabled);
-        titleUseRegexCheck.setDisable(!enabled);
-        if (!enabled) {
-            titleStartMarkerField.clear();
-            titleEndMarkerField.clear();
-            titleUseRegexCheck.setSelected(false);
-        }
+        applyRules(false, "enableTitleExtraction");
         updateTitleExtractTooltip();
+    }
+
+    /** 仅渲染布局；字段顺序、类型、标签、默认值与分组均来自端口。 */
+    private void buildSchema(boolean image, VBox parent) {
+        ParamSchemaVm schema = queries.paramSchema(image);
+        for (var group : schema.groups()) {
+            VBox content = new VBox(8);
+            TitledPane titled = new TitledPane(Texts.get(group.labelKey()), content);
+            titled.setId(group.id());
+            groups.put(group.id(), titled);
+            parent.getChildren().add(titled);
+            GridPane grid = null;
+            int row = 0;
+            for (var field : schema.fields()) {
+                if (!field.group().equals(group.id())) continue;
+                Control control;
+                if (field.type() == ParamSchemaVm.Type.BOOLEAN) {
+                    control = new ToggleSwitch(Texts.get(field.labelKey()));
+                    content.getChildren().add(control);
+                    grid = null;
+                } else {
+                    if (grid == null) {
+                        grid = new GridPane(8, 4);
+                        ColumnConstraints label = new ColumnConstraints();
+                        label.setMinWidth(100);
+                        ColumnConstraints input = new ColumnConstraints();
+                        input.setHgrow(Priority.ALWAYS);
+                        grid.getColumnConstraints().addAll(label, input);
+                        content.getChildren().add(grid);
+                        row = 0;
+                    }
+                    TextField text = new TextField();
+                    text.setPromptText(field.promptText());
+                    grid.add(new Label(Texts.get(field.labelKey())), 0, row);
+                    grid.add(text, 1, row++);
+                    control = text;
+                }
+                fields.put(field.id(), control);
+                writeField(field.id(), field.defaultValue());
+            }
+            if (group.noteKey() != null) {
+                Label note = new Label(Texts.get(group.noteKey()));
+                note.getStyleClass().add("text-muted");
+                note.setWrapText(true);
+                content.getChildren().add(note);
+            }
+        }
     }
 
     /** 更新标题提取开关的 tooltip，反映章节序号+标题的组合状态 */
@@ -494,26 +556,10 @@ public class ParamFormPane extends BorderPane {
     }
 
     /** 图片名称提取字段联动：未勾选时禁用标记输入框并清空 */
-    private void toggleImageNameSettings() {
-        boolean enabled = imageNameExtractCheck.isSelected();
-        imageNameStartField.setDisable(!enabled);
-        imageNameEndField.setDisable(!enabled);
-        if (!enabled) {
-            imageNameStartField.clear();
-            imageNameEndField.clear();
-        }
-    }
+    private void toggleImageNameSettings() { applyRules(true, "enableNameExtraction"); }
 
     /** 图片区域限定字段联动：未勾选时禁用标记输入框并清空 */
-    private void toggleImageRegionSettings() {
-        boolean enabled = imageRegionExtractCheck.isSelected();
-        imageRegionStartField.setDisable(!enabled);
-        imageRegionEndField.setDisable(!enabled);
-        if (!enabled) {
-            imageRegionStartField.clear();
-            imageRegionEndField.clear();
-        }
-    }
+    private void toggleImageRegionSettings() { applyRules(true, "enableRegionExtraction"); }
 
     /** 模板输入框回车处理：按下回车时插入 \n 字符串 */
     private void setupTemplateFieldEnterKeyHandler() {
@@ -529,8 +575,9 @@ public class ParamFormPane extends BorderPane {
             }
         };
 
-        startTemplateField.setOnKeyPressed(enterHandler);
-        endTemplateField.setOnKeyPressed(enterHandler);
+        for (var field : queries.paramSchema(false).fields()) {
+            if (field.templateEnter()) ((TextField) fields.get(field.id())).setOnKeyPressed(enterHandler);
+        }
     }
 
     // ==================== Q6b：草稿变更通知 ====================
