@@ -3,9 +3,12 @@ package com.mhtextractor.uiport;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -74,14 +77,46 @@ class UiportPortSliceTest {
     @Test
     void sealedHierarchyContainsWorkspaceAndActivityEventRecords() {
         Class<?>[] permitted = PortEvent.class.getPermittedSubclasses();
-        assertEquals(16, permitted.length, "B5-1 新增 ImportStateChanged / ImportRound / ImportFinished（导入编排事件）");
+        // 预期成员按「显式名单」派生（新增成员必须在此登记，防计数断言漂移）：
+        // B5-1 新增 ImportStateChanged / ImportRound / ImportFinished（导入编排事件）；
+        // B6 新增通道接口 ExtractionChannelEvent（非 record）+ 通道记录
+        // ExtractionProgress / ExtractionTerminal / ExtractionResult —— 通道记录是
+        // ExtractionChannelEvent 的直接子类，故不在 PortEvent 的直接子类名单里，单列通道族名单断言。
+        assertEquals(
+                Set.of("ParamStateChanged", "WorkspaceActivityChanged", "PreparseProgress",
+                        "ImportStateChanged", "ImportRound", "ImportFinished",
+                        "PreparseStarted", "PreparseFinished",
+                        "PreviewLoadStateChanged", "PreviewConfirmationRequired", "PreviewLoadFailed",
+                        "PreviewThumbnail", "PreviewLoaded",
+                        "ExtractionChannelEvent",
+                        "WorkspaceChanged", "RunningChanged", "Notice"),
+                Arrays.stream(permitted).map(Class::getSimpleName).collect(Collectors.toSet()),
+                "PortEvent 直接子类成员名单（新增成员须显式登记）");
+        for (Class<?> c : permitted) {
+            assertTrue(PortEvent.class.isAssignableFrom(c));
+            if (c == PortEvent.ExtractionChannelEvent.class) {
+                assertTrue(c.isInterface(), "B6 通道接口是通道族容器，非 record");
+            } else {
+                assertTrue(c.isRecord());
+            }
+        }
+
+        // 通道族成员显式登记（ExtractionChannelEvent 是 non-sealed，getPermittedSubclasses() 为 null，
+        // 成员不可反射枚举 —— 新增通道记录必须在此登记，防计数断言漂移）
+        List<Class<?>> channelMembers = List.of(
+                PortEvent.ExtractionProgress.class,
+                PortEvent.ExtractionTerminal.class,
+                PortEvent.ExtractionResult.class);
+        for (Class<?> c : channelMembers) {
+            assertTrue(c.isRecord(), "B6 通道记录必须仍是 record：" + c.getSimpleName());
+            assertTrue(PortEvent.ExtractionChannelEvent.class.isAssignableFrom(c),
+                    "B6 通道记录必须实现通道接口：" + c.getSimpleName());
+            assertTrue(PortEvent.class.isAssignableFrom(c));
+        }
+
         assertTrue(PortEvent.WorkspaceChanged.class.isRecord());
         assertTrue(PortEvent.RunningChanged.class.isRecord());
         assertTrue(PortEvent.Notice.class.isRecord());
-        for (Class<?> c : permitted) {
-            assertTrue(c.isRecord());
-            assertTrue(PortEvent.class.isAssignableFrom(c));
-        }
     }
 
     @Test
@@ -122,6 +157,8 @@ class UiportPortSliceTest {
                     public void applyGlobalParams(TargetId target, boolean imageMode) {}
                     public void importPaths(List<String> addresses, String sourceDesc, boolean fromDrag) {}
                     public void applyImportPlan(ImportPlanVm plan) {}
+                    public void startExtraction(boolean checkedOnly) {}
+                    public void cancelExtraction() {}
                     @Override
                     public void undo() {
                     }

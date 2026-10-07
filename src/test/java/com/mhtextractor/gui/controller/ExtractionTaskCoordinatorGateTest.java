@@ -1,12 +1,15 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.ExtractionStats;
+import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.app.PreStartGate;
+import com.mhtextractor.app.WorkspaceExtractionCoordinator;
 import com.mhtextractor.app.WorkspaceExtractionService;
+import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uiport.PortEvent;
 import javafx.application.Platform;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -19,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -31,19 +35,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * 步骤 2 —— 提取启动<b>可插拔顺序门</b>（{@link PreStartGate}）的可观察证据。
+ * 步骤 2 —— 提取启动<b>可插拔顺序门</b>（{@link PreStartGate}）的可观察证据
+ * （P3-B6 起：任务通道已下沉 {@link WorkspaceExtractionCoordinator}，本测试驱动
+ * {@link ExtractionTaskCoordinator#begin()} 到「到达启动」并断言后端运行标记与终态渲染）。
  *
  * <p>决策 C 要求：deny 链 + R1.6 参数未确认卡之后、真正启动之前，按插入顺序<b>串行</b>询问门链，
  * 前一道门取消（{@code proceed(false)}）即整体中止、不回退到后续门。本测试注入假门断言：
  * ① 按插入顺序被询问；② 取消即中止（后续门不被询问、启动路径零副作用）；
  * ③ 全部放行则到达启动（{@code startExtractionTask} 的第一个副作用 =
- * {@code host.cancelWorkspaceActivity()} + 运行标记置位）。不是注释声称 —— 三条都有断言。</p>
+ * {@code host.cancelWorkspaceActivity()} + 后端运行标记置位）。不是注释声称 —— 三条都有断言。</p>
  *
  * <h2>与真实 GUI 的分工</h2>
  * <p>①②③的"到达启动"在无 toolkit 环境下仍可全绿（①②不触任何 JavaFX 节点：桩宿主给合法目录、
- * 已确认参数，deny 链与 R1.6 卡都不会弹）。③启动真实 {@code Task} 需要 FX 事件循环，
- * 与 {@link ExtractionTaskCoordinatorCancelRaceTest} 同口径：可用则完整执行，被 {@code Platform.exit()}
- * 占用则按假设跳过 —— 全链放行 → 提取真的跑起来，由 GUI 自动化的两条提取用例端到端覆盖。</p>
+ * 已确认参数，deny 链与 R1.6 卡都不会弹）。③启动真实 worker 需要 FX 事件循环，
+ * 与 {@link WorkspaceExtractionCoordinatorCancelRaceTest} 同口径：可用则完整执行，被
+ * {@code Platform.exit()} 占用则按假设跳过 —— 全链放行 → 提取真的跑起来，由 GUI 自动化的
+ * 两条提取用例端到端覆盖。</p>
  */
 class ExtractionTaskCoordinatorGateTest {
 
@@ -123,12 +130,39 @@ class ExtractionTaskCoordinatorGateTest {
                 Files.createDirectories(dir.resolve("out")).toString());
     }
 
-    private ExtractionTaskCoordinator coordinator(StubHost host) {
-        return new ExtractionTaskCoordinator(new WorkspaceExtractionService(
-                new PreviewCacheLifecycle(new PreviewCacheStore(dir.resolve("cache")))), host);
+    /** 空单元请求：到达启动后任务立即自然完成（与迁移前空单元 {@code Task} 同形）。 */
+    private static WorkspaceExtractionService.ExtractionRequest emptyRequest(Path dir) {
+        return new WorkspaceExtractionService.ExtractionRequest(dir.resolve("session").toString(),
+                List.of(), Map.of(), false, () -> true);
     }
 
-    /** 与 {@link ExtractionTaskCoordinatorCancelRaceTest} 同口径的 toolkit 前置。 */
+    /** 装配：gui 协调器（deny 链 + 门链 + 终态渲染）+ 后端任务通道（空单元服务 + FX 派发器）+ 事件转发（模拟 MainController 的一行接线）。 */
+    private static final class Wire {
+        final ExtractionTaskCoordinator gui;
+        final WorkspaceExtractionCoordinator backend;
+
+        Wire(ExtractionTaskCoordinator gui, WorkspaceExtractionCoordinator backend) {
+            this.gui = gui;
+            this.backend = backend;
+        }
+    }
+
+    private Wire wire(StubHost host, java.util.concurrent.atomic.AtomicInteger derivedCalls) {
+        WorkspaceExtractionCoordinator backend = new WorkspaceExtractionCoordinator(
+                new WorkspaceExtractionService(new PreviewCacheLifecycle(new PreviewCacheStore(dir.resolve("cache")))),
+                checkedOnly -> emptyRequest(dir), Platform::runLater);
+        ExtractionTaskCoordinator c = new ExtractionTaskCoordinator(host, derivedCalls::incrementAndGet,
+                new WorkspaceModel());
+        c.bindStartExtraction(backend::startExtraction);
+        backend.subscribe(event -> {
+            if (event instanceof PortEvent.ExtractionChannelEvent channelEvent) {
+                c.applyExtractionEvent(channelEvent);   // 生产 = MainController.onPortEvent 的同一行接线
+            }
+        });
+        return new Wire(c, backend);
+    }
+
+    /** 与 {@link WorkspaceExtractionCoordinatorCancelRaceTest} 同口径的 toolkit 前置。 */
     private static void requireToolkit() {
         Assumptions.assumeFalse("1".equals(System.getProperty("mht.headless.execution")),
                 "headless-layer-b 执行（JavaFX 已物理剔除）：本用例需要真实 FX 事件循环");
@@ -189,98 +223,130 @@ class ExtractionTaskCoordinatorGateTest {
     @Test
     void firstGateCancelAbortsWithoutAskingLaterGates() throws Exception {
         StubHost host = host();
-        ExtractionTaskCoordinator c = coordinator(host);
+        Wire w = wire(host, new java.util.concurrent.atomic.AtomicInteger());
         List<String> asked = new ArrayList<>();
-        c.preStartGates().add(new FakeGate(asked, "g1", false));
-        c.preStartGates().add(new FakeGate(asked, "g2", true));
+        w.gui.preStartGates().add(new FakeGate(asked, "g1", false));
+        w.gui.preStartGates().add(new FakeGate(asked, "g2", true));
 
-        c.begin();
+        w.gui.begin();
 
         assertEquals(List.of("g1"), asked, "第一道门取消后不得再询问后续门");
         assertEquals(0, host.cancelActivityCalls, "中止路径不得触达 startExtractionTask（首个副作用）");
-        assertFalse(c.running.get(), "中止路径不得置运行标记");
+        assertFalse(w.backend.running.get(), "中止路径不得置运行标记");
     }
 
     /** ① 顺序 + ② 第二道门取消：前两道按插入顺序被询问，第三道不被询问、启动零副作用（无 toolkit）。 */
     @Test
     void middleGateCancelKeepsOrderAndAborts() throws Exception {
         StubHost host = host();
-        ExtractionTaskCoordinator c = coordinator(host);
+        Wire w = wire(host, new java.util.concurrent.atomic.AtomicInteger());
         List<String> asked = new ArrayList<>();
-        c.preStartGates().add(new FakeGate(asked, "g1", true));
-        c.preStartGates().add(new FakeGate(asked, "g2", false));
-        c.preStartGates().add(new FakeGate(asked, "g3", true));
+        w.gui.preStartGates().add(new FakeGate(asked, "g1", true));
+        w.gui.preStartGates().add(new FakeGate(asked, "g2", false));
+        w.gui.preStartGates().add(new FakeGate(asked, "g3", true));
 
-        c.begin();
+        w.gui.begin();
 
         assertEquals(List.of("g1", "g2"), asked, "按插入顺序串行询问；g2 取消后 g3 不得被询问");
         assertEquals(0, host.cancelActivityCalls, "中止路径不得触达 startExtractionTask");
-        assertFalse(c.running.get());
+        assertFalse(w.backend.running.get());
     }
 
-    /** ③ 全部放行 → 到达启动：cancelWorkspaceActivity 被调一次、运行标记置位、开始按钮切到"提取中"，
+    /** ③ 全部放行 → 到达启动：cancelWorkspaceActivity 被调一次、后端运行标记置位、开始按钮切到"提取中"，
      *  任务自然完成（空单元）后运行标记复位 —— 需要真实 FX 事件循环（toolkit 不可用时按假设跳过）。 */
     @Test
     void allGatesPassReachesStartExtractionTask() throws Exception {
         requireToolkit();
         StubHost host = host();
-        ExtractionTaskCoordinator c = coordinator(host);
+        Wire w = wire(host, new java.util.concurrent.atomic.AtomicInteger());
         List<String> asked = new ArrayList<>();
-        c.preStartGates().add(new FakeGate(asked, "g1", true));
-        c.preStartGates().add(new FakeGate(asked, "g2", true));
+        w.gui.preStartGates().add(new FakeGate(asked, "g1", true));
+        w.gui.preStartGates().add(new FakeGate(asked, "g2", true));
 
         try {
             // "到达启动"的证据必须在 begin() 返回的同一 FX 帧内取：空单元任务完成得极快，
-            // 其 onSucceeded 回调排在 FX 队列里，返回测试线程后运行标记可能已被复位。
+            // 其成功终态排在 FX 队列里，返回测试线程后运行标记可能已被复位。
             runOnFx(() -> {
                 host.statusLabel = new Label();
                 host.progressBar = new ProgressBar();
                 host.startButton = new Button();
                 host.stopButton = new Button();
-                c.begin();
+                w.gui.begin();
                 assertEquals(List.of("g1", "g2"), asked, "按插入顺序串行询问");
                 assertEquals(1, host.cancelActivityCalls, "全链放行必须触达 startExtractionTask");
-                assertTrue(c.running.get(), "启动路径必须置运行标记");
+                assertTrue(w.backend.running.get(), "启动路径必须置运行标记");
                 assertTrue(host.startButton.isDisabled(), "提取中开始按钮必须禁用");
             });
 
-            // 空单元任务即刻完成：onSucceeded 经 FX 事件循环复位运行标记
-            waitUntil("空单元任务完成 → 运行标记复位", () -> !c.running.get());
+            // 空单元任务即刻完成：成功终态经 FX 事件循环复位运行标记
+            waitUntil("空单元任务完成 → 运行标记复位", () -> !w.backend.running.get());
             assertTrue(host.events.stream().anyMatch(e -> e.startsWith("status:")),
                     "任务完成应回写状态栏文案：" + host.events);
         } finally {
-            c.cancel();
+            w.backend.cancelExtraction();
         }
     }
 
-    /** ④ 终态落地（成功路径，真实 {@code extractionUi} 生产组装）：空单元任务自然完成后 ——
-     *  运行标记复位、停止按钮禁用、开始按钮按注入的派生函数重算恰一次（需要真实 FX 事件循环）。 */
+    /** ④ 终态落地（成功路径，真实事件转发生产接线）：空单元任务自然完成后 ——
+     *  后端运行标记复位、停止按钮禁用、开始按钮按注入的派生函数重算恰一次（需要真实 FX 事件循环）。 */
     @Test
     void naturalCompletionLandsTerminalUiState() throws Exception {
         requireToolkit();
         StubHost host = host();
         java.util.concurrent.atomic.AtomicInteger derivedCalls = new java.util.concurrent.atomic.AtomicInteger();
-        ExtractionTaskCoordinator c = new ExtractionTaskCoordinator(new WorkspaceExtractionService(
-                new PreviewCacheLifecycle(new PreviewCacheStore(dir.resolve("cache")))), host,
-                derivedCalls::incrementAndGet);
+        Wire w = wire(host, derivedCalls);
         try {
             runOnFx(() -> {
                 host.statusLabel = new Label();
                 host.progressBar = new ProgressBar();
                 host.startButton = new Button();
                 host.stopButton = new Button();
-                c.begin();
-                assertTrue(c.running.get(), "启动路径必须置运行标记");
+                w.gui.begin();
+                assertTrue(w.backend.running.get(), "启动路径必须置运行标记");
                 assertTrue(host.startButton.isDisabled(), "提取中开始按钮必须禁用");
                 assertFalse(host.stopButton.isDisabled(), "提取中停止按钮必须启用");
             });
 
-            waitUntil("空单元任务完成 → 运行标记复位", () -> !c.running.get());
-            runOnFx(() -> { });   // 排空 FX：onSucceeded 收尾（落地 → 状态栏）全部执行完再断言
+            waitUntil("空单元任务完成 → 运行标记复位", () -> !w.backend.running.get());
+            runOnFx(() -> { });   // 排空 FX：成功终态渲染（落地 → 状态栏）全部执行完再断言
             assertTrue(host.stopButton.isDisabled(), "成功后停止按钮必须禁用（终态落地）");
             assertEquals(1, derivedCalls.get(), "成功后开始按钮必须按派生函数重算恰一次（终态落地）");
         } finally {
-            c.cancel();
+            w.backend.cancelExtraction();
+        }
+    }
+
+    /**
+     * ④-取消/幂等（E1.1 断言面平移）：取消终态渲染只做落地（停止禁用 + 勾选解锁 + 开始按派生函数重算），
+     * 不写状态栏文案、不回写统计；重复投递只重复复位（幂等，与迁移前 {@code landTerminalState}
+     * 的幂等契约同一口径：派生函数每落地重算一次、两次结果相同）。
+     */
+    @Test
+    void cancelTerminalHandlingLandsUiIdempotentlyAndWritesNoStatusText() throws Exception {
+        requireToolkit();
+        StubHost host = host();
+        java.util.concurrent.atomic.AtomicInteger derivedCalls = new java.util.concurrent.atomic.AtomicInteger();
+        Wire w = wire(host, derivedCalls);
+        try {
+            runOnFx(() -> {
+                host.statusLabel = new Label();
+                host.progressBar = new ProgressBar();
+                host.startButton = new Button();
+                host.stopButton = new Button();
+                w.gui.applyExtractionEvent(new PortEvent.ExtractionTerminal(1,
+                        PortEvent.ExtractionEnd.CANCELLED, null, null));   // 第一次落地
+                w.gui.applyExtractionEvent(new PortEvent.ExtractionTerminal(1,
+                        PortEvent.ExtractionEnd.CANCELLED, null, null));   // 重复投递（幂等）
+            });
+
+            assertTrue(host.stopButton.isDisabled(), "取消终态必须禁用停止按钮（两次落地结果相同）");
+            assertEquals(2, derivedCalls.get(), "派生函数每落地重算一次（纯派生，两次结果相同）");
+            assertTrue(host.events.stream().noneMatch(e -> e.startsWith("status:")),
+                    "落地不得改状态栏文案（stop 文案由 onStopProcessing 恰一次写入）");
+            assertTrue(host.events.stream().noneMatch(e -> e.equals("results")),
+                    "落地本身不得回写统计（取消 partial 回写走结果事件）");
+        } finally {
+            w.backend.cancelExtraction();
         }
     }
 }

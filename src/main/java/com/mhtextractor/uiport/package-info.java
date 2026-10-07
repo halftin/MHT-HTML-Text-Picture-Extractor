@@ -16,10 +16,10 @@
  *       的类；视图模型全部由本包自持 record。</li>
  * </ol>
  *
- * <p><b>当前切片（P3-2 最小切片）</b>：工作区查询（{@link WorkspaceVm}）+
- * 撤销 / 清场 / 勾选 / 取消命令（{@link WorkspaceCommands}）+ 变更事件流（{@link PortEvents}）+
- * 确认往返接缝（{@link Confirmer}）；其余端口能力（导入编排、提取编排、参数 schema、
- * 输出单元规划、预览等）留后续批次，见《端口能力覆盖矩阵》§4。</p>
+ * <p><b>当前切片（P3-2 最小切片起，B3–B6 逐批扩展）</b>：工作区查询（{@link WorkspaceVm}）+
+ * 命令（{@link WorkspaceCommands}：撤销 / 清场 / 勾选 / 分组 / 参数 / 导入编排 / 提取任务通道）+
+ * 变更事件流（{@link PortEvents}，含提取任务通道事件族
+ * {@link PortEvent.ExtractionChannelEvent}）+ 确认往返接缝（{@link Confirmer}）。</p>
  *
  * <p><b>视图模型纪律</b>：所有 record 的集合字段做<b>防御性不可变拷贝</b>
  * （{@code List.copyOf} / {@code Map.copyOf}），快照一次性成立后不再受构造方后续修改影响。</p>

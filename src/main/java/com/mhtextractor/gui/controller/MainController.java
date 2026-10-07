@@ -16,7 +16,7 @@ import com.mhtextractor.gui.util.JavaFxUtil;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.app.Texts;
-import com.mhtextractor.app.ExtractionStats;
+import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.model.ParamScope;
@@ -186,18 +186,14 @@ public class MainController {
     private final WorkspaceExtractionService extractionService =
             new WorkspaceExtractionService(previewCacheLifecycle.lifecycle());
     /**
-     * 提取任务协调器（Q3 / P2；步骤 2 起兼作提取启动编排收口）：JavaFX {@code Task} 生命周期与
-     * UI 回调的宿主，{@link ExtractionTaskCoordinator#begin()} 从 {@code onStartProcessing} 接下
-     * deny 链 → R1.6 参数未确认卡 → 顺序门 → 启动的整条编排。
-     * <b>partial 统计（原 {@code lastExtractStats}）、运行标记（原 {@code running}）与在途任务
-     * （原 {@code currentTask}）三个提取状态字段都已归它持有</b>——本类不再有第二份可变 holder：
-     * 写入只发生在协调器一处（服务返回值落一次），取消回调只读它。测试支撑访问经
-     * {@link #extractStats()} 与 {@link #running()}；驱动面（{@code AcceptanceDriver}）直访
-     * 本字段读 {@code buildRuntimeConfig()}（与 {@code refs} 同一口径：为协作放宽可见性，
-     * 不带 test-support 标记）。
+     * 提取任务协调器（Q3 / P2；P3-B6 起只剩前端两段）：begin() 接下 deny 链 → R1.6 卡 → 顺序门
+     * → 启动的编排，以及提取任务通道事件的前端渲染（{@link ExtractionTaskCoordinator#applyExtractionEvent}）。
+     * 任务通道（代际/终态恰好一次/取消竞态/结果通道）已下沉 {@link #extractionChannel}（app 层）。
+     * 驱动面（{@code AcceptanceDriver}）直访本字段读 {@code buildRuntimeConfig()}（与 {@code refs}
+     * 同一口径：为协作放宽可见性，不带 test-support 标记）。
      */
     final ExtractionTaskCoordinator extractionCoordinator =
-            new ExtractionTaskCoordinator(extractionService, new ExtractionTaskCoordinator.Host() {
+            new ExtractionTaskCoordinator(new ExtractionTaskCoordinator.Host() {
                 @Override public boolean isAnimating() { return groupCommand.isAnimating(); }
                 @Override public String inputFolder() { return refs.inputFolderField().getText(); }
                 @Override public String outputFolder() { return refs.outputFolderField().getText(); }
@@ -296,8 +292,15 @@ public class MainController {
     });
     /** 端口确认往返的界面实现（B5-1 起有真实消费方：配额卡；锚点与迁移前配额卡一致） */
     private final com.mhtextractor.gui.component.GuiConfirmer uiConfirmer = new com.mhtextractor.gui.component.GuiConfirmer(() -> refs.statusLabel());
+    /** 提取任务通道（P3-B6）：任务代际/终态恰好一次/取消竞态/结果通道的唯一所有者（app 层）；运行标记与统计 holder 经 {@link #running()} / {@link #extractStats()} 投影。 */
+    final com.mhtextractor.app.WorkspaceExtractionCoordinator extractionChannel =
+            new com.mhtextractor.app.WorkspaceExtractionCoordinator(extractionService,
+                    com.mhtextractor.app.WorkspaceExtractionCoordinator.productionRequests(
+                            extractionCoordinator.plans(), this::allVisibleItems, uiConfirmer),
+                    Platform::runLater);
     private final com.mhtextractor.uiport.Uiport activityPort = new com.mhtextractor.app.InProcessUiport(ws,
             uiConfirmer,
+            extractionCoordinator.plans(),
             new com.mhtextractor.app.WorkspaceActivityService(new com.mhtextractor.app.WorkspaceActivityService.Context() {
                 public List<PreviewItem> items() { return ws.allItems(); }
                 public boolean textMode() { return isTextMode(); }
@@ -316,7 +319,8 @@ public class MainController {
                 public com.mhtextractor.app.WorkspaceParamService cacheService() { return workspaceParamService; }
                 public com.mhtextractor.app.GlobalParameterCache globalParams() { return paramDomain.globalCache(); }
             }),
-            new com.mhtextractor.app.WorkspaceImportCoordinator(ws, uiConfirmer, Platform::runLater));
+            new com.mhtextractor.app.WorkspaceImportCoordinator(ws, uiConfirmer, Platform::runLater),
+            extractionChannel);
     final PreviewLoader previewLoader = new PreviewLoader(new PreviewLoader.Host() {
         @Override public Object currentSelection() { return MainController.this.currentSelection(); }
         @Override public PreviewRenderer renderer() { return previewRenderer; }
@@ -546,6 +550,7 @@ public class MainController {
         installer.installModeAndFolders();
         installer.installPreviewCacheHooks();
         installer.installWelcomeLog();
+        extractionCoordinator.bindStartExtraction(activityPort.commands()::startExtraction);
         portEvents = activityPort.events().subscribe(this::onPortEvent);
     }
 
@@ -738,6 +743,8 @@ public class MainController {
             onFx(() -> applyImportFinished(finished));
         } else if (event instanceof PortEvent.Notice notice) {
             applyNotice(notice);
+        } else if (event instanceof PortEvent.ExtractionChannelEvent extraction) {
+            onFx(() -> extractionCoordinator.applyExtractionEvent(extraction));
         }
     }
 
@@ -1182,33 +1189,25 @@ public class MainController {
 
     @FXML
     private void onStartProcessing() {
-        // deny 链 → 图片模式额外校验 → R1.6 参数未确认卡 → 顺序门 → 启动：
-        // 编排本体已整体外迁到 ExtractionTaskCoordinator.begin()（步骤 2，台账 1.1-②），
-        // 此处仅 FXML 入口薄转发。顺序、日志键与文案键一律不变。
+        // deny 链 → R1.6 卡 → 顺序门 → 启动：编排在 ExtractionTaskCoordinator.begin()（步骤 2，台账 1.1-②）
         extractionCoordinator.begin();
     }
 
-    /**
-     * 单次提取的运行标记（测试支撑）：投影到协调器持有的唯一实例 ——
-     * 解析回调据此让出进度条 / 状态栏，语义与搬迁前 {@code running} 字段一致。
-     */
+    /** 单次提取的运行标记（测试支撑）：投影到提取任务通道（app 层）持有的唯一实例。 */
     AtomicBoolean running() {
-        return extractionCoordinator.running;
+        return extractionChannel.running;
     }
 
-    /**
-     * 最近一次提取的 partial/完整统计（测试支撑）：<b>只读</b>投影到协调器持有的唯一 holder ——
-     * 写入只发生在 {@code ExtractionTaskCoordinator.run} 一处（服务返回值落一次）。
-     */
+    /** 最近一次提取的 partial/完整统计（测试支撑）：只读投影到提取任务通道持有的唯一 holder。 */
     AtomicReference<ExtractionStats> extractStats() {
-        return extractionCoordinator.lastExtractStats;
+        return extractionChannel.lastExtractStats;
     }
 
     @FXML
     private void onStopProcessing() {
-        // E1.1：取消 + 复位（running / currentTask / 停止按钮 / 开始按钮派生函数）只有协调器一份实现；
-        // 此处只保留非复位 UI 动作。任务线程迟到的 onCancelled 会再落地一次（幂等，见 landTerminalState）。
-        extractionCoordinator.cancelAndReset();
+        // E1.1：取消 + 复位（running / 停止按钮 / 开始按钮派生函数）由后端任务通道的取消终态恰好一次交付；
+        // 此处只保留非复位 UI 动作。
+        activityPort.commands().cancelExtraction();
         refs.progressBar().setVisible(false);
         setProgressBarActivity(null);
         refs.statusLabel().setText(Texts.get("extract.stopped"));

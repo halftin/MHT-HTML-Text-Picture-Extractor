@@ -24,14 +24,18 @@ import java.util.function.Supplier;
  *
  * <p><b>按钮与图标口径（与迁移前逐字一致）</b>：按钮文案恒为 {@code notification.ok} /
  * {@code notification.cancel}（迁移前 {@code GuiNotifications.quotaConfirm} 就是这两个固定标签）；
- * 图标按请求键映射 —— 配额卡（{@code import.quotaReached}）用 {@code CLIPBOARD_LIST}
- * （与迁移前同图标），其余用问号默认图标。动作键只在「继续 / 停止」判定时作为答案标识回传，
+ * 图标按请求键映射 —— 配额卡（{@code import.quotaReached}）用 {@code CLIPBOARD_LIST}、
+ * 递归深度卡（{@code alert.recursionDepthHeader}，P3-B6）用 {@code SITEMAP}
+ * （均与迁移前同图标），其余用问号默认图标。动作键只在「继续 / 停止」判定时作为答案标识回传，
  * 不参与按钮渲染（若按动作键渲染会改变迁移前的按钮文案，属用户可见变化）。</p>
  */
 public final class GuiConfirmer implements Confirmer {
 
     /** 配额确认卡图标映射键（迁移前 {@code GuiNotifications.quotaConfirm} → {@code CLIPBOARD_LIST}）。 */
     private static final String QUOTA_KEY = "import.quotaReached";
+
+    /** 递归深度确认卡图标映射键（P3-B6；迁移前 {@code GuiNotifications.recursionDepthConfirm} → {@code SITEMAP}）。 */
+    private static final String RECURSION_KEY = "alert.recursionDepthHeader";
 
     private final Supplier<Node> anchor;
 
@@ -71,8 +75,13 @@ public final class GuiConfirmer implements Confirmer {
     }
 
     private static FontAwesomeSolid iconOf(ConfirmRequest request) {
-        return QUOTA_KEY.equals(request.key()) ? FontAwesomeSolid.CLIPBOARD_LIST
-                : FontAwesomeSolid.QUESTION_CIRCLE;
+        if (QUOTA_KEY.equals(request.key())) {
+            return FontAwesomeSolid.CLIPBOARD_LIST;
+        }
+        if (RECURSION_KEY.equals(request.key())) {
+            return FontAwesomeSolid.SITEMAP;
+        }
+        return FontAwesomeSolid.QUESTION_CIRCLE;
     }
 
     /**

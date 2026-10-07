@@ -48,7 +48,10 @@ import java.util.function.Consumer;
  *       参数命令族（B4）转发 {@link WorkspaceParamCommandService}（写入 + 撤销压栈 +
  *       缓存失效收口于 app 层，前端按 {@code ParamStateChanged} 事件刷新）；
  *       导入编排（B5-1）转发 {@link WorkspaceImportCoordinator}（会话/轮次/配额确认往返/
- *       自动建组命名/撤销压栈，前端按 {@code ImportStateChanged/ImportRound/ImportFinished} 事件刷新）；</li>
+ *       自动建组命名/撤销压栈，前端按 {@code ImportStateChanged/ImportRound/ImportFinished} 事件刷新）；
+ *       提取任务通道（B6）转发 {@link WorkspaceExtractionCoordinator}（请求构建 + 任务代际 +
+ *       终态恰好一次 + 取消竞态，前端按 {@code ExtractionProgress/ExtractionTerminal/
+ *       ExtractionResult} 事件渲染）；</li>
  *   <li>{@link #queries()} —— 每次调用<b>重新组装</b>只读快照（{@link WorkspaceVm}），
  *       <b>不缓存</b>：快照必须总是当前模型状态；</li>
  *   <li>{@link #events()} —— {@link WorkspaceModel#addListener} 桥接：{@link WorkspaceChange.Kind}
@@ -78,6 +81,7 @@ public final class InProcessUiport implements Uiport {
     private final WorkspaceActivityService activities;
     private final WorkspaceParamCommandService paramCommands;
     private final WorkspaceImportCoordinator imports;
+    private final WorkspaceExtractionCoordinator extractions;
 
     /**
      * @param model     工作区模型（数据序 / 分组关系 / 撤销命令的唯一所有者）
@@ -177,12 +181,25 @@ public final class InProcessUiport implements Uiport {
     public InProcessUiport(WorkspaceModel model, Confirmer confirmer, ExtractionPlanService plans,
                           WorkspaceActivityService activities, WorkspaceParamCommandService paramCommands,
                           WorkspaceImportCoordinator imports) {
+        this(model, confirmer, plans, activities, paramCommands, imports, null);
+    }
+
+    /**
+     * B6：带提取任务通道的完整构造（GUI 用 —— 共享真实计划服务的请求工厂与 FX 派发器的
+     * 协调器）。无提取通道的构造（{@code extractions = null}）下
+     * {@code startExtraction/cancelExtraction} 抛 {@link UnsupportedOperationException}
+     * （端口诚实化：不静默吞命令）。
+     */
+    public InProcessUiport(WorkspaceModel model, Confirmer confirmer, ExtractionPlanService plans,
+                          WorkspaceActivityService activities, WorkspaceParamCommandService paramCommands,
+                          WorkspaceImportCoordinator imports, WorkspaceExtractionCoordinator extractions) {
         this.model = Objects.requireNonNull(model, "model");
         this.confirmer = Objects.requireNonNull(confirmer, "confirmer");
         this.plans = Objects.requireNonNull(plans, "plans");
         this.activities = Objects.requireNonNull(activities, "activities");
         this.paramCommands = Objects.requireNonNull(paramCommands, "paramCommands");
         this.imports = Objects.requireNonNull(imports, "imports");
+        this.extractions = extractions;     // 可空：未装配提取通道的构造按诚实化口径拒绝命令
     }
 
     /**
@@ -282,7 +299,27 @@ public final class InProcessUiport implements Uiport {
             public void applyImportPlan(ImportPlanVm plan) {
                 imports.applyPlan(plan);
             }
+
+            // ---- B6：提取任务通道 ----
+
+            @Override
+            public void startExtraction(boolean checkedOnly) {
+                extractionChannel().startExtraction(checkedOnly);
+            }
+
+            @Override
+            public void cancelExtraction() {
+                extractionChannel().cancelExtraction();
+            }
         };
+    }
+
+    /** B6：提取通道按诚实化口径解析（未装配 = 抛异常，不静默吞命令）。 */
+    private WorkspaceExtractionCoordinator extractionChannel() {
+        if (extractions == null) {
+            throw new UnsupportedOperationException("Extraction channel is not wired");
+        }
+        return extractions;
     }
 
     @Override
@@ -308,11 +345,13 @@ public final class InProcessUiport implements Uiport {
             AutoCloseable activitySubscription = activities.subscribe(listener);
             AutoCloseable paramSubscription = paramCommands.subscribe(listener);
             AutoCloseable importSubscription = imports.subscribe(listener);
+            AutoCloseable extractionSubscription = extractions == null ? () -> { } : extractions.subscribe(listener);
             return () -> {
                 model.removeListener(bridge);
                 activitySubscription.close();
                 paramSubscription.close();
                 importSubscription.close();
+                extractionSubscription.close();
             };
         };
     }

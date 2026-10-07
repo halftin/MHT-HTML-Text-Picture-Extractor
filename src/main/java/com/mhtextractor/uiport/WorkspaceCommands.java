@@ -1,11 +1,13 @@
 package com.mhtextractor.uiport;
 
 /**
- * 工作区命令（P3-3a 最小切片起，B3 扩至勾选与分组命令集，B4 扩至参数命令族，B5-1 扩至导入编排）：
+ * 工作区命令（P3-3a 最小切片起，B3 扩至勾选与分组命令集，B4 扩至参数命令族，B5-1 扩至导入编排，
+ * B6 扩至提取任务通道）：
  * 撤销、清场、勾选（{@code setChecked}）、分组（{@code group/ungroup/renameGroup}）、
  * 展开状态（{@code toggleGroupExpanded}）、参数应用/清除
- * （{@code setGlobalParams/setGroupParams/setItemParams/clearParams/applyGlobalParams}）
- * 与导入编排（{@code importPaths/applyImportPlan}）。
+ * （{@code setGlobalParams/setGroupParams/setItemParams/clearParams/applyGlobalParams}）、
+ * 导入编排（{@code importPaths/applyImportPlan}）与提取任务通道
+ * （{@code startExtraction/cancelExtraction}）。
  *
  * <p>命令语义由后端保证（数据序 / 分组关系 / 勾选 / 展开状态 / 撤销命令的唯一所有者是后端模型）；
  * 命令生效后经 {@link PortEvents} 推送变更事件，前端据此刷新投影。B3 的勾选 / 组名 /
@@ -119,6 +121,31 @@ public interface WorkspaceCommands {
      * 不启动线程、不置位导入标志。本轮落地后发布 {@link PortEvent.ImportRound}。
      */
     void applyImportPlan(ImportPlanVm plan);
+
+    // ---- B6：提取任务通道（矩阵处置项 1）----
+
+    /**
+     * 启动提取任务（B6）：deny 链 / 门链 / UI 确认卡在前端（它们渲染卡片），<b>请求构建与任务通道
+     * 在后端</b> —— 后端完成「运行时配置 → 会话目录 → 输出单元计划 → 不可变请求快照」并启动
+     * worker；此后一切经 {@link PortEvent.ExtractionChannelEvent} 族事件驱动
+     * （进度 {@code ExtractionProgress}、终态 {@code ExtractionTerminal}、取消 partial
+     * {@code ExtractionResult}）。任务通道契约（每任务一代际、终态恰好一次、取消请求 ≠ worker
+     * 已退出、取消后立即再开不互相污染）由后端保证。
+     *
+     * <p><b>调用方前置（与迁移前 {@code startExtractionTask} 一致，不变）</b>：deny 链与顺序门
+     * 已放行、「只提取选中」的旧结果色清理与界面锁定（开始/停止按钮、进度条归零）已完成；
+     * 本命令只在宿主串行线程（生产 = FX）调用。</p>
+     *
+     * @param checkedOnly 是否只提取列表中被勾选的项目（"开始提取"点击时快照）
+     */
+    void startExtraction(boolean checkedOnly);
+
+    /**
+     * 取消在途提取任务（B6；无在途任务或 worker 已收尾时为空操作）：取消请求时刻立即交付
+     * {@code ExtractionTerminal(CANCELLED)}（前端据此复位停止/开始按钮），partial 回写经
+     * {@code ExtractionResult} 在 worker 收尾后投递一次。在宿主串行线程（生产 = FX）调用。
+     */
+    void cancelExtraction();
 
     /**
      * 清空工作区数据序（组随数据序一并清空；撤销栈与组号计数器不动 —— 与后端

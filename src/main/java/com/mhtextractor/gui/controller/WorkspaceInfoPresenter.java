@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.ExtractResultService;
-import com.mhtextractor.app.ExtractionStats;
+import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.app.OutputNameService;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.app.WorkspaceStructure;

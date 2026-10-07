@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.ExtractionStats;
+import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.cache.PreviewCacheLifecycle;

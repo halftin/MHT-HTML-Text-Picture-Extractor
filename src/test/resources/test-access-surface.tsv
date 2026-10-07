@@ -3,12 +3,6 @@
 #   reflect-dynamic（成员名无法静态解析的反射点，按 文件+方法 登记，第 2 列=源文件相对路径）
 direct	com.mhtextractor.gui.component.HtmlSourceViewer	plainText	同包直访（驱动类字节码常量池引用）；驱动: HtmlFindIndexTest
 direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator	buildRuntimeConfig	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
-direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator	landTerminalState	同包直访（驱动类字节码常量池引用）；驱动: ExtractionTaskCoordinatorRunChannelTest
-direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator	running	同包直访（驱动类字节码常量池引用）；驱动: ExtractionTaskCoordinatorCancelRaceTest, ExtractionTaskCoordinatorGateTest, ExtractionTaskCoordinatorRunChannelTest
-direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator$RunChannel	<init>	同包直访（驱动类字节码常量池引用）；驱动: ExtractionTaskCoordinatorRunChannelTest
-direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator$RunChannel	deliverAfterWorkerFinished	同包直访（驱动类字节码常量池引用）；驱动: ExtractionTaskCoordinatorRunChannelTest
-direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator$RunChannel	isCurrent	同包直访（驱动类字节码常量池引用）；驱动: ExtractionTaskCoordinatorRunChannelTest
-direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator$RunChannel	result	同包直访（驱动类字节码常量池引用）；驱动: ExtractionTaskCoordinatorRunChannelTest
 direct	com.mhtextractor.gui.controller.FileListContextMenu	pickFrom	同包直访（驱动类字节码常量池引用）；驱动: FileListContextMenuTest
 direct	com.mhtextractor.gui.controller.GroupCommandController	finishExpandAnim	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.GroupCommandController	toggleGroupExpanded	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver

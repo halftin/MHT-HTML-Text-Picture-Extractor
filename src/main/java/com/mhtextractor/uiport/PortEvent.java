@@ -107,6 +107,62 @@ public sealed interface PortEvent {
 
     record PreviewLoaded(long generation, String path) implements PortEvent {}
 
+    // ---- B6：提取任务通道（矩阵处置项 1）----
+
+    /**
+     * 提取任务通道事件族（B6）：任务代际 / 终态恰好一次 / 取消竞态 / 结果通道的端口契约 ——
+     * {@link ExtractionProgress} / {@link ExtractionTerminal} / {@link ExtractionResult}
+     * 都携带递增的 run 代际；旧任务迟到的投递由后端代际守卫拦下（不得污染新任务）。
+     */
+    non-sealed interface ExtractionChannelEvent extends PortEvent {
+    }
+
+    /**
+     * 跨单元总进度（0.0~1.0，只增不减；后端 worker 的进度回调经派发器投递）。
+     *
+     * @param generation run 代际
+     * @param overall    总进度
+     */
+    record ExtractionProgress(long generation, double overall) implements ExtractionChannelEvent {
+    }
+
+    /**
+     * 提取终态（B6）：<b>恰好一次</b> —— 成功 / 失败在 worker 收尾后交付；取消在
+     * {@code cancelExtraction()} 的<b>取消请求时刻</b>交付（取消请求 ≠ worker 已退出）。
+     * 前端据此复位停止/开始按钮并渲染结果。
+     *
+     * @param generation          run 代际
+     * @param end                 终态类别
+     * @param stats               统计快照（仅 {@link ExtractionEnd#SUCCEEDED} 非 null；
+     *                             取消路径的 partial 经 {@link ExtractionResult} 单独交付）
+     * @param sessionOutputFolder 本次会话输出目录（成功路径"完成后打开输出目录"用）
+     */
+    record ExtractionTerminal(long generation, ExtractionEnd end,
+                              com.mhtextractor.model.ExtractionStats stats,
+                              String sessionOutputFolder) implements ExtractionChannelEvent {
+    }
+
+    /**
+     * 取消路径的 partial 回写（B6）：worker 完成处理（取消请求之后）恰好投递一次，
+     * 载荷 = worker 返回的统计；成功路径统计随 {@link ExtractionTerminal} 走，不重复投递。
+     *
+     * @param generation run 代际
+     * @param stats      已处理单元的 partial 统计
+     */
+    record ExtractionResult(long generation,
+                            com.mhtextractor.model.ExtractionStats stats) implements ExtractionChannelEvent {
+    }
+
+    /** 提取终态类别（B6）：成功 / 失败 / 取消，每任务恰好交付其一。 */
+    enum ExtractionEnd {
+        /** worker 正常收尾（统计随终态事件交付） */
+        SUCCEEDED,
+        /** worker 异常收尾（无统计；后端已打 {@code log.maincontroller.37}，前端渲染错误卡片） */
+        FAILED,
+        /** 取消请求时刻交付（无统计；partial 经 {@link ExtractionResult} 在 worker 收尾后投递） */
+        CANCELLED
+    }
+
     /**
      * 工作区结构化变更（数据序 / 分组 / 勾选 / 参数 / 撤销等）。
      *

@@ -1,6 +1,7 @@
 package com.mhtextractor.app;
 
 import com.mhtextractor.model.ExtractWarning;
+import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.model.PreviewItem;
 
 import java.util.ArrayList;

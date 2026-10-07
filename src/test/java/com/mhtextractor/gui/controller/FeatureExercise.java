@@ -6,7 +6,7 @@ import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.app.ExtractionStats;
+import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.model.ChangeListener;
 import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.model.ExtractOutcome;
