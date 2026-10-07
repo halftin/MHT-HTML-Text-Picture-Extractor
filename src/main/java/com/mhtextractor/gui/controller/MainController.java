@@ -21,6 +21,8 @@ import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.model.ParamScope;
 import com.mhtextractor.app.UndoManager;
+import com.mhtextractor.uiport.ImportPlanVm;
+import com.mhtextractor.uiport.PortEvent;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
@@ -53,7 +55,6 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
 /**
  * 主界面逻辑控制器：预览工作台常驻主窗口，参数设置弹窗化。
@@ -64,7 +65,7 @@ import java.util.function.Consumer;
  * GUI 状态（模式/目录/完成后打开输出文件夹）持久化于 logs/gui-state.json。</p>
  */
 @Slf4j
-public class MainController implements ImportSessionCoordinator.ImportUi {
+public class MainController {
 
     /* 单元格内边距清零（列头与单元格列对齐由各自 HBox 的内边距控制） */
     /* 预解析失败样式（提取结果状态需求拍板：浅黄；2026-09-25 用户反馈改为接近 Windows/WinUI 警告黄 #FFF9AE） */
@@ -252,8 +253,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             Collections.newSetFromMap(new IdentityHashMap<>());
 
     // ==================== 统一导入会话 ====================
-    /** 当前导入会话：非 null = 导入进行中（用于禁用开始提取 + 恢复判定） */
-    ImportSession importPending = null;
+    /** 当前导入在途：true = 导入进行中（用于禁用开始提取 + 恢复判定）；由 {@link PortEvent.ImportStateChanged} 事件驱动 */
+    boolean importPending = false;
     /** 外部导入拖拽进行中（与内部排序通道互斥；hasFiles() 判定） */
     private boolean importDragOver = false;
     /** 拖拽目标嵌套深度计数（DRAG_ENTERED_TARGET/DRAG_EXITED_TARGET 成对计数） */
@@ -261,16 +262,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
     /** 外部导入拖拽的列表高亮样式类 */
     private static final String STYLE_LIST_IMPORT_HOVER = "list-import-hover";
 
-    /** 导入会话（不可变） */
-    record ImportSession(List<String> addresses, String sourceDesc, boolean fromDrag) {}
-
-    /**
-     * 导入会话协调器（Q2/P1）：后台线程生命周期、轮次派发、配额确认等待、模型命令、列表刷新与唯一收尾都在它里面。
-     * 导入的<b>规则</b>（地址规范化、轮次去重、组名计算、累计计数）在无头
-     * {@link com.mhtextractor.app.WorkspaceImportService} —— 原先散在本类的 7 个累计字段
-     * （{@code importAccumulated} / {@code importGroupCount} 与 5 个扫描计数器）随规则一起搬进该服务的会话对象。
-     */
-    private final ImportSessionCoordinator importSessions = new ImportSessionCoordinator(ws, this);
+    /** 导入规则服务（Q2/P1）：规范化/去重/组名/累计的无头规则；编排（会话/轮次/配额/撤销压栈 BC-5）经端口命令下沉 {@code app.WorkspaceImportCoordinator}，本类按 {@link PortEvent} 事件刷新前端。 */
+    private final WorkspaceImportService importService = new WorkspaceImportService();
 
     // ===== 右键菜单（13 项 = 9 动作 + 4 分隔线；Q9a 已整体外迁到 FileListContextMenu） =====
     /** 右键菜单：菜单项所有权 / 启用规则 / 动作转发 / 显示生命周期都在新类；本类只提供回调面 */
@@ -301,8 +294,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public int unitIndex(Object item) { return (int) MainController.this.unitIndex((PreviewItem) item); }
         @Override public PreviewSession session() { return previewCacheLifecycle; }
     });
+    /** 端口确认往返的界面实现（B5-1 起有真实消费方：配额卡；锚点与迁移前配额卡一致） */
+    private final com.mhtextractor.gui.component.GuiConfirmer uiConfirmer = new com.mhtextractor.gui.component.GuiConfirmer(() -> refs.statusLabel());
     private final com.mhtextractor.uiport.Uiport activityPort = new com.mhtextractor.app.InProcessUiport(ws,
-            request -> { throw new UnsupportedOperationException("Activity confirmations use port events"); },
+            uiConfirmer,
             new com.mhtextractor.app.WorkspaceActivityService(new com.mhtextractor.app.WorkspaceActivityService.Context() {
                 public List<PreviewItem> items() { return ws.allItems(); }
                 public boolean textMode() { return isTextMode(); }
@@ -320,7 +315,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                 }
                 public com.mhtextractor.app.WorkspaceParamService cacheService() { return workspaceParamService; }
                 public com.mhtextractor.app.GlobalParameterCache globalParams() { return paramDomain.globalCache(); }
-            }));
+            }),
+            new com.mhtextractor.app.WorkspaceImportCoordinator(ws, uiConfirmer, Platform::runLater));
     final PreviewLoader previewLoader = new PreviewLoader(new PreviewLoader.Host() {
         @Override public Object currentSelection() { return MainController.this.currentSelection(); }
         @Override public PreviewRenderer renderer() { return previewRenderer; }
@@ -452,7 +448,10 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         @Override public void cancelWorkspaceActivity() { MainController.this.cancelWorkspaceActivity(); }
         @Override public void awaitPreviewInFlight(long millis) { previewLoader.awaitInFlight(millis); }
         @Override public Path cacheRoot() { return previewCacheLifecycle.store().root(); }
-        @Override public void onShutdownClearCache() { workspaceParamService.clearAllCaches(); }
+        @Override public void onShutdownClearCache() {
+            workspaceParamService.clearAllCaches();
+            try { portEvents.close(); } catch (Exception ignored) { /* 关窗路径：订阅关闭失败不影响清缓存收尾 */ }
+        }
     });
     /** Q9a：测试驱动按<b>字段访问</b>读它的 isDisable()（已由第 13 条不变式冻结），故保留同名字段指向新类里那一个 */
     MenuItem ctxClearParams;
@@ -547,6 +546,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
         installer.installModeAndFolders();
         installer.installPreviewCacheHooks();
         installer.installWelcomeLog();
+        portEvents = activityPort.events().subscribe(this::onPortEvent);
     }
 
     /** 关窗（规则 d）：本体已外迁到 {@link WorkspaceLifecycleController}（C4），此处仅作转发壳（MainViewInstaller 挂接点） */
@@ -657,9 +657,9 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
 
     // ==================== 统一导入（拖拽 + 浏览共用入口） ====================
 
-    /** 是否正在导入 */
+    /** 是否正在导入（导入在途标志由 {@link PortEvent.ImportStateChanged} 事件驱动） */
     boolean isImporting() {
-        return importPending != null;
+        return importPending;
     }
 
     /**
@@ -667,7 +667,8 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
      * 拖拽路径（fromDrag=true）在盘符根目录时弹确认框（BC-8）；浏览路径不弹。
      *
      * <p>本方法只留"拦截 + 确认展示 + 日志产出"；规范化/去重/建组/累计的规则在
-     * {@link com.mhtextractor.app.WorkspaceImportService}，会话生命周期在 {@link ImportSessionCoordinator}。</p>
+     * {@link com.mhtextractor.app.WorkspaceImportService}，会话生命周期/轮次/配额确认往返/
+     * 撤销压栈（BC-5）经端口命令下沉到 {@code app.WorkspaceImportCoordinator}。</p>
      */
     void importByPaths(List<String> addresses, String sourceDesc, boolean fromDrag) {
         if (addresses == null || addresses.isEmpty()) {
@@ -678,7 +679,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             return;
         }
         // 地址规范化（RISK-6）：祖先/后代包含关系合并为祖先，防重复扫描与重复批次
-        WorkspaceImportService.NormalizeResult normalized = importSessions.normalize(addresses);
+        WorkspaceImportService.NormalizeResult normalized = importService.normalizeAddresses(addresses);
         // 规范化日志（.06 重复 / .07 被祖先覆盖）：规则在 app 层回传有序事件，文案留在 GUI 层。
         // ★ 必须在 .04 之前逐条产出 —— 原实现是"规范化过程中打日志，返回后才打 .04"。
         for (WorkspaceImportService.DroppedAddress dropped : normalized.dropped()) {
@@ -701,7 +702,7 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
                         + Texts.get("import.rootDirConfirmNote");
                 GuiNotifications.driveRootConfirm(refs.statusLabel(), msg, ok -> {
                     if (ok) {
-                        importSessions.start(normalized.kept(), sourceDesc, fromDrag);
+                        activityPort.commands().importPaths(normalized.kept(), sourceDesc, fromDrag);
                     } else {
                         log.info(Texts.msg("log.maincontroller.05", roots));
                     }
@@ -710,76 +711,74 @@ public class MainController implements ImportSessionCoordinator.ImportUi {
             }
         }
 
-        importSessions.start(normalized.kept(), sourceDesc, fromDrag);
+        activityPort.commands().importPaths(normalized.kept(), sourceDesc, fromDrag);
     }
 
     /**
      * 应用一个计划（一批或一轮）；FX 线程；生产与自动化测试共用（<b>签名与语义一字不变</b>：
-     * GUI 自动化 {@code FeatureExercise} 用它程序化驱动一整轮导入）。
-     * 规则（去重/条目构造/累计/组名）在 {@link com.mhtextractor.app.WorkspaceImportService}，
-     * 模型命令与刷新在 {@link ImportSessionCoordinator}。
+     * GUI 自动化 {@code FeatureExercise} 用它程序化驱动一整轮导入）。计划经端口视图模型
+     * {@link ImportPlanVm} 落地，编排在 {@code app.WorkspaceImportCoordinator}。
      */
-    void applyImportPlan(MhtImportPlanner.Plan plan) {
-        importSessions.applyPlan(plan);
+    void applyImportPlan(ImportPlanVm plan) {
+        activityPort.commands().applyImportPlan(plan);
     }
 
-    // ==================== 导入协调器的 GUI 回调（ImportSessionCoordinator.ImportUi） ====================
+    // ==================== 导入编排事件桥（B5-1）：后端编排驱动的前端刷新 ====================
 
-    /** 会话开始：置位"导入中"并刷新开始按钮（C-1：禁用开始提取） */
-    @Override
-    public void onImportStarted(List<String> addresses, String sourceDesc, boolean fromDrag) {
-        importPending = new ImportSession(addresses, sourceDesc, fromDrag);
-        paramDomain.updateStartButtonState();
+    /** 端口事件订阅句柄（{@link #initialize()} 挂接；关窗清空缓存时关闭，防止收尾期间再来刷新事件） */
+    private AutoCloseable portEvents = () -> { };
+
+    /** 端口事件入口：只消费导入编排事件与后端提醒（其余事件由各自协作者订阅） */
+    private void onPortEvent(PortEvent event) {
+        if (event instanceof PortEvent.ImportRound round) {
+            onFx(() -> applyImportRound(round));
+        } else if (event instanceof PortEvent.ImportStateChanged state) {
+            onFx(() -> applyImportState(state));
+        } else if (event instanceof PortEvent.ImportFinished finished) {
+            onFx(() -> applyImportFinished(finished));
+        } else if (event instanceof PortEvent.Notice notice) {
+            applyNotice(notice);
+        }
     }
 
-    /** 会话收尾：清位并刷新开始按钮（★ 必须走派生更新，不裸 setDisable） */
-    @Override
-    public void onImportFinished() {
-        importPending = null;
-        paramDomain.updateStartButtonState();
+    /** 后端事件可能来自导入后台线程：FX 线程直接执行，否则转投（顺序由事件流保证） */
+    private void onFx(Runnable task) {
+        if (Platform.isFxApplicationThread()) {
+            task.run();
+        } else {
+            Platform.runLater(task);
+        }
     }
 
-    /** 列表可见项快照：路径（导入去重口径 = 可见项，<b>不得</b>含已移除项）+ 数量 */
-    @Override
-    public VisibleSnapshot visibleSnapshot() {
-        List<PreviewItem> visible = allVisibleItems();
-        return new VisibleSnapshot(visible.stream().map(i -> i.path).toList(), visible.size());
-    }
-
-    @Override
-    public boolean hasConfirmedParams() {
-        return currentModeConfirmed();
-    }
-
-    /** 收尾统一预解析（RISK-7：导入期间抑制，收尾跑一次，避免 O(n²)） */
-    @Override
-    public void startPreParse(List<PreviewItem> items) {
-        preparseController.startPreParseFor(items);
-    }
-
-    @Override
-    public void refreshList() {
+    /** 一轮落地：列表全量刷新（每轮一次，RISK-8）→ 新建组名字刷新挂接（F8/RISK-11）→ 首轮选中首行 */
+    private void applyImportRound(PortEvent.ImportRound round) {
         refreshAfterListChange();
+        for (GroupItem<PreviewItem> group : round.createdGroups()) {
+            registerGroupNameRefresh(group);
+        }
+        if (round.madeListNonEmpty()) {
+            refs.fileListView().getSelectionModel().selectFirst();
+        }
     }
 
-    @Override
-    public void attachGroupNameRefresh(GroupItem<PreviewItem> group) {
-        registerGroupNameRefresh(group);
+    /** 导入在途置位/复位：刷新开始按钮（C-1：导入期间禁用开始提取） */
+    private void applyImportState(PortEvent.ImportStateChanged state) {
+        importPending = state.importing();
+        paramDomain.updateStartButtonState();
     }
 
-    @Override
-    public void selectFirstRow() {
-        refs.fileListView().getSelectionModel().selectFirst();
+    /** 收尾统一预解析（RISK-7：导入期间抑制，收尾跑一次，避免 O(n²)）—— 判「非空 + 当前模式参数已确认」后触发 */
+    private void applyImportFinished(PortEvent.ImportFinished finished) {
+        if (!finished.accumulatedPaths().isEmpty() && currentModeConfirmed()) {
+            activityPort.commands().startPreparseFor(finished.accumulatedPaths());
+        }
     }
 
-    @Override
-    public void confirmQuotaReached(String message, Consumer<Boolean> answer) {
-        GuiNotifications.quotaConfirm(refs.statusLabel(), message, answer);
-    }
-
-    @Override
-    public void showImportFailed() {
-        GuiNotifications.importFailed(refs.statusLabel());
+    /** 后端提醒：目前只有导入扫描失败（error.IMPORT_FAILED → 居中错误卡片） */
+    private void applyNotice(PortEvent.Notice notice) {
+        if ("error.IMPORT_FAILED".equals(notice.key())) {
+            GuiNotifications.importFailed(refs.statusLabel());
+        }
     }
 
     /** 组名刷新监听注册（手动/自动建组共用；F8/RISK-11） */

@@ -45,7 +45,7 @@ import java.util.function.Consumer;
  *   <li>{@link #fileDirMissing} / {@link #openFolderFailed} → {@code FOLDER_OPEN}
  *       （<b>刻意同图标</b>：两者都是"文件夹这一路"出的问题，不是"一码一图标"）</li>
  *   <li>{@link #browserLaunchFailed} / {@link #browserViewFailed} → {@code GLOBE}（同上，同一用途）</li>
- *   <li>{@link #importFailed} → {@code FILE_IMPORT}；{@link #quotaConfirm} → {@code CLIPBOARD_LIST}</li>
+ *   <li>{@link #importFailed} → {@code FILE_IMPORT}；导入配额卡（B5-1 起经 {@link GuiConfirmer} 渲染）→ {@code CLIPBOARD_LIST}</li>
  *   <li>{@link #driveRootConfirm} / {@link #cacheStepWarning} → {@code HDD}</li>
  *   <li>{@link #cacheClearing} → {@code BROOM}；{@link #paramDialogOpenFailed} / {@link #paramTargetConfirm} /
  *       {@link #collapseDraftKept} / {@link #draftBlocksStart} → {@code SLIDERS_H}</li>
@@ -82,11 +82,6 @@ public final class GuiNotifications {
     /** 预览缓存跨过大小台阶：右上角非阻塞警告 toast（连续跨台阶由 toast 层自行限流）。 */
     public static void cacheStepWarning(Node anchor, String message) {
         NotificationHost.toastWarning(anchor, message, FontAwesomeSolid.HDD);
-    }
-
-    /** 导入配额已达上限：居中确认卡片（等待方是导入后台线程，回答经回调回传）。 */
-    public static void quotaConfirm(Node anchor, String message, Consumer<Boolean> answer) {
-        NotificationHost.confirm(anchor, message, FontAwesomeSolid.CLIPBOARD_LIST, answer);
     }
 
     /** 仅拖拽来源 + 盘符根目录：居中确认卡片（BC-8 防误拖整个盘）。 */

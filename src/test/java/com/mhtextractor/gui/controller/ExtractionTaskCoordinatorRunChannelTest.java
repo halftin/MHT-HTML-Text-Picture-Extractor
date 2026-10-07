@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * B —— 取消统计回写竞态：{@link ExtractionTaskCoordinator.RunChannel} 的每 run 结果通道
  * + 完成信号 + 陈旧守卫（<b>零 JavaFX、不启动 toolkit</b>，与
- * {@link ImportSessionCoordinatorQuotaTest} 同思路的无头驱动）。
+ * {@code WorkspaceImportCoordinatorTest} 同思路的无头驱动）。
  *
  * <h2>三个时点怎么表达</h2>
  * <ol>

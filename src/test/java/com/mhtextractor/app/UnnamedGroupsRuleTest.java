@@ -53,7 +53,7 @@ class UnnamedGroupsRuleTest {
 
     @Test
     void importedGroupIsNotReportedByDefault() {
-        // 导入自动建组走 new GroupItem（ImportSessionCoordinator:245），标记默认 false
+        // 导入自动建组走 new GroupItem（WorkspaceImportCoordinator.createGroupForImport），标记默认 false
         GroupItem<PreviewItem> g = group(1, "子目录");
         assertEquals(List.of(), ExtractionPreconditions.unnamedGroups(List.of(g)));
     }
@@ -127,7 +127,7 @@ class UnnamedGroupsRuleTest {
     @Test
     void importedGroupAppendedViaModelIsNotMarked() {
         WorkspaceModel ws = new WorkspaceModel();
-        // ImportSessionCoordinator 同款构造：new GroupItem + appendGroup（自动建组，标记默认 false）
+        // WorkspaceImportCoordinator 同款构造：new GroupItem + appendGroup（自动建组，标记默认 false）
         GroupItem<PreviewItem> imported = new GroupItem<>(ws.nextGroupNo(), "子目录");
         imported.getMembers().add(item("s1.mht"));
         ws.appendGroup(imported);

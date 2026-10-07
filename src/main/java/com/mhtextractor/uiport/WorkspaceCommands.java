@@ -1,10 +1,11 @@
 package com.mhtextractor.uiport;
 
 /**
- * 工作区命令（P3-3a 最小切片起，B3 扩至勾选与分组命令集，B4 扩至参数命令族）：撤销、清场、
- * 勾选（{@code setChecked}）、分组（{@code group/ungroup/renameGroup}）、
- * 展开状态（{@code toggleGroupExpanded}）与参数应用/清除
- * （{@code setGlobalParams/setGroupParams/setItemParams/clearParams/applyGlobalParams}）。
+ * 工作区命令（P3-3a 最小切片起，B3 扩至勾选与分组命令集，B4 扩至参数命令族，B5-1 扩至导入编排）：
+ * 撤销、清场、勾选（{@code setChecked}）、分组（{@code group/ungroup/renameGroup}）、
+ * 展开状态（{@code toggleGroupExpanded}）、参数应用/清除
+ * （{@code setGlobalParams/setGroupParams/setItemParams/clearParams/applyGlobalParams}）
+ * 与导入编排（{@code importPaths/applyImportPlan}）。
  *
  * <p>命令语义由后端保证（数据序 / 分组关系 / 勾选 / 展开状态 / 撤销命令的唯一所有者是后端模型）；
  * 命令生效后经 {@link PortEvents} 推送变更事件，前端据此刷新投影。B3 的勾选 / 组名 /
@@ -95,6 +96,29 @@ public interface WorkspaceCommands {
 
     /** 撤销上一条工作区命令（无可撤销时为 no-op）。 */
     void undo();
+
+    // ---- B5-1：导入编排 ----
+
+    /**
+     * 统一导入编排（B5-1）：把导入会话的<b>生命周期与界面等待</b>整体后端化 —— 会话/轮次扫描
+     * （{@code mht-import-scan} 后台守护线程）、配额确认往返（经 {@link Confirmer}）、自动建组命名、
+     * 撤销压栈（<b>一次导入的每一轮恰好一条</b>，载荷 = 含本轮的全量累计，BC-5）与唯一收尾都在后端；
+     * 规则底座为 {@code WorkspaceImportService}（规范化 / 去重 / 条目构造 / 累计 / 组名计算）。
+     *
+     * <p><b>调用方前置（与迁移前 MainController 一致，不变）</b>：地址已规范化（去重 / 祖先覆盖）、
+     * 空地址与导入在途已拦截、拖拽来源盘符根确认（BC-8）已完成；本命令只负责「开始会话 → 发布
+     * {@link PortEvent.ImportStateChanged}(importing=true) → 起扫描线程」。前端经
+     * {@link PortEvent.ImportRound} / {@link PortEvent.ImportFinished} 事件驱动刷新。</p>
+     */
+    void importPaths(java.util.List<String> addresses, String sourceDesc, boolean fromDrag);
+
+    /**
+     * 分轮导入第二拍（B5-1）：程序化驱动一轮计划（{@link ImportPlanVm}）落地 —— 去重 / 条目构造 /
+     * 累计 / 组名规则在 {@code WorkspaceImportService}，模型命令与撤销压栈在后端模型。
+     * 无进行中的导入会话时后端按需建一个「空地址」会话（与迁移前控制器长期存在的累计字段等价），
+     * 不启动线程、不置位导入标志。本轮落地后发布 {@link PortEvent.ImportRound}。
+     */
+    void applyImportPlan(ImportPlanVm plan);
 
     /**
      * 清空工作区数据序（组随数据序一并清空；撤销栈与组号计数器不动 —— 与后端

@@ -20,16 +20,17 @@ import java.util.Set;
  *
  * <p><b>本类零 JavaFX、零第三方依赖、不调 {@code I18n}</b>（{@code app} 层由 {@code ArchitectureTest} 强制）。
  * 因此它<b>不产出任何用户文案</b>：需要写日志/弹提醒的地方，本类只回传<b>结构化事实</b>
- * （{@link NormalizeResult} / {@link RoundOutcome}），由 GUI 层（{@code ImportSessionCoordinator}）
- * 用 {@code log.*} 键产出原文案。这样"规则可无头单测"与"日志文案随界面语言走"两件事同时成立。</p>
+ * （{@link NormalizeResult} / {@link RoundOutcome}），由调用方（B5-1 起 = 同层的
+ * {@link WorkspaceImportCoordinator}）用 {@code log.*} 键产出原文案。这样"规则可无头单测"与
+ * "日志文案随界面语言走"两件事同时成立。</p>
  *
- * <h2>分层：本类与 {@code ImportSessionCoordinator} 的边界</h2>
+ * <h2>分层：本类与 {@link WorkspaceImportCoordinator} 的边界</h2>
  * <ul>
  *   <li><b>本类（app）</b>：纯规则与纯数据 —— 规范化、去重口径、条目构造、累计计数、组名计算。
  *       所有方法同步、无线程、不碰任何控件与模型结构。</li>
- *   <li><b>{@code ImportSessionCoordinator}（gui）</b>：会话生命周期 —— 后台线程、{@code Platform.runLater}
- *       派发、配额确认等待、模型命令（{@code WorkspaceModel.appendItems/appendGroup/push}）、
- *       列表刷新与唯一收尾。</li>
+ *   <li><b>{@link WorkspaceImportCoordinator}（app，B5-1 起）</b>：会话生命周期 —— 后台线程、
+ *       宿主派发（生产 = {@code Platform.runLater}）、配额确认往返、模型命令
+ *       （{@code WorkspaceModel.appendItems/appendGroup/push}）、刷新事件与唯一收尾。</li>
  * </ul>
  *
  * <h2>为什么会话累计状态（原控制器的 7 个字段）落在这里</h2>
@@ -147,7 +148,7 @@ public final class WorkspaceImportService {
     /**
      * 导入会话：扫描器（每一轮从断点续扫）+ 本次导入的累计状态。
      *
-     * <p><b>不持有任何线程与界面对象</b>：线程与派发在 {@code ImportSessionCoordinator}。
+     * <p><b>不持有任何线程与界面对象</b>：线程与派发在 {@link WorkspaceImportCoordinator}。
      * 扫描器只能被创建它的线程使用（见 {@link MhtImportPlanner#scanner}），故本对象跨线程时
      * 只有"累计字段"被两方读写 —— 与迁移前控制器字段的形态一致（写方是 GUI 线程，读方是导入后台线程
      * 构造配额文案与收尾汇总）。</p>
@@ -236,7 +237,7 @@ public final class WorkspaceImportService {
      * <p><b>为什么把配额做成参数</b>：生产路径恒用默认值（见上一个重载），而"每轮配额打满 ⇒
      * quotaHit/hasMore 逐轮传递"这条语义只有在配额可缩小时才能用<b>真实扫描器</b>在单测里复现
      * （否则要造 200 个组的目录树）。注入的值必须与调用方打印的配额数一致 ——
-     * 生产调用方（{@code ImportSessionCoordinator}）打印的就是 {@link MhtImportPlanner} 的默认常量。</p>
+     * 生产调用方（{@link WorkspaceImportCoordinator}）打印的就是 {@link MhtImportPlanner} 的默认常量。</p>
      */
     public Session begin(List<String> normalized, String sourceDesc, boolean fromDrag,
                          int maxGroupsPerRound, int maxFilesPerRound) {

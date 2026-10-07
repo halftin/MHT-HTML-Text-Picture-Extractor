@@ -96,7 +96,6 @@ public final class TestAccessSurface {
             "com.mhtextractor.gui.controller.FeatureExercise",
             "com.mhtextractor.gui.controller.FeatureExerciseSupport",
             "com.mhtextractor.gui.controller.FileListContextMenuTest",
-            "com.mhtextractor.gui.controller.ImportSessionCoordinatorQuotaTest",
             "com.mhtextractor.gui.controller.ParamClipboardTest",
             "com.mhtextractor.gui.util.DragGeometryTest",
             "com.mhtextractor.gui.util.ThumbnailFxBridgeTest");

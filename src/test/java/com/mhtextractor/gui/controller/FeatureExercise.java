@@ -133,7 +133,7 @@ private void firePrimary(int index) {
     b.fire();
 }
 
-/** 与生产 {@code ImportSessionCoordinator.awaitQuotaConfirm} 相同的拼装口径（同键同参），断言随 locale 走 */
+/** 与生产 {@code WorkspaceImportCoordinator.awaitQuotaConfirm} 相同的拼装口径（同键同参），断言随 locale 走 */
 private String quotaCardText(int maxGroups, int maxFiles, int filesKept, int groupsKept) {
     return I18n.get("import.quotaReached", "groups", maxGroups, "files", maxFiles)
             + I18n.get("import.quotaContinue")
@@ -330,10 +330,10 @@ public boolean runAutomatedTests() {
 
         // 按钮状态：导入期间禁用 + 收尾恢复
         try {
-            this.view.importPending(this.view.newImportSession(List.of(), I18n.get("test.autoButtonState"), false));
+            this.view.importPending(true);
             this.view.updateStartButtonState();
             if (!startButton().isDisabled()) throw new IllegalStateException("导入期间开始提取应禁用");
-            this.view.importPending(null);
+            this.view.importPending(false);
             this.view.updateStartButtonState();
             boolean anyMode = textModeToggle().isSelected() || imageModeToggle().isSelected();
             if (startButton().isDisabled() != (!anyMode || this.view.visibleCount() == 0)) {
@@ -979,12 +979,11 @@ public boolean runAutomatedTests() {
             out.println("[PASS] Re-import after remove restores items"); p++;
         } catch (Exception e) { out.println("[FAIL] Re-import after remove: " + e.getMessage()); f++; }
 
-        // A2（台账 1.3；决策 F）：GUI 配额确认卡场景 —— 真实 ImportSessionCoordinator（包级注入构造：
-        // 派发器 = 真实 Platform::runLater，配额 = 2 组 / 3 文件，不必造 200 个组的夹具）+ 真实
-        // MainController 的 ImportUi（confirmQuotaReached → GuiNotifications.quotaConfirm），
-        // 在真实 FX 线程上驱动。与无头 ImportSessionCoordinatorQuotaTest 的分工：无头测试用延迟
-        // 派发器确定性复现"卡在 apply 落地前构造"的竞态（桩 UI 收卡）；本场景补上"真实卡片渲染 +
-        // 真实按钮回答 + 计数含触发轮 + 关窗守卫无残留"这条 GUI 可观察面。
+        // A2（台账 1.3；决策 F）：GUI 配额确认卡场景 —— 真实 WorkspaceImportCoordinator（配额 =
+        // 2 组 / 3 文件，不必造 200 个组的夹具）+ 真实 GuiConfirmer（配额卡经 NotificationHost
+        // 渲染，锚点 = 状态标签），在真实 FX 线程上驱动。与无头 WorkspaceImportCoordinatorTest 的
+        // 分工：无头测试用延迟派发器确定性复现"卡在 apply 落地前构造"的竞态（桩 Confirmer 收卡）；
+        // 本场景补上"真实卡片渲染 + 真实按钮回答 + 计数含触发轮 + 关窗守卫无残留"这条 GUI 可观察面。
         try { textModeToggle().setSelected(true); Thread.sleep(200);
             if (com.mhtextractor.gui.component.NotificationHost.hasPendingDecision(statusLabel())) {
                 throw new IllegalStateException("场景前置失败：存在未答的提醒卡");
@@ -1001,9 +1000,11 @@ public boolean runAutomatedTests() {
             for (String s : List.of("d1", "d2", "d3", "d4")) {
                 createSampleMht(java.nio.file.Files.createDirectories(qRoot.resolve(s)), "in.mht");
             }
-            ImportSessionCoordinator quotaSessions =
-                    new ImportSessionCoordinator(this.view.model(), this.mc, Platform::runLater, 2, 3);
-            quotaSessions.start(List.of(qRoot.toString()), I18n.get("test.autoReimport"), false);
+            com.mhtextractor.app.WorkspaceImportCoordinator quotaSessions =
+                    new com.mhtextractor.app.WorkspaceImportCoordinator(this.view.model(),
+                            new com.mhtextractor.gui.component.GuiConfirmer(() -> statusLabel()),
+                            Platform::runLater, 2, 3);
+            quotaSessions.importPaths(List.of(qRoot.toString()), I18n.get("test.autoReimport"), false);
             // 卡 1 = 轮 1（顶层 2 文件 + d1）= 3 文件 / 1 组（文件配额打满）；计数必须含触发卡的那一轮
             waitForQuotaCard();
             if (!com.mhtextractor.gui.component.NotificationHost.hasPendingDecision(statusLabel())) {

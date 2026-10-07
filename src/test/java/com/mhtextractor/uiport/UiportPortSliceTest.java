@@ -74,7 +74,7 @@ class UiportPortSliceTest {
     @Test
     void sealedHierarchyContainsWorkspaceAndActivityEventRecords() {
         Class<?>[] permitted = PortEvent.class.getPermittedSubclasses();
-        assertEquals(13, permitted.length, "B4 新增 ParamStateChanged（参数状态变更事件）");
+        assertEquals(16, permitted.length, "B5-1 新增 ImportStateChanged / ImportRound / ImportFinished（导入编排事件）");
         assertTrue(PortEvent.WorkspaceChanged.class.isRecord());
         assertTrue(PortEvent.RunningChanged.class.isRecord());
         assertTrue(PortEvent.Notice.class.isRecord());
@@ -120,6 +120,8 @@ class UiportPortSliceTest {
                     public void setItemParams(String path, boolean imageMode, com.mhtextractor.model.AppConfig params) {}
                     public void clearParams(List<TargetId> fallbackTargets, boolean imageMode) {}
                     public void applyGlobalParams(TargetId target, boolean imageMode) {}
+                    public void importPaths(List<String> addresses, String sourceDesc, boolean fromDrag) {}
+                    public void applyImportPlan(ImportPlanVm plan) {}
                     @Override
                     public void undo() {
                     }
@@ -158,6 +160,11 @@ class UiportPortSliceTest {
 
                     @Override
                     public void cancel() {
+                    }
+
+                    @Override
+                    public String await() {
+                        return null;
                     }
                 };
             }

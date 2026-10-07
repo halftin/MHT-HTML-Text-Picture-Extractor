@@ -36,7 +36,7 @@ import java.util.function.Consumer;
  *       {@code animateReleaseInsert} <b>先拍旧布局快照</b>、随后才重建显示序并让快照滑到新位置。
  *       若 adapter 在 {@code applyResolvedDrop} 那一刻就 setAll，动画拍到的"旧布局"已是新布局
  *       —— 视觉上就是"没有让位动画"。这正是指南警告的那件事。</li>
- *   <li><b>会重新引入导入路径刻意避免的 O(批次数 × n)</b>：{@code ImportSessionCoordinator}
+ *   <li><b>会重新引入导入路径刻意避免的 O(批次数 × n)</b>：{@code WorkspaceImportCoordinator}
  *       每轮只刷一次列表（RISK-8，不是每批一次）；逐变更自动投影会把这条优化抹掉。</li>
  *   <li><b>选中抖动</b>：{@code setAll} 会重置 {@code ListView} 的选择模型，再按对象钉回。
  *       每次结构命令多一次"清选择 → 重选"，等于把选中监听回调翻倍，属可观察行为变化。</li>

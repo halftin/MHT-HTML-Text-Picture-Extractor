@@ -241,9 +241,24 @@ public final class AcceptanceDriver {
         }
 
         /** 应用导入计划（包级；纯内部轮次派发 —— 真实手势 = 整条异步导入链，
-         *  且该测试段先用离线 Scanner 出 plan 再应用，手势不可复现）。 */
+         *  且该测试段先用离线 Scanner 出 plan 再应用，手势不可复现）。
+         *  B5-1 起计划经端口视图模型落地（换算在驱动侧，生产 MainController 零换算成本）。 */
         public void applyImportPlan(MhtImportPlanner.Plan plan) {
-            mc.applyImportPlan(plan);
+            mc.applyImportPlan(toPlanVm(plan));
+        }
+
+        /** 计划 → 端口视图模型（B5-1）：批次的文件以绝对路径字符串承载，批次形态 / 顺序 / 计数器不变。 */
+        private static com.mhtextractor.uiport.ImportPlanVm toPlanVm(MhtImportPlanner.Plan plan) {
+            List<com.mhtextractor.uiport.ImportPlanVm.ImportBatchVm> batches = new ArrayList<>();
+            for (MhtImportPlanner.Batch b : plan.batches()) {
+                boolean grouped = b instanceof MhtImportPlanner.GroupBatch;
+                String folderName = b instanceof MhtImportPlanner.GroupBatch gb ? gb.folderName() : null;
+                batches.add(new com.mhtextractor.uiport.ImportPlanVm.ImportBatchVm(
+                        b.dirPath(), folderName, grouped,
+                        b.files().stream().map(f -> f.getPath()).toList()));
+            }
+            return new com.mhtextractor.uiport.ImportPlanVm(batches, plan.ignoredNonMht(), plan.hiddenDirs(),
+                    plan.emptyDirs(), plan.unreadable(), plan.depthLimited(), plan.quotaHit(), plan.hasMore());
         }
 
         /** 写入某模式的已确认参数缓存并刷新工作区（包级；真实手势 = 驱动 ParamSidePanel 表单
@@ -390,15 +405,10 @@ public final class AcceptanceDriver {
             mc.importDragDepth = v;
         }
 
-        /** 模拟"导入进行中"状态（包级字段；真实替代 = 起真导入再掐时机断言，时序脆弱）。 */
-        public void importPending(MainController.ImportSession session) {
-            mc.importPending = session;
-        }
-
-        /** {@code MainController.ImportSession} 的包级记录直接构造（DSH 裁决：去掉 private，
-         *  消除 D-3 点名禁止的反射构造）。 */
-        public MainController.ImportSession newImportSession(List<String> addresses, String sourceDesc, boolean fromDrag) {
-            return new MainController.ImportSession(addresses, sourceDesc, fromDrag);
+        /** 模拟"导入进行中"状态（包级字段；B5-1 起为布尔，由 ImportStateChanged 事件驱动 ——
+         *  真实替代 = 起真导入再掐时机断言，时序脆弱）。 */
+        public void importPending(boolean importing) {
+            mc.importPending = importing;
         }
     }
 }

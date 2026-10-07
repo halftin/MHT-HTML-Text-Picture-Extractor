@@ -3,6 +3,7 @@ package com.mhtextractor.app;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.ParamScope;
+import com.mhtextractor.uiport.ImportPlanVm;
 import com.mhtextractor.uiport.OutputUnitVm;
 import com.mhtextractor.uiport.ParamSchemaVm;
 import com.mhtextractor.model.PreviewItem;
@@ -45,7 +46,9 @@ import java.util.function.Consumer;
  *       勾选与分组命令集（B3）按路径 / 组号解析后转发（{@code setChecked/group/ungroup/
  *       renameGroup/toggleGroupExpanded}，未知路径静默跳过、未知组号 no-op）；
  *       参数命令族（B4）转发 {@link WorkspaceParamCommandService}（写入 + 撤销压栈 +
- *       缓存失效收口于 app 层，前端按 {@code ParamStateChanged} 事件刷新）；</li>
+ *       缓存失效收口于 app 层，前端按 {@code ParamStateChanged} 事件刷新）；
+ *       导入编排（B5-1）转发 {@link WorkspaceImportCoordinator}（会话/轮次/配额确认往返/
+ *       自动建组命名/撤销压栈，前端按 {@code ImportStateChanged/ImportRound/ImportFinished} 事件刷新）；</li>
  *   <li>{@link #queries()} —— 每次调用<b>重新组装</b>只读快照（{@link WorkspaceVm}），
  *       <b>不缓存</b>：快照必须总是当前模型状态；</li>
  *   <li>{@link #events()} —— {@link WorkspaceModel#addListener} 桥接：{@link WorkspaceChange.Kind}
@@ -74,6 +77,7 @@ public final class InProcessUiport implements Uiport {
     private final ExtractionPlanService plans;
     private final WorkspaceActivityService activities;
     private final WorkspaceParamCommandService paramCommands;
+    private final WorkspaceImportCoordinator imports;
 
     /**
      * @param model     工作区模型（数据序 / 分组关系 / 撤销命令的唯一所有者）
@@ -142,14 +146,43 @@ public final class InProcessUiport implements Uiport {
     /**
      * B4：带参数命令服务的完整构造（GUI 传入共享两套全局参数缓存与剪贴板压栈的服务；
      * 无头测试用 {@link #defaultParamCommands} 的默认服务）。
+     *
+     * <p><b>B5-1</b>：导入编排协调器用无头默认（{@code Runnable::run} 派发器）—— 需 FX 派发
+     * （{@code Platform::runLater}）的 GUI 调用方用下一重载显式传入协调器。</p>
      */
     public InProcessUiport(WorkspaceModel model, Confirmer confirmer, ExtractionPlanService plans,
                           WorkspaceActivityService activities, WorkspaceParamCommandService paramCommands) {
+        this(model, confirmer, plans, activities, paramCommands,
+                new WorkspaceImportCoordinator(model, confirmer, Runnable::run));
+    }
+
+    /** B5-1：带导入编排协调器的便捷构造（GUI 用：活动/参数服务 + 共享 FX 派发器与确认卡实现的协调器）。 */
+    public InProcessUiport(WorkspaceModel model, Confirmer confirmer, WorkspaceActivityService activities,
+                          WorkspaceParamCommandService paramCommands, WorkspaceImportCoordinator imports) {
+        this(model, confirmer, new ExtractionPlanService(new ExtractionPlanService.Context() {
+            public List<Object> dataOrder() { return model.topLevel(); }
+            public boolean imageMode() { return false; }
+            public AppConfig textParamsCache() { return null; }
+            public AppConfig imageParamsCache() { return null; }
+            public String inputFolder() { return null; }
+            public String outputFolder() { return ""; }
+            public boolean openFolderAfterComplete() { return false; }
+        }), activities, paramCommands, imports);
+    }
+
+    /**
+     * B5-1：带导入编排协调器的完整构造（GUI 传入共享 FX 派发器与确认卡实现的协调器；
+     * 无头调用方可注入小配额/延迟派发器的协调器复现「每轮打满」）。
+     */
+    public InProcessUiport(WorkspaceModel model, Confirmer confirmer, ExtractionPlanService plans,
+                          WorkspaceActivityService activities, WorkspaceParamCommandService paramCommands,
+                          WorkspaceImportCoordinator imports) {
         this.model = Objects.requireNonNull(model, "model");
         this.confirmer = Objects.requireNonNull(confirmer, "confirmer");
         this.plans = Objects.requireNonNull(plans, "plans");
         this.activities = Objects.requireNonNull(activities, "activities");
         this.paramCommands = Objects.requireNonNull(paramCommands, "paramCommands");
+        this.imports = Objects.requireNonNull(imports, "imports");
     }
 
     /**
@@ -237,6 +270,18 @@ public final class InProcessUiport implements Uiport {
             public void applyGlobalParams(TargetId target, boolean imageMode) {
                 paramCommands.applyGlobalParams(target, imageMode);
             }
+
+            // ---- B5-1：导入编排 ----
+
+            @Override
+            public void importPaths(List<String> addresses, String sourceDesc, boolean fromDrag) {
+                imports.importPaths(addresses, sourceDesc, fromDrag);
+            }
+
+            @Override
+            public void applyImportPlan(ImportPlanVm plan) {
+                imports.applyPlan(plan);
+            }
         };
     }
 
@@ -262,10 +307,12 @@ public final class InProcessUiport implements Uiport {
             model.addListener(bridge);
             AutoCloseable activitySubscription = activities.subscribe(listener);
             AutoCloseable paramSubscription = paramCommands.subscribe(listener);
+            AutoCloseable importSubscription = imports.subscribe(listener);
             return () -> {
                 model.removeListener(bridge);
                 activitySubscription.close();
                 paramSubscription.close();
+                importSubscription.close();
             };
         };
     }

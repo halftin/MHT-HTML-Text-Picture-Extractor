@@ -45,6 +45,11 @@ class InProcessUiportTest {
             @Override
             public void cancel() {
             }
+
+            @Override
+            public String await() {
+                return null;
+            }
         };
     }
 

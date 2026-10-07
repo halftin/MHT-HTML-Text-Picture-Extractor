@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>本类<b>不启动任何界面</b>，也不出现 UI 框架字面量 —— 这正是"导入规则已可无头单测"的证据
  * （{@code com.mhtextractor.app} 测试包由 {@code ArchitectureTest.headlessTestPackagesHaveNoJavaFx}
  * 强制）。生产路径的界面侧（线程、派发、模型命令）在
- * {@code com.mhtextractor.gui.controller.ImportSessionCoordinator}，由 GUI 自动化覆盖。</p>
+ * {@code com.mhtextractor.app.WorkspaceImportCoordinator}，由 GUI 自动化覆盖。</p>
  */
 class WorkspaceImportServiceTest {
 

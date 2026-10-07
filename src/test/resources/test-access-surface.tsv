@@ -12,7 +12,6 @@ direct	com.mhtextractor.gui.controller.ExtractionTaskCoordinator$RunChannel	resu
 direct	com.mhtextractor.gui.controller.FileListContextMenu	pickFrom	同包直访（驱动类字节码常量池引用）；驱动: FileListContextMenuTest
 direct	com.mhtextractor.gui.controller.GroupCommandController	finishExpandAnim	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.GroupCommandController	toggleGroupExpanded	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
-direct	com.mhtextractor.gui.controller.ImportSessionCoordinator	<init>	同包直访（驱动类字节码常量池引用）；驱动: FeatureExercise, ImportSessionCoordinatorQuotaTest
 direct	com.mhtextractor.gui.controller.ListInteractionController	findCell	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.ListInteractionController	setCheckedSilently	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	applyImportPlan	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
@@ -42,7 +41,6 @@ direct	com.mhtextractor.gui.controller.MainController	updateContextMenuState	同
 direct	com.mhtextractor.gui.controller.MainController	updateImportDropHighlight	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	updateListButtons	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	ws	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
-direct	com.mhtextractor.gui.controller.MainController$ImportSession	<init>	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.ParamDomainController	applyConfirmedParams	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.ParamDomainController	applyGroupParams	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.ParamDomainController	applyItemParams	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
