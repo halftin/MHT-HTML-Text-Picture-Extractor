@@ -7,7 +7,7 @@ import ch.qos.logback.core.Appender;
 /**
  * 无头后端入口（P4-1 骨架）—— 与 JavaFX 启动器 {@code com.mhtextractor.App} 互不影响。
  *
- * <p><b>模式</b>：{@code --once}（导入 → 建组 → 设参 → 提取后退出）/ {@code --serve}（常驻；本批不做 IPC）。</p>
+ * <p><b>模式</b>：{@code --once}（导入 → 建组 → 设参 → 提取后退出）/ {@code --serve}（JSON Lines IPC）。</p>
  *
  * <p><b>退出码</b>：0 = 成功；1 = 运行时失败（可读原因到 stderr）；2 = 用法错误（附用法说明）。</p>
  *
@@ -15,7 +15,7 @@ import ch.qos.logback.core.Appender;
  * 若在此初始化 logger 会在选定无头配置前触发 logback 上下文构建（GUI 的 {@code logback.xml} 会先被自动发现）。
  * 因此"选定配置"必须是 main 的第一件事，之后再触发上下文初始化并校验
  * <b>无头进程不得装载 GUI 日志包（{@code com.mhtextractor.logging}，唯一允许引用 UI 框架的主源集日志包）的 appender</b>。
- * 校验是运行时闸门而非仅测试断言：任何把 JavaFX appender 引回无头配置的改动会在启动时以退出码 1 失败（CG-2 实测）。</p>
+ * 校验是运行时闸门而非仅测试断言：任何把 JavaFX appender 引回无头配置的改动会在启动时以退出码 1 失败（控制组实测）。</p>
  *
  * <p><b>零 UI 框架</b>：本包由 {@code ArchitectureTest} 按字节码常量池强制。</p>
  */
@@ -108,7 +108,7 @@ public final class BackendCli {
 
                 modes (exactly one required):
                   --once                       run import -> group -> params -> extract, then exit
-                  --serve                      stay resident (P4-1 skeleton: no IPC yet, EOF on stdin exits)
+                  --serve                      JSON Lines v1 over stdio (EOF on stdin exits)
 
                 once options:
                   --input <path>               importable file or directory (repeatable, required)

@@ -12,7 +12,7 @@ import java.util.Locale;
  *
  * <p><b>选项面</b>：</p>
  * <ul>
- *   <li>模式（二选一，必填）：{@code --once}（批处理）/ {@code --serve}（常驻，本批无 IPC）；</li>
+ *   <li>模式（二选一，必填）：{@code --once}（批处理）/ {@code --serve}（JSON Lines IPC）；</li>
  *   <li>{@code --once} 参数：{@code --input <path>}（可重复，必填）、{@code --output <dir>}（必填）、
  *       {@code --extract text|images}（默认 text）、{@code --separate}、{@code --group}、
  *       {@code --template-start <s>} / {@code --template-end <e>}（给出任一即开启自定义模板）；</li>

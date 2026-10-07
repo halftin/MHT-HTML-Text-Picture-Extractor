@@ -230,7 +230,7 @@ class BackendOnceSmokeTest {
                 .redirectOutput(capture.toFile())
                 .start();
 
-        // 等就绪行（骨架期无 IPC：就绪后只等 stdin EOF）
+        // 等协议就绪事件；后续 stdin EOF 必须结束服务。
         long deadline = System.currentTimeMillis() + 30_000;
         String seen = "";
         while (System.currentTimeMillis() < deadline) {
@@ -239,15 +239,15 @@ class BackendOnceSmokeTest {
             } catch (Exception ignore) {
                 // 子进程尚未写完文件：下一轮再看
             }
-            if (seen.contains("backend ready")) {
+            if (seen.contains("\"event\":\"ready\"")) {
                 break;
             }
             Thread.sleep(100);
         }
-        assertTrue(seen.contains("backend ready"), "应打印就绪行：" + seen);
+        assertTrue(seen.contains("\"event\":\"ready\""), "应打印就绪事件：" + seen);
         assertTrue(p.isAlive(), "服务模式应保持常驻（就绪后不得自行退出）");
 
-        p.getOutputStream().close();   // stdin EOF → 骨架期服务干净退出
+        p.getOutputStream().close();   // stdin EOF → 服务干净退出
         if (!p.waitFor(60, TimeUnit.SECONDS)) {
             p.destroyForcibly();
             throw new AssertionError("服务在 stdin EOF 后未退出");
