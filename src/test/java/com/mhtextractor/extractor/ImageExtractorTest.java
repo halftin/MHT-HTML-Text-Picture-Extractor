@@ -52,7 +52,7 @@ class ImageExtractorTest {
         List<ImageExtractor.ImageData> out = ex.extractImages();
         assertEquals(3, out.size());
         assertEquals(List.of("header@01D8AD12.9A2B3C4D", "download_12345", "shadow"), filenames(out));
-        assertTrue(ex.getLastWarnings().isEmpty());
+        assertEquals("extract.region.r2", ex.getLastWarnings().getFirst().key());
     }
 
     // (b) 空字符串 CID 与 null CID 统一保留（此前空串被删、null 保留，行为不一致）
@@ -64,7 +64,7 @@ class ImageExtractorTest {
         List<ImageExtractor.ImageData> out = ex.extractImages();
         assertEquals(2, out.size());
         assertEquals(List.of("empty.png", "null.png"), filenames(out));
-        assertTrue(ex.getLastWarnings().isEmpty());
+        assertEquals("extract.region.r2", ex.getLastWarnings().getFirst().key());
     }
 
     // (3.3) 独立成词的广告标识符仍被过滤，且删除记入 warnings
@@ -74,14 +74,14 @@ class ImageExtractorTest {
         List<ImageExtractor.ImageData> out = ex.extractImages();
         assertEquals(1, out.size());
         assertEquals("photo1", out.get(0).getFilename());
-        assertEquals(2, ex.getLastWarnings().size());
-        assertEquals("extract.adFiltered", ex.getLastWarnings().get(0).key());
-        assertEquals("ad_123", ex.getLastWarnings().get(0).args().get("name"));
+        assertEquals(3, ex.getLastWarnings().size());
+        assertEquals("extract.adFiltered", ex.getLastWarnings().get(1).key());
+        assertEquals("ad_123", ex.getLastWarnings().get(1).args().get("name"));
     }
 
-    // (c) 区域 HTML 解析失败：中止区域限定，不静默放行区域外图片，且有 warning
+    // P4-15: failed region parsing falls back with traceable warnings (final D1/D2).
     @Test
-    void regionParseFailureAbortsInsteadOfAllowingEverything() {
+    void regionParseFailureFallsBackWithWarning() {
         String html = "<html><body><img src=\"cid:out1\"><div>START<img src=\"cid:in1\">END</div>"
                 + "<img src=\"cid:out2\"></body></html>";
         List<MimeParser.ImageInfo> images = List.of(img("out1"), img("in1"), img("out2"));
@@ -92,18 +92,21 @@ class ImageExtractorTest {
             }
         };
         List<ImageExtractor.ImageData> out = ex.extractImages();
-        assertTrue(out.isEmpty());
-        assertEquals(1, ex.getLastWarnings().size());
+        assertEquals(3, out.size());
+        assertEquals(2, ex.getLastWarnings().size());
         assertEquals("extract.areaImageRefFailed", ex.getLastWarnings().get(0).key());
     }
 
-    // 区域内确实没有 <img>（解析正常、引用为空）：不得回退为提取全部
+    // P4-15: extraction implicitly accepts R5; preview explicitly defers that decision.
     @Test
-    void regionWithNoImagesDoesNotFallBackToAll() {
+    void regionWithNoImagesFallsBackOnlyWhenAccepted() {
         String html = "<html><body><div>START<p>no images here</p>END</div></body></html>";
         ImageExtractor ex = region(html, List.of(img("cid1"), img("cid2")), "START", "END");
         List<ImageExtractor.ImageData> out = ex.extractImages();
-        assertTrue(out.isEmpty());
+        assertEquals(2, out.size());
+        assertEquals("extract.region.r5", ex.getLastWarnings().getFirst().key());
+        assertTrue(ex.extractImages(null, false).isEmpty());
+        assertTrue(ex.requiresFullDocumentConfirmation());
     }
 
     // 区域限定的正常路径：只提取区域内图片，顺序不变
@@ -132,7 +135,7 @@ class ImageExtractorTest {
             assertEquals(images.get(i).getContentId(), out.get(i).getContentId());
             assertArrayEquals(DATA, out.get(i).getData());
         }
-        assertTrue(ex.getLastWarnings().isEmpty());
+        assertEquals("extract.region.r2", ex.getLastWarnings().getFirst().key());
     }
 
     // ==================== 步骤 7 修复：纯 Data URI 的 MHT ====================

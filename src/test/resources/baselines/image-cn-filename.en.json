@@ -11,8 +11,8 @@
     "success": 1,
     "fail": 0,
     "skip": 0,
-    "warn": 0,
-    "outcomes": ["cn-filename.mht=SUCCESS"]
+    "warn": 1,
+    "outcomes": ["cn-filename.mht=SUCCESS_WARNED"]
   },
   "products": [
     {"path": "cn-filename/ä¸­æå¾çäº.gif", "sha256": "ef1955ae757c8b966c83248350331bd3a30f658ced11f387f8ebf05ab3368629"},

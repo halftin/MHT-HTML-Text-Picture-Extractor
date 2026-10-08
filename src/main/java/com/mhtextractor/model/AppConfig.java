@@ -97,7 +97,7 @@ public class AppConfig {
     // ==================== 图片提取参数指纹（需求 2 P2/P10，会话 7） ====================
 
     /** 图片提取规则版本：改 AD_KEYWORDS / 去重口径等"提取出哪些图片"的规则时必须 +1（会让旧预览缓存一次性失效）。 */
-    private static final int IMAGE_EXTRACTION_RULES_VERSION = 1;
+    private static final int IMAGE_EXTRACTION_RULES_VERSION = 2;
 
     /**
      * 图片提取参数指纹：只含影响「提取出哪些图片、以什么名字、什么扩展名」的字段与规则版本，

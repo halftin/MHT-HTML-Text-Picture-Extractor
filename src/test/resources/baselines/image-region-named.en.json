@@ -8,15 +8,16 @@
   "knownIssues": [],
   "stats": {
     "total": 2,
-    "success": 1,
+    "success": 2,
     "fail": 0,
-    "skip": 1,
+    "skip": 0,
     "warn": 2,
-    "outcomes": ["region.mht=SUCCESS_WARNED", "titles.mht=SKIPPED"]
+    "outcomes": ["region.mht=SUCCESS_WARNED", "titles.mht=SUCCESS_WARNED"]
   },
   "products": [
     {"path": "All_Images/f01_inside1.png", "sha256": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443"},
-    {"path": "All_Images/f01_inside2.gif", "sha256": "ef1955ae757c8b966c83248350331bd3a30f658ced11f387f8ebf05ab3368629"}
+    {"path": "All_Images/f01_inside2.gif", "sha256": "ef1955ae757c8b966c83248350331bd3a30f658ced11f387f8ebf05ab3368629"},
+    {"path": "All_Images/f02_img001.png", "sha256": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443"}
   ],
   "contentDigests": {
   }

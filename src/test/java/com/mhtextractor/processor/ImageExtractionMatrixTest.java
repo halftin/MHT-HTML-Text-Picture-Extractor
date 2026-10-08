@@ -433,7 +433,7 @@ class ImageExtractionMatrixTest {
                     assertEquals(1, badStats.getSuccessCount(),
                             key + "：合并模式文件级写入不受归档失败影响：" + badStats);
                     assertEquals(1, badStats.getFailCount(), key + "：" + badStats);
-                    assertEquals(ExtractOutcome.SUCCESS, badStats.getFileResults().get(0).outcome(),
+                    assertEquals(ExtractOutcome.SUCCESS_WARNED, badStats.getFileResults().get(0).outcome(),
                             key + "：合并模式归档失败不改写文件级结果");
                 }
             }
@@ -513,7 +513,7 @@ class ImageExtractionMatrixTest {
                 .process(files, outSep.toString(), null, null);
         assertEquals(1, sSep.getFileResults().size(),
                 "流式单独输出：取消前首文件已走完 ⇒ 恰好 1 条结果：" + sSep);
-        assertEquals(ExtractOutcome.SUCCESS, sSep.getFileResults().get(0).outcome(), sSep.toString());
+        assertEquals(ExtractOutcome.SUCCESS_WARNED, sSep.getFileResults().get(0).outcome(), sSep.toString());
         assertEquals(Set.of("a/", "a/img001.webp"), namesOf(outSep),
                 "取消后第二个文件不得产出：" + namesOf(outSep));
 
@@ -587,7 +587,7 @@ class ImageExtractionMatrixTest {
             Map<String, ExtractOutcome> byName = new LinkedHashMap<>();
             stats.getFileResults().forEach(r ->
                     byName.put(Path.of(r.path()).getFileName().toString(), r.outcome()));
-            assertEquals(ExtractOutcome.SUCCESS, byName.get("a.mht"), in.label + "：" + stats);
+            assertEquals(ExtractOutcome.SUCCESS_WARNED, byName.get("a.mht"), in.label + "：" + stats);
             assertEquals(ExtractOutcome.SKIPPED, byName.get("plain.mht"),
                     in.label + "：HTML 为空 → SKIPPED：" + stats);
             assertEquals(ExtractOutcome.FAILED, byName.get("bad.mht"),

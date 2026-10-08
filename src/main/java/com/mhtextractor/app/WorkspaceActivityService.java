@@ -53,6 +53,7 @@ public final class WorkspaceActivityService {
     private volatile long generation;
     private volatile long previewGeneration;
     private volatile String loadingPath;
+    private PreviewService.Prepared pendingRegion;
 
     public WorkspaceActivityService(Context context, PreviewService previews,
                                     ThumbnailDecoder decoder, Executor delivery) {
@@ -92,10 +93,15 @@ public final class WorkspaceActivityService {
     }
 
     public synchronized void cancelPreviewLoad() {
+        long oldToken = previewGeneration;
         previewGeneration++;
+        pendingRegion = null;
         String oldPath = loadingPath;
         loadingPath = null;
-        if (oldPath != null) emit(new PortEvent.PreviewLoadStateChanged(previewGeneration, oldPath, false));
+        if (oldPath != null) {
+            emit(new PortEvent.PreviewLoadStateChanged(previewGeneration, oldPath, false));
+            emit(new PortEvent.PreviewLoaded(oldToken, oldPath));
+        }
     }
 
     public synchronized void startPreparse() {
@@ -162,12 +168,35 @@ public final class WorkspaceActivityService {
     }
 
     public synchronized void loadPreview(String path, boolean largeFileConfirmed) {
+        loadPreview(path, largeFileConfirmed, false);
+    }
+
+    public synchronized void resolvePreviewRegion(long token, String path, boolean accepted) {
+        if (token != previewGeneration || pendingRegion == null
+                || !pendingRegion.mht().equals(Path.of(path))) return;
+        PreviewService.Prepared pending = pendingRegion;
+        pendingRegion = null;
+        PreviewItem item = context.items().stream().filter(i -> i.path.equals(path)).findFirst().orElse(null);
+        AppConfig current = item == null || item.removed ? null : context.effectiveImageParams(item);
+        if (current == null || !current.imageExtractionFingerprint().equals(pending.cacheKey().paramFingerprint())) return;
+        if (accepted) loadPreview(path, true, true);
+        else emit(new PortEvent.PreviewNotice(token, path, "preview.region.declined"));
+    }
+
+    private void loadPreview(String path, boolean largeFileConfirmed, boolean acceptEmptyRegion) {
         PreviewItem item = context.items().stream().filter(i -> i.path.equals(path)).findFirst().orElse(null);
         if (item == null || item.removed) return;
-        AppConfig params = context.effectiveParams(item);
-        if (params == null) return;
+        if (loadingPath != null && !path.equals(loadingPath)) cancelPreviewLoad();
+        AppConfig effective = context.effectiveParams(item);
+        if (effective == null) return;
+        AppConfig params = effective.copyExtractionParams();
+        if (item.cachedMeta != null && !params.imageExtractionFingerprint().equals(item.cachedMeta.paramFingerprint())) {
+            item.cachedThumbs = null;
+            item.cachedMeta = null;
+        }
         if (item.cachedThumbs != null) {
             emit(new PortEvent.PreviewLoaded(previewGeneration, path));
+            if (item.cachedMeta != null) previewNotices(previewGeneration, path, item.cachedMeta.warnings());
             return;
         }
         if (path.equals(loadingPath)) return;
@@ -190,7 +219,7 @@ public final class WorkspaceActivityService {
         emit(new PortEvent.PreviewLoadStateChanged(token, path, true));
         Thread worker = new Thread(() -> {
             try {
-                var result = previews.ensureCachedLocked(prepared, () -> token != previewGeneration);
+                var result = previews.ensureCachedLocked(prepared, () -> token != previewGeneration, acceptEmptyRegion);
                 if (result == null) return;
                 List<ThumbnailData> thumbs = new ArrayList<>();
                 if (token == previewGeneration) {
@@ -214,11 +243,20 @@ public final class WorkspaceActivityService {
                     }
                 }
                 dispatch(() -> completePreview(token, item, result, thumbs));
-            } catch (Exception e) {
+            } catch (PreviewService.RegionConfirmationRequired e) {
                 dispatch(() -> {
-                    if (token != previewGeneration) return;
+                    if (token != previewGeneration || !path.equals(loadingPath)) return;
                     finishPreview(token, path);
-                    emit(new PortEvent.PreviewLoadFailed(token, path, false, e.getMessage()));
+                    if (token != previewGeneration) return;
+                    AppConfig current = context.effectiveImageParams(item);
+                    if (item.removed || current == null
+                            || !current.imageExtractionFingerprint().equals(prepared.cacheKey().paramFingerprint())) return;
+                    pendingRegion = prepared;
+                    emit(new PortEvent.PreviewRegionConfirmationRequired(token, path));
+                });
+            } catch (Throwable e) {
+                dispatch(() -> {
+                    finishPreview(token, path, new PortEvent.PreviewLoadFailed(token, path, false, e.toString()));
                 });
             } finally {
                 previewWorkers.remove(Thread.currentThread());
@@ -228,10 +266,21 @@ public final class WorkspaceActivityService {
         previewWorkers.add(worker);
         worker.setDaemon(true);
         worker.start();
+        // A hung parser/decoder must not hold the UI in loading state indefinitely.
+        java.util.concurrent.CompletableFuture.delayedExecutor(30, java.util.concurrent.TimeUnit.SECONDS)
+                .execute(() -> dispatch(() -> {
+                    if (token != previewGeneration || !path.equals(loadingPath)) return;
+                    finishPreview(token, path, new PortEvent.PreviewLoadFailed(token, path, false,
+                            Texts.get("preview.loadTimeout")));
+                    if (previewGeneration == token) previewGeneration++;
+                    worker.interrupt();
+                }));
     }
 
     private void completePreview(long token, PreviewItem item, PreviewService.PreviewResult result,
                                  List<ThumbnailData> thumbs) {
+        // Old completions must not delete a cache being used by a newer request.
+        if (token != previewGeneration) return;
         AppConfig imageParams = context.effectiveImageParams(item);
         boolean stale = item.removed || imageParams == null
                 || !imageParams.imageExtractionFingerprint().equals(result.meta().paramFingerprint());
@@ -250,15 +299,27 @@ public final class WorkspaceActivityService {
         item.cachedThumbs = thumbs;
         item.cachedMeta = result.meta();
         item.cachedImages = null;
-        if (result.images().isEmpty()) item.status = PreviewItem.Status.EMPTY;
+        item.status = result.images().isEmpty() ? PreviewItem.Status.EMPTY : PreviewItem.Status.READY;
         finishPreview(token, item.path);
-        emit(new PortEvent.PreviewLoaded(token, item.path));
+        previewNotices(token, item.path, result.meta().warnings());
+    }
+
+    private void previewNotices(long token, String path, List<com.mhtextractor.model.ExtractWarning> warnings) {
+        for (var warning : warnings)
+            if (warning.key().startsWith("extract.region.") && !warning.key().equals("extract.region.r5"))
+                emit(new PortEvent.PreviewNotice(token, path, warning.key()));
     }
 
     private void finishPreview(long token, String path) {
+        finishPreview(token, path, new PortEvent.PreviewLoaded(token, path));
+    }
+
+    /** Exactly one terminal event per owned load, including stale/null results and finally. */
+    private void finishPreview(long token, String path, PortEvent terminal) {
         if (token != previewGeneration || !path.equals(loadingPath)) return;
         loadingPath = null;
         emit(new PortEvent.PreviewLoadStateChanged(token, path, false));
+        emit(terminal);
     }
 
     /** 等待所有仍在写盘/解码的 worker，旧请求退出不得擦掉新请求的线程引用。 */

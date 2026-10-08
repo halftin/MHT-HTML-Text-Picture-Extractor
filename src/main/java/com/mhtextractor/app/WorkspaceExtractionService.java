@@ -132,7 +132,9 @@ public final class WorkspaceExtractionService {
                 .map(r -> new com.mhtextractor.model.ExtractionStats.FileOutcome(
                         r.path(), r.outcome(), r.message(), java.util.List.copyOf(r.warnings())))
                 .toList();
-        return new com.mhtextractor.model.ExtractionStats(stats.getSummaryLine(), stats.getFailCount(),
+        String summary = stats.getSummaryLine();
+        if (!stats.getWarnDetails().isEmpty()) summary += "\n" + String.join("\n", stats.getWarnDetails());
+        return new com.mhtextractor.model.ExtractionStats(summary, stats.getFailCount(),
                 stats.getSkipCount(), stats.getWarnCount(), files);
     }
 

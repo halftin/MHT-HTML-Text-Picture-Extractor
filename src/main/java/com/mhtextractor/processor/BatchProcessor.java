@@ -265,6 +265,8 @@ public abstract class BatchProcessor {
      */
     protected void reportExtractorWarnings(String fileName, WarningProvider extractor, ProcessStats stats) {
         for (ExtractWarning warning : extractor.getLastWarnings()) {
+            if (warning.key().startsWith("extract.region."))
+                log.warn(I18n.msg("log.region.warning", fileName, I18n.render(warning)));
             stats.incrementWarn();
             stats.addWarnDetail(I18n.get("extract.fileWarned", "file", fileName,
                     "message", I18n.render(warning)));

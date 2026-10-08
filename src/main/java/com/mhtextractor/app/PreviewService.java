@@ -50,6 +50,8 @@ import java.util.function.Supplier;
  */
 @Slf4j
 public final class PreviewService {
+    /** R5 is a decision, not a load failure; no incomplete result is published to the cache. */
+    public static final class RegionConfirmationRequired extends Exception {}
 
     /**
      * 一次预览加载的结果。
@@ -128,7 +130,12 @@ public final class PreviewService {
      */
     public PreviewResult ensureCached(Path mht, AppConfig params, PreviewCacheKey cacheKey,
                                       Supplier<Boolean> cancelled) throws Exception {
-        PreviewCacheMeta meta = loadOrRebuild(mht, params, cacheKey, cancelled);
+        return ensureCached(mht, params, cacheKey, cancelled, true);
+    }
+
+    private PreviewResult ensureCached(Path mht, AppConfig params, PreviewCacheKey cacheKey,
+                                        Supplier<Boolean> cancelled, boolean acceptEmptyRegion) throws Exception {
+        PreviewCacheMeta meta = loadOrRebuild(mht, params, cacheKey, cancelled, acceptEmptyRegion);
         if (meta == null) {
             return null;
         }
@@ -176,8 +183,13 @@ public final class PreviewService {
      */
     public PreviewResult ensureCachedLocked(Prepared prepared, Supplier<Boolean> cancelled)
             throws Exception {
+        return ensureCachedLocked(prepared, cancelled, true);
+    }
+
+    public PreviewResult ensureCachedLocked(Prepared prepared, Supplier<Boolean> cancelled,
+                                            boolean acceptEmptyRegion) throws Exception {
         synchronized (previewCache.lockFor(prepared.cacheKey().absolutePath())) {
-            return ensureCached(prepared.mht(), prepared.params(), prepared.cacheKey(), cancelled);
+            return ensureCached(prepared.mht(), prepared.params(), prepared.cacheKey(), cancelled, acceptEmptyRegion);
         }
     }
 
@@ -208,10 +220,12 @@ public final class PreviewService {
 
     /** 命中即返回；否则重建。语义见 {@link #ensureCached}。 */
     private PreviewCacheMeta loadOrRebuild(Path mht, AppConfig params, PreviewCacheKey cacheKey,
-                                           Supplier<Boolean> cancelled) throws Exception {
+                                           Supplier<Boolean> cancelled, boolean acceptEmptyRegion) throws Exception {
         try {
             Optional<PreviewCacheMeta> hit = previewCache.store().load(cacheKey);
             if (hit.isPresent()) {
+                if (!acceptEmptyRegion && hit.get().warnings().stream()
+                        .anyMatch(w -> w.key().equals("extract.region.r5"))) throw new RegionConfirmationRequired();
                 log.info(I18n.msg("log.previewservice.01", mht.getFileName()));
                 return hit.get();
             }
@@ -224,22 +238,25 @@ public final class PreviewService {
                 log.warn(I18n.msg("log.previewservice.03", del.getMessage()));
             }
         }
-        return rebuild(mht, params, cacheKey, cancelled);
+        return rebuild(mht, params, cacheKey, cancelled, acceptEmptyRegion);
     }
 
     /** 解析 + 抽图 + 原子落盘。 */
     private PreviewCacheMeta rebuild(Path mht, AppConfig params, PreviewCacheKey cacheKey,
-                                     Supplier<Boolean> cancelled) throws Exception {
+                                     Supplier<Boolean> cancelled, boolean acceptEmptyRegion) throws Exception {
         SourceParser parser = SourceParsers.forPath(mht.toString());
-        MimeParser.ParsedMht parsed = parser.parse(mht.toString(), false, () -> false, null, null);
+        MimeParser.ParsedMht parsed = parser.parse(mht.toString(), false,
+                cancelled == null ? () -> false : cancelled, null, null);
         ImageExtractor imageExtractor = new ImageExtractor(parsed,
                 params.getImageNameStartMarker(), params.getImageNameEndMarker(),
                 params.getImageRegionStartMarker(), params.getImageRegionEndMarker());
-        List<ImageExtractor.ImageData> images = imageExtractor.extractImages(null);
+        List<ImageExtractor.ImageData> images = imageExtractor.extractImages(null, acceptEmptyRegion);
         // 与搬迁前一致：抽图后、写盘前检查取消信号；已取消则不写缓存（旧缓存保持可用）
         if (cancelled != null && Boolean.TRUE.equals(cancelled.get())) {
             return null;
         }
+        if (!acceptEmptyRegion && imageExtractor.requiresFullDocumentConfirmation())
+            throw new RegionConfirmationRequired();
 
         // 元数据先行构建；写盘文件名必须与 meta.images[].file 一致（store.load 据此校验）
         List<String> plainNames = new ArrayList<>();

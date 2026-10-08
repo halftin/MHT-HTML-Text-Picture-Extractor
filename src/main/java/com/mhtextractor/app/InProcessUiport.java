@@ -223,6 +223,9 @@ public final class InProcessUiport implements Uiport {
             public void startPreparseFor(List<String> paths) { activities.startPreparseFor(paths); }
             public void refreshPreparseProgress() { activities.refreshPreparseProgress(); }
             public void loadPreview(String path, boolean confirmed) { activities.loadPreview(path, confirmed); }
+            public void resolvePreviewRegion(long generation, String path, boolean accepted) {
+                activities.resolvePreviewRegion(generation, path, accepted);
+            }
             public void awaitPreviewInFlight(long millis) { activities.awaitPreviewInFlight(millis); }
             @Override
             public void undo() {

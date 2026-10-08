@@ -332,8 +332,8 @@ public class MainController {
         @Override public void setProgressBarActivity(String styleClass) { MainController.this.setProgressBarActivity(styleClass); }
         @Override public void updateProgressStatus(long token) { preparseController.updateProgressStatus(token); }
         @Override public void refreshList() { refs.fileListView().refresh(); }
+        @Override public void updateContentArea(Object sel) { MainController.this.updateContentArea(sel); }
     }, activityPort);
-    /** 预解析进度与结果呈现；代际由活动端口持有。 */
     final PreparseController preparseController = new PreparseController(new PreparseController.Host() {
         @Override public boolean extractionRunning() { return running().get(); }
         @Override public boolean isPreviewLoading() { return previewLoader.isActive(); }

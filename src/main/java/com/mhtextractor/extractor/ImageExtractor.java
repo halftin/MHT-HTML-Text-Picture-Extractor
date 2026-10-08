@@ -3,7 +3,6 @@ package com.mhtextractor.extractor;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.ExtractWarning;
-import com.mhtextractor.util.HtmlUtils;
 import com.mhtextractor.util.SanitizeUtils;
 import lombok.Data;
 import org.jsoup.Jsoup;
@@ -31,6 +30,10 @@ public class ImageExtractor extends BaseExtractor {
     private final String nameLimitEnd;
     private final String contentLimitStart;
     private final String contentLimitEnd;
+    private boolean regionEmpty;
+
+    /** True only for a matched R1 region that yielded no available image resources. */
+    public boolean requiresFullDocumentConfirmation() { return regionEmpty; }
 
     public ImageExtractor(MimeParser.ParsedMht parsedMht,
                           String nameLimitStart, String nameLimitEnd,
@@ -44,7 +47,7 @@ public class ImageExtractor extends BaseExtractor {
 
     /**
      * 提取限定区域内的图片数据列表（已过滤广告）
-     * 按照 HTML 中 <img> 标签的声明顺序返回，并保留原始文件名
+     * 保持既有 MHT 资源声明顺序，Data URI 追加于其后，并保留原始文件名。
      */
     public List<ImageData> extractImages() {
         return extractImages(null);
@@ -52,12 +55,18 @@ public class ImageExtractor extends BaseExtractor {
 
     /**
      * 提取限定区域内的图片数据列表（已过滤广告）
-     * 按照 HTML 中 <img> 标签的声明顺序返回，并保留原始文件名
+     * 保持既有资源声明顺序（不是 HTML 布局顺序，P4-15 D3），并保留原始文件名。
      *
      * @param progressCallback 进度回调（0.0~1.0），可为 null
      */
     public List<ImageData> extractImages(Consumer<Double> progressCallback) {
+        return extractImages(progressCallback, true);
+    }
+
+    /** Preview may defer R5 until a decision; extraction always accepts it without blocking. */
+    public List<ImageData> extractImages(Consumer<Double> progressCallback, boolean acceptEmptyRegion) {
         lastWarnings.clear();
+        regionEmpty = false;
         String html = parsedMht.getHtmlContent();
         if (html == null) {
             if (progressCallback != null) progressCallback.accept(1.0);
@@ -65,11 +74,9 @@ public class ImageExtractor extends BaseExtractor {
         }
 
         // 内容区域限定
-        String targetHtml = extractContentArea(html);
-        if (targetHtml == null || targetHtml.isEmpty()) {
-            if (progressCallback != null) progressCallback.accept(0.3);
-            return Collections.emptyList();
-        }
+        ImageRegion region = ImageRegion.resolve(html, contentLimitStart, contentLimitEnd);
+        String targetHtml = region.html();
+        if (region.warningKey() != null) addRegionWarning(region.warningKey());
 
         if (progressCallback != null) progressCallback.accept(0.2);
 
@@ -79,7 +86,7 @@ public class ImageExtractor extends BaseExtractor {
         if (progressCallback != null) progressCallback.accept(0.4);
 
         // 如果没有设置区域限定，则使用所有图片（按 imageInfoList 顺序）
-        boolean noRegionLimit = (contentLimitStart == null || contentLimitEnd == null);
+        boolean noRegionLimit = region.rule() == ImageRegion.Rule.R2;
 
         if (noRegionLimit) {
             // 没有区域限定：imageInfoList（MHT 声明顺序）+ HTML 内嵌 Data URI 图片。
@@ -90,16 +97,16 @@ public class ImageExtractor extends BaseExtractor {
             // 成了只在"有图片 part"时才可达的死代码。
             // 现在统一委托给 extractAllImagesInOrder：它内部先遍历 imageInfoList（空则跳过），
             // 再提取 Data URI。**注意不可在此处再调一次 extractDataUriImages**，否则会重复提取。
-            return extractAllImagesInOrder(progressCallback);
+            return finishRegionImages(extractAllImagesInOrder(progressCallback), region, acceptEmptyRegion, progressCallback);
         }
 
-        // 有区域限定：解析失败则中止该文件的区域限定提取，不静默放行区域外图片
+        // Failed image-reference parsing is observable; an otherwise matched R1 uses R5.
         if (orderedImageRefs == null) {
             ExtractWarning warning = new ExtractWarning("extract.areaImageRefFailed", Map.of());
             logger.warn(I18n.msg("log.imageextractor.01", I18n.render(warning)));
             lastWarnings.add(warning);
             if (progressCallback != null) progressCallback.accept(1.0);
-            return Collections.emptyList();
+            return finishRegionImages(Collections.emptyList(), region, acceptEmptyRegion, progressCallback);
         }
 
         // 有区域限定：只保留 HTML 中出现在限定区域内的图片引用
@@ -107,12 +114,8 @@ public class ImageExtractor extends BaseExtractor {
         List<ImageData> images = new ArrayList<>();
         Set<String> addedKeys = new HashSet<>();
 
-        if (parsedMht.getImageInfoList() == null) {
-            if (progressCallback != null) progressCallback.accept(1.0);
-            return images;
-        }
-
-        List<MimeParser.ImageInfo> allImages = parsedMht.getImageInfoList();
+        List<MimeParser.ImageInfo> allImages = parsedMht.getImageInfoList() == null
+                ? List.of() : parsedMht.getImageInfoList();
         for (int i = 0; i < allImages.size(); i++) {
             MimeParser.ImageInfo info = allImages.get(i);
             if (isInfoAllowed(info, allowedImageRefs)) {
@@ -134,7 +137,26 @@ public class ImageExtractor extends BaseExtractor {
         extractDataUriImages(targetHtml, images);
 
         if (progressCallback != null) progressCallback.accept(1.0);
+        return finishRegionImages(images, region, acceptEmptyRegion, progressCallback);
+    }
+
+    private List<ImageData> finishRegionImages(List<ImageData> images, ImageRegion region,
+                                               boolean acceptEmptyRegion, Consumer<Double> progress) {
+        if (images.isEmpty() && region.rule() == ImageRegion.Rule.R1) {
+            regionEmpty = true;
+            if (!acceptEmptyRegion) return images; // No cache of a declined/pending preview.
+            addRegionWarning("extract.region.r5");
+            images = extractAllImagesInOrder(progress);
+        }
+        if (images.isEmpty()) addRegionWarning("extract.region.noImages");
+        if (progress != null) progress.accept(1.0);
         return images;
+    }
+
+    private void addRegionWarning(String key) {
+        ExtractWarning warning = new ExtractWarning(key, Map.of());
+        lastWarnings.add(warning);
+        logger.warn(I18n.msg("log.imageextractor.01", I18n.render(warning)));
     }
 
     /**
@@ -144,11 +166,8 @@ public class ImageExtractor extends BaseExtractor {
         List<ImageData> images = new ArrayList<>();
         Set<String> addedKeys = new HashSet<>();
 
-        if (parsedMht.getImageInfoList() == null) {
-            return images;
-        }
-
-        List<MimeParser.ImageInfo> allImages = parsedMht.getImageInfoList();
+        List<MimeParser.ImageInfo> allImages = parsedMht.getImageInfoList() == null
+                ? List.of() : parsedMht.getImageInfoList();
         for (int i = 0; i < allImages.size(); i++) {
             MimeParser.ImageInfo info = allImages.get(i);
             String cid = info.getContentId();
@@ -289,16 +308,6 @@ public class ImageExtractor extends BaseExtractor {
 
         return html.substring(startIdx + nameLimitStart.length(), endIdx)
                 .trim().replaceAll("\\s+", " ");
-    }
-
-    private String extractContentArea(String html) {
-        if (contentLimitStart == null || contentLimitEnd == null
-                || contentLimitStart.isEmpty() || contentLimitEnd.isEmpty()) return html;
-        String result = HtmlUtils.extractRegion(html, contentLimitStart, contentLimitEnd, lastWarnings);
-        if (result == null) {
-            logger.warn(I18n.msg("log.imageextractor.01", I18n.render(lastWarnings.getLast())));
-        }
-        return result;
     }
 
     /**

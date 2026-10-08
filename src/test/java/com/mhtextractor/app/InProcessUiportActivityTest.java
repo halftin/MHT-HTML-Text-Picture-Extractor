@@ -256,13 +256,18 @@ class InProcessUiportActivityTest {
             nextDelivery(); nextDelivery(); nextDelivery(); // 旧 thumbnail / complete / finally
             assertEquals(item.path, port.queries().previewLoadingPath());
             assertNull(item.cachedThumbs);
-            assertFalse(events.stream().anyMatch(PortEvent.PreviewLoaded.class::isInstance));
+            assertTrue(events.stream().anyMatch(e -> e instanceof PortEvent.PreviewLoaded done
+                    && done.generation() < port.queries().previewGeneration()));
+            assertFalse(events.stream().anyMatch(e -> e instanceof PortEvent.PreviewLoaded done
+                    && done.generation() == port.queries().previewGeneration()));
             params = null; // 新请求落盘后失效，也必须复位在途状态。
             newRelease.countDown();
             port.commands().awaitPreviewInFlight(5000);
             drain();
             assertNull(port.queries().previewLoadingPath());
             assertNull(item.cachedMeta);
+            assertTrue(events.stream().anyMatch(e -> e instanceof PortEvent.PreviewLoaded done
+                    && done.generation() == port.queries().previewGeneration()));
             // 陈旧缓存清理 worker 已纳入在途清单：join 后缓存项目目录必须已删除，
             // 收尾不得与外部递归删除（@TempDir 清理）赛跑。
             port.commands().awaitPreviewInFlight(5000);
@@ -270,5 +275,111 @@ class InProcessUiportActivityTest {
                 assertEquals(0, dirs.count(), "joined cleanup worker must remove the stale cache");
             }
         } finally { oldRelease.countDown(); newRelease.countDown(); port.commands().awaitPreviewInFlight(5000); }
+    }
+
+    @Test
+    void zeroImagesAndCancellationHaveExactlyOneTerminalPerStartedLoad() throws Exception {
+        PreviewItem empty = item("empty.html");
+        Files.writeString(Path.of(empty.path), "<html><body>no images</body></html>");
+        var port = port(SourceParseService::parse);
+        for (boolean cancel : List.of(false, true)) {
+            empty.cachedThumbs = null;
+            events.clear();
+            port.commands().loadPreview(empty.path, true);
+            if (cancel) port.commands().cancelPreviewLoad();
+            port.commands().awaitPreviewInFlight(5000);
+            drain();
+            assertNull(port.queries().previewLoadingPath());
+            assertEquals(1, events.stream().filter(e -> e instanceof PortEvent.PreviewLoaded
+                    || e instanceof PortEvent.PreviewLoadFailed).count());
+            System.out.println("ZERO cancel=" + cancel + " terminalEvent=true loadingPath=null");
+        }
+    }
+
+    @Test
+    void regionDecisionEndsLoadBeforeCardAndYesRestartsWhileNoDoesNot() throws Exception {
+        Files.copy(BaselineCases.FIXTURE_DIR.resolve("region.mht"), tmp.resolve("region.mht"));
+        PreviewItem item = item("region.mht");
+        params.setImageRegionStartMarker("<!--START-->");
+        params.setImageRegionEndMarker("<p>");
+        var port = port(SourceParseService::parse);
+        for (boolean yes : List.of(false, true)) {
+            events.clear();
+            port.commands().loadPreview(item.path, true);
+            port.commands().awaitPreviewInFlight(5000);
+            drain();
+            assertNull(port.queries().previewLoadingPath());
+            assertNull(item.cachedThumbs);
+            assertInstanceOf(PortEvent.PreviewRegionConfirmationRequired.class, events.getLast());
+            assertTrue(events.stream().anyMatch(PortEvent.PreviewLoaded.class::isInstance));
+            long token = port.queries().previewGeneration();
+            port.commands().resolvePreviewRegion(token, item.path, yes);
+            if (yes) {
+                assertEquals(item.path, port.queries().previewLoadingPath());
+                port.commands().awaitPreviewInFlight(5000);
+                drain();
+                assertEquals(4, item.cachedThumbs.size());
+            } else {
+                assertEquals("preview.region.declined", ((PortEvent.PreviewNotice) events.getLast()).key());
+            }
+            assertNull(port.queries().previewLoadingPath());
+            System.out.println("R5 accepted=" + yes + " loadingPath=null thumbs="
+                    + (item.cachedThumbs == null ? "null" : item.cachedThumbs.size()));
+        }
+    }
+
+    @Test
+    void staleRegionDecisionCannotRestartOrOverwriteAnotherSelection() throws Exception {
+        Files.copy(BaselineCases.FIXTURE_DIR.resolve("region.mht"), tmp.resolve("region.mht"));
+        PreviewItem item = item("region.mht");
+        params.setImageRegionStartMarker("<!--START-->");
+        params.setImageRegionEndMarker("<p>");
+        var port = port(SourceParseService::parse);
+        port.commands().loadPreview(item.path, true);
+        port.commands().awaitPreviewInFlight(5000);
+        drain();
+        long token = port.queries().previewGeneration();
+        port.commands().cancelPreviewLoad();
+        port.commands().resolvePreviewRegion(token, item.path, true);
+        assertNull(port.queries().previewLoadingPath());
+        assertNull(item.cachedThumbs);
+    }
+
+    @Test
+    void decoderErrorStillDeliversFailureAndReleasesLoad() throws Exception {
+        PreviewItem item = imageFixture();
+        var port = port(SourceParseService::parse, (image, index, config) -> { throw new AssertionError("decoder"); });
+        port.commands().loadPreview(item.path, true);
+        port.commands().awaitPreviewInFlight(5000);
+        drain();
+        assertNull(port.queries().previewLoadingPath());
+        assertEquals(1, events.stream().filter(PortEvent.PreviewLoadFailed.class::isInstance).count());
+    }
+
+    @Test
+    void stuckDecoderTimesOutWithoutApplyingLateResult() throws Exception {
+        PreviewItem item = imageFixture();
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        var port = port(SourceParseService::parse, (image, index, config) -> {
+            entered.countDown();
+            try { release.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            return new ThumbnailData("thumb", 1, 1, new int[]{-1});
+        });
+        try {
+            port.commands().loadPreview(item.path, true);
+            await(entered);
+            Runnable timeout = deliveries.poll(35, TimeUnit.SECONDS);
+            assertNotNull(timeout);
+            timeout.run();
+            assertNull(port.queries().previewLoadingPath());
+            assertTrue(events.stream().anyMatch(PortEvent.PreviewLoadFailed.class::isInstance));
+            release.countDown();
+            port.commands().awaitPreviewInFlight(5000);
+            drain();
+            assertNull(item.cachedThumbs);
+            assertEquals(1, events.stream().filter(e -> e instanceof PortEvent.PreviewLoaded
+                    || e instanceof PortEvent.PreviewLoadFailed).count());
+            System.out.println("TIMEOUT terminalEvent=true loadingPath=null lateResultRejected=true");
+        } finally { release.countDown(); port.commands().awaitPreviewInFlight(5000); }
     }
 }

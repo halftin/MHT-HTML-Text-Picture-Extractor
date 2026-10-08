@@ -11,8 +11,8 @@
     "success": 1,
     "fail": 0,
     "skip": 0,
-    "warn": 0,
-    "outcomes": ["sidecar.html=SUCCESS"]
+    "warn": 1,
+    "outcomes": ["sidecar.html=SUCCESS_WARNED"]
   },
   "products": [
     {"path": "sidecar/a.png", "sha256": "ebf4f635a17d10d6eb46ba680b70142419aa3220f228001a036d311a22ee9d2a"},

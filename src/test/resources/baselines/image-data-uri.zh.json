@@ -11,8 +11,8 @@
     "success": 1,
     "fail": 0,
     "skip": 0,
-    "warn": 0,
-    "outcomes": ["data-uri.mht=SUCCESS"]
+    "warn": 1,
+    "outcomes": ["data-uri.mht=SUCCESS_WARNED"]
   },
   "products": [
     {"path": "data-uri/image_0.png", "sha256": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443"},

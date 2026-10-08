@@ -87,7 +87,7 @@ class UiportPortSliceTest {
                         "ImportStateChanged", "ImportRound", "ImportFinished",
                         "PreparseStarted", "PreparseFinished",
                         "PreviewLoadStateChanged", "PreviewConfirmationRequired", "PreviewLoadFailed",
-                        "PreviewThumbnail", "PreviewLoaded",
+                        "PreviewThumbnail", "PreviewLoaded", "PreviewRegionConfirmationRequired", "PreviewNotice",
                         "ExtractionChannelEvent",
                         "WorkspaceChanged", "RunningChanged", "Notice"),
                 Arrays.stream(permitted).map(Class::getSimpleName).collect(Collectors.toSet()),
@@ -144,6 +144,7 @@ class UiportPortSliceTest {
                     public void startPreparseFor(List<String> paths) {}
                     public void refreshPreparseProgress() {}
                     public void loadPreview(String path, boolean confirmed) {}
+                    public void resolvePreviewRegion(long generation, String path, boolean accepted) {}
                     public void awaitPreviewInFlight(long millis) {}
                     public void setChecked(List<String> paths, boolean checked) {}
                     public void group(List<String> paths, String namePrefix) {}

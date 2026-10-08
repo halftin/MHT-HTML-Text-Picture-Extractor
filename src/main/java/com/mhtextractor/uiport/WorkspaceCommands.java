@@ -26,6 +26,7 @@ public interface WorkspaceCommands {
     void startPreparseFor(java.util.List<String> paths);
     void refreshPreparseProgress();
     void loadPreview(String path, boolean largeFileConfirmed);
+    void resolvePreviewRegion(long generation, String path, boolean accepted);
     void awaitPreviewInFlight(long millis);
 
     // ---- B3：勾选命令 + 分组命令集（处置项 6 / 5）----

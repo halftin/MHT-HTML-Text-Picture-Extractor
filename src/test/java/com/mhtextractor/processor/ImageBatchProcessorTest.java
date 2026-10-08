@@ -125,9 +125,9 @@ class ImageBatchProcessorTest {
         assertEquals(1, stats.getSkipCount(), stats.toString());
         assertEquals(3, stats.getFileResults().size(), "每文件必须恰好一条结果（不得双记录）");
         Map<String, FileResult> results = resultsByName(stats);
-        assertEquals(ExtractOutcome.SUCCESS, results.get("a.mht").outcome());
+        assertEquals(ExtractOutcome.SUCCESS_WARNED, results.get("a.mht").outcome());
         assertEquals(ExtractOutcome.SKIPPED, results.get("plain.mht").outcome());
-        assertEquals(ExtractOutcome.SUCCESS, results.get("b.mht").outcome());
+        assertEquals(ExtractOutcome.SUCCESS_WARNED, results.get("b.mht").outcome());
 
         // 归属正确：错位时 b 的图片会被写进 plain 的目录，且 b 越界失败
         assertEquals(1, Files.list(out.resolve("a")).count(), "a 目录应只有 a 的 1 张图");
@@ -153,11 +153,11 @@ class ImageBatchProcessorTest {
         assertEquals(1, stats.getFailCount(), stats.toString());
         assertEquals(3, stats.getFileResults().size(), "每文件必须恰好一条结果（不得双记录）");
         Map<String, FileResult> results = resultsByName(stats);
-        assertEquals(ExtractOutcome.SUCCESS, results.get("a.mht").outcome());
+        assertEquals(ExtractOutcome.SUCCESS_WARNED, results.get("a.mht").outcome());
         assertEquals(ExtractOutcome.FAILED, results.get("bad.mht").outcome());
         assertTrue(results.get("bad.mht").message().contains("加载 MHT 文件失败"),
                 "失败原因应保留解析异常信息：" + results.get("bad.mht").message());
-        assertEquals(ExtractOutcome.SUCCESS, results.get("b.mht").outcome());
+        assertEquals(ExtractOutcome.SUCCESS_WARNED, results.get("b.mht").outcome());
 
         assertEquals(1, Files.list(out.resolve("a")).count());
         assertEquals(1, Files.list(out.resolve("b")).count());
@@ -185,7 +185,7 @@ class ImageBatchProcessorTest {
         assertEquals(0, stats.getFailCount(), stats.toString());
         Map<String, FileResult> results = resultsByName(stats);
         assertEquals(ExtractOutcome.SKIPPED, results.get("plain.mht").outcome());
-        assertEquals(ExtractOutcome.SUCCESS, results.get("a.mht").outcome());
+        assertEquals(ExtractOutcome.SUCCESS_WARNED, results.get("a.mht").outcome());
 
         // 首个文件不可解析 → 合并目录名回退默认（输入目录名），不得取第二个文件的标题
         Path merged = out.resolve("src");
@@ -301,7 +301,7 @@ class ImageBatchProcessorTest {
                 out.toString(), null, null);
 
         assertEquals(0, stats.getFailCount(), stats.toString());
-        assertEquals(ExtractOutcome.SUCCESS, resultsByName(stats).get("page.html").outcome());
+        assertEquals(ExtractOutcome.SUCCESS_WARNED, resultsByName(stats).get("page.html").outcome());
         assertTrue(Files.isDirectory(out.resolve("page")),
                 "A1：单独输出目录必须是基名 page，实际内容："
                         + Files.list(out).map(p -> p.getFileName().toString()).toList());
@@ -386,7 +386,8 @@ class ImageBatchProcessorTest {
         PreviewCacheMeta meta = new PreviewCacheMeta(PreviewCacheMeta.FORMAT_VERSION,
                 new PreviewCacheMeta.Source(key.absolutePath(), key.size(), key.mtime(),
                         key.extraFingerprint()),
-                key.paramFingerprint(), true, images, List.of());
+                key.paramFingerprint(), true, images,
+                List.of(new com.mhtextractor.model.ExtractWarning("extract.region.r2", Map.of())));
         store.write(key, meta, dir -> {
             for (int i = 0; i < datas.length; i++) {
                 Files.write(dir.resolve(String.format("%04d.webp", i + 1)), datas[i]);
@@ -557,7 +558,7 @@ class ImageBatchProcessorTest {
         assertEquals(0, stats.getFailCount(), stats.toString());
         assertEquals(0, stats.getSkipCount(), stats.toString());
         assertEquals(1, stats.getSuccessCount(), stats.toString());
-        assertEquals(ExtractOutcome.SUCCESS, stats.getFileResults().get(0).outcome());
+        assertEquals(ExtractOutcome.SUCCESS_WARNED, stats.getFileResults().get(0).outcome());
         Path saved = out.resolve("a").resolve("img001.webp");
         assertTrue(Files.exists(saved), "缓存命中的输出应使用原始文件名 img001.webp");
         assertTrue(Arrays.equals(webpBytes, Files.readAllBytes(saved)), "输出字节必须与缓存图片一致");
@@ -713,7 +714,7 @@ class ImageBatchProcessorTest {
 
         assertEquals(0, stats.getSuccessCount(), stats.toString());
         assertEquals(1, stats.getFileResults().size(), stats.toString());
-        assertNotEquals(ExtractOutcome.SUCCESS, stats.getFileResults().get(0).outcome(),
+        assertTrue(List.of(ExtractOutcome.SKIPPED, ExtractOutcome.FAILED).contains(stats.getFileResults().get(0).outcome()),
                 "参数变化后不得命中旧缓存（命中会 SUCCESS，实际必须走全量解析失败路径）");
         // C10：失败后缓存仍存在，可重试
         assertTrue(lifecycle.store().load(keyA).isPresent(), "失败后缓存必须保留");
@@ -813,7 +814,7 @@ class ImageBatchProcessorTest {
         BatchProcessor.ProcessStats base = new ImageBatchProcessor(config).process(
                 BatchProcessor.buildMhtFileInfoList(List.of(a.toString())), out1.toString(), null, null);
         assertEquals(1, base.getFileResults().size(), base.toString());
-        assertEquals(ExtractOutcome.SUCCESS, base.getFileResults().get(0).outcome(),
+        assertEquals(ExtractOutcome.SUCCESS_WARNED, base.getFileResults().get(0).outcome(),
                 "纯 Data URI 的 MHT 现在应成功提取（修复前是 SKIPPED）");
         // 产物证据：应恰好落盘一张 .png，且内容是真 PNG（魔数 89 50 4E 47），字节数 > 0
         Path produced = out1.resolve("a").resolve("image_0.png");
@@ -871,7 +872,8 @@ class ImageBatchProcessorTest {
         assertEquals(base.getFileResults().get(0).outcome(), cached.getFileResults().get(0).outcome(),
                 "区域未命中时有 0 图缓存必须与无缓存结果一致");
         assertTreeEquals(out1, out2);
-        assertTrue(lifecycle.store().load(key).isPresent(), "失败不触发规则 (b)，缓存保留可重试（C10）");
+        assertEquals(ExtractOutcome.SUCCESS_WARNED, cached.getFileResults().getFirst().outcome());
+        assertTrue(lifecycle.store().load(key).isEmpty(), "R2 full fallback succeeds and triggers cache cleanup (b)");
     }
 
     @Test

@@ -19,6 +19,7 @@ public final class PreviewLoader {
         void setProgressBarActivity(String styleClass);
         void updateProgressStatus(long token);
         void refreshList();
+        void updateContentArea(Object selection);
     }
 
     private final Host host;
@@ -42,7 +43,17 @@ public final class PreviewLoader {
     }
 
     private void accept(PortEvent event) {
-        if (event instanceof PortEvent.PreviewConfirmationRequired confirm) {
+        if (event instanceof PortEvent.PreviewNotice notice) {
+            if (current(notice.generation(), notice.path()))
+                com.mhtextractor.gui.component.NotificationHost.toastWarning(host.statusLabel(),
+                        Texts.get(notice.key()), org.kordamp.ikonli.fontawesome5.FontAwesomeSolid.IMAGE);
+        } else if (event instanceof PortEvent.PreviewRegionConfirmationRequired confirm) {
+            if (!current(confirm.generation(), confirm.path())) return;
+            com.mhtextractor.gui.component.NotificationHost.confirm(host.statusLabel(),
+                    Texts.get("preview.region.confirm"), org.kordamp.ikonli.fontawesome5.FontAwesomeSolid.IMAGE,
+                    ok -> port.commands().resolvePreviewRegion(confirm.generation(), confirm.path(),
+                            ok && current(confirm.generation(), confirm.path())));
+        } else if (event instanceof PortEvent.PreviewConfirmationRequired confirm) {
             String msg = Texts.get("preview.largeFileConfirmHeader") + "\n"
                     + confirm.name() + Texts.get("preview.largeFileConfirmBody", "size", confirm.sizeMiB());
             GuiNotifications.largeFileConfirm(host.statusLabel(), msg, ok -> {
@@ -62,6 +73,7 @@ public final class PreviewLoader {
                 }
             } else {
                 host.previewEffectButton().setDisable(false);
+                host.updateContentArea(host.currentSelection());
                 host.updateProgressStatus(port.queries().activityGeneration());
             }
         } else if (event instanceof PortEvent.PreviewThumbnail thumb) {
@@ -71,7 +83,7 @@ public final class PreviewLoader {
             if (!current(loaded.generation(), loaded.path())) return;
             PreviewItem item = (PreviewItem) host.currentSelection();
             if (item.status == PreviewItem.Status.EMPTY) host.refreshList();
-            host.renderer().renderThumbnails(item);
+            host.updateContentArea(item);
         } else if (event instanceof PortEvent.PreviewLoadFailed failed) {
             if (!current(failed.generation(), failed.path())) return;
             if (failed.fileInfo()) {

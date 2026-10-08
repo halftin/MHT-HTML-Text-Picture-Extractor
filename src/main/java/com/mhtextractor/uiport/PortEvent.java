@@ -105,7 +105,13 @@ public sealed interface PortEvent {
     record PreviewThumbnail(long generation, String path, int index,
                             com.mhtextractor.model.ThumbnailData thumbnail) implements PortEvent {}
 
+    /** Terminal/repaint signal, also emitted on cancellation or stale completion.
+     * A null thumbnail cache means return to the lazy prompt, never reenter loading. */
     record PreviewLoaded(long generation, String path) implements PortEvent {}
+
+    record PreviewRegionConfirmationRequired(long generation, String path) implements PortEvent {}
+
+    record PreviewNotice(long generation, String path, String key) implements PortEvent {}
 
     // ---- B6：提取任务通道（矩阵处置项 1）----
 

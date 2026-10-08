@@ -11,8 +11,8 @@
     "success": 2,
     "fail": 0,
     "skip": 0,
-    "warn": 0,
-    "outcomes": ["multi-image.mht=SUCCESS", "single-image.mht=SUCCESS"]
+    "warn": 2,
+    "outcomes": ["multi-image.mht=SUCCESS_WARNED", "single-image.mht=SUCCESS_WARNED"]
   },
   "products": [
     {"path": "multi-image/img001.png", "sha256": "a4bcd7b80c65e14e3809783fc4c587ce66a995dcc142e25bf61c9337ef6f3443"},

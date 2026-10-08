@@ -108,8 +108,8 @@ class AppConfigTest {
     @Test
     void publicFingerprintUsesCurrentRulesVersion() {
         AppConfig c = base();
-        // 1 = AppConfig.IMAGE_EXTRACTION_RULES_VERSION 当前值（private 常量，测试按项目惯例钉数值）
-        assertEquals(c.imageExtractionFingerprint(), c.imageExtractionFingerprint(1),
+        // 2 = P4-15 shared region relaxation rules; old strict caches must miss.
+        assertEquals(c.imageExtractionFingerprint(), c.imageExtractionFingerprint(2),
                 "公开指纹必须等于当前规则版本的指纹（版本常量变更时同步此钉值）");
     }
 

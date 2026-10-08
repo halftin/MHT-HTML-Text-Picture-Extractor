@@ -350,12 +350,8 @@ public class ImageBatchProcessor extends BatchProcessor {
                     if (parsed.getCidMap().isEmpty() && parsed.getLocationDataMap().isEmpty()
                             && !ExtractionPreviewCache.hasDataUriImages(parsed.getHtmlContent())) {
                         log.info(I18n.msg("log.imagebatchprocessor.24", name));
-                        stats.incrementSkip();
-                        stats.addSkipDetail(I18n.get("extract.fileSkippedNoImages", "file", name));
-                        recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
-                                I18n.get("extract.reasonNoImages"), List.of());
-                        fireProgress(idx, total, name, 1.0);
-                        continue;
+                        // Still run the shared region decision: empty files also need R2-R5
+                        // warnings and the same no-images conclusion as preview.
                     }
 
                     // 提取图片
