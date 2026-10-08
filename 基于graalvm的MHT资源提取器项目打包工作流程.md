@@ -48,7 +48,7 @@
 | 主类 | `com.mhtextractor.App` |
 | 关键依赖 | Jackson, Ikonli, AtlantaFX, Jakarta Mail, Jsoup, Logback, Lombok 1.18.44, **glavo webp 0.2.0**（纯 Java，无 JNI） |
 | 打包路径 | pom.xml → fat JAR → native-image → EXE + DLLs |
-| **架构分层**（2026-09 重构后） | `gui → app → {core, extractor, processor, output, util, cache, config, i18n}`；`model` 为纯数据模型。**业务层与 app 层零 JavaFX**，由 `ArchitectureTest` 的 **13 条**不变式强制 |
+| **架构分层**（2026-09 重构后） | `gui → app → {core, extractor, processor, output, util, cache, config, i18n}`；`model` 为纯数据模型。**业务层与 app 层零 JavaFX**，由 `ArchitectureTest` 的 **17 条**不变式强制（2026-10-08 实测） |
 | **国际化** | zh_CN / en_US，**各 547 键**（`src/main/resources/i18n/messages_*.properties`，两份键集与占位符集合必须一致）+ **22** 个 `ErrorCode` → **native 需资源注册**（见 §4.9） |
 | **预览缓存** | 会话级 `<java.io.tmpdir>/mht-extractor-preview/`，Jackson 读写 `PreviewCacheMeta` → **native 需反射条目**（见 §4.9） |
 | **测试** | **768** 单测（默认执行）+ **68** 无头（`headless-layer-b`）；**42 份**产物黄金基线（21 例 × zh/en）；GUI 自动化 **zh/en 各 34/0**（入口见 §10.5.5）。当前回归基线汇总见 **§10.11** |
@@ -243,7 +243,7 @@ mkdir -p src/main/resources/META-INF/native-image/com.mhtextractor
 
 #### 4.3.1 前置条件
 
-- 已用 JDK 21 编译出 fat JAR: `mvn clean package -DskipTests`
+- 已用**完整 JDK** 编译出 fat JAR: `mvn clean package -DskipTests`（**现行口径 JDK 25 / Liberica NIK**；历史记录中的 JDK 21 仅作背景）
 - 确保 `target/lib/` 目录下有所有依赖（包括 `*-win.jar` 的 JavaFX JAR）
 
 #### 4.3.2 在 App.java 中添加自动退出机制
@@ -265,7 +265,9 @@ if (agentDelay != null) {
 }
 ```
 
-在 `MainController.java` 中添加 `exerciseAllFeatures()` 方法，程序化演练所有 UI 功能。关键演练内容:
+> 🚫 **本节示例已作废（2026-10-02 起）**：**不要**再往生产类（`App` / `MainController`）里添加演练方法。演练入口现在位于**测试源集**（`com.mhtextractor.gui.acceptance.TestMain` → `FeatureExercise` / `AgentExercise`），生产启动器不含任何测试分支。以下清单仅作"演练应覆盖哪些功能"的**内容参考**。
+
+（历史做法）在 `MainController.java` 中添加 `exerciseAllFeatures()` 方法，程序化演练所有 UI 功能。关键演练内容:
 
 - ToggleButton 文本/图片模式切换
 - 所有 ToggleSwitch 开关操作
@@ -1205,7 +1207,7 @@ NIK 自带 agent，JVM 下即可运行：
 
 ```bash
 java -agentlib:native-image-agent=config-output-dir=target/agent-out \
-     -Dtest.mode=true -cp "target/classes;target/test-classes;<cp.txt>" com.mhtextractor.App
+     -Dtest.mode=true -cp "target/classes;target/test-classes;<cp.txt>" com.mhtextractor.gui.acceptance.TestMain
 # 若报 "Can't find dependent libraries"，改用全路径形式：
 #   -agentpath=<NIK>/bin/native-image-agent.dll=config-output-dir=target/agent-out
 # 建议跑两轮（zh 与 en 各一次），确保两份 bundle 都被采集
@@ -1349,7 +1351,7 @@ native-image.cmd \
 # native-image 会把 EXE **以及它动态依赖的 JDK DLL**（awt/fontmanager/freetype/java/
 # javaaccessbridge/javajpeg/jawt/jvm/lcms）一起写进 -H:Path 指定的目录，整目录搬走即可；
 # 再补上 Step 3 抽出来的 5 个 VC++ 运行库 DLL。
-# 🚨 不要把 target/jfx-dlls 里的 JavaFX DLL 放进 dist（见 Step 3 的说明）。
+# 🚨 配方相关（见 Step 3 的说明）：**static 配方不要**把 JavaFX DLL 放进 dist（WinApplication._init 段错误）；**dynamic 配方必须随包**。
 mkdir -p target/dist
 cp target/native-image/MhtExtractor.exe target/dist/
 cp target/native-image/*.dll target/dist/          # native-image 自动落地的 9 个 JDK DLL
@@ -2253,7 +2255,7 @@ native 侧的全量 GUI 自动化仍以 JVM 侧这份为准。
    java -agentlib:native-image-agent=config-output-dir=target\agent-out ^
         --module-path <jfx-win jars> --add-modules javafx.controls,javafx.fxml ^
         -Duser.language=zh -Duser.country=CN -Dtest.mode=true ^
-        -cp "target\classes;target\test-classes;<cp.txt>" com.mhtextractor.App
+        -cp "target\classes;target\test-classes;<cp.txt>" com.mhtextractor.gui.acceptance.TestMain
    ```
 
    想覆盖更全就跑**两轮**，第二轮用 `config-merge-dir=`（把两轮并集留在同一目录）。
@@ -2413,7 +2415,7 @@ static 配方不生成启动器（不需要）。
 | 能不能真提取 | native 跑 `BaselineCases` → **42 passed / 0 failed**（§10.5.2） |
 | 元数据够不够 | FXML / Jackson / 资源三处不炸；`git diff --numstat` 纯增量；过时项用 `tools/native/audit-native-metadata.ps1` 审计 |
 | 功能有没有坏 | 按 **§10.5.6 人工验收清单**逐项过（A 组 ⭐ 必做） |
-| 回归门槛 | `mvn test`：**768/0** + `headless-layer-b` **68/0**；产物基线 42 份；架构不变式 13 条；GUI 自动化 zh/en 各 34/0（明细见 §10.11） |
+| 回归门槛 | `mvn test`：**949/0** + `headless-layer-b` **73/0**；产物基线 **44** 份；架构不变式 **17** 条；GUI 自动化 zh/en 各 34/0（**以下为 2026-10-08 最新值**；§10.11 的历史明细中 768/68 等为当时基线） |
 
 ### 10.11 当前回归基线（2026-10-05 独立复核）
 
@@ -2424,7 +2426,7 @@ static 配方不生成启动器（不需要）。
 | 编译 + 全量单测 | `mvnw.cmd clean test`（不加 `-q`） | 默认 **768 / 0**、`headless-layer-b` **68 / 0**、`BUILD SUCCESS` |
 | 独立聚合（不读执行方日志） | 聚合 `target/surefire-reports/*.txt` | **768 passed / 0 failed**（75 个类汇总） |
 | 产物黄金基线 | `ProductBaselineTest` | **42 / 0**（zh+en × 21 例 × 2 遍确定性自检） |
-| 结构不变式 | `ArchitectureTest` | **13 / 0**；`MainController` **1709** 行 / 上限 **2240**；`test-support` 标记 **0**；GUI 直写 **0** / 间接写 **0** |
+| 结构不变式 | `ArchitectureTest` | **17 / 0**；`MainController` **1654** 行 / 上限 **2240**；`test-support` 标记 **0**；GUI 直写 **0** / 间接写 **0** |
 | GUI 自动化 | §10.5.5 入口，zh 与 en 各跑一次 | **各 34 passed / 0 failed**；`logs/test-results.txt` 的 **mtime** 与本轮一致 |
 | UI / 交互探针 | `tools\probes\run-probe.ps1 <Probe> [-Locale …]` | ContextMenu **121/0**、SidePanel **153/0**（+E1.2 运行时观测 6 条）、HtmlViewer **163/0**、ParamDraft **14/0**、AppCard **5/0**、NotificationAcceptance / BusyCloseProbe `ALL CHECKS PASSED`、PendingConfirmClose `PROBE DONE`；UiProbe 截断 **0**（en 屏上中文 **0**） |
 | 生产日志键 | 扫描 `I18n.get` / `I18n.msg` 字面量 | `log.*` **236 键 / 247 调用点**逐键不变；全部键调用点 **442**（E4.1 起 7 个业务警告键改产 `ExtractWarning` 码值） |
