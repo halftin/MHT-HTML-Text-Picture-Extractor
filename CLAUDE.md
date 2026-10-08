@@ -250,11 +250,13 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | 给强断言配**控制组** | 发现两条断言是假通过 |
 | **会自己消失的 UI**：同帧断言或用闸门卡住后台任务 | 曾把正确实现误判成 FAIL |
 
-**native 卡片冒烟：两个缺陷，第一个已修、第二个待修（2026-10-08 更新；不要再用「static 一律挂死」这个旧说法）**
+**native 卡片冒烟：三处叠加缺陷全部已修（2026-10-08，`d9e0c7f` + `351f6de`）——「static 冒烟一律挂死」的旧说法作废**
 
 ① **脚本读/超时缺陷（已修，P4-7 `d9e0c7f`）**：旧 `native-card-smoke.ps1` 用顺序 `StandardOutput.ReadToEnd()` + `StandardError.ReadToEnd()` 再 `WaitForExit(timeout)` → **经典 stdio 死锁**，`-TimeoutSec` 对读管道**无效**，现象是 `[smoke] running probe ...` 后长时间零输出（曾挂 16 分钟）。**修法**：两路输出**重定向到文件**、立即限时等待、超时 `taskkill /PID … /T /F` + 返回 1、退出码用 Win32 `GetExitCodeProcess` 读取（本机 `$proc.ExitCode` 恒为空）。**harness 实测**：修后 static 冒烟 **30 s 内返回 exit=1**（不再假挂）。
 
-② **`-OutDir` 从不清 DLL（待修）**：冒烟脚本把 `-JfxDlls\*.dll` 拷进 `-OutDir`，但**从不清理 `-OutDir` 里已有的 DLL**；而 `build-native.cmd` 集成调用固定用持久目录 `.claude-work\native-card-smoke`。→ **dynamic 冒烟跑过之后再来 static**，残留的 7 个 JavaFX DLL 被加载 → `WinApplication._init` **段错误**（`0xC0000005`，`SegfaultHandler`） → **static 端到端 `build-native.cmd` FAILED（退出码 1）**。harness 已复现（`smoke-output.log.err` 里有段错误栈），且**实施方只在干净目录下验过**，其「static 通过」不覆盖集成路径。**当前临时绕过**：`--skip-card-smoke` / `NATIVE_CARD_SMOKE=0`，或先删除 `.claude-work\native-card-smoke` 里的 JavaFX DLL。**修复方向**：冒烟前按配方清空 `-OutDir` 的 DLL。
+② **`-OutDir` 从不清 DLL（待修）**：冒烟脚本把 `-JfxDlls\*.dll` 拷进 `-OutDir`，但**从不清理 `-OutDir` 里已有的 DLL**；而 `build-native.cmd` 集成调用固定用持久目录 `.claude-work\native-card-smoke`。→ **dynamic 冒烟跑过之后再来 static**，残留的 7 个 JavaFX DLL 被加载 → `WinApplication._init` **段错误**（`0xC0000005`，`SegfaultHandler`） → **static 端到端 `build-native.cmd` FAILED（退出码 1）**。harness 已复现（`smoke-output.log.err` 里有段错误栈），且**实施方只在干净目录下验过**，其「static 通过」不覆盖集成路径。**已修（P4-8）**：构建前清 `-OutDir` 的 `*.dll`，再由 native-image 重新生成（`-SkipNativeBuild` 语义保留；harness 用**哨兵 DLL** 验证清理确实执行）。⚠️ **但它单独不够** —— 见 ③。
+
+③ **真根因（P4-9 `351f6de`，已修并由 harness 复验）**：`build-native.cmd:236` 执行 `set "PATH=%BUILD_JAVA_HOME%\bin;%PATH%"`，而 **NIK JDK 的 `bin` 里含全部 7 个 JavaFX 原生 DLL**（`glass`/`prism_common`/`prism_d3d`/`prism_sw`/`decora_sse`/`javafx_font`/`javafx_iio`）→ **static 镜像运行时从 PATH 命中它们** → 与静态链接的 JavaFX 冲突 → `WinApplication._init` **段错误 `0xC0000005`** → `[smoke] FAILED` → static 集成构建 `exit 1`。**控制组**：只给 standalone 命令前置同一行 PATH，即**从 PASS 变 FAIL**。**修法**：static 配方的冒烟**子进程**重建 PATH 并剔除 `BUILD_JAVA_HOME\bin`/`GRAALVM_HOME\bin`（**dynamic 原样保留**，它本来就依赖这些 DLL）；顺带把误导性的 `Usual cause: missing JavaFX effect-peer reflection metadata` 改成指向 `smoke-output.log/.err`。**harness 复验**：集成 static 带冒烟 → `exit 0` + `[STEP SMOKE] END exit=0` + `[smoke] RESULTS: 5 passed, 0 failed`；集成 dynamic → `exit 0`、dist 22 文件/71.8 MB。
 
 另：`NativeBaselineProbe` 的工作根必须用**仓库内相对路径**（绝对 `H:\...` 会 `AccessDeniedException`）；且**两个配方共用同一 dist 目录**——`NATIVE_RECIPE` 漏设或 dist 未清空都会让产物计数被污染。
 
@@ -353,7 +355,7 @@ AtlantaFX 2.1.0（主题）· Logback 1.5.26 · Ikonli 12.3.1 · JUnit 6.0.3 · 
 - **产物**：GraalVM native EXE（`MhtExtractor.exe` + DLL），绿色免安装；**默认 `dynamic` 22 文件 / ≈70 MB**，
   `set NATIVE_RECIPE=static` 换 NIK 静态配方（15 文件 / ≈98 MB）。两种配方产物**逐字节等价**（native 基线 **42/0**）。
 - **三条必须记住的**：
-  ① JavaFX DLL 是否随包**取决于配方**（dynamic **必须**随包；static **一个都不能放**，否则 `WinApplication._init` 段错误）；
+  ① JavaFX DLL 是否随包**取决于配方**（dynamic **必须**随包；static **一个都不能放** —— **包括 PATH 里也不能有**：构建机 JDK 的 `bin` 里就带着它们，见 §6③，否则 `WinApplication._init` 段错误）；
   ② 🚨 **不要从项目树内运行**（`Font.loadFont` 返回 `null` → 全部图标变空心方框）；
   ③ dynamic 配方在**非 ASCII（中文）路径**下双击 exe 会启动失败 → 双击随包的 **`启动.cmd`**，
      或改用 `static` 配方，或放进纯 ASCII 路径。
