@@ -260,6 +260,15 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 
 另：`NativeBaselineProbe` 的工作根必须用**仓库内相对路径**（绝对 `H:\...` 会 `AccessDeniedException`）；且**两个配方共用同一 dist 目录**——`NATIVE_RECIPE` 漏设或 dist 未清空都会让产物计数被污染。
 
+**2026-10-08 收口轮（P4-10/11/12，提交 `a268a7b`）——四条口径与两条重要事实**
+
+1. 🚨 **`testAccessSurfaceIsFrozen` 的扫描范围包含 `tools/probes/*.java`**：在**探针**里加反射（如 `getDeclaredField`/`setAccessible`）同样会算成**清单外新增访问点**而变红（P4-12 实测：ESC 观测曾因此把第 13 条打红）。→ **探针里尽量只用公开 API**；真需要动态访问就必须进冻结清单（且清单**只减不增**，得先去掉别的条）。
+2. 🚨 **宿主命令行码页边界（cp936）**：路径里含**非 ANSI 码页字符**（韩文 `한글`、非 BMP emoji `😀`）时，**「命令行 → JVM argv」会把它们压成 `?`** → `java.nio.file.InvalidPathException: Illegal char <?>`（`CliArgs.parse` / `IpcFiles` 处崩）。**日文假名/汉字/全角/中文都在 cp936 内，故正常**。**控制组**：**绕过 node**、直接用 PowerShell 数组参数调 `BackendCli` **同样复现** → 是**宿主限制**，不是产品缺陷、也不是 node 的锅；但**所有 CLI 用户都会遇到**（GUI 走文件对话框不经 argv，不受影响）。矩阵把它归类为 **`LIMITATION(expected) reason=HOST_CP936_ARGV`**，不再当作 PASS/FAIL。缓解方向（未实现）：让 `--config` 这类 **UTF-8 文件**也能携带输入/输出路径，或支持 `@argfile`。
+3. **C 盘「零新增」的正确口径 = 项目产物**：`C:\Users\Admin\AppData\Local\Temp` 下 **`mht-extractor-*` 新增 = 0**（`tools/ipc/project-temp-audit.mjs`，三态 PASS/FAIL/UNVERIFIED）。**整盘零新增在活主机上不可达**（DSH 会话快照 `dsh-workspace-changes-*`、VS 后台日志 `dd_BackgroundDownload_*` 都会写 C 盘）——脚本已改成分别计数并**显式列出未验证范围**。
+4. **ESC 观测（`NotificationAcceptance`）**：默认改为 **`scroll-pane` 公开事件路由**（`Event.fireEvent(ModalPane 的直接 ScrollPane 子节点, KeyEvent)`），**零反射**；zh_CN / en_US 均 **`failures=0 unverified=0`**（非持久 `consumed=true` 关闭卡片 / 持久 `consumed=false` 保持打开，同一 skin 实例对照保留）。
+
+**收口轮实测（harness 亲手）**：矩阵 16 格 = **8 PASS + 8 LIMITATION(expected)**、CG-3 **RED=FAIL GREEN=PASS**（红日志含 `TEXT_EXACT_GUARD`）；内存文本守门 字面=PASS/注入`?`=FAIL/撤销=PASS；C 盘 `projectStatus=PASS`；**en_US 全 14 探针 exit=0**；**无头 exe 重建后 native 42/42**；**无头 native IPC（`--serve`）CLIENT_EXIT=0 + TEXT_EXACT_MATCH + stderr 0 字节**；**static 构建 exit 0 + `[STEP SMOKE] exit=0` + 15 文件/99.4 MB + 0 个 JavaFX DLL**，**静态版 `BaselineProbeStatic`：`NATIVE-BASELINE: 42 passed, 0 failed`**；**P4-7 超时杀树：`taskkill` SUCCESS + 无残留进程**。
+
 **迁移/改包名时必须全仓库检索调用方（含 `tools/probes/`）**：P3-3b-19 把 `util.GroupItem` 迁到 `model` 后，`src` 内编译全绿，但 `tools/probes/ContextMenuProbe`/`ParamDraftProbe` 仍 import 旧包 → 两个探针**编译失败**（exit=1，易被误当功能回归）。**教训**：包迁移/签名变更后，除 `mvn test` 外必须 `grep -rn <旧全限定名> .`（覆盖 `tools/`）并**复跑受影响探针**。
 
 **`HtmlViewerProbe` step5 hscroll 时序竞态：已定位并修复（2026-10-08，P4-6 `2f9be95`）**。
