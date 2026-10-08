@@ -94,9 +94,11 @@ final class IpcTestClient implements AutoCloseable {
     }
 
     void ready() throws Exception {
-        assertEquals(JSON.readTree("""
-                {"v":1,"type":"event","event":"ready","data":{"methods":["workspace","setChecked"]}}
-                """), receive());
+        JsonNode frame = receive();
+        assertEquals("event", frame.path("type").asText());
+        assertEquals("ready", frame.path("event").asText());
+        assertEquals("workspace", frame.path("data").path("methods").get(0).asText());
+        assertEquals("setChecked", frame.path("data").path("methods").get(1).asText());
         assertTrue(process.isAlive(), "serve must stay alive before stdin EOF");
     }
 

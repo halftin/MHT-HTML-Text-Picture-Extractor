@@ -1,8 +1,7 @@
 package com.mhtextractor.backend;
 
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.app.InProcessUiport;
-import com.mhtextractor.app.WorkspaceModel;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -17,11 +16,8 @@ public final class ServeRunner {
     public int run(CliArgs args) {
         I18n.setLocale(args.locale());
         log.info("serve mode entered (JSON Lines v1)");
-        var port = new InProcessUiport(new WorkspaceModel(), request -> {
-            throw new UnsupportedOperationException("Confirmation is not exposed by IPC v1");
-        });
-        try {
-            new IpcServer(port).run(System.in, System.out);
+        try (var session = new IpcSession(new ObjectMapper())) {
+            new IpcServer(session).run(System.in, System.out);
             return BackendCli.EXIT_OK;
         } catch (IOException e) {
             log.error("IPC transport failed", e);

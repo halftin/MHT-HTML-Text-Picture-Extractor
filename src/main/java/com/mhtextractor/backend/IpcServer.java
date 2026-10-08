@@ -20,6 +20,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Objects;
@@ -34,12 +35,21 @@ import java.util.Objects;
 @Slf4j
 final class IpcServer {
     private final Uiport port;
+    private final IpcSession session;
+    private WorkspaceVm pageSnapshot;
+    private java.util.List<ItemVm> pageItems;
     private final ObjectMapper json = new ObjectMapper()
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
             .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
 
     IpcServer(Uiport port) {
         this.port = Objects.requireNonNull(port, "port");
+        this.session = null;
+    }
+
+    IpcServer(IpcSession session) {
+        this.port = session.port;
+        this.session = session;
     }
 
     void run(InputStream input, OutputStream output) throws IOException {
@@ -47,11 +57,19 @@ final class IpcServer {
         BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
         BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8));
         ObjectNode ready = frame("event").put("event", "ready");
-        ready.putObject("data").putArray("methods").add("workspace").add("setChecked");
+        ArrayNode methods = ready.putObject("data").putArray("methods").add("workspace").add("setChecked");
+        if (session != null) {
+            IpcSession.METHODS.forEach(methods::add);
+            session.events(event -> {
+                try { write(writer, event); }
+                catch (IOException e) { throw new UncheckedIOException(e); }
+            });
+        }
         write(writer, ready);
         String line;
         while ((line = reader.readLine()) != null) {
-            write(writer, dispatch(line));
+            try { write(writer, dispatch(line)); }
+            catch (UncheckedIOException e) { throw e.getCause(); }
         }
     }
 
@@ -89,19 +107,55 @@ final class IpcServer {
                         paths.add(path.isNull() ? null : path.textValue());
                     }
                     port.commands().setChecked(paths, params.path("checked").booleanValue());
+                    pageSnapshot = null;
                     result = json.nullNode();
                 }
                 default -> {
-                    return error(id, "UNKNOWN_METHOD", "Unknown method: " + request.path("method").asText());
+                    String method = request.path("method").asText();
+                    if (session == null || !IpcSession.METHODS.contains(method)) {
+                        return error(id, "UNKNOWN_METHOD", "Unknown method: " + method);
+                    }
+                    if (method.equals("workspacePage")) result = page(params);
+                    else {
+                        result = session.call(method, params);
+                        pageSnapshot = null;
+                    }
                 }
             }
             ObjectNode response = frame("response").put("id", id);
             response.set("result", result);
             return response;
-        } catch (RuntimeException e) {
+        } catch (UncheckedIOException e) {
+            throw e;
+        } catch (IllegalArgumentException | JsonProcessingException | java.nio.file.NoSuchFileException e) {
+            return error(id, "INVALID_PARAMS", "Invalid method parameters");
+        } catch (Exception e) {
             log.error("IPC request failed: id={}", id, e);
             return error(id, "INTERNAL_ERROR", "Request failed; see backend log");
         }
+    }
+
+    private ObjectNode page(JsonNode params) {
+        for (String key : java.util.List.of("offset", "limit")) {
+            if (!params.path(key).isIntegralNumber() || !params.path(key).canConvertToInt()) {
+                throw new IllegalArgumentException("Integer page bounds required");
+            }
+        }
+        int offset = params.path("offset").intValue();
+        int limit = params.path("limit").intValue();
+        if (offset < 0 || limit < 1 || limit > 256) throw new IllegalArgumentException("Page bounds out of range");
+        if (pageSnapshot == null) {
+            pageSnapshot = port.queries().workspace();
+            var flat = new ArrayList<ItemVm>(pageSnapshot.topLevelItems());
+            pageSnapshot.groups().forEach(group -> flat.addAll(group.members()));
+            pageItems = java.util.List.copyOf(flat);
+        }
+        ObjectNode result = json.createObjectNode().put("total", pageItems.size()).put("offset", offset)
+                .put("groupCount", pageSnapshot.groups().size());
+        ArrayNode entries = result.putArray("items");
+        int end = (int) Math.min(pageItems.size(), (long) offset + limit);
+        for (int i = offset; i < end; i++) entries.add(item(pageItems.get(i)));
+        return result;
     }
 
     // Explicit wire mapping avoids reflective DTO registration for a future native backend.
