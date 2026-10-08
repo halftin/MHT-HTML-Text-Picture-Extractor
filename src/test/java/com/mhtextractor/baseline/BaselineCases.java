@@ -245,9 +245,38 @@ public final class BaselineCases {
     public static RunResult run(Case c, Path workDir) throws Exception {
         Path input = workDir.resolve("in");
         Path sessionOut = workDir.resolve("out").resolve("session_20260102_030405");
-        Files.createDirectories(input);
         Files.createDirectories(sessionOut);
 
+        List<BatchProcessor.MhtFileInfo> files = prepareInput(c, input);
+
+        // 产物与统计来自**同一次**运行
+        BatchProcessor.ProcessStats stats;
+        if (c.imageMode()) {
+            ImageBatchProcessor p = new ImageBatchProcessor(c.config(), null);
+            stats = c.mergedOutput()
+                    ? p.process(files, sessionOut.toString(), null, null)
+                    : p.process(files, sessionOut.toString(), null);
+        } else {
+            TextBatchProcessor p = new TextBatchProcessor(c.config());
+            stats = c.mergedOutput()
+                    ? p.processMerged(files, sessionOut.resolve("merged.txt").toString(), null,
+                            Collections.emptyMap())
+                    : p.processSeparate(files, sessionOut.toString(), null, Collections.emptyMap());
+        }
+
+        List<String> outcomes = new ArrayList<>();
+        stats.getFileResults().forEach(r -> outcomes.add(fileName(r.path()) + "=" + r.outcome()));
+        outcomes.sort(Comparator.naturalOrder());
+
+        StatsSummary summary = new StatsSummary(stats.getTotalFiles(), stats.getSuccessCount(),
+                stats.getFailCount(), stats.getSkipCount(), stats.getWarnCount(), outcomes);
+
+        return summarize(sessionOut, summary, workDir);
+    }
+
+    /** Same fixtures and deterministic mtimes for processor, CLI and native baseline runners. */
+    public static List<BatchProcessor.MhtFileInfo> prepareInput(Case c, Path input) throws IOException {
+        Files.createDirectories(input);
         List<BatchProcessor.MhtFileInfo> files = new ArrayList<>();
         for (String fx : c.fixtures()) {
             Path src = FIXTURE_DIR.resolve(fx);
@@ -273,31 +302,13 @@ public final class BaselineCases {
             }
         }
 
-        // 产物与统计来自**同一次**运行
-        BatchProcessor.ProcessStats stats;
-        if (c.imageMode()) {
-            ImageBatchProcessor p = new ImageBatchProcessor(c.config(), null);
-            stats = c.mergedOutput()
-                    ? p.process(files, sessionOut.toString(), null, null)
-                    : p.process(files, sessionOut.toString(), null);
-        } else {
-            TextBatchProcessor p = new TextBatchProcessor(c.config());
-            stats = c.mergedOutput()
-                    ? p.processMerged(files, sessionOut.resolve("merged.txt").toString(), null,
-                            Collections.emptyMap())
-                    : p.processSeparate(files, sessionOut.toString(), null, Collections.emptyMap());
-        }
+        return files;
+    }
 
+    /** ProductBaselineTest's exact product/content digest contract, with externally observed stats. */
+    public static RunResult summarize(Path sessionOut, StatsSummary summary, Path workDir) throws IOException {
         List<BaselineHasher.TreeEntry> products = BaselineHasher.hashTree(sessionOut);
         Map<String, String> contentDigests = contentDigests(sessionOut, products, workDir);
-
-        List<String> outcomes = new ArrayList<>();
-        stats.getFileResults().forEach(r -> outcomes.add(fileName(r.path()) + "=" + r.outcome()));
-        outcomes.sort(Comparator.naturalOrder());
-
-        StatsSummary summary = new StatsSummary(stats.getTotalFiles(), stats.getSuccessCount(),
-                stats.getFailCount(), stats.getSkipCount(), stats.getWarnCount(), outcomes);
-
         return new RunResult(sessionOut, products, summary, contentDigests);
     }
 

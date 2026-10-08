@@ -102,8 +102,11 @@ public final class OnceRunner {
         }
 
         BatchProcessor.ProcessStats stats = result.stats();
+        stats.getFileResults().forEach(r -> System.out.println("result: "
+                + Path.of(r.path()).getFileName() + "=" + r.outcome()));
         System.out.println("done: total=" + stats.getTotalFiles() + " success=" + stats.getSuccessCount()
-                + " fail=" + stats.getFailCount() + " skip=" + stats.getSkipCount() + " -> " + out);
+                + " fail=" + stats.getFailCount() + " skip=" + stats.getSkipCount()
+                + " warn=" + stats.getWarnCount() + " -> " + out);
         if (stats.getFailCount() > 0 || stats.getSuccessCount() == 0) {
             System.err.println("error: extraction incomplete (total=" + stats.getTotalFiles()
                     + " success=" + stats.getSuccessCount() + " fail=" + stats.getFailCount() + ")");
@@ -126,14 +129,14 @@ public final class OnceRunner {
     }
 
     private static AppConfig buildParams(CliArgs args) {
-        AppConfig p = new AppConfig();
-        p.setSeparateFiles(args.separate());
+        AppConfig p = args.config() == null ? new AppConfig() : args.config().copyExtractionParams();
+        if (args.separate()) p.setSeparateFiles(true);
         p.setImageModeEnabled(args.imageMode());
         if (args.templateStart() != null || args.templateEnd() != null) {
             // 换行转义（\\n → 换行）由 FileWriter.processTemplate 统一处理，这里原样透传
             p.setEnableTemplate(true);
-            p.setStartTemplate(args.templateStart());
-            p.setEndTemplate(args.templateEnd());
+            if (args.templateStart() != null) p.setStartTemplate(args.templateStart());
+            if (args.templateEnd() != null) p.setEndTemplate(args.templateEnd());
         }
         return p;
     }

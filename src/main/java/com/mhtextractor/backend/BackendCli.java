@@ -113,11 +113,21 @@ public final class BackendCli {
                 once options:
                   --input <path>               importable file or directory (repeatable, required)
                   --output <dir>               output directory (required, created if missing)
+                  --config <AppConfig.json>    UTF-8 named config JSON (once only); omitted fields use POJO defaults
                   --extract <text|images>      extraction kind (default: text)
                   --separate                   text: one output file per input (default: merged)
                   --group                      group all imported items into one group before extraction
                   --template-start <text>      enable custom text template with this start marker
                   --template-end <text>        enable custom text template with this end marker
+
+                config rules:
+                  Use persisted names: enableLimit, enableTitleExtract, enableCustomTemplate,
+                  imageNameExtractEnabled, imageRegionExtractEnabled, imageRenameEnabled,
+                  imageZipEnabled, imageCbzEnabled, singleOutputMode, legacyMemoryMode, etc.
+                  Explicit --separate and template flags override only corresponding config fields,
+                  regardless of argument order. Input/output, extraction kind and locale are independent.
+                  Unknown/ignored fields, wrong types, boolean null, syntax errors, duplicate keys,
+                  trailing values and non-object roots fail with exit 2; no scalar coercion.
 
                 common options:
                   --locale <zh|en|...>         business-layer locale for product naming (default: system)

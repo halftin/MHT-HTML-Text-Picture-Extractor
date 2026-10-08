@@ -1,7 +1,17 @@
 package com.mhtextractor.backend;
 
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.AppConfig;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.cfg.CoercionAction;
+import com.fasterxml.jackson.databind.cfg.CoercionInputShape;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.type.LogicalType;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +26,12 @@ import java.util.Locale;
  *   <li>{@code --once} 参数：{@code --input <path>}（可重复，必填）、{@code --output <dir>}（必填）、
  *       {@code --extract text|images}（默认 text）、{@code --separate}、{@code --group}、
  *       {@code --template-start <s>} / {@code --template-end <e>}（给出任一即开启自定义模板）；</li>
+ *   <li>{@code --config <path>}（仅 once）：UTF-8 AppConfig JSON，使用命名配置持久化属性名，
+ *       如 {@code enableLimit/enableTitleExtract/legacyMemoryMode}；省略字段保留 POJO 默认值。
+ *       显式 {@code --separate} 覆盖 separateFiles；显式模板开关开启 enableCustomTemplate，
+ *       仅覆盖给出的 startTemplate/endTemplate（与参数顺序无关）。输入/输出、模式、locale 独立于配置。
+ *       未知/被忽略的运行时字段、类型不符（不做标量转换）、布尔 null、语法错误、重复键、
+ *       尾随 JSON 值及非对象根均为退出码 2；字符串允许 null。</li>
  *   <li>公共：{@code --locale <zh|en|…>}（默认跟随系统）、{@code -h/--help}。</li>
  * </ul>
  *
@@ -31,10 +47,11 @@ import java.util.Locale;
  * @param templateStart {@code --template-start} 原文（未做换行转义；转义由 FileWriter.processTemplate 统一处理）
  * @param templateEnd   {@code --template-end} 原文
  * @param locale        业务层 locale（null = 跟随系统默认）
+ * @param config        已校验的命名配置（null = 未指定 --config）
  */
 public record CliArgs(Mode mode, boolean help, List<Path> inputs, Path output,
                       boolean imageMode, boolean separate, boolean group,
-                      String templateStart, String templateEnd, Locale locale) {
+                      String templateStart, String templateEnd, Locale locale, AppConfig config) {
 
     /** 运行模式 */
     public enum Mode { ONCE, SERVE }
@@ -58,6 +75,7 @@ public record CliArgs(Mode mode, boolean help, List<Path> inputs, Path output,
         String templateStart = null;
         String templateEnd = null;
         Locale locale = null;
+        Path configPath = null;
 
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
@@ -68,7 +86,7 @@ public record CliArgs(Mode mode, boolean help, List<Path> inputs, Path output,
                 case "--separate" -> separate = true;
                 case "--group" -> group = true;
                 case "--input", "--output", "--extract", "--locale",
-                        "--template-start", "--template-end" -> {
+                        "--template-start", "--template-end", "--config" -> {
                     if (i + 1 >= args.length) {
                         throw new UsageException("missing value for " + a);
                     }
@@ -76,6 +94,7 @@ public record CliArgs(Mode mode, boolean help, List<Path> inputs, Path output,
                     switch (a) {
                         case "--input" -> inputs.add(Path.of(v));
                         case "--output" -> output = Path.of(v);
+                        case "--config" -> configPath = Path.of(v);
                         case "--extract" -> {
                             switch (v) {
                                 case "text" -> imageMode = false;
@@ -105,7 +124,7 @@ public record CliArgs(Mode mode, boolean help, List<Path> inputs, Path output,
         }
 
         if (help) {
-            return new CliArgs(null, true, List.of(), null, false, false, false, null, null, null);
+            return new CliArgs(null, true, List.of(), null, false, false, false, null, null, null, null);
         }
         if (mode == null) {
             throw new UsageException("missing mode: specify --once or --serve");
@@ -119,13 +138,36 @@ public record CliArgs(Mode mode, boolean help, List<Path> inputs, Path output,
             }
         } else {
             boolean onceOnly = output != null || !inputs.isEmpty() || separate || group
-                    || templateStart != null || templateEnd != null;
+                    || templateStart != null || templateEnd != null || configPath != null;
             if (onceOnly) {
                 throw new UsageException(
-                        "--input/--output/--separate/--group/--template-* are not supported with --serve in this batch");
+                        "--input/--output/--separate/--group/--template-*/--config are not supported with --serve in this batch");
             }
         }
         return new CliArgs(mode, false, List.copyOf(inputs), output, imageMode, separate, group,
-                templateStart, templateEnd, locale);
+                templateStart, templateEnd, locale, configPath == null ? null : readConfig(configPath));
+    }
+
+    private static AppConfig readConfig(Path path) throws UsageException {
+        JsonMapper json = JsonMapper.builder()
+                .disable(MapperFeature.ALLOW_COERCION_OF_SCALARS)
+                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
+                        DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES,
+                        DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES,
+                        DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+                .build();
+        for (CoercionInputShape shape : List.of(CoercionInputShape.Integer,
+                CoercionInputShape.Float, CoercionInputShape.Boolean)) {
+            json.coercionConfigFor(LogicalType.Textual).setCoercion(shape, CoercionAction.Fail);
+        }
+        try {
+            // Read UTF-8 explicitly; native image's platform charset may be GBK.
+            AppConfig config = json.readValue(Files.readString(path), AppConfig.class);
+            if (config == null) throw new UsageException("invalid --config " + path + ": expected a JSON object");
+            return config;
+        } catch (IOException e) {
+            throw new UsageException("invalid --config " + path + ": " + e.getMessage());
+        }
     }
 }

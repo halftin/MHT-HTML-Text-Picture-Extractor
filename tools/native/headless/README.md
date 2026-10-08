@@ -96,3 +96,14 @@ Raw collection commands, stdout/stderr and the probe command are retained under
 `H:\TEST\mht\p4-3-agent-utf8`.
 Recollect into a fresh H-drive directory, union new observations into this subset,
 and rerun both the negative control and native smoke/baseline checks after changes.
+
+P4-5 incremental capture (2026-10-08): `BackendConfigBaselineTest` ran all 21 cases
+x zh/en through the production `--once --config` CLI with
+`-Dmht.backend.agentDir=H:/TEST/mht/p4-5-agent`. All 42 complete golden JSONs
+matched. Only 25 observed `AppConfig` setter registrations were added; reflection
+type count stays 58, no existing methods/fields/resources were removed, and the
+seven GUI metadata files remain unchanged. `H:/TEST/mht/p4-5-evidence/agent.raw.log`
+and `metadata-union.json` retain commands, results and member-level provenance.
+See `tools/backend/CONFIG-BASELINES.md` for JVM/native matrix and negative-control
+commands. A pre-P4-5 executable without `--config` requires rebuilding with
+`NATIVE_TARGET=headless`; it cannot validate the expanded CLI via that option.

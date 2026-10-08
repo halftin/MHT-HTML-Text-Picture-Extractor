@@ -358,6 +358,156 @@
           "parameterTypes": [
             "java.lang.String"
           ]
+        },
+        {
+          "name": "setAddChapterNumber",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setAutoFixEncoding",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setContentLimitEnd",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setContentLimitStart",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setEnableBatchRenaming",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setEnableCbzPackaging",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setEnableContentLimit",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setEnableNameExtraction",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setEnableRegionExtraction",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setEnableTitleExtraction",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setEnableZipPackaging",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setEndMarker",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setHighSpeedMemoryMode",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setImageNameEndMarker",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setImageNameStartMarker",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setImageRegionEndMarker",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setImageRegionStartMarker",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setNameLimitEnd",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setNameLimitStart",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setSingleOutputMode",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setStartMarker",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setTitleEndMarker",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setTitleStartMarker",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setTitleUseRegex",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "setUseRegex",
+          "parameterTypes": [
+            "boolean"
+          ]
         }
       ]
     },
