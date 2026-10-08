@@ -66,7 +66,11 @@ final class IpcTestClient implements AutoCloseable {
     }
 
     JsonNode receive() throws Exception {
-        String line = reads.submit(output::readLine).get(30, TimeUnit.SECONDS);
+        return receive(30);
+    }
+
+    JsonNode receive(long timeoutSeconds) throws Exception {
+        String line = reads.submit(output::readLine).get(timeoutSeconds, TimeUnit.SECONDS);
         assertNotNull(line, "Unexpected EOF; stderr=" + Files.readString(stderr));
         Files.writeString(transcript, "< " + line + "\n", StandardCharsets.UTF_8,
                 java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
@@ -118,20 +122,54 @@ final class IpcTestClient implements AutoCloseable {
         // Drain to EOF as well: catches trailing logs, unexpected events and extra response frames.
         assertNull(reads.submit(output::readLine).get(5, TimeUnit.SECONDS), "unexpected trailing stdout");
         assertEquals(0, process.exitValue(), Files.readString(stderr));
+        assertFalse(Files.readString(stderr).contains("Exception in thread"), "Uncaught backend worker exception");
         finished = true;
+    }
+
+    List<JsonNode> disconnectAndCollect() throws Exception {
+        long started = System.nanoTime();
+        long pid = process.pid();
+        var descendants = process.descendants().toList();
+        input.close();
+        assertTrue(process.waitFor(3, TimeUnit.SECONDS), "CG-2: disconnected backend must exit within 3s; pid=" + pid);
+        long processExitMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+        var frames = new ArrayList<JsonNode>();
+        String line;
+        while ((line = reads.submit(output::readLine).get(1, TimeUnit.SECONDS)) != null) {
+            Files.writeString(transcript, "< " + line + "\n", StandardCharsets.UTF_8,
+                    java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+            frames.add(JSON.readTree(line));
+        }
+        assertEquals(0, process.exitValue(), Files.readString(stderr));
+        assertFalse(process.isAlive());
+        assertTrue(ProcessHandle.of(pid).map(handle -> !handle.isAlive()).orElse(true), "Residual backend process");
+        assertTrue(descendants.stream().noneMatch(ProcessHandle::isAlive), "Residual descendants");
+        String diagnostics = Files.readString(stderr);
+        assertFalse(diagnostics.contains("Exception in thread"), diagnostics);
+        assertTrue(diagnostics.contains("IPC THREADS CLEAN: nonDaemon=0 inputReaders=0"), diagnostics);
+        System.out.println("CG-2 GREEN: pid=" + pid + " exit=" + process.exitValue() + " processExitMs=" + processExitMs + " cleanupMs="
+                + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) + " residualProcesses=0; " + diagnostics.strip());
+        finished = true;
+        return frames;
     }
 
     @Override
     public void close() throws Exception {
         try {
             if (!finished) {
+                long pid = process.pid();
+                var descendants = process.descendants().toList();
                 process.destroyForcibly();
-                process.waitFor(10, TimeUnit.SECONDS);
+                assertTrue(process.waitFor(10, TimeUnit.SECONDS), "Failed test teardown left backend alive");
+                assertFalse(process.isAlive());
+                assertTrue(descendants.stream().noneMatch(ProcessHandle::isAlive));
+                System.out.println("IPC TEST TEARDOWN: pid=" + pid + " forcedExit=" + process.exitValue() + " residualProcesses=0");
             }
         } finally {
             reads.shutdownNow();
             output.close();
             input.close();
+            assertTrue(reads.awaitTermination(5, TimeUnit.SECONDS), "Residual client read thread");
         }
     }
 }

@@ -51,8 +51,8 @@ class BackendLauncherTest {
         String declared = System.getProperty("mht.cg.backend.buildId", identity.buildId());
         try (var connection = BackendLauncher.launch(backend(identity.version(), declared), identity, Duration.ofSeconds(30))) {
             assertEquals(identity, connection.identity());
-            assertEquals(List.of("workspace", "setChecked", "workspacePage", "bulkFiles"), connection.capabilities());
-            assertFalse(connection.confirmationRoundTrip());
+            assertEquals(List.of("workspace", "setChecked", "workspacePage", "bulkFiles", "confirmationRoundTrip"), connection.capabilities());
+            assertTrue(connection.confirmationRoundTrip());
             connection.input().write("{\"v\":1,\"type\":\"request\",\"id\":\"after-hello\",\"method\":\"workspace\",\"params\":{}}\n");
             connection.input().flush();
             assertEquals("response", JSON.readTree(connection.output().readLine()).path("type").asText());

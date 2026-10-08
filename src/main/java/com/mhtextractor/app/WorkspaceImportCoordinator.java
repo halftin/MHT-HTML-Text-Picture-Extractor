@@ -278,7 +278,10 @@ public final class WorkspaceImportCoordinator {
                 + Texts.get("import.quotaStop",
                         "files", counts.files(),
                         "groups", counts.groups());
-        ConfirmRequest request = new ConfirmRequest("import.quotaReached", Map.of(),
+        ConfirmRequest request = new ConfirmRequest("import.quotaReached", Map.of(
+                "groups", String.valueOf(maxGroupsPerRound), "files", String.valueOf(maxFilesPerRound),
+                "accumulatedGroups", String.valueOf(counts.groups()),
+                "accumulatedFiles", String.valueOf(counts.files())),
                 List.of(ACTION_CONTINUE, ACTION_STOP), 0, msg);
         String chosen;
         try {

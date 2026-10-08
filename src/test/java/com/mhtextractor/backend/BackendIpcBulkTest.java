@@ -92,8 +92,27 @@ class BackendIpcBulkTest {
 
     private List<JsonNode> run(IpcSession session, String input) throws Exception {
         input = BackendIpcContractTest.hello() + input;
-        var out = new ByteArrayOutputStream();
-        new IpcServer(session).run(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)), out);
+        String lastId = JSON.readTree(input.strip().lines().reduce((a, b) -> b).orElseThrow()).path("id").asText();
+        var pipe = new java.io.PipedInputStream(65536);
+        var client = new java.io.PipedOutputStream(pipe);
+        client.write(input.getBytes(StandardCharsets.UTF_8));
+        var currentLine = new ByteArrayOutputStream();
+        var out = new ByteArrayOutputStream() {
+            @Override public synchronized void write(int value) {
+                super.write(value);
+                currentLine.write(value);
+                if (value == '\n') {
+                    try {
+                        if (JSON.readTree(currentLine.toByteArray()).path("id").asText().equals(lastId)) client.close();
+                        currentLine.reset();
+                    } catch (IOException e) { throw new java.io.UncheckedIOException(e); }
+                }
+            }
+            @Override public synchronized void write(byte[] bytes, int offset, int length) {
+                for (int i = offset; i < offset + length; i++) write(bytes[i]);
+            }
+        };
+        try (pipe; client) { new IpcServer(session).run(pipe, out); }
         return out.toString(StandardCharsets.UTF_8).lines().map(line -> {
             try { return JSON.readTree(line); } catch (Exception e) { throw new AssertionError(line, e); }
         }).toList();

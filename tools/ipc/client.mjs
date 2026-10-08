@@ -165,7 +165,9 @@ try {
   assert.equal(welcome.kind, 'welcome');
   for (const [key, value] of Object.entries(expectedIdentity)) assert.equal(welcome[key], value, `Handshake ${key} mismatch`);
   assert.ok(welcome.capabilities.includes('workspacePage'));
-  assert.equal(welcome.confirmationRoundTrip, false);
+  assert.ok(greeting.data.methods.includes('confirmAnswer'));
+  assert.ok(welcome.capabilities.includes('confirmationRoundTrip'));
+  assert.equal(welcome.confirmationRoundTrip, true);
   console.log('HANDSHAKE ' + JSON.stringify(welcome));
   const imported = await request('importPaths', { paths: [input] });
   assert.equal(imported.count, count);

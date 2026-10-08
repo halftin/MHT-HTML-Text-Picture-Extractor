@@ -13,21 +13,21 @@ import com.mhtextractor.uiport.Uiport;
 import com.mhtextractor.uiport.WorkspaceVm;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Objects;
+import java.util.ArrayDeque;
 
 /**
  * v1 stdio control frames: one UTF-8 JSON object plus LF per frame (see IPC.md).
- * A single reader dispatches synchronously to the port and flushes one response per request.
+ * A serial host dispatches to the port and flushes one response per request. A separate
+ * daemon reads stdin so answers and EOF are handled while the host waits for an activity.
  * The initial ready event precedes all responses; setChecked is silent at the port and
  * therefore emits no fabricated change events. IO failure ends the session; malformed
  * requests produce error frames and leave the session usable.
@@ -41,6 +41,8 @@ final class IpcServer {
     private boolean welcomed;
     private WorkspaceVm pageSnapshot;
     private java.util.List<ItemVm> pageItems;
+    private final ArrayDeque<String> deferred = new ArrayDeque<>();
+    private boolean disconnected;
     private final ObjectMapper json = new ObjectMapper()
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
             .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
@@ -60,7 +62,6 @@ final class IpcServer {
     void run(InputStream input, OutputStream output) throws IOException {
         welcomed = false;
         // Borrowed stdio: the caller owns stream lifetime. Never use PrintWriter (swallows IO errors).
-        BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
         BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8));
         ObjectNode ready = frame("event").put("event", "ready");
         ArrayNode methods = ready.putObject("data").putArray("methods").add("workspace").add("setChecked");
@@ -73,10 +74,64 @@ final class IpcServer {
         }
         methods.add("hello");
         write(writer, ready);
-        String line;
-        while ((line = reader.readLine()) != null) {
-            try { write(writer, dispatch(line)); }
-            catch (UncheckedIOException e) { throw e.getCause(); }
+        disconnected = false;
+        deferred.clear();
+        try (var incoming = new IpcInput(input)) {
+            if (session != null) session.inputPump(() -> pump(incoming, writer));
+            while (!disconnected) {
+                String line;
+                if (!deferred.isEmpty()) line = deferred.removeFirst();
+                else {
+                    var received = incoming.take();
+                    if (received.line() == null) {
+                        endInput(received);
+                        break;
+                    }
+                    line = received.line();
+                }
+                write(writer, dispatch(line));
+            }
+        } catch (UncheckedIOException e) {
+            throw e.getCause();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("IPC host interrupted", e);
+        } finally {
+            if (session != null) {
+                session.inputPump(() -> { });
+                session.events(event -> { }); // Failed output must not prevent cancellation or cleanup.
+                session.disconnect();
+            }
+        }
+    }
+
+    private void endInput(IpcInput.Received received) throws IOException {
+        disconnected = true;
+        if (received.failure() != null) throw received.failure();
+        if (session != null) session.disconnect();
+    }
+
+    private void pump(IpcInput incoming, BufferedWriter writer) {
+        if (disconnected) return;
+        try {
+            // EOF is not delayed behind a backlog of ordinary requests while a confirmation is pending.
+            if (incoming.end() != null) { endInput(incoming.end()); return; }
+            var received = incoming.poll();
+            if (received == null) return;
+            if (received.line() == null) { endInput(received); return; }
+            JsonNode request;
+            try { request = json.readTree(received.line()); }
+            catch (JsonProcessingException e) { write(writer, dispatch(received.line())); return; }
+            if (request != null && request.path("method").asText().equals("confirmAnswer")) {
+                write(writer, dispatch(received.line()));
+            } else if (deferred.size() < 256) {
+                deferred.addLast(received.line()); // No other command may mutate an active model snapshot.
+            } else {
+                String id = request != null && request.path("id").isTextual() ? request.path("id").asText() : null;
+                write(writer, error(id, "INVALID_REQUEST", "Too many queued requests during activity"));
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
@@ -163,8 +218,8 @@ final class IpcServer {
                 .put("protocolVersion", identity.protocolVersion()).put("version", identity.version())
                 .put("buildId", identity.buildId());
         ArrayNode capabilities = welcome.putArray("capabilities").add("workspace").add("setChecked");
-        if (session != null) capabilities.add("workspacePage").add("bulkFiles");
-        welcome.put("confirmationRoundTrip", false);
+        if (session != null) capabilities.add("workspacePage").add("bulkFiles").add("confirmationRoundTrip");
+        welcome.put("confirmationRoundTrip", session != null);
         welcomed = true;
         return response;
     }

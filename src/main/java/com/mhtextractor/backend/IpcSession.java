@@ -21,10 +21,10 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-/** Backend host assembly. All model commands and dispatched callbacks run on the IPC reader thread. */
+/** Backend host assembly. All model commands and callbacks run on the serial IPC host thread. */
 final class IpcSession implements AutoCloseable {
     static final List<String> METHODS = List.of("importPaths", "group", "setParams", "extract",
-            "workspacePage", "previewFiles", "fileInfo", "releaseFiles", "metrics");
+            "workspacePage", "previewFiles", "fileInfo", "releaseFiles", "metrics", "confirmAnswer");
     private final ObjectMapper json;
     private final WorkspaceModel model = new WorkspaceModel();
     private final GlobalParameterCache global = new GlobalParameterCache();
@@ -34,6 +34,7 @@ final class IpcSession implements AutoCloseable {
     private final PreviewSession previews;
     private final PreviewService previewService;
     private final WorkspaceExtractionCoordinator extractions;
+    private final IpcConfirmations confirmations;
     final Uiport port;
     private Consumer<ObjectNode> events;
     private boolean importDone;
@@ -46,9 +47,12 @@ final class IpcSession implements AutoCloseable {
     private long sentProgress;
     private volatile int queuePeak;
     private volatile boolean closing;
+    private volatile boolean disconnecting;
+    private Runnable inputPump = () -> { };
 
     IpcSession(ObjectMapper json) throws IOException {
         this.json = json;
+        confirmations = new IpcConfirmations(json, this::dispatch, data -> emit("confirmationRequested", data));
         files = new IpcFiles(json);
         previews = PreviewSession.create(files.root.resolve("preview-cache"));
         previewService = new PreviewService(previews.lifecycle());
@@ -61,11 +65,7 @@ final class IpcSession implements AutoCloseable {
             public String outputFolder() { return outputFolder; }
             public boolean openFolderAfterComplete() { return false; }
         });
-        Confirmer confirmer = request -> new ConfirmToken() {
-            public void answer(String actionKey) { throw new UnsupportedOperationException(); }
-            public void cancel() { }
-            public String await() { return null; } // Unsupported confirmations conservatively stop.
-        };
+        Confirmer confirmer = confirmations;
         var activities = new WorkspaceActivityService(new WorkspaceActivityService.Context() {
             public List<PreviewItem> items() { return model.allItems(); }
             public boolean textMode() { return !imageMode; }
@@ -75,7 +75,7 @@ final class IpcSession implements AutoCloseable {
         var clipboard = new ParamClipboard(model::push, target -> ParamScope.GLOBAL, (target, mode, config) -> { });
         var paramCommands = new WorkspaceParamCommandService(model, new WorkspaceParamService(previews.lifecycle()),
                 global, clipboard::pushParamUndo);
-        // A server import round is bounded to 20k inputs; quota confirmations are deferred to P4-3.
+        // A server import round is bounded to 20k inputs; continuing requires a client decision.
         var imports = new WorkspaceImportCoordinator(model, confirmer, this::dispatch, 200, 20000);
         extractions = new WorkspaceExtractionCoordinator(new WorkspaceExtractionService(previews.lifecycle()),
                 WorkspaceExtractionCoordinator.productionRequests(plans,
@@ -85,6 +85,20 @@ final class IpcSession implements AutoCloseable {
     }
 
     void events(Consumer<ObjectNode> sink) { events = sink; }
+
+    void inputPump(Runnable pump) { inputPump = pump; }
+
+    void disconnect() {
+        if (disconnecting) return;
+        disconnecting = true;
+        try {
+            // Mark the run cancelled before waking its confirmation waiter; otherwise it may win a natural-completion race.
+            port.commands().cancelExtraction();
+        } finally {
+            confirmations.disconnect(); // Also release import confirmations, even if terminal delivery broke stdout.
+            port.commands().cancelWorkspaceActivity();
+        }
+    }
 
     private AppConfig params(PreviewItem item, boolean mode) {
         AppConfig config = ParamScope.effectiveParams(item.parentGroup, item.textItemParams,
@@ -100,6 +114,7 @@ final class IpcSession implements AutoCloseable {
             queuePeak = Math.max(queuePeak, callbacks.size());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            if (closing || disconnecting) return; // Expected shutdown interrupt must not escape the worker's final dispatch.
             throw new IllegalStateException("Host dispatch interrupted", e);
         }
     }
@@ -107,7 +122,8 @@ final class IpcSession implements AutoCloseable {
     private void await(java.util.function.BooleanSupplier done) throws InterruptedException {
         // Synchronous methods finish their activity before responding; no worker touches the model afterward.
         while (!done.getAsBoolean()) {
-            Runnable callback = callbacks.poll(1, TimeUnit.SECONDS);
+            inputPump.run();
+            Runnable callback = callbacks.poll(25, TimeUnit.MILLISECONDS);
             if (callback != null) callback.run();
         }
     }
@@ -161,6 +177,14 @@ final class IpcSession implements AutoCloseable {
 
     JsonNode call(String method, JsonNode p) throws Exception {
         switch (method) {
+            case "confirmAnswer" -> {
+                String id = string(p, "confirmationId");
+                JsonNode action = p.get("actionKey");
+                if (action == null || (!action.isNull() && !action.isTextual())) {
+                    throw new IllegalArgumentException("actionKey string or null required");
+                }
+                return json.createObjectNode().put("accepted", confirmations.answer(id, action.isNull() ? null : action.asText()));
+            }
             case "importPaths" -> {
                 List<String> paths = strings(p, "paths");
                 for (String path : paths) IpcFiles.input(path);
@@ -277,8 +301,7 @@ final class IpcSession implements AutoCloseable {
         closing = true;
         events = event -> { };
         callbacks.clear();
-        port.commands().cancelWorkspaceActivity();
-        port.commands().cancelExtraction();
+        disconnect();
         try {
             var channel = extractions.channel();
             if (channel != null) channel.result.get(10, TimeUnit.SECONDS);

@@ -1,4 +1,4 @@
-# JSON Lines 控制协议 v1（P4-2a + P4-2b + P4-13 启动握手）
+# JSON Lines 控制协议 v1（P4-2a + P4-2b + P4-13 启动握手 + P4-14 确认往返）
 
 启动 `com.mhtextractor.backend.BackendCli --serve`，stdin/stdout 为 UTF-8 JSON Lines：
 每行恰好一个 JSON 对象，输出行尾为 LF，字符串中的换行由 JSON 转义。每帧立即 flush。
@@ -8,9 +8,9 @@
 帧示例：
 
 ```json
-{"v":1,"type":"event","event":"ready","data":{"methods":["workspace","setChecked","importPaths","group","setParams","extract","workspacePage","previewFiles","fileInfo","releaseFiles","metrics","hello"]}}
+{"v":1,"type":"event","event":"ready","data":{"methods":["workspace","setChecked","importPaths","group","setParams","extract","workspacePage","previewFiles","fileInfo","releaseFiles","metrics","confirmAnswer","hello"]}}
 {"v":1,"type":"request","id":"h1","method":"hello","params":{"protocolVersion":1,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1"}}
-{"v":1,"type":"response","id":"h1","result":{"kind":"welcome","protocolVersion":1,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1","capabilities":["workspace","setChecked","workspacePage","bulkFiles"],"confirmationRoundTrip":false}}
+{"v":1,"type":"response","id":"h1","result":{"kind":"welcome","protocolVersion":1,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1","capabilities":["workspace","setChecked","workspacePage","bulkFiles","confirmationRoundTrip"],"confirmationRoundTrip":true}}
 {"v":1,"type":"request","id":"q1","method":"workspace","params":{}}
 {"v":1,"type":"response","id":"q1","result":{"groups":[],"topLevelItems":[],"canUndo":false,"undoDepth":0,"selection":"NONE"}}
 {"v":1,"type":"request","id":"c1","method":"setChecked","params":{"paths":["H:/input/a.mht"],"checked":true}}
@@ -33,7 +33,7 @@
   这些错误不会结束进程，下一行仍可服务。物理 IO 故障结束会话（退出码 1）；stdin EOF 退出码 0。
   EOF 前无 LF 的最后一行也按一帧处理。
 
-正式 `--serve` 初始工作区为空。P4-2b 新方法见下；恢复会话与交互式确认往返仍未开放。
+正式 `--serve` 初始工作区为空。P4-2b 新方法见下；恢复会话仍未开放，确认往返见 P4-14。
 非空契约测试用测试源集装配器在真实子进程内建立分组/条目/移除夹具，再运行同一个生产 IpcServer；
 没有给生产入口加测试数据开关。与直接端口执行同一命令序列后，用独立 Jackson record 序列化结果
 逐字段比较（包括数组顺序、null 和转义字符串；忽略对象键顺序这一无语义差异）。正式 CLI 另有子进程往返测试。
@@ -57,8 +57,8 @@ P4-2b 方法次之，并追加 `hello`。所有 `--serve` 会话必须先完成 
 
 匹配成功返回普通 `response`（同 id），`result.kind=welcome`，携带上述三个实际值、
 字符串数组 `capabilities` 与布尔 `confirmationRoundTrip`。
-正式后端能力集为 `workspace`、`setChecked`、`workspacePage`、`bulkFiles`；
-仅装配最小端口的契约宿主只声明前两项。确认往返目前为 false。
+正式后端能力集为 `workspace`、`setChecked`、`workspacePage`、`bulkFiles`、`confirmationRoundTrip`；
+完整会话的确认往返标志为 true；仅装配最小端口的契约宿主只声明前两项，标志仍为 false。
 能力名允许扩展，客户端按包含关系检测，不能把未声明能力当作已支持。
 
 新增专用错误码 **`HANDSHAKE_FAILED`**：版本/构建标识不匹配，或尚未握手就请求业务方法。
@@ -93,8 +93,61 @@ P4-2b 方法次之，并追加 `hello`。所有 `--serve` 会话必须先完成 
 以下方法每请求仍恰好一个 response/error。`importPaths` / `extract` 同步等待后端活动完成再响应，
 期间允许发送下表列出的事件；客户端必须持续读取 stdout，不能只等紧邻请求的下一行。
 导入与提取的模型回写、端口事件在 IPC 宿主线程串行执行，后台到宿主回调队列容量 **256**，满时背压。
-stdin EOF 在当前方法结束后处理，再取消活动、等提取 worker 完成并清理本会话目录。
-在途请求取消、断连即取消及确认卡往返属于 P4-3；本批不宣称支持它们。
+P4-14 用独立 daemon 读线程持续接收 stdin（读队列 256），不在读线程执行端口命令。
+活动等待期间宿主处理 `confirmAnswer` 与 EOF，其余请求按接收顺序暂存（最多 256；溢出返回
+既有 `INVALID_REQUEST`），活动收尾后继续执行。确认回答的响应可以早于原活动请求的响应；
+客户端必须按 id 匹配，不能假定响应与请求的全局顺序一致。普通业务命令仍串行执行。
+stdin EOF/读取 IO 故障不再等确认结束才发现：释放在途确认、取消提取、等待 worker 收尾并清理会话。
+P4-3 实际交付为独立无头 native 构建；本处曾误归 P4-3 的确认往返和断连语义由 P4-14 承接。
+显式的通用「取消某个在途请求」方法仍未开放。
+
+## P4-14 确认往返、超时与断连
+
+新增普通 event `confirmationRequested` 与普通 request 方法 `confirmAnswer`。
+仍为 `v=1` 的 request/response/event/error 四类帧，原五个错误码及 P4-13 的
+`HANDSHAKE_FAILED` 均不改变；没有新增帧类型或错误码。`ready.data.methods` 追加 `confirmAnswer`。
+
+```json
+{"v":1,"type":"event","event":"confirmationRequested","data":{"confirmationId":"confirm-1","key":"alert.recursionDepthHeader","namedParams":{},"actionKeys":["continue"],"defaultAction":null,"timeoutMs":30000}}
+{"v":1,"type":"request","id":"answer-1","method":"confirmAnswer","params":{"confirmationId":"confirm-1","actionKey":"continue"}}
+{"v":1,"type":"response","id":"answer-1","result":{"accepted":true}}
+{"v":1,"type":"request","id":"answer-2","method":"confirmAnswer","params":{"confirmationId":"confirm-2","actionKey":null}}
+{"v":1,"type":"response","id":"answer-2","result":{"accepted":true}}
+```
+
+- `confirmationId` 是本会话内唯一、不复用的字符串，与普通 request id 独立；不能跨会话回答。
+  `key` 标识问题类型及文案入口，`namedParams` 是字符串具名参数对象，`actionKeys` 是有序动作键数组。
+  `defaultAction=null` 明确默认按取消交付；取消选项始终存在，用 `actionKey=null` 回答。
+  非 null 的答案必须属于 `actionKeys`。协议层零 I18n 引用，不传预渲染正文，尤其不序列化
+  `ConfirmRequest.message`。前端按当前语言渲染，下列组合键口径由前端实现。
+- `alert.recursionDepthHeader`：组合同名前缀的 Header、Content、Continue、Skip 四个既有键；
+  选 `continue` 继续既有解析流程，取消/超时按既有语义跳过超深子树。
+  **继续也不会解除解析器深度上限**。跳过可能得到 SUCCEEDED + SKIPPED 文件结果，不等于整任务 CANCELLED。
+- `import.quotaReached`：`groups/files` 为单轮配额，`accumulatedGroups/accumulatedFiles` 为已导入累计；
+  组合既有 `import.quotaReached`、`import.quotaContinue`、`import.quotaStop`，最后一个键的
+  groups/files 用累计值渲染。动作 `continue/stop`；`stop`、null、超时均停止下一轮。
+  既有 in-process 渲染正文保留，IPC 只取键和参数。
+- `confirmAnswer` 必须已完成 hello，`confirmationId` 必须是非空字符串，`actionKey` 必须显式存在
+  且为字符串或 null。已到期、重复、未知 id 回答返回 `{accepted:false}`，不改变其它确认。
+  在途确认的非候选动作返回 `INVALID_PARAMS`，不消耗确认。每张卡答案、取消、超时只能有一个胜者。
+- 超时上限来自 `IpcConfirmations.DEFAULT_TIMEOUT_MS=30000`（30 秒）。JVM 可用
+  `-Dmht.ipc.confirmTimeoutMs=<正整数毫秒>` 配置；native 可用现有 JVM 系统属性机制配置。
+  缺省/请求 `timeoutMs<=0` 仍受这个会话上限保护，正请求期限取两者较小值。
+  帧中的 `timeoutMs` 是实际期限，从后端创建 token 时开始，采用单调时钟；不会因重复 await/回答延长。
+  无回答到期后交付 null，移除确认，工作线程继续既有取消语义并到达活动终态，管道继续服务。
+  非正值/非数字配置拒绝启动。前端须在回答、当地计时到期或活动终态时移除卡片。
+- 客户端关闭 stdin/进程退出导致 EOF，或读取失败：在途 token 全部交付 null，提取请求取消并
+  交付一次 CANCELLED（已完成 worker 的终态仍按既有自然完成竞态裁决），释放确认中的非 daemon worker。
+  stdout 尚可读时仍可收到终态及 extract 响应；stdout 已断开的场景只能在后端完成终态与清理，
+  不承诺已断管道送达帧。写 IO 故障同样在 finally 取消与清理，退出码沿用 1；EOF 沿用 0。
+  借用流由调用方关闭；异常后仍阻塞 readLine 的输入线程为 daemon，不阻碍进程自然退出。
+  真实管道测试要求确认在途时 EOF 后 **3 秒内自然退出**，并断言无残留进程/非 daemon worker/读线程。
+
+本批 **GUI 集成未做**；JavaFX 前端尚未接入跨进程确认应答。native EXE 重建与上述路径运行另验。
+`BackendIpcConfirmationTest` 使用真实无头子进程、深度 101 的两个兄弟分支，比较 IPC/in-process 的
+确认次数与逐文件结果：确定询问一次，取消/不回答询问两次，排除“静默按取消”的伪往返。
+CG-1 故意不答；CG-2 在看到确认帧后关客户端输入，并用自然返回的测试宿主检查线程，避免
+`System.exit` 掩盖残留 worker。移除 timed get/移除 EOF 处理可分别令有限时间断言跑红。
 
 | 新方法 | params | result |
 |---|---|---|
@@ -107,11 +160,12 @@ stdin EOF 在当前方法结束后处理，再取消活动、等提取 worker �
 | `fileInfo` | `path`: 本会话签发的文件路径 | 文件描述；检查存在与规范化后的会话归属，无通用文件内容读取方法 |
 | `releaseFiles` | `paths`: 非空已签发文件路径数组 | null；全部校验成功再去重删除，有一个非法条目就整批拒绝 |
 | `metrics` | `{}` | `{heapPoolPeakBytes,callbackQueuePeak,rawProgress,sentProgress}`，口径见压测 |
+| `confirmAnswer` | `confirmationId`: 非空字符串；`actionKey`: 候选动作字符串或 null | `{accepted}`：是否交付了这张在途卡的决定 |
 
 `config` 沿用持久化配置属性名，例如 `enableCustomTemplate`（不是 Java 字段 `enableTemplate`）、
 `startTemplate`、`endTemplate`、`separateFiles`。未知属性报 INVALID_PARAMS；四个被 JsonIgnore 的运行时
 字段不经该对象设置，输出目录由 `extract` 单独校验。导入每轮上限 200 组 / 20000 文件；达到配额后
-若仍有剩余，当前无确认往返，按取消停止。`count` 必须由客户端核对，不能假定所有输入都已落地。
+若仍有剩余，发配额确认，确定才继续下一轮；取消/超时停止。`count` 必须由客户端核对，不能假定所有输入都已落地。
 读取不到的输入及解析失败仍沿用业务层容错语义；不存在的直接输入报 INVALID_PARAMS。
 
 `workspacePage` 使用端口不可变快照，首次按需查询时建立服务器内部列表；工作区写命令使快照失效。
@@ -127,6 +181,7 @@ stdin EOF 在当前方法结束后处理，再取消活动、等提取 worker �
 | `notice` | `{key}`：业务通知键，不传正文/列表 |
 | `extractionProgress` | `{generation,overall}`：进度 0–1；每进入更大的整数百分比桶才发，最多 **101** 帧/任务 |
 | `extractionTerminal` | 与 extract 结果相同的统计摘要，**不含 resultsFile 或 files 数组**；每任务一次 |
+| `confirmationRequested` | `{confirmationId,key,namedParams,actionKeys,defaultAction,timeoutMs}`；不传预渲染文案 |
 
 ## 批量文件、安全与生命周期
 
