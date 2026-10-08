@@ -311,7 +311,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 
 **测试怎样访问生产控制器**：生产类**不为测试开放状态面**（`test-support` 标记 = 0）。两条正路：
 ① 测试源集的同包 driver `com.mhtextractor.gui.controller.AcceptanceDriver`（**直访，无反射**；`MainController` 现共 **49** 个包级成员、其中 **30** 个被驱动面访问，全测试访问面 **108** 条由第 13 条不变式 `testAccessSurfaceIsFrozen` 冻结）；
-② 真正的公开行为（如 `WorkspaceModel` 的公开 API）——**优先用这条**。探针另走 `getDeclaredField + setAccessible`。
+② 真正的公开行为（如 `WorkspaceModel` 的公开 API）——**优先用这条**。⚠️ **探针也在访问面扫描范围内**（见 §6）：探针里加反射同样会把第 13 条打红（P4-12 实测），所以**探针也优先走公开 API**（例如用 `Event.fireEvent` 派发真实事件，而不是反射调私有 handler）。
 
 ### 派发实施方：Claude Code CLI 与 Codex CLI（**长活走 detach**，2026-10-08）
 
