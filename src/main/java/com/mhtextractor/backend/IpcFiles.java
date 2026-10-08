@@ -22,8 +22,9 @@ final class IpcFiles implements AutoCloseable {
     IpcFiles(ObjectMapper json) throws IOException {
         this.json = json;
         Path configured = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize();
-        if (!configured.equals(TEMP) || !configured.toRealPath().equals(TEMP)) {
-            throw new IOException("IPC requires -Djava.io.tmpdir=H:/TEST/temp (no redirected root)");
+        if (!configured.startsWith(TEMP) || !configured.toRealPath().equals(configured)
+                || !TEMP.toRealPath().equals(TEMP)) {
+            throw new IOException("IPC requires java.io.tmpdir under H:/TEST/temp (no redirected root)");
         }
         root = Files.createTempDirectory(configured, "mht-ipc-").toRealPath();
     }

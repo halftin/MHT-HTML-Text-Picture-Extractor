@@ -342,9 +342,21 @@
           ]
         },
         {
+          "name": "setEndTemplate",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
           "name": "setSeparateFiles",
           "parameterTypes": [
             "boolean"
+          ]
+        },
+        {
+          "name": "setStartTemplate",
+          "parameterTypes": [
+            "java.lang.String"
           ]
         }
       ]

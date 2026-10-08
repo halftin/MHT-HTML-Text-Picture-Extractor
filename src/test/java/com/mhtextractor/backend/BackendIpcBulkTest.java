@@ -22,6 +22,61 @@ class BackendIpcBulkTest {
     private static final String PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1sAAAAASUVORK5CYII=";
     private static final String HTML = "<html><body><p>bulk text sentinel</p><img src=\"data:image/png;base64," + PNG + "\"></body></html>";
 
+    @Test void chineseNestedTempRootPreservesPathsAndCleansSession() throws Exception {
+        String original = System.getProperty("java.io.tmpdir");
+        Path parent = Files.createTempDirectory(IpcFiles.TEMP, "p4-4-temp-");
+        Path configured = Files.createDirectories(parent.resolve("中文 临时（目录）").resolve("嵌套"));
+        Path sessionRoot;
+        try {
+            System.setProperty("java.io.tmpdir", configured.toString());
+            try (var files = new IpcFiles(JSON)) {
+                sessionRoot = files.root;
+                assertEquals(configured.toRealPath(), sessionRoot.getParent());
+                JsonNode ref = files.write(".txt", "中文路径往返".getBytes(StandardCharsets.UTF_8), "text/plain");
+                Path issued = files.validateIssued(ref.path("path").asText());
+                assertEquals("中文路径往返", Files.readString(issued));
+                assertTrue(issued.startsWith(sessionRoot));
+            }
+            assertFalse(Files.exists(sessionRoot), "Session cleanup must use the configured Unicode root");
+        } finally {
+            System.setProperty("java.io.tmpdir", original);
+            Files.delete(configured);
+            Files.delete(configured.getParent());
+            Files.delete(parent);
+        }
+    }
+
+    @Test void tempRootRejectsSiblingPrefixAndNormalizedEscape() throws Exception {
+        String original = System.getProperty("java.io.tmpdir");
+        try {
+            for (String bad : List.of("H:/TEST/temp-中文", "H:/TEST/temp/../mht/中文")) {
+                System.setProperty("java.io.tmpdir", bad);
+                assertThrows(IOException.class, () -> new IpcFiles(JSON), bad);
+            }
+        } finally {
+            System.setProperty("java.io.tmpdir", original);
+        }
+    }
+
+    @Test void tempRootRejectsJunctionOutsideTempAllowlist() throws Exception {
+        String original = System.getProperty("java.io.tmpdir");
+        Path parent = Files.createTempDirectory(IpcFiles.TEMP, "p4-4-link-");
+        Path link = parent.resolve("中文重定向");
+        var process = new ProcessBuilder("cmd.exe", "/c", "mklink", "/J", link.toString(),
+                IpcFiles.PRODUCTS.toString()).redirectErrorStream(true).start();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertTrue(process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS));
+        assertEquals(0, process.exitValue(), output);
+        try {
+            System.setProperty("java.io.tmpdir", link.toString());
+            assertThrows(IOException.class, () -> new IpcFiles(JSON));
+        } finally {
+            System.setProperty("java.io.tmpdir", original);
+            Files.delete(link); // Remove only the junction, never its target.
+            Files.delete(parent);
+        }
+    }
+
     private Path source() throws IOException {
         Path work = Files.createTempDirectory(IpcFiles.PRODUCTS, "ipc-bulk-test-");
         Path input = work.resolve("input.html");

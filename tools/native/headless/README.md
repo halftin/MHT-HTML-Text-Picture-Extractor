@@ -78,6 +78,15 @@ checked selection, preview creation and cache readback, text/images extraction;
 the existing `NativeBaselineProbe`, 21 cases x zh/en, each executed twice, all
 42 golden baselines matched under the tracing JVM.
 
+P4-4 incremental capture (2026-10-08): `client.mjs --agent-dir
+H:/TEST/mht/p4-4-agent-green` ran the real text IPC workflow with custom templates
+and matched `text-template-vars.zh` by SHA-256. The agent output registered
+`AppConfig.setStartTemplate(String)` and `setEndTemplate(String)`; only these two
+observed methods were merged into this subset. Existing entries and the seven
+GUI metadata files remain unchanged. The original P4-3 exe fails this workflow
+with `MissingReflectionRegistrationError`; the P4-4 native matrix verifies it
+after rebuilding. JVM agent roots include `jdk.unsupported` for Unsafe.
+
 Subset: 58 reflection types (including backend logback sink, `AppConfig`, preview
 cache records and warnings), two JNI-accessible types, 25 resource patterns and one locale
 bundle. Missing-resource probes recorded by the agent are retained.

@@ -85,7 +85,8 @@ stdin EOF 在当前方法结束后处理，再取消活动、等提取 worker �
 
 ## 批量文件、安全与生命周期
 
-`--serve` 要求显式 `-Djava.io.tmpdir=H:/TEST/temp`，根目录不得经链接跳转到别处。每实例在该目录下
+`--serve` 要求显式设置 `-Djava.io.tmpdir=H:/TEST/temp` 或该根下已存在的子目录（允许中文、空格），
+配置目录与根目录均不得经链接跳转到别处。每实例在配置目录下
 创建随机 `mht-ipc-*` 目录；预览缓存也注入此会话根，避免清掉另一个实例/GUI 的缓存。
 文件描述为 `{path,bytes,mediaType}`，path 是服务端签发的绝对路径，bytes 为落盘长度。
 预览 manifest 是一个 JSON 文件，包含 `text` / `html` 文件描述和 `thumbnails` 数组；每个图像描述
