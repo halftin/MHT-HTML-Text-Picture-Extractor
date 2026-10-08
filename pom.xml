@@ -14,6 +14,8 @@
         <!-- Liberica NIK 25 统一编译和 native-image -->
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Release/build identity shared with the embedded UI; override per release build. -->
+        <backend.build.id>${project.version}-p4-13-ipc1</backend.build.id>
 
         <!-- 依赖版本统一管理 -->
         <javafx.version>25.0.3</javafx.version>
@@ -138,6 +140,16 @@
             <!-- 包含 src/main/resources 下的所有资源 -->
             <resource>
                 <directory>src/main/resources</directory>
+                <excludes>
+                    <exclude>backend-build.properties</exclude>
+                </excludes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>backend-build.properties</include>
+                </includes>
             </resource>
             <!-- 包含 src/main/java 下的 FXML 文件 -->
             <resource>

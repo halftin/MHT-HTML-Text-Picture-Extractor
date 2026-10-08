@@ -94,6 +94,16 @@ final class IpcTestClient implements AutoCloseable {
     }
 
     void ready() throws Exception {
+        readyWithoutHandshake();
+        var identity = BackendIdentity.current();
+        var welcome = request("hello", "hello", JSON.createObjectNode()
+                .put("protocolVersion", identity.protocolVersion()).put("version", identity.version())
+                .put("buildId", identity.buildId()));
+        assertEquals("response", welcome.path("type").asText());
+        assertEquals("welcome", welcome.path("result").path("kind").asText());
+    }
+
+    void readyWithoutHandshake() throws Exception {
         JsonNode frame = receive();
         assertEquals("event", frame.path("type").asText());
         assertEquals("ready", frame.path("event").asText());

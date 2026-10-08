@@ -1,0 +1,23 @@
+{
+  "case": "text-template-basename",
+  "locale": "zh",
+  "imageMode": false,
+  "mergedOutput": true,
+  "fixtures": ["html/plain/plain.html"],
+  "note": "同一来源模板：{filename}=plain.html；{basename}=plain（SourceKinds 已知扩展名）",
+  "knownIssues": [],
+  "stats": {
+    "total": 1,
+    "success": 1,
+    "fail": 0,
+    "skip": 0,
+    "warn": 0,
+    "outcomes": ["plain.html=SUCCESS"]
+  },
+  "products": [
+    {"path": "merged.txt", "sha256": "6b1ad784aba303730d62f4867c47fc7f078204733046525266f79a72fbfcbe4d"}
+  ],
+  "contentDigests": {
+    "merged.txt": "e6f09a3c454695d45f48649599203399f29106e56dda06b33a2feb9039d19cc2"
+  }
+}

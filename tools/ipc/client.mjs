@@ -153,12 +153,26 @@ let cleanupRoot;
 try {
   const greeting = await ready;
   assert.ok(greeting.data.methods.includes('previewFiles'));
+  assert.ok(greeting.data.methods.includes('hello'), 'Backend must support startup handshake');
+  // Expected identity comes from the local UI/build, never from the untrusted backend greeting.
+  const identityFile = argv.indexOf('--identity-file');
+  const identityText = utf8(identityFile < 0 ? path.join(repo, 'target/classes/backend-build.properties') : argv[identityFile + 1]);
+  const identityProperties = Object.fromEntries(identityText.split(/\r?\n/).filter(line => line.includes('='))
+    .map(line => { const i = line.indexOf('='); return [line.slice(0, i).trim(), line.slice(i + 1).trim()]; }));
+  const expectedIdentity = { protocolVersion: 1, version: identityProperties.version, buildId: identityProperties.buildId };
+  assert.ok(expectedIdentity.version && expectedIdentity.buildId && !identityText.includes('${'), 'Filtered build identity required');
+  const welcome = await request('hello', expectedIdentity);
+  assert.equal(welcome.kind, 'welcome');
+  for (const [key, value] of Object.entries(expectedIdentity)) assert.equal(welcome[key], value, `Handshake ${key} mismatch`);
+  assert.ok(welcome.capabilities.includes('workspacePage'));
+  assert.equal(welcome.confirmationRoundTrip, false);
+  console.log('HANDSHAKE ' + JSON.stringify(welcome));
   const imported = await request('importPaths', { paths: [input] });
   assert.equal(imported.count, count);
   assert.equal(imported.failed, false);
   assert.ok(Object.values(imported).every(value => value === null || typeof value !== 'object'),
     'Import response must contain only scalar summaries, with no full item list');
-  assert.equal(frames.filter(frame => frame.type === 'response').length, 1,
+  assert.equal(frames.filter(frame => frame.type === 'response').length, 2,
     'Import must not trigger an unsolicited workspace response');
   assert.equal(eventCounts.importFinished, 1);
   const first = await request('workspacePage', { offset: 0, limit: 256 });

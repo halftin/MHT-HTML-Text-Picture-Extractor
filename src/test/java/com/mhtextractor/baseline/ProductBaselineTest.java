@@ -47,6 +47,9 @@ class ProductBaselineTest {
     void allProductBaselinesMatch() throws Exception {
         boolean capture = BaselineCases.captureRequested();
         List<BaselineCases.Case> cases = BaselineCases.all();
+        String onlyCase = System.getProperty("mht.baseline.case");
+        if (onlyCase != null) cases = cases.stream().filter(c -> c.name().equals(onlyCase)).toList();
+        assertTrue(!cases.isEmpty(), "filter selected no baselines");
 
         Locale originalLocale = I18n.currentLocale();
         List<String> failures = new ArrayList<>();

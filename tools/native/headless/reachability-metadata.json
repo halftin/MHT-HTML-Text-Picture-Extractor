@@ -697,6 +697,9 @@
   ],
   "resources": [
     {
+      "glob": "backend-build.properties"
+    },
+    {
       "glob": "H:\\TEST\\mht\\p4-3-evidence\\probe-logback.xml"
     },
     {

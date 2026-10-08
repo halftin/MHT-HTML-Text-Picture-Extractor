@@ -2,6 +2,7 @@ package com.mhtextractor.output;
 
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.FileUtils;
+import com.mhtextractor.util.SourceKinds;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.*;
@@ -75,6 +76,7 @@ public class FileWriter {
         if (template == null || template.isEmpty()) return "";
 
         String result = template;
+        result = result.replace("{basename}", filename != null ? SourceKinds.stripKnownExtension(filename) : "");
         result = result.replace("{filename}", filename != null ? filename : "");
 
         if (fileTime != null) {

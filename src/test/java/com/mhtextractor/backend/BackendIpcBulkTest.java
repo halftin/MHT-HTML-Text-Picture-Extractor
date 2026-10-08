@@ -91,6 +91,7 @@ class BackendIpcBulkTest {
     }
 
     private List<JsonNode> run(IpcSession session, String input) throws Exception {
+        input = BackendIpcContractTest.hello() + input;
         var out = new ByteArrayOutputStream();
         new IpcServer(session).run(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)), out);
         return out.toString(StandardCharsets.UTF_8).lines().map(line -> {
@@ -216,12 +217,12 @@ class BackendIpcBulkTest {
             session.call("importPaths", JSON.createObjectNode().set("paths", JSON.valueToTree(List.of(source.toString()))));
             JsonNode preview = session.call("previewFiles", JSON.createObjectNode().put("path", source.toString()));
             root = Path.of(preview.path("manifest").path("path").asText()).getParent();
-            var input = request("extract", "extract", JSON.createObjectNode().put("checkedOnly", false)
+            var input = BackendIpcContractTest.hello() + request("extract", "extract", JSON.createObjectNode().put("checkedOnly", false)
                     .put("outputFolder", source.getParent().resolve("output").toString()));
             OutputStream broken = new OutputStream() {
                 int newlines;
                 @Override public void write(int value) throws IOException {
-                    if (newlines >= 1) throw new IOException("disconnect after ready");
+                    if (newlines >= 2) throw new IOException("disconnect after welcome");
                     if (value == '\n') newlines++;
                 }
             };

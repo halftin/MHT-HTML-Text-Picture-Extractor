@@ -1,4 +1,4 @@
-# JSON Lines 控制协议 v1（P4-2a + P4-2b 扩展）
+# JSON Lines 控制协议 v1（P4-2a + P4-2b + P4-13 启动握手）
 
 启动 `com.mhtextractor.backend.BackendCli --serve`，stdin/stdout 为 UTF-8 JSON Lines：
 每行恰好一个 JSON 对象，输出行尾为 LF，字符串中的换行由 JSON 转义。每帧立即 flush。
@@ -8,7 +8,9 @@
 帧示例：
 
 ```json
-{"v":1,"type":"event","event":"ready","data":{"methods":["workspace","setChecked"]}}
+{"v":1,"type":"event","event":"ready","data":{"methods":["workspace","setChecked","importPaths","group","setParams","extract","workspacePage","previewFiles","fileInfo","releaseFiles","metrics","hello"]}}
+{"v":1,"type":"request","id":"h1","method":"hello","params":{"protocolVersion":1,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1"}}
+{"v":1,"type":"response","id":"h1","result":{"kind":"welcome","protocolVersion":1,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1","capabilities":["workspace","setChecked","workspacePage","bulkFiles"],"confirmationRoundTrip":false}}
 {"v":1,"type":"request","id":"q1","method":"workspace","params":{}}
 {"v":1,"type":"response","id":"q1","result":{"groups":[],"topLevelItems":[],"canUndo":false,"undoDepth":0,"selection":"NONE"}}
 {"v":1,"type":"request","id":"c1","method":"setChecked","params":{"paths":["H:/input/a.mht"],"checked":true}}
@@ -40,10 +42,53 @@
 
 ## P4-2b 兼容规则与方法发现
 
-帧版本仍为整数 `v=1`，四种帧与五种错误码不变。扩展仅添加方法和这些方法产生的事件，
+帧版本仍为整数 `v=1`，四种帧与原有五种错误码的语义不变。P4-2b 扩展添加方法和这些方法产生的事件，
 `ready.data.methods` 在原来的两项后追加支持的方法；客户端应按包含关系检测能力，允许未知方法名。
 原有 `workspace` 的完整映射、顺序、null 与 `setChecked` 静默语义保持不变。旧客户端不调用新方法
-就不会收到新活动事件。没有握手版本协商、重连或并行命令执行。
+就不会收到新活动事件。P4-13 增加下面的强制启动握手；没有重连或并行命令执行。
+
+## P4-13 启动版本/构建标识握手
+
+`ready` 仅表示管道可用，**不表示业务请求已获准**。其 `methods` 保持原两项在前、
+P4-2b 方法次之，并追加 `hello`。所有 `--serve` 会话必须先完成 `hello`：
+`params` 为正整数 `protocolVersion`、非空字符串 `version`、非空字符串 `buildId`。
+三个值是客户端随 UI/交付物携带的**预期值**，不能从对端 ready 复制以伪造匹配。
+多余字段仍忽略；类型/空值错误为 `INVALID_PARAMS`。请求帧本身仍须 `v=1`。
+
+匹配成功返回普通 `response`（同 id），`result.kind=welcome`，携带上述三个实际值、
+字符串数组 `capabilities` 与布尔 `confirmationRoundTrip`。
+正式后端能力集为 `workspace`、`setChecked`、`workspacePage`、`bulkFiles`；
+仅装配最小端口的契约宿主只声明前两项。确认往返目前为 false。
+能力名允许扩展，客户端按包含关系检测，不能把未声明能力当作已支持。
+
+新增专用错误码 **`HANDSHAKE_FAILED`**：版本/构建标识不匹配，或尚未握手就请求业务方法。
+错误回显合法 id，message 指出 expected / backend declares 或要求先发 hello。
+失配不执行任何业务命令，进程保持服务；修正后可重新 hello。
+重复 hello 每次重新校验，失败（包括参数非法）会撤销之前的握手，后续业务请求再次拒绝。
+原五个错误码仍各司原职，坏 JSON/坏帧的检查先于握手检查。
+
+保留整数帧版本 `v=1` 的理由：JSON Lines 编码、四类帧、id 对应、旧方法字段与业务语义均未变。
+握手协议版本单独用 `protocolVersion=1`，本批只接受精确匹配，不做降级。
+**兼容边界**：既有业务请求/响应格式兼容；旧客户端必须在 ready 后补一次 hello 才能继续，
+未升级客户端会明确收到 HANDSHAKE_FAILED。本批不提供绕过握手的兼容开关。
+`--once` 不使用 IPC，不受握手影响。
+
+构建标识由 Maven 过滤 `/backend-build.properties` 注入：`version=${project.version}`，
+`buildId=${backend.build.id}`；默认 buildId 为 `${project.version}-p4-13-ipc1`。
+发版可用 `-Dbackend.build.id=<release-id>` 指定不可复用的发布标识，UI 与后端应分发同一预期标识。
+这是**构建标识**，不是产物 SHA-256 或真实性签名；复用标识无法发现内容篡改。
+未过滤/缺失资源直接启动失败，不静默给默认版本。基于资源的标识也便于控制组篡改：
+测试仅在子进程 classpath 首部覆盖资源，客户端保留原预期值，生产 CLI 无测试注入开关。
+
+`BackendLauncher.launch(ProcessBuilder, BackendIdentity, Duration)` 可拉起 JVM/native `--serve` 命令，
+限时读取 ready、发送 hello、独立验证 welcome；错误、EOF、超时、失配均抛可读 `IOException`
+并结束所启动的进程。调用方显式配置工作目录/临时目录，stdin/stdout 须为 PIPE、stderr 须独立，
+默认未重定向的 stderr 改为继承诊断流，禁止合并进 stdout。
+成功后返回 `Connection`：identity、不可变能力集、确认往返标志以及独占的输入/输出流。
+调用方持续消费业务 response/error/event，`close()` 发送 EOF，超时则强制清理进程。
+**本批 GUI 集成未做**；native EXE 的重建/运行需另验。
+无头打包输入复制上述过滤后的属性文件，headless 元数据仅增补 tracing agent 实际记录的资源 glob；
+既有七份 GUI 元数据不变。
 
 以下方法每请求仍恰好一个 response/error。`importPaths` / `extract` 同步等待后端活动完成再响应，
 期间允许发送下表列出的事件；客户端必须持续读取 stdout，不能只等紧邻请求的下一行。
@@ -123,6 +168,8 @@ node tools/ipc/client.mjs --stress
 ```
 
 `--classpath-file <file>` 可覆盖依赖清单文件；`--classpath <完整classpath>` 可直接传入（用于复验）。
+`--identity-file <file>` 可指定 UI 持有的预期构建属性文件，默认读取 `target/classes/backend-build.properties`。
+脚本在 ready 后先 hello，逐字段核对 welcome，再执行下面的工作流。
 脚本物理剔除 UI 框架 jars，启动 Java 子进程并限制为 java.se / `-Xmx512m`。
 完整走导入→分页收齐 id→分组→全局参数→预览文件读取→提取→结果文件/产物核对→释放→stdin EOF。
 stdout 与 stderr 分开消费及落盘，退出时验证 exitCode=0、会话目录消失、终态一次、输出正文与模板各出现

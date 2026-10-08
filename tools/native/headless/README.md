@@ -33,6 +33,14 @@ automatic native metadata. The optional FX adapters and module descriptor in the
 **copy** of the existing webp jar are omitted; the pure Java decoder is retained.
 Original dependency jars and GUI inputs are untouched.
 
+P4-13 also includes Maven-filtered `backend-build.properties` in the isolated jar.
+The one new resource glob was observed with the native-image tracing agent during
+the JVM IPC hello/workflow run (`H:/TEST/mht/p4-13-evidence/agent/reachability-metadata.json`).
+No existing reflection methods, fields or resource entries were removed; the seven
+GUI metadata files remain unchanged. This resource registration does not constitute
+a rebuilt/verified native executable. Native `--serve` clients must now send hello;
+see `src/main/java/com/mhtextractor/backend/IPC.md` and `client.mjs --identity-file`.
+
 The image charset follows the build host's Windows ANSI codepage (`GBK` on this
 CP936 host), because Graal decodes CRT command-line arguments with the image
 charset. This preserves the Chinese template argument in the existing native

@@ -72,9 +72,10 @@ foreach ($package in $packages) {
         $classCount++
     }
 }
-# Only business locale resources and the headless logging configuration.
+# Business locale resources, headless logging and the compile-time handshake identity.
 Copy-Item -LiteralPath (Join-Path $Repo 'target\classes\i18n') -Destination $classes -Recurse
 Copy-Item -LiteralPath (Join-Path $Repo 'target\classes\logback-headless.xml') -Destination $classes
+Copy-Item -LiteralPath (Join-Path $Repo 'target\classes\backend-build.properties') -Destination $classes
 $jar = Join-Path $inputDir 'backend.jar'
 & (Join-Path $JavaHome 'bin\jar.exe') --create --file $jar --main-class com.mhtextractor.backend.BackendCli -C $classes .
 if ($LASTEXITCODE -ne 0) { throw "jar failed: $LASTEXITCODE" }

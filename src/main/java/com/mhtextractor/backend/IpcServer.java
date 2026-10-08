@@ -31,28 +31,34 @@ import java.util.Objects;
  * The initial ready event precedes all responses; setChecked is silent at the port and
  * therefore emits no fabricated change events. IO failure ends the session; malformed
  * requests produce error frames and leave the session usable.
+ * Business requests require a matching hello; ready alone grants no business access.
  */
 @Slf4j
 final class IpcServer {
     private final Uiport port;
     private final IpcSession session;
+    private final BackendIdentity identity;
+    private boolean welcomed;
     private WorkspaceVm pageSnapshot;
     private java.util.List<ItemVm> pageItems;
     private final ObjectMapper json = new ObjectMapper()
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
             .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
 
-    IpcServer(Uiport port) {
+    IpcServer(Uiport port) throws IOException {
         this.port = Objects.requireNonNull(port, "port");
         this.session = null;
+        this.identity = BackendIdentity.current();
     }
 
-    IpcServer(IpcSession session) {
+    IpcServer(IpcSession session) throws IOException {
         this.port = session.port;
         this.session = session;
+        this.identity = BackendIdentity.current();
     }
 
     void run(InputStream input, OutputStream output) throws IOException {
+        welcomed = false;
         // Borrowed stdio: the caller owns stream lifetime. Never use PrintWriter (swallows IO errors).
         BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
         BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8));
@@ -65,6 +71,7 @@ final class IpcServer {
                 catch (IOException e) { throw new UncheckedIOException(e); }
             });
         }
+        methods.add("hello");
         write(writer, ready);
         String line;
         while ((line = reader.readLine()) != null) {
@@ -90,6 +97,8 @@ final class IpcServer {
             return error(id, "INVALID_REQUEST", "Expected v=1, type=request, nonempty string id, method and object params");
         }
         JsonNode params = request.path("params");
+        if (request.path("method").asText().equals("hello")) return hello(id, params);
+        if (!welcomed) return error(id, "HANDSHAKE_FAILED", "Send matching hello before business requests");
         try {
             JsonNode result;
             switch (request.path("method").asText()) {
@@ -133,6 +142,31 @@ final class IpcServer {
             log.error("IPC request failed: id={}", id, e);
             return error(id, "INTERNAL_ERROR", "Request failed; see backend log");
         }
+    }
+
+    private ObjectNode hello(String id, JsonNode params) {
+        // A failed repeat handshake revokes the previous agreement as well.
+        welcomed = false;
+        if (!params.path("protocolVersion").isIntegralNumber()
+                || !params.path("protocolVersion").canConvertToInt()
+                || params.path("protocolVersion").intValue() < 1
+                || !params.path("version").isTextual() || params.path("version").asText().isBlank()
+                || !params.path("buildId").isTextual() || params.path("buildId").asText().isBlank()) {
+            return error(id, "INVALID_PARAMS", "hello requires positive integer protocolVersion and nonempty version/buildId");
+        }
+        BackendIdentity expected = new BackendIdentity(params.path("protocolVersion").intValue(),
+                params.path("version").asText(), params.path("buildId").asText());
+        String mismatch = expected.mismatch(identity);
+        if (mismatch != null) return error(id, "HANDSHAKE_FAILED", mismatch);
+        ObjectNode response = frame("response").put("id", id);
+        ObjectNode welcome = response.putObject("result").put("kind", "welcome")
+                .put("protocolVersion", identity.protocolVersion()).put("version", identity.version())
+                .put("buildId", identity.buildId());
+        ArrayNode capabilities = welcome.putArray("capabilities").add("workspace").add("setChecked");
+        if (session != null) capabilities.add("workspacePage").add("bulkFiles");
+        welcome.put("confirmationRoundTrip", false);
+        welcomed = true;
+        return response;
     }
 
     private ObjectNode page(JsonNode params) {

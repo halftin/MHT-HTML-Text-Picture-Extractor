@@ -13,10 +13,10 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** P4-5: 21 x zh/en through the real --once --config CLI, never the processor test runner. */
+/** All cases x zh/en through the real --once --config CLI, never the processor test runner. */
 class BackendConfigBaselineTest {
     @Test
-    void all42ConfigsMatchGoldenBaselines() throws Exception {
+    void allConfigsMatchGoldenBaselines() throws Exception {
         Path root = BackendProcess.evidence("matrix");
         ObjectMapper json = new ObjectMapper();
         List<String> matrix = new ArrayList<>();
@@ -88,7 +88,7 @@ class BackendConfigBaselineTest {
         }
         System.out.println("[backend-baseline] " + passed + "/" + total + "; evidence=" + root);
         assertTrue(total > 0, "filter selected no baselines");
-        if (onlyCase == null && onlyLocale == null) assertEquals(42, total);
+        if (onlyCase == null && onlyLocale == null) assertEquals(BaselineCases.all().size() * 2, total);
         assertEquals(List.of(), failures, String.join("\n", failures));
     }
 }

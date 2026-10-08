@@ -218,6 +218,14 @@ public final class BaselineCases {
                 "HTML 源 + 模板变量：锁定 {filename} = 完整来源文件名（plain.html），即完整文件名契约（决策 A）",
                 List.of()));
 
+        AppConfig basename = new AppConfig();
+        basename.setEnableTemplate(true);
+        basename.setStartTemplate("filename={filename}|basename={basename}\\n");
+        basename.setEndTemplate("\\nend={basename}\\n");
+        out.add(new Case("text-template-basename", List.of("html/plain/plain.html"),
+                basename, false, true,
+                "同一来源模板：{filename}=plain.html；{basename}=plain（SourceKinds 已知扩展名）", List.of()));
+
         return out;
     }
 

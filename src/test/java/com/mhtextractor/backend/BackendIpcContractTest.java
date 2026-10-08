@@ -120,7 +120,7 @@ class BackendIpcContractTest {
 
     @Test
     void wireUsesUtf8LfAndPipelineOrder() throws Exception {
-        String input = "{\"v\":1,\"type\":\"request\",\"id\":\"中文\",\"method\":\"workspace\",\"params\":{}}\n"
+        String input = hello() + "{\"v\":1,\"type\":\"request\",\"id\":\"中文\",\"method\":\"workspace\",\"params\":{}}\n"
                 + "{\"v\":1,\"type\":\"request\",\"id\":\"2\",\"method\":\"workspace\",\"params\":{}}\n";
         var bytes = new ByteArrayOutputStream();
         new IpcServer(BackendIpcFixture.port()).run(
@@ -129,10 +129,11 @@ class BackendIpcContractTest {
         assertFalse(output.contains("\r"));
         assertTrue(output.endsWith("\n"));
         String[] lines = output.split("\n");
-        assertEquals(3, lines.length);
+        assertEquals(4, lines.length);
         assertEquals("ready", JSON.readTree(lines[0]).path("event").asText());
-        assertEquals("中文", JSON.readTree(lines[1]).path("id").asText());
-        assertEquals("2", JSON.readTree(lines[2]).path("id").asText());
+        assertEquals("welcome", JSON.readTree(lines[1]).path("result").path("kind").asText());
+        assertEquals("中文", JSON.readTree(lines[2]).path("id").asText());
+        assertEquals("2", JSON.readTree(lines[3]).path("id").asText());
         assertTrue(output.contains("中文"));
     }
 
@@ -150,5 +151,47 @@ class BackendIpcContractTest {
         assertEquals(code, frame.path("error").path("code").asText());
         assertFalse(frame.path("error").path("message").asText().isEmpty());
         assertFalse(frame.has("result"));
+    }
+
+    static String hello() throws Exception {
+        BackendIdentity identity = BackendIdentity.current();
+        var frame = JSON.createObjectNode().put("v", 1).put("type", "request").put("id", "hello").put("method", "hello");
+        frame.putObject("params").put("protocolVersion", identity.protocolVersion())
+                .put("version", identity.version()).put("buildId", identity.buildId());
+        return JSON.writeValueAsString(frame) + "\n";
+    }
+
+    @Test void handshakeIsRequiredAndMismatchRevokesAgreement() throws Exception {
+        BackendIdentity identity = BackendIdentity.current();
+        try (var ipc = new IpcTestClient(tmp.resolve("handshake"), BackendCli.class.getName(), "--serve")) {
+            ipc.readyWithoutHandshake();
+            assertError(ipc.request("before-hello", "workspace", JSON.createObjectNode()), "HANDSHAKE_FAILED");
+            var params = JSON.createObjectNode().put("protocolVersion", identity.protocolVersion())
+                    .put("version", identity.version()).put("buildId", identity.buildId());
+            JsonNode welcome = ipc.request("match", "hello", params);
+            System.out.println("HANDSHAKE WIRE: " + welcome);
+            assertEquals("response", welcome.path("type").asText());
+            JsonNode result = welcome.path("result");
+            assertEquals("welcome", result.path("kind").asText());
+            assertEquals(identity.protocolVersion(), result.path("protocolVersion").intValue());
+            assertEquals(identity.version(), result.path("version").asText());
+            assertEquals(identity.buildId(), result.path("buildId").asText());
+            assertEquals(JSON.readTree("[\"workspace\",\"setChecked\",\"workspacePage\",\"bulkFiles\"]"), result.path("capabilities"));
+            assertFalse(result.path("confirmationRoundTrip").booleanValue());
+            for (String field : List.of("protocolVersion", "version", "buildId")) {
+                var bad = params.deepCopy();
+                if (field.equals("protocolVersion")) bad.put(field, 2); else bad.put(field, "tampered");
+                JsonNode rejected = ipc.request("mismatch", "hello", bad);
+                assertError(rejected, "HANDSHAKE_FAILED");
+                assertTrue(rejected.path("error").path("message").asText().contains("mismatch"));
+                assertError(ipc.request("blocked", "workspace", JSON.createObjectNode()), "HANDSHAKE_FAILED");
+                assertEquals("response", ipc.request("recover", "hello", params).path("type").asText());
+            }
+            assertError(ipc.request("bad-hello", "hello", JSON.createObjectNode()), "INVALID_PARAMS");
+            assertError(ipc.request("still-blocked", "workspace", JSON.createObjectNode()), "HANDSHAKE_FAILED");
+            assertEquals("response", ipc.request("again", "hello", params).path("type").asText());
+            assertEquals("response", ipc.request("after", "workspace", JSON.createObjectNode()).path("type").asText());
+            ipc.finish();
+        }
     }
 }
