@@ -98,6 +98,11 @@ if ($LASTEXITCODE -ne 0) { Say "[smoke] [ERROR] javac failed (exit=$LASTEXITCODE
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Force | Out-Null }
 $exe = Join-Path $OutDir 'AppCardProbeSmoke.exe'
 if (-not $SkipNativeBuild) {
+    # Clear the previous recipe before native-image regenerates its dependency DLLs.
+    # Keep existing dependencies intact when reusing the image with -SkipNativeBuild.
+    Say "[smoke] clearing previous build DLLs ..."
+    Get-ChildItem -LiteralPath $OutDir -Filter '*.dll' -File |
+        ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
     if (Test-Path $exe) { Remove-Item -LiteralPath $exe -Force }
     $prismOpt = @()
     if ($PrismCommonLib -and (Test-Path $PrismCommonLib)) { $prismOpt = @(('-H:NativeLinkerOption=' + $PrismCommonLib)) }

@@ -352,11 +352,17 @@ REM   Skip with --skip-card-smoke or NATIVE_CARD_SMOKE=0.
 if /i "%SKIP_CARD_SMOKE%"=="1" goto :card_smoke_skipped
 if /i "%NATIVE_CARD_SMOKE%"=="0" goto :card_smoke_skipped
 call :begin "SMOKE" "native card render smoke"
+REM Static JavaFX must not load DLLs from either JDK bin (including inherited duplicates).
+REM Scope the sanitized PATH to the smoke child; dynamic keeps its original environment.
+if /i "%RECIPE%"=="static" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$bins=@(($env:BUILD_JAVA_HOME+'\bin'),($env:GRAALVM_HOME+'\bin')); $env:PATH=($env:PATH -split ';' | Where-Object { $bins -notcontains $_.Trim().Trim([char]34).TrimEnd('\') }) -join ';'; & ($env:REPO+'\tools\native\native-card-smoke.ps1') -Repo $env:REPO -OutDir ($env:REPO+'\.claude-work\native-card-smoke') -JavaHome $env:BUILD_JAVA_HOME -NativeImage $env:NATIVE_IMAGE -PrismCommonLib $env:PRISM_COMMON_LIB; exit $LASTEXITCODE" >> "%LOG%" 2>&1
+) else (
 powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\tools\native\native-card-smoke.ps1" -Repo "%REPO%" -OutDir "%REPO%\.claude-work\native-card-smoke" -JavaHome "%BUILD_JAVA_HOME%" -NativeImage "%NATIVE_IMAGE%" -PrismCommonLib "%PRISM_COMMON_LIB%" >> "%LOG%" 2>&1
+)
 if errorlevel 1 (
     call :end 1
     call :say "      [ERROR] native card smoke FAILED - the native image cannot paint a reminder card."
-    call :say "              Usual cause: missing JavaFX effect-peer reflection metadata."
+    call :say "              Check smoke-output.log / .err for DLL conflicts, rendering errors or missing metadata."
     call :say "              See tools/native/native-card-smoke.ps1 + tools/probes/AppCardProbe.java."
     set "RC=1"
     set "FAILSTEP=SMOKE native card render smoke"
