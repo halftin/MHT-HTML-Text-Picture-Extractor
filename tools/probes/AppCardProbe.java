@@ -28,7 +28,8 @@ public class AppCardProbe {
         else { failed++; System.out.println("[FAIL] " + n + "  " + d); }
     }
     public static void main(String[] args) throws Exception {
-        I18n.setLocale(I18n.parseLocale("zh_CN"));
+        I18n.setLocale(I18n.parseLocale(System.getProperty("probe.locale", "zh_CN")));
+        System.out.println("[probe] locale=" + I18n.currentLocale());
         CountDownLatch done = new CountDownLatch(1);
         Platform.startup(() -> {
             try {

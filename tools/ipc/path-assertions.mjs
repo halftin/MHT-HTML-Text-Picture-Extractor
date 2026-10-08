@@ -32,3 +32,14 @@ export function golden(root, baseline, mappings = {}) {
   assert.deepEqual(actual, expected, 'GOLDEN_SHA256_GUARD: full path and byte digest equality');
   return actual;
 }
+
+// Literal expectations for the new Unicode fixtures, independent of backend output.
+// Compare the whole tree and whole decoded text, not merely a substring or absence of '?'.
+export function exactText(root, expected) {
+  const actual = tree(root);
+  assert.deepEqual(actual.map(item => item.path), Object.keys(expected).sort(), 'TEXT_TREE_GUARD');
+  for (const item of actual) {
+    assert.equal(utf8(path.join(root, item.path)), expected[item.path], 'TEXT_EXACT_GUARD: ' + item.path);
+  }
+  return actual;
+}

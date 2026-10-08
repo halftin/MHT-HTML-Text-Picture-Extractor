@@ -1,4 +1,5 @@
 import atlantafx.base.controls.ModalPane;
+import atlantafx.base.controls.ModalPaneSkin;
 import atlantafx.base.controls.Notification;
 import atlantafx.base.theme.NordLight;
 import com.mhtextractor.App;
@@ -7,10 +8,14 @@ import com.mhtextractor.i18n.I18n;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
+import javafx.event.Event;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.image.PixelReader;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.StackPane;
@@ -38,6 +43,10 @@ public class NotificationAcceptance extends Application {
     private Parent root;
     private Stage stage;
     private int failures = 0;
+    private int unverified = 0;
+    private boolean escControlDelivered;
+    private ModalPaneSkin escSkin;
+    private final String escInput = System.getProperty("probe.esc.input", "scroll-pane");
     private final AtomicReference<String> decision = new AtomicReference<>("(none)");
 
     @Override
@@ -135,27 +144,27 @@ public class NotificationAcceptance extends Application {
         check("confirm() Cancel delivers false", "false".equals(decision.get()));
         check("confirm() Cancel hides the card", !modalPane().isDisplay());
 
-        // harness control: with persistent=false a REAL ESC must dismiss -- proves ESC is actually
-        // delivered (otherwise the persistent check below would pass vacuously; it did, twice)
+        // The same live skin and ESC handler must dismiss with persistent=false.
+        // Without this control, keeping the persistent card open is a vacuous pass.
         modalPane().setPersistent(false);
         NotificationHost.confirm(root, "ESC-CONTROL-CARD", ok -> { });
     }
 
     private void pressEscControl() {
-        focusInsideCard();
-        pressRealEsc();
+        dispatchEsc();
     }
 
     private void checkEscControl() {
-        warn("real ESC did NOT dismiss a non-persistent ModalPane either -> ESC delivery to the skin is "
-                + "not verifiable in this harness, so the persistent assertion below is NOT proof");
+        escControlDelivered = !modalPane().isDisplay();
+        check("ESC control: non-persistent live skin dismisses the card", escControlDelivered);
         modalPane().setPersistent(true);   // production setting
         NotificationHost.confirm(root, "ESC-PERSISTENT-CARD", ok -> { });
+        // Negative control changes only the probe's live pane, never production code.
+        if (Boolean.getBoolean("probe.esc.breakPersistent")) modalPane().setPersistent(false);
     }
 
     private void pressEscPersistent() {
-        focusInsideCard();
-        pressRealEsc();
+        dispatchEsc();
     }
 
     /**
@@ -169,19 +178,63 @@ public class NotificationAcceptance extends Application {
     }
 
     private void checkEscPersistent() {
-        warn("real ESC left the persistent card open: " + modalPane().isDisplay()
-                + " (expected behaviour, but unproven while the control above fails)");
+        if (escControlDelivered) {
+            boolean open = modalPane().isDisplay();
+            check("ESC persistent: the same live skin keeps the card open", open);
+            System.out.println("ESC " + escInput + ": " + (open ? "VERIFIED" : "FAILED")
+                    + " by non-persistent/persistent control");
+        } else {
+            warn("ESC persistent: delivery control failed; keeping the card open proves nothing");
+        }
+        modalPane().setPersistent(true);
         firePrimary(1);   // Cancel, clean up
         check("cleanup: card hidden again", !modalPane().isDisplay());
     }
 
     /**
-     * Real key press via {@link javafx.scene.robot.Robot}.
-     *
-     * <p>Synthetic {@code Event.fireEvent} does NOT work here (verified twice: firing at the ModalPane
-     * and at its internal {@code .scroll-pane} both left the pane showing, which made the persistent
-     * assertion pass vacuously). Real input is the only faithful path, hence the control step.</p>
+     * AtlantaFX 2.1.0 registerListeners() adds its KEY_PRESSED handler to the ScrollPane that is
+     * a direct child of ModalPane. Find that node through the public scene graph and dispatch ESC
+     * through its normal event chain. Firing at ModalPane would not visit this child handler.
+     * This observes synthetic event routing, not OS keyboard delivery; Robot is a separate mode.
      */
+    private void dispatchEsc() {
+        var pane = modalPane();
+        var skin = pane.getSkin();
+        check("ESC targets the existing AtlantaFX ModalPaneSkin", skin instanceof ModalPaneSkin);
+        if (!(skin instanceof ModalPaneSkin)) return;
+        if (escSkin == null) escSkin = (ModalPaneSkin) skin;
+        else {
+            boolean same = skin == escSkin;
+            check("ESC control and persistent check use the same skin instance", same);
+            if (!same) return;
+        }
+        check("ESC starts with a displayed card", pane.isDisplay());
+        if ("robot".equals(escInput)) {
+            focusInsideCard();
+            pressRealEsc();
+            return;
+        }
+        if (!"scroll-pane".equals(escInput)) {
+            check("supported ESC input mode: " + escInput, false);
+            return;
+        }
+        var targets = pane.getChildrenUnmodifiable().stream()
+                .filter(n -> n instanceof ScrollPane).toList();
+        check("ESC route has exactly one direct ScrollPane child", targets.size() == 1);
+        if (targets.size() != 1) return;
+        Node target = targets.get(0);
+        var event = new KeyEvent(target, target, KeyEvent.KEY_PRESSED, "", "", KeyCode.ESCAPE,
+                false, false, false, false);
+        boolean persistent = pane.getPersistent();
+        boolean delivery = !Boolean.getBoolean("probe.esc.breakDelivery");
+        if (delivery) Event.fireEvent(target, event);
+        // Dispatch may copy the event; the delayed display assertions prove delivery and persistence.
+        System.out.println("ESC INPUT=scroll-pane target=" + target.getClass().getName()
+                + " persistent=" + persistent + " dispatched=" + delivery
+                + " consumed=" + event.isConsumed() + " display=" + pane.isDisplay());
+    }
+
+    /** Real OS key press; this mode must pass its own non-persistent delivery control. */
     private void pressRealEsc() {
         if (!stage.isFocused()) {
             System.out.println("!! ESC TEST SKIPPED: probe window is not focused (result unverified)");
@@ -195,9 +248,12 @@ public class NotificationAcceptance extends Application {
     }
 
     private void finish() {
-        System.out.println(failures == 0 ? "ALL CHECKS PASSED" : (failures + " CHECK(S) FAILED"));
+        System.out.println("NOTIFICATION ACCEPTANCE: failures=" + failures + " unverified=" + unverified
+                + " locale=" + I18n.currentLocale() + " escInput=" + escInput);
+        System.out.println(failures == 0 && unverified == 0 ? "ALL CHECKS PASSED" :
+                (failures + " CHECK(S) FAILED, " + unverified + " UNVERIFIED"));
         Platform.exit();
-        System.exit(failures == 0 ? 0 : 1);
+        System.exit(failures > 0 ? 1 : unverified > 0 ? 2 : 0);
     }
 
     // ---------- helpers ----------
@@ -211,6 +267,7 @@ public class NotificationAcceptance extends Application {
 
     /** Observations that this harness cannot actually prove are reported, never counted as passes. */
     private void warn(String what) {
+        unverified++;
         System.out.println("UNVERIFIED  " + what);
     }
 
@@ -258,7 +315,8 @@ public class NotificationAcceptance extends Application {
     private void snapshot(String path) {
         try {
             WritableImage img = scene.snapshot(null);
-            File out = new File(path);
+            File out = new File(new File(System.getProperty("probe.png", "H:/TEST/mht/p4-10-notification/probe.png"))
+                    .getAbsoluteFile().getParentFile(), new File(path).getName());
             out.getParentFile().mkdirs();
             int w = (int) img.getWidth();
             int h = (int) img.getHeight();

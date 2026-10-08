@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
-import { golden, under, utf8 } from './path-assertions.mjs';
+import { exactText, golden, under, utf8 } from './path-assertions.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
@@ -221,8 +221,10 @@ try {
   const textOutputs = products.filter(file => file.endsWith('.txt'));
   if (scenario) {
     under(fs.realpathSync(output), 'H:/TEST/mht');
-    const actual = golden(extracted.outputFolder, scenario.baseline, scenario.mappings);
-    console.log('GOLDEN_SHA256_MATCH ' + JSON.stringify(actual));
+    const actual = scenario.expectedText
+      ? exactText(extracted.outputFolder, scenario.expectedText)
+      : golden(extracted.outputFolder, scenario.baseline, scenario.mappings);
+    console.log((scenario.expectedText ? 'TEXT_EXACT_MATCH ' : 'GOLDEN_SHA256_MATCH ') + JSON.stringify(actual));
   } else {
     assert.equal(textOutputs.length, 1);
     const content = fs.readFileSync(textOutputs[0], 'utf8');
