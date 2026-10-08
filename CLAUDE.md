@@ -250,7 +250,13 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | 给强断言配**控制组** | 发现两条断言是假通过 |
 | **会自己消失的 UI**：同帧断言或用闸门卡住后台任务 | 曾把正确实现误判成 FAIL |
 
-**native 卡片冒烟在 static 配方下会挂死（2026-10-06 实测）**：用 `build-native.cmd --skip-card-smoke`（或 `set NATIVE_CARD_SMOKE=0`）绕过；**dynamic 冒烟正常**。若见 `[smoke] running probe ...` 后长时间零输出、且无 `java`/`native-image` 进程在跑，即为该挂死，**不要继续等**（`taskkill /PID <cmd pid> /T /F`）。另：`NativeBaselineProbe` 的工作根必须用**仓库内相对路径**（绝对 `H:\...` 会 `AccessDeniedException`）；且**两个配方共用同一 dist 目录**——`NATIVE_RECIPE` 漏设或 dist 未清空都会让产物计数被污染。
+**native 卡片冒烟：两个缺陷，第一个已修、第二个待修（2026-10-08 更新；不要再用「static 一律挂死」这个旧说法）**
+
+① **脚本读/超时缺陷（已修，P4-7 `d9e0c7f`）**：旧 `native-card-smoke.ps1` 用顺序 `StandardOutput.ReadToEnd()` + `StandardError.ReadToEnd()` 再 `WaitForExit(timeout)` → **经典 stdio 死锁**，`-TimeoutSec` 对读管道**无效**，现象是 `[smoke] running probe ...` 后长时间零输出（曾挂 16 分钟）。**修法**：两路输出**重定向到文件**、立即限时等待、超时 `taskkill /PID … /T /F` + 返回 1、退出码用 Win32 `GetExitCodeProcess` 读取（本机 `$proc.ExitCode` 恒为空）。**harness 实测**：修后 static 冒烟 **30 s 内返回 exit=1**（不再假挂）。
+
+② **`-OutDir` 从不清 DLL（待修）**：冒烟脚本把 `-JfxDlls\*.dll` 拷进 `-OutDir`，但**从不清理 `-OutDir` 里已有的 DLL**；而 `build-native.cmd` 集成调用固定用持久目录 `.claude-work\native-card-smoke`。→ **dynamic 冒烟跑过之后再来 static**，残留的 7 个 JavaFX DLL 被加载 → `WinApplication._init` **段错误**（`0xC0000005`，`SegfaultHandler`） → **static 端到端 `build-native.cmd` FAILED（退出码 1）**。harness 已复现（`smoke-output.log.err` 里有段错误栈），且**实施方只在干净目录下验过**，其「static 通过」不覆盖集成路径。**当前临时绕过**：`--skip-card-smoke` / `NATIVE_CARD_SMOKE=0`，或先删除 `.claude-work\native-card-smoke` 里的 JavaFX DLL。**修复方向**：冒烟前按配方清空 `-OutDir` 的 DLL。
+
+另：`NativeBaselineProbe` 的工作根必须用**仓库内相对路径**（绝对 `H:\...` 会 `AccessDeniedException`）；**两个配方共用同一 dist 目录**——`NATIVE_RECIPE` 漏设或 dist 未清空都会让产物计数被污染。另：`NativeBaselineProbe` 的工作根必须用**仓库内相对路径**（绝对 `H:\...` 会 `AccessDeniedException`）；且**两个配方共用同一 dist 目录**——`NATIVE_RECIPE` 漏设或 dist 未清空都会让产物计数被污染。
 
 **迁移/改包名时必须全仓库检索调用方（含 `tools/probes/`）**：P3-3b-19 把 `util.GroupItem` 迁到 `model` 后，`src` 内编译全绿，但 `tools/probes/ContextMenuProbe`/`ParamDraftProbe` 仍 import 旧包 → 两个探针**编译失败**（exit=1，易被误当功能回归）。**教训**：包迁移/签名变更后，除 `mvn test` 外必须 `grep -rn <旧全限定名> .`（覆盖 `tools/`）并**复跑受影响探针**。
 
