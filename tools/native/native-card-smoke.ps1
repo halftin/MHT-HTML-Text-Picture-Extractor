@@ -127,22 +127,41 @@ if (Test-Path $JfxDlls) { Copy-Item (Join-Path $JfxDlls '*.dll') -Destination $O
 
 $outLog = Join-Path $OutDir 'smoke-output.log'
 Say "[smoke] running probe ..."
-$psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = $exe
-$psi.WorkingDirectory = $OutDir
-$psi.UseShellExecute = $false
-$psi.RedirectStandardOutput = $true
-$psi.RedirectStandardError = $true
-$proc = [System.Diagnostics.Process]::Start($psi)
-$stdout = $proc.StandardOutput.ReadToEnd()
-$stderr = $proc.StandardError.ReadToEnd()
-$timedOut = -not $proc.WaitForExit($TimeoutSec * 1000)
-if ($timedOut) { try { $proc.Kill() } catch { } }
-$code = if ($timedOut) { 1 } else { $proc.ExitCode }
-if ($null -eq $code) { $code = 1 }
-Set-Content -LiteralPath $outLog -Value $stdout -Encoding UTF8
-Set-Content -LiteralPath ($outLog + '.err') -Value $stderr -Encoding UTF8
-if ($timedOut) { Say "[smoke] [ERROR] probe timed out after $TimeoutSec s - the native image hung (card render deadlock?)"; exit 1 }
+# Read the native exit status directly: Process.ExitCode can be null on this host.
+if (-not ('NativeCardSmokeProcess' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class NativeCardSmokeProcess {
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool GetExitCodeProcess(IntPtr process, out uint code);
+}
+'@
+}
+# File redirection drains both streams concurrently; no pipe read can block the deadline.
+$proc = Start-Process -FilePath $exe -WorkingDirectory $OutDir -NoNewWindow -PassThru `
+    -RedirectStandardOutput $outLog -RedirectStandardError ($outLog + '.err')
+try {
+    $handle = $proc.Handle # Retain the handle even if the probe exits immediately.
+    $timedOut = -not $proc.WaitForExit($TimeoutSec * 1000)
+    if ($timedOut) {
+        Say "[smoke] [ERROR] probe timed out after $TimeoutSec s (pid=$($proc.Id), hasExited=$($proc.HasExited)); killing process tree"
+        & taskkill.exe /PID $proc.Id /T /F
+        $killCode = $LASTEXITCODE
+        if (-not $proc.WaitForExit(5000) -or $killCode -ne 0) {
+            Say "[smoke] [ERROR] process-tree termination failed (taskkill exit=$killCode)"
+        }
+        Say "[smoke] [ERROR] timeout; full logs: $outLog / $outLog.err"
+        exit 1
+    }
+    [uint32]$code = 0
+    if (-not [NativeCardSmokeProcess]::GetExitCodeProcess($handle, [ref]$code)) {
+        Say "[smoke] [ERROR] cannot read probe exit status (Win32 error=$([Runtime.InteropServices.Marshal]::GetLastWin32Error()))"
+        exit 1
+    }
+} finally {
+    $proc.Dispose()
+}
 if (Test-Path $outLog) {
     Get-Content -LiteralPath $outLog -Encoding UTF8 |
         Where-Object { $_ -match '^\[(PASS|FAIL)\]' -or $_ -match '^RESULTS:' -or $_ -match '^\[probe\]' } |
