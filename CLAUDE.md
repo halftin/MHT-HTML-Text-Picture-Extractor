@@ -267,7 +267,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 3. **C 盘「零新增」的正确口径 = 项目产物**：`C:\Users\Admin\AppData\Local\Temp` 下 **`mht-extractor-*` 新增 = 0**（`tools/ipc/project-temp-audit.mjs`，三态 PASS/FAIL/UNVERIFIED）。**整盘零新增在活主机上不可达**（DSH 会话快照 `dsh-workspace-changes-*`、VS 后台日志 `dd_BackgroundDownload_*` 都会写 C 盘）——脚本已改成分别计数并**显式列出未验证范围**。
 4. **ESC 观测（`NotificationAcceptance`）**：默认改为 **`scroll-pane` 公开事件路由**（`Event.fireEvent(ModalPane 的直接 ScrollPane 子节点, KeyEvent)`），**零反射**；zh_CN / en_US 均 **`failures=0 unverified=0`**（非持久 `consumed=true` 关闭卡片 / 持久 `consumed=false` 保持打开，同一 skin 实例对照保留）。
 
-**收口轮实测（harness 亲手）**：矩阵 16 格 = **8 PASS + 8 LIMITATION(expected)**、CG-3 **RED=FAIL GREEN=PASS**（红日志含 `TEXT_EXACT_GUARD`）；内存文本守门 字面=PASS/注入`?`=FAIL/撤销=PASS；C 盘 `projectStatus=PASS`；**en_US 全 14 探针 exit=0**；**无头 exe 重建后 native 42/42**；**无头 native IPC（`--serve`）CLIENT_EXIT=0 + TEXT_EXACT_MATCH + stderr 0 字节**；**static 构建 exit 0 + `[STEP SMOKE] exit=0` + 15 文件/99.4 MB + 0 个 JavaFX DLL**，**静态版 `BaselineProbeStatic`：`NATIVE-BASELINE: 42 passed, 0 failed`**；**P4-7 超时杀树：`taskkill` SUCCESS + 无残留进程**。
+**收口轮实测（harness 亲手）**：矩阵 16 格 = **8 PASS + 8 LIMITATION(expected)**、CG-3 **RED=FAIL GREEN=PASS**（红日志含 `TEXT_EXACT_GUARD`）；内存文本守门 字面=PASS/注入`?`=FAIL/撤销=PASS；C 盘 `projectStatus=PASS`；**en_US 全 14 探针 exit=0**；**无头 exe 重建后 native 42/42**；**无头 native IPC（`--serve`）CLIENT_EXIT=0 + TEXT_EXACT_MATCH + stderr 0 字节**；**static 构建 exit 0 + `[STEP SMOKE] exit=0` + 15 文件/99.4 MB + 0 个 JavaFX DLL**，**静态版 `BaselineProbeStatic`：`NATIVE-BASELINE: 42 passed, 0 failed`**（⚠️ 该次运行发生时基线总数为 **42**，属历史记录；现为 44，JavaFX 侧探针**尚未按 44 重跑**）；**P4-7 超时杀树：`taskkill` SUCCESS + 无残留进程**。
 
 **迁移/改包名时必须全仓库检索调用方（含 `tools/probes/`）**：P3-3b-19 把 `util.GroupItem` 迁到 `model` 后，`src` 内编译全绿，但 `tools/probes/ContextMenuProbe`/`ParamDraftProbe` 仍 import 旧包 → 两个探针**编译失败**（exit=1，易被误当功能回归）。**教训**：包迁移/签名变更后，除 `mvn test` 外必须 `grep -rn <旧全限定名> .`（覆盖 `tools/`）并**复跑受影响探针**。
 
@@ -362,7 +362,7 @@ AtlantaFX 2.1.0（主题）· Logback 1.5.26 · Ikonli 12.3.1 · JUnit 6.0.3 · 
 ## 9. native 打包现状（摘要）
 
 - **产物**：GraalVM native EXE（`MhtExtractor.exe` + DLL），绿色免安装；**默认 `dynamic` 22 文件 / ≈70 MB**，
-  `set NATIVE_RECIPE=static` 换 NIK 静态配方（15 文件 / ≈98 MB）。两种配方产物**逐字节等价**（native 基线 **42/0**）。
+  `set NATIVE_RECIPE=static` 换 NIK 静态配方（15 文件 / ≈98 MB）。两种配方产物**逐字节等价**（native 基线 **44/0**，2026-10-08）。
 - **三条必须记住的**：
   ① JavaFX DLL 是否随包**取决于配方**（dynamic **必须**随包；static **一个都不能放** —— **包括 PATH 里也不能有**：构建机 JDK 的 `bin` 里就带着它们，见 §6③，否则 `WinApplication._init` 段错误）；
   ② 🚨 **不要从项目树内运行**（`Font.loadFont` 返回 `null` → 全部图标变空心方框）；
