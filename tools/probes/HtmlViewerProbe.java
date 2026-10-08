@@ -147,6 +147,10 @@ public class HtmlViewerProbe extends Application {
     /** 台账 §4-1 的 resize 步骤：拉宽窗口前的折行列数（下一步断言"确实变宽了"用）。 */
     private int step5ColsBefore;
     private long step5FlowsBefore;
+    private Node step5CellBeforeRestore;
+    private double step5SceneWidthBefore;
+    private double step5ViewportWidthBefore;
+    private final List<int[]> step5RowsBefore = new ArrayList<>();
 
     private Path bigFile;
     private Path longFile;
@@ -236,6 +240,7 @@ public class HtmlViewerProbe extends Application {
         asyncSteps.add(steps.indexOf(REAL_ENTRY));
         asyncSteps.add(steps.indexOf(BIG_LOAD));
         steps.addAll(BIG_STEPS);
+        asyncSteps.add(steps.indexOf(HSCROLL_READY));
         nextStep();
     }
 
@@ -292,6 +297,8 @@ public class HtmlViewerProbe extends Application {
     private final Runnable REAL_ENTRY = this::openViaRealEntryPoint;
     /** 异步步的身份。 */
     private final Runnable BIG_LOAD = this::beginBigLoad;
+    /** Cached identity: this step owns continuation while waiting for the restored grid. */
+    private final Runnable HSCROLL_READY = this::awaitNoHscrollWithSelection;
 
     // ==================== steps ====================
 
@@ -807,15 +814,20 @@ public class HtmlViewerProbe extends Application {
                                 java.util.function.BooleanSupplier ready,
                                 java.util.function.Consumer<Boolean> then) {
         long deadline = System.currentTimeMillis() + timeoutMs;
+        boolean[] finished = {false}; // accessed only on the FX thread
         Timer t = new Timer(true);
         t.schedule(new TimerTask() {
             public void run() {
                 Platform.runLater(() -> {
+                    if (finished[0]) {
+                        return; // cancellation does not remove polls already queued on FX
+                    }
                     boolean ok = ready.getAsBoolean();
                     if (!ok && System.currentTimeMillis() <= deadline) {
                         return;
                     }
-                    cancel();
+                    finished[0] = true;
+                    t.cancel();
                     then.accept(!ok);
                 });
             }
@@ -899,7 +911,7 @@ public class HtmlViewerProbe extends Application {
             this::checkE2SoftWrap, this::checkE2WrapMapping,
             this::openCorpusSource, this::checkE2Corpus,
             this::openCorpusSourceNoTrailingNl, this::checkE2CorpusNoTrailingNl,
-            this::checkResizeStage, this::checkResizeRewrap, this::checkNoHscrollWithSelection,
+            this::checkResizeStage, this::checkResizeRewrap, HSCROLL_READY,
             this::checkCollapseR29, this::checkGuiStateUnchanged,
             this::snapshotFinal, this::finish);
 
@@ -917,16 +929,21 @@ public class HtmlViewerProbe extends Application {
      */
     private void awaitLinesAsync(String label, int expected, long timeoutMs, Runnable then) {
         long deadline = System.currentTimeMillis() + timeoutMs;
+        boolean[] finished = {false}; // accessed only on the FX thread
         Timer t = new Timer(true);
         t.schedule(new TimerTask() {
             @Override
             public void run() {
                 Platform.runLater(() -> {
+                    if (finished[0]) {
+                        return;
+                    }
                     boolean ok = vInt(viewer, "lineCount") == expected;
                     if (!ok && System.currentTimeMillis() <= deadline) {
                         return;   // 还没好，等下一拍
                     }
-                    cancel();
+                    finished[0] = true;
+                    t.cancel();
                     loadMillis = (System.nanoTime() - loadStartNanos) / 1_000_000;
                     System.out.println("awaitLines(" + label + "): " + (ok ? "ready" : "TIMED OUT")
                             + " lineCount=" + vInt(viewer, "lineCount") + " expected=" + expected
@@ -2273,7 +2290,14 @@ public class HtmlViewerProbe extends Application {
         vNode(viewer).applyCss();
         vNode(viewer).layout();
         step5ColsBefore = vInt(viewer, "wrapCols");
-        step5FlowsBefore = flowCount(revealCellForLine(1));
+        Node cell = revealCellForLine(1);
+        step5FlowsBefore = flowCount(cell);
+        step5SceneWidthBefore = scene.getWidth();
+        step5ViewportWidthBefore = scroller.getViewportBounds().getWidth();
+        step5RowsBefore.clear();
+        for (int row = 0; row < step5FlowsBefore; row++) {
+            step5RowsBefore.add(visualRowRange(cell, row));
+        }
         // 单行选区 [0,5)：resize 前后复制都必须逐字符相同（单行口径）
         dragVisual(1, 0, 0, 1, 0, 5);
         copyViaApi();
@@ -2325,12 +2349,61 @@ public class HtmlViewerProbe extends Application {
         check("step5 resize: the selection rects repainted on the new grid (rects=" + selRects + ")",
                 selRects >= 1);
         // 还原窗口尺寸（后续步骤依赖 1280×800 的几何）
+        step5CellBeforeRestore = cell;
+        dumpStep5Geometry("before restore", cell);
         stage.setWidth(1280);
         stage.setHeight(800);
         scene.getRoot().applyCss();
         scene.getRoot().layout();
         vNode(viewer).applyCss();
         vNode(viewer).layout();
+    }
+
+    /**
+     * Restoring the stage size crosses two asynchronous boundaries: the native peer
+     * updates the scene, then the viewport listener queues a cell refresh. A subtree
+     * layout or a fixed step delay cannot prove either boundary has completed.
+     * Compare the rendered grid with the grid captured at this same viewport width
+     * before widening. Do not wait on selection rectangles: those remain assertions.
+     */
+    private void awaitNoHscrollWithSelection() {
+        Node[] lastReadyFlow = {null};
+        dumpStep5Geometry("waiting for restored grid", cellForLine(1));
+        awaitCondition("step5 restored grid", 8_000, () -> {
+            scene.getRoot().applyCss();
+            scene.getRoot().layout();
+            Node cell = revealCellForLine(1);
+            boolean ready = cell != null && !step5RowsBefore.isEmpty()
+                    && Math.abs(scene.getWidth() - step5SceneWidthBefore) <= 0.5
+                    && Math.abs(scroller.getViewportBounds().getWidth() - step5ViewportWidthBefore) <= 0.5
+                    && Math.abs(listView.getWidth() - step5ViewportWidthBefore) <= TOL
+                    && flowCount(cell) == step5RowsBefore.size()
+                    && Math.abs(cell.getLayoutBounds().getHeight()
+                            - step5RowsBefore.size() * vDbl(viewer, "rowHeight")) <= TOL;
+            for (int row = 0; ready && row < step5RowsBefore.size(); row++) {
+                ready = java.util.Arrays.equals(visualRowRange(cell, row), step5RowsBefore.get(row));
+            }
+            Node flow = ready ? visualRowNode(cell, 0) : null;
+            boolean stable = ready && flow == lastReadyFlow[0];
+            lastReadyFlow[0] = flow;
+            return stable; // two matching FX observations, including the same rendered nodes
+        }, expired -> {
+            try {
+                System.out.println("step5 restored grid: " + (expired ? "TIMED OUT" : "ready")
+                        + " expectedViewport=" + fmt(step5ViewportWidthBefore)
+                        + " expectedRow0=" + (step5RowsBefore.isEmpty() ? "(missing)"
+                                : java.util.Arrays.toString(step5RowsBefore.get(0))));
+                if (expired) {
+                    check("step5 hscroll: restored viewport and rendered wrap grid became ready", false);
+                }
+                checkNoHscrollWithSelection();
+            } catch (Throwable ex) {
+                check("step5 hscroll readiness threw: " + ex, false);
+                ex.printStackTrace();
+            } finally {
+                nextStep();
+            }
+        });
     }
 
     /**
@@ -2342,6 +2415,7 @@ public class HtmlViewerProbe extends Application {
         vNode(viewer).layout();
         int len1 = vLine(viewer, 1).length();
         Node wrapCell = revealCellForLine(1);
+        dumpStep5Geometry("before drag", wrapCell);
         int[] row0 = visualRowRange(wrapCell, 0);
         int[] row1 = visualRowRange(wrapCell, 1);
         int fromCol = Math.max(row0[0], row0[1] - 3);
@@ -2355,6 +2429,7 @@ public class HtmlViewerProbe extends Application {
         check("step5 hscroll: hvalue stays at 0 (selection rendering introduced no horizontal "
                         + "scroll; hvalue=" + fmt(scroller.getHvalue()) + ")", scroller.getHvalue() <= 0.001);
         Node cell = revealCellForLine(1);
+        dumpStep5Geometry("assertion", cell);
         double viewportRight = scroller.localToScene(scroller.getBoundsInLocal()).getMaxX();
         boolean rectsInside = cell != null;
         int rects = 0;
@@ -2364,6 +2439,13 @@ public class HtmlViewerProbe extends Application {
                     continue;
                 }
                 rects++;
+                System.out.println("step5 geometry rect: id=" + System.identityHashCode(r2)
+                        + " x=" + fmt(r2.getX()) + " y=" + fmt(r2.getY())
+                        + " width=" + fmt(r2.getWidth()) + " height=" + fmt(r2.getHeight())
+                        + " sceneRight=" + fmt(r2.localToScene(r2.getBoundsInLocal()).getMaxX())
+                        + " overflow=" + fmt(r2.localToScene(r2.getBoundsInLocal()).getMaxX() - viewportRight)
+                        + " parentLayoutX=" + fmt(r2.getParent().getLayoutX())
+                        + " parentWidth=" + fmt(r2.getParent().getLayoutBounds().getWidth()));
                 rectsInside &= r2.localToScene(r2.getBoundsInLocal()).getMaxX() <= viewportRight + 1;
             }
         }
@@ -2373,6 +2455,28 @@ public class HtmlViewerProbe extends Application {
         check("step5 hscroll: the cross-wrap single-line copy is still char-exact (clipboard len="
                         + (clipboardString() == null ? -1 : clipboardString().length()) + ")",
                 charByChar("step5-hscroll-copy", vLine(viewer, 1).substring(fromCol, toCol), clipboardString()));
+    }
+
+    private void dumpStep5Geometry(String phase, Node cell) {
+        System.out.println("step5 geometry " + phase + ": cell="
+                + (cell == null ? "null" : System.identityHashCode(cell))
+                + " sameAsBeforeRestore=" + (cell == step5CellBeforeRestore)
+                + " stageWidth=" + fmt(stage.getWidth()) + " sceneWidth=" + fmt(scene.getWidth())
+                + " scrollerWidth=" + fmt(scroller.getWidth())
+                + " viewportWidth=" + fmt(scroller.getViewportBounds().getWidth())
+                + " contentWidth=" + invoke(viewer, "contentWidth", new Class<?>[]{})
+                + " listWidth=" + fmt(listView.getWidth())
+                + " cellWidth=" + fmt(cell == null ? -1 : cell.getLayoutBounds().getWidth())
+                + " rowHeight=" + fmt(vDbl(viewer, "rowHeight"))
+                + " uniformCols=" + vInt(viewer, "wrapCols")
+                + " rootNeedsLayout=" + scene.getRoot().isNeedsLayout()
+                + " viewerNeedsLayout=" + vNode(viewer).isNeedsLayout());
+        for (int row = 0; row < Math.min(2, flowCount(cell)); row++) {
+            System.out.println("step5 geometry row " + row + ": range="
+                    + java.util.Arrays.toString(visualRowRange(cell, row))
+                    + " sceneWidth=" + fmt(visualRowWidth(cell, row))
+                    + " flowWidth=" + fmt(visualRowNode(cell, row).getLayoutBounds().getWidth()));
+        }
     }
 
     /** 视觉行坐标的拖选：视觉行号是逻辑行<b>内部</b>的折行行号，视觉列是该折行内的列。 */
