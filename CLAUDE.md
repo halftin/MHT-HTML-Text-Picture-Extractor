@@ -287,7 +287,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 |---|---|---|
 | **A**（分钟级） | `compile` + 定向单测 + 结构事实（行数 / 标记 / 直写） | 全绿；无"重排整文件"型 diff |
 | **B**（每阶段） | `mvn clean test` + 独立聚合 + `ProductBaselineTest` + `ArchitectureTest` + GUI 自动化 + 探针 + 日志键对账 | 默认 **949/0** + headless **73/0**；产物基线 **44/0**；不变式 **17/0**；GUI zh/en **34/0**；`log.*` 键逐键不变 |
-| **C**（阶段收尾） | native 构建 + native 产物基线 + 截图对比 + i18n 键 | `build-native.cmd` exit 0、report `status=OK`；native 基线 **42/0**（⚠️ 基线总数已 42 → **44**，**native 侧需按 44 重跑**，见台账 §4）|
+| **C**（阶段收尾） | native 构建 + native 产物基线 + 截图对比 + i18n 键 | `build-native.cmd` exit 0、report `status=OK`；native 基线 **44/0**（2026-10-08 用含 P4-13/14 的**全新无头 exe** 复跑：matrix 45 行 = 表头 + 44，**PASS 44 / FAIL 0**）|
 
 **没实际跑过的项目要明确标为"未验证"，不许推断通过。**
 
@@ -375,7 +375,7 @@ AtlantaFX 2.1.0（主题）· Logback 1.5.26 · Ikonli 12.3.1 · JUnit 6.0.3 · 
   `serialization-config.json` / `native-image.properties`。
 - **元数据纪律**：**必须用 tracing agent 采集，不许手工推断**（i18n 的"需要 ResourceBundle 反射"就曾被推断错：实测 0 条）；
   **按并集合并**、**纯增量 diff**、**方法/字段级对账丢失数 = 0**、**不要往 `src/main/resources` 放临时/备份文件**（会被打进 jar）；
-  过时项用 `tools/native/audit-native-metadata.ps1` 审计。改元数据后**必须**做 42 份产物基线回归。
+  过时项用 `tools/native/audit-native-metadata.ps1` 审计。改元数据后**必须**做**全部产物基线**回归（2026-10-08 起为 **44** 份）。
 
 > 构建命令、配方细节、验收清单、故障排查与全部实测坑 → **《基于graalvm的MHT资源提取器项目打包工作流程.md》**。
 
