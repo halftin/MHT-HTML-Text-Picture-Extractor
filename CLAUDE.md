@@ -288,6 +288,40 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 ① 测试源集的同包 driver `com.mhtextractor.gui.controller.AcceptanceDriver`（**直访，无反射**；`MainController` 现共 **49** 个包级成员、其中 **30** 个被驱动面访问，全测试访问面 **108** 条由第 13 条不变式 `testAccessSurfaceIsFrozen` 冻结）；
 ② 真正的公开行为（如 `WorkspaceModel` 的公开 API）——**优先用这条**。探针另走 `getDeclaredField + setAccessible`。
 
+### 派发实施方：Claude Code CLI 与 Codex CLI（**长活走 detach**，2026-10-08）
+
+两条实施通道：`tools/drive/drive-claude.mjs`（Claude Code CLI）与 **`codex_run` 工具**（Codex CLI，底层是 `.claude-work/codex/drive-codex.mjs`）。
+**指挥方只做统筹与独立验收，不自己改 `src/`、`tools/`**（除紧急修正并说明）。
+
+| 任务规模 | 怎么派 | 为什么 |
+|---|---|---|
+| 短 / 原子（≲8 分钟） | `codex_run(prompt_file=…, label=…)` **同步** | 有界返回；同步路径自带 540s 预算，到点由 driver **自己**整树终止、核实 pid 真死、写终版 meta（`termination=channel-budget`），不把"结束"交给宿主 |
+| **长活 / 架构级（可能 >8 分钟）** | **`codex_run(…, detach=true)`**，再用 **`codex_status(label=…, wait_ms=540000)`** 轮询取回 | 工具调用**立刻返回** → 不受调用通道的 ~600s 切点约束；且**只交一次启动税**，不必按 10 分钟切片（切片会逼模型只看局部、丢掉架构判断） |
+
+> **实测依据（2026-10-08）**：走 `run_code` 的会话，其单次工具调用在 **567 / 575 / 584 / 592 / 593 s** 被宿主切断（meta 无 `status`）；
+> 同一天在**直连会话**里一次同步 `codex_run` 跑到 **765 s 正常返回**。→ **"600s" 是调用通道的属性，不是 Codex 的**。长活一律走 detach。
+
+**被中断时的纪律（不许推断通过）**
+
+1. 先 `git status --porcelain` / `git diff` 判交付完整度，并**清掉本批可能留下的注入/半成品**（控制组注入、临时探针、临时文件）。
+2. 用返回的 `thread_id` **续跑**：`codex_run(prompt_file=<下一批提示词>, label=<新标签>, resume_thread="<thread_id>")`——不重开线程、不重交启动税；续跑时**保持同一模型档**。
+3. 证据全在 `.claude-work/codex-logs/`：`*.meta.json`（`status / abortReason / killVerified / threadId / usage / budgetMs`）、`*.hb.json`（心跳，driver 被杀后仍可交叉验证）、`*.jsonl`（原始事件）。**指挥方必须读这些文件，不能只看工具返回的那一行摘要。**
+
+**思考强度（effort）怎么定——混合制（2026-10-08 用户拍板）**
+
+默认由 harness 按下表**自判**，per-call 用户指定优先；每次派发把所选档位与理由写进汇报。
+
+| 任务类型 | 档位 |
+|---|---|
+| 机械搬迁 / 改名 / 文档同步 / 跑门禁 | `low`~`medium`（**大而机械 ≠ 需要高强度**，它最吃轮数） |
+| 常规实现 / 修 bug / 写测试 | `medium`~`high`（本项目默认 `high`） |
+| 架构设计 / 跨层重构 / 疑难不确定问题 / **验收失败后的返工批** | `xhigh` |
+| `max` / `ultra` | **必须用户放行**（`codex_run(…, unlock_effort=true)`）；`ultra` 会**自动委派子任务**，与"唯一实施方 + 指挥方独立验收"冲突，默认不用 |
+
+- **成本 ≈ 每轮思考 token × 轮数**（实测：14 项 / 540 s 的 `low` 批 ≈ 5 个 5h 额度点；1 轮最小任务 ≈ 0 点）→ **长批 + 高强度是最贵组合**；不要因为"改动大"就升档。
+- 强度不够时优先 **`resume_thread` 同线程升档**（模型标记支持运行中改强度，且不重交启动税），而不是重开一批。
+- 插件侧的自治上限 `maxEffortAllowed`（默认 `xhigh`）在**机制上**兜住"升档漂移"：越过它必须显式放行、且返回值里留痕（`effort_unlocked`）。
+
 ---
 
 ## 8. 依赖
