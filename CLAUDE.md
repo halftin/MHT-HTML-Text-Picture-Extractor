@@ -254,7 +254,11 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 
 **迁移/改包名时必须全仓库检索调用方（含 `tools/probes/`）**：P3-3b-19 把 `util.GroupItem` 迁到 `model` 后，`src` 内编译全绿，但 `tools/probes/ContextMenuProbe`/`ParamDraftProbe` 仍 import 旧包 → 两个探针**编译失败**（exit=1，易被误当功能回归）。**教训**：包迁移/签名变更后，除 `mvn test` 外必须 `grep -rn <旧全限定名> .`（覆盖 `tools/`）并**复跑受影响探针**。
 
-**`HtmlViewerProbe` 是已知抖动（2026-10-08 两轮量化）**：`FAIL step5 hscroll: every selection rect stays inside the viewport (rects=2, inside=false)`（**只有这一条**会抖）。实测：**P4-4 轮 = 4 跑 1 败**（首跑败，连跑 3 次全 `166/0`）；**P4-5 轮 = 4 跑 2 败**（首跑败、复跑 3 次为 通过/通过/失败）→ **抖动率约 25%~50%，不是罕见闪烁**。→ **纪律：报红先复跑 ≥3 次再下结论**；**该条已列入最终完好性验证要追的观察项**（可能是 `step5` 选择矩形与视口的真实几何竞态，待查）。
+**`HtmlViewerProbe` step5 hscroll 时序竞态：已定位并修复（2026-10-08，P4-6 `2f9be95`）**。
+症状：`FAIL step5 hscroll: every selection rect stays inside the viewport (rects=2, inside=false)`（**只有这一条**会抖），抖动率曾达 **25%~50%**（P4-4 轮 1/4、P4-5 轮 2/4）。
+**定性 = 探针时序（非产品缺陷）**：受控复现显示 631 px 视口下 cell 仍用旧 `[0,96)` 折行区间，首个选中矩形越界 **83.2 px**，产品排队刷新后几何恢复正常。
+**修法**：新增异步步 `HSCROLL_READY`，在还原窗口尺寸后**等待渲染网格与加宽前捕获的网格一致**再断言（注释明写 *Do not wait on selection rectangles: those remain assertions*）；并修掉「轮询在 `cancel()` 后仍排队于 FX 线程 → **重复推进步骤**」的真 bug。
+**断言 `rectsInside && rects >= 1` 与容差未变**；修前 62.5%(5/8) → 修后 **harness 亲手连跑 6 次 6× `166/0`**。→ **纪律保留：探针报红仍先复跑 ≥3 次再下结论**。
 
 **验证脚本自身也可能是错的**：`mvn -q` 吞过 surefire 摘要；正则漏过以分号结尾的枚举常量；`$null -eq $int` 不可靠；
 聚合报告时用 `-notlike '*output*'` 把 `output.ImageWriterTest` 一并滤掉（少算 38 个）；`$proc.ExitCode` 在本机**恒为空**
