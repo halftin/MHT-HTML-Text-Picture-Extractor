@@ -22,6 +22,7 @@ REM    build-native.cmd --prepare-only  只做 JVM 侧准备（不调用 native-
 REM    build-native.cmd --skip-package  跳过 mvn package
 REM    build-native.cmd --skip-card-smoke  跳过 native 卡片渲染冒烟（post-build 验证）
 REM    build-native.cmd --no-editbin    保留控制台子系统（便于看启动期崩溃）
+REM    set NATIVE_TARGET=headless     独立无 JavaFX 后端（H:\TEST\mht\p4-3-headless-dist）
 REM
 REM  环境变量覆盖：BUILD_JAVA_HOME / GRAALVM_HOME / MAVEN_CMD / OUTPUT_DIR /
 REM               NATIVE_XMX（默认 4G）/ VSWHERE / LOG_DIR（默认 <仓库>\logs）
@@ -48,6 +49,24 @@ if /i "%~1"=="--skip-card-smoke" set "SKIP_CARD_SMOKE=1"
 shift
 goto parse
 :parsed
+if not defined NATIVE_TARGET set "NATIVE_TARGET=javafx"
+if /i not "%NATIVE_TARGET%"=="javafx" if /i not "%NATIVE_TARGET%"=="headless" (
+    echo [ERROR] NATIVE_TARGET must be javafx or headless.
+    popd
+    endlocal & exit /b 1
+)
+if /i "%NATIVE_TARGET%"=="headless" (
+    if not defined OUTPUT_DIR set "OUTPUT_DIR=H:\TEST\mht\p4-3-headless-dist"
+    if not defined HEADLESS_WORK_DIR set "HEADLESS_WORK_DIR=H:\TEST\mht\p4-3-native-work"
+    if not defined LOG_DIR set "LOG_DIR=H:\TEST\mht\p4-3-native-logs"
+    set "TEMP=H:\TEST\temp"
+    set "TMP=H:\TEST\temp"
+    set "TMPCMD=H:\TEST\temp\mht-native-headless-step.cmd"
+    set "JAVA_TOOL_OPTIONS=!JAVA_TOOL_OPTIONS! -Djava.io.tmpdir=H:\TEST\temp"
+    if not exist "H:\TEST\temp" mkdir "H:\TEST\temp"
+    powershell -NoProfile -Command "$o=[IO.Path]::GetFullPath($env:OUTPUT_DIR); $w=[IO.Path]::GetFullPath($env:HEADLESS_WORK_DIR); $l=[IO.Path]::GetFullPath($env:LOG_DIR); foreach ($p in @($o,$w,$l)) { if (-not $p.StartsWith('H:\TEST\mht\',[StringComparison]::OrdinalIgnoreCase)) { Write-Error 'Headless output/work/log directories must be under H:\TEST\mht\.'; exit 1 } }; if ($o.TrimEnd('\') -eq $w.TrimEnd('\') -or $o.StartsWith($w.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase) -or $w.StartsWith($o.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)) { Write-Error 'Headless dist and work directories must be separate.'; exit 1 }"
+    if errorlevel 1 ( popd & endlocal & exit /b 1 )
+)
 
 REM ---------- 日志与报告骨架 ----------
 if not defined LOG_DIR set "LOG_DIR=%REPO%\logs"
@@ -123,6 +142,7 @@ REM 由实际选中的 JDK 反推它支持哪种配方（判据：有没有 Java
 set "RECIPE=dynamic"
 if exist "%GRAALVM_HOME%\lib\static\windows-amd64\prism_common.lib" set "RECIPE=static"
 if /i not "%RECIPE%"=="%NATIVE_RECIPE%" call :say "      [WARN] 想要 %NATIVE_RECIPE% 配方，但选中的 native-image JDK 只支持 %RECIPE%：%GRAALVM_HOME%"
+if /i "%NATIVE_TARGET%"=="headless" set "RECIPE=headless"
 
 REM dir 的 /s 不支持中间目录通配，必须把 mvn.cmd 作为**文件名**交给 /s
 if not defined MAVEN_CMD for /f "delims=" %%i in ('where mvn.cmd 2^>nul') do if not defined MAVEN_CMD set "MAVEN_CMD=%%i"
@@ -226,6 +246,7 @@ goto :maven_done
 call :say "      已跳过（--skip-package）"
 call :end 0
 :maven_done
+if /i "%NATIVE_TARGET%"=="headless" goto :headless_prepare
 
 REM ==================== 步骤 4/6：抽取随包 DLL（按配方） ====================
 REM   dynamic → 7 个 JavaFX DLL + 5 个 VC++ 运行库（JavaFX 走 DLL，必须随包）
@@ -348,6 +369,62 @@ goto :card_smoke_done
 :card_smoke_skipped
 call :say "      [SKIP] native card smoke skipped"
 :card_smoke_done
+goto :done
+
+REM Headless target shares environment detection, Maven, tee and reports with the GUI recipes.
+:headless_prepare
+call :begin "4/6" "headless input and metadata isolation"
+> "%TMPCMD%" echo @echo off
+>>"%TMPCMD%" echo powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\tools\native\prepare-headless.ps1" -Repo "%REPO%" -WorkDir "%HEADLESS_WORK_DIR%" -OutputDir "%OUTPUT_DIR%" -JavaHome "%BUILD_JAVA_HOME%" -DefaultCharset "%HEADLESS_CHARSET%"
+call :tee
+if not "%RC%"=="0" ( call :end %RC% & set "FAILSTEP=4/6 headless input" & goto :done )
+set "HEADLESS_INPUT=%HEADLESS_WORK_DIR%\input"
+set "HEADLESS_METADATA=%HEADLESS_INPUT%\metadata"
+for /f "usebackq delims=" %%c in ("%HEADLESS_INPUT%\classpath.txt") do set "HEADLESS_CP=%%c"
+for /f "usebackq delims=" %%c in ("%HEADLESS_INPUT%\default-charset.txt") do set "HEADLESS_CHARSET=%%c"
+call :end 0
+if "%PREPARE_ONLY%"=="1" ( set "STATUS=PREPARE_ONLY" & set "RC=0" & goto :done )
+
+call :begin "5/6" "headless native-image"
+call "%VCVARS%" >nul 2>&1
+set "HEADLESS_CL="
+for /f "delims=" %%c in ('where cl.exe 2^>nul') do if not defined HEADLESS_CL set "HEADLESS_CL=%%c"
+if not defined HEADLESS_CL ( call :end 20 & set "RC=20" & set "FAILSTEP=5/6 headless MSVC environment" & goto :done )
+set "JAVA_HOME=%GRAALVM_HOME%"
+set "PATH=%GRAALVM_HOME%\bin;%PATH%"
+if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
+REM No GUI shaded jar, JavaFX modules, prism linker flag or GUI native metadata.
+> "%TMPCMD%" echo @echo off
+>>"%TMPCMD%" echo pushd "%HEADLESS_INPUT%"
+REM Initialize MSVC in the same leaf cmd process as native-image, and retain its raw output.
+>>"%TMPCMD%" echo call "%VCVARS%"
+>>"%TMPCMD%" echo if errorlevel 1 exit /b 20
+>>"%TMPCMD%" echo where cl.exe
+>>"%TMPCMD%" echo if errorlevel 1 exit /b 20
+>>"%TMPCMD%" echo call "%NATIVE_IMAGE%" --limit-modules=java.se,jdk.unsupported -cp "%HEADLESS_CP%" --native-compiler-path="%HEADLESS_CL%" -H:+UnlockExperimentalVMOptions -H:DefaultCharset="%HEADLESS_CHARSET%" -H:ConfigurationFileDirectories="%HEADLESS_METADATA%" -H:+PrintClassInitialization -H:-UnlockExperimentalVMOptions com.mhtextractor.backend.BackendCli --no-fallback -o "%OUTPUT_DIR%\MhtExtractorBackend" --enable-url-protocols=http,https -J-Xmx%NATIVE_XMX% -Ob
+call :say "      command file: %TMPCMD%"
+type "%TMPCMD%"
+type "%TMPCMD%" >>"%LOG%"
+call :tee
+if not "%RC%"=="0" ( call :end %RC% & set "FAILSTEP=5/6 headless native-image" & goto :done )
+call :end 0
+
+call :begin "6/6" "headless artifact metadata assertion"
+REM Retain the exact build-input metadata as a sidecar for independent artifact audit.
+if not exist "%OUTPUT_DIR%\metadata" mkdir "%OUTPUT_DIR%\metadata"
+copy /Y "%HEADLESS_METADATA%\*.json" "%OUTPUT_DIR%\metadata\" >nul
+if exist "%HEADLESS_METADATA%\*.properties" copy /Y "%HEADLESS_METADATA%\*.properties" "%OUTPUT_DIR%\metadata\" >nul
+copy /Y "%HEADLESS_INPUT%\manifest.tsv" "%OUTPUT_DIR%\build-inputs.tsv" >nul
+> "%TMPCMD%" echo @echo off
+>>"%TMPCMD%" echo powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\tools\native\assert-headless-metadata.ps1" -MetadataDir "%OUTPUT_DIR%\metadata" -AnalysisDir "%OUTPUT_DIR%\reports"
+call :tee
+if not "%RC%"=="0" ( call :end %RC% & set "FAILSTEP=6/6 headless artifact metadata" & goto :done )
+REM CLI keeps the console subsystem; no JavaFX DLLs, launcher or card smoke.
+call :say "      headless artifacts:"
+for /r "%OUTPUT_DIR%" %%f in (*) do call :say "        - %%~ff  %%~zf bytes"
+call :end 0
+set "STATUS=OK"
+set "RC=0"
 :done
 REM ---------- 失败现场（若有） ----------
 if not "%STATUS%"=="FAILED" goto :report
@@ -378,6 +455,8 @@ set "NB_NATIVEIMAGE=%NATIVE_IMAGE%"
 set "NB_MAVEN=%MAVEN_CMD%"
 set "NB_VSPATH=%VSPATH%"
 set "NB_XMX=%NATIVE_XMX%"
+set "NB_TARGET=%NATIVE_TARGET%"
+set "NB_HEADLESS_INPUT=%HEADLESS_INPUT%"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\native-report.ps1" 2>&1
 
 call :say ""
@@ -391,6 +470,7 @@ if "%STATUS%"=="OK" call :say " 输出目录    : %OUTPUT_DIR%"
 if "%STATUS%"=="OK" call :say " 分发方式    : 整个目录拷走即可，无需安装 JDK/JRE"
 if "%STATUS%"=="OK" if /i "%RECIPE%"=="dynamic" call :say " 启动方式    : **双击 启动.cmd**（dynamic 配方：直接双击 exe 在中文/非 ASCII 路径下会失败）"
 if "%STATUS%"=="OK" if /i "%RECIPE%"=="static"  call :say " 启动方式    : 双击 MhtExtractor.exe（static 配方对路径无要求）"
+if "%STATUS%"=="OK" if /i "%RECIPE%"=="headless" call :say " 启动方式    : MhtExtractorBackend.exe --once / --serve"
 call :say " 日志        : %LOG%"
 call :say " 机器可读报告: %REPORT%"
 call :say " 步骤明细    : %STEPS%"

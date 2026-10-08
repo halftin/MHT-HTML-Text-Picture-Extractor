@@ -45,6 +45,34 @@ class ArchitectureTest {
     private static final Path TEST_SOURCES = Path.of("src", "test", "java");
     private static final Path MAIN_CLASSES = Path.of("target", "classes");
 
+    /** P4-3 / 第 17 条：仅扫描显式加载的后端子集，不裁剪 JavaFX 版存量元数据。 */
+    @Test
+    void headlessNativeMetadataHasNoJavaFxEntries() throws IOException {
+        Path subset = Path.of("tools", "native", "headless");
+        assertTrue(Files.isRegularFile(subset.resolve("reachability-metadata.json")),
+                "后端子集元数据缺失：" + subset);
+        var forbidden = java.util.regex.Pattern.compile("javafx[./\\\\]",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+        List<String> violations = new ArrayList<>();
+        int count = 0;
+        try (Stream<Path> walk = Files.walk(subset)) {
+            for (Path p : walk.filter(Files::isRegularFile).sorted().toList()) {
+                String name = p.getFileName().toString();
+                if (!name.endsWith(".json") && !name.endsWith(".properties")) continue;
+                String text = Files.readString(p, StandardCharsets.UTF_8);
+                // JSON 先解析再扫描：同样拦住 \\u 转义隐藏的类型名/资源路径。
+                if (name.endsWith(".json")) {
+                    text = new com.fasterxml.jackson.databind.ObjectMapper().readTree(text).toString();
+                }
+                count++;
+                if (forbidden.matcher(text).find()) violations.add(subset.relativize(p).toString());
+            }
+        }
+        assertTrue(violations.isEmpty(), "后端 native 子集含 JavaFX 条目：" + violations);
+        System.out.println("[arch] headless native metadata: " + count + " files / 0 JavaFX entries"
+                + " (decoded JSON + properties text, javafx/ and javafx.)");
+    }
+
     /**
      * 本应"零 UI 框架依赖"的包 —— 这些是业务层。
      * 换 UI 框架时它们必须原样复用，因此任何 javafx 引用都是泄漏点。

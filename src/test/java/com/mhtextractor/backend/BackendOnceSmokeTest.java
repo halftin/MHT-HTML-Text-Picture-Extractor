@@ -85,6 +85,15 @@ class BackendOnceSmokeTest {
      */
     private static List<String> baseCommand() {
         List<String> cmd = new ArrayList<>();
+        // P4-3: reuse the same subprocess/exit-code/golden-product assertions on the real native CLI.
+        String executable = System.getProperty("mht.backend.executable");
+        if (executable != null && !executable.isBlank()) {
+            cmd.add(Path.of(executable).toAbsolutePath().toString());
+            cmd.add("-Djava.io.tmpdir=" + System.getProperty("java.io.tmpdir"));
+            cmd.add("-Dstdout.encoding=UTF-8");
+            cmd.add("-Dstderr.encoding=UTF-8");
+            return cmd;
+        }
         cmd.add(Path.of(System.getProperty("java.home"), "bin", "java.exe").toString());
         cmd.add("-Dstdout.encoding=UTF-8");
         cmd.add("-Dstderr.encoding=UTF-8");

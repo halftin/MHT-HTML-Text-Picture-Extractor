@@ -65,6 +65,9 @@ $artifacts = Get-ArtifactList $env:NB_DIST
 # The jar is the *input* of the data flow; record it so the report traces input -> output.
 $jarInfo = $null
 $jarPath = Join-Path $env:NB_REPO ("target\mhtExtractor-{0}.jar" -f $env:NB_APKVERSION)
+if ($env:NB_TARGET -eq 'headless' -and $env:NB_HEADLESS_INPUT) {
+    $jarPath = Join-Path $env:NB_HEADLESS_INPUT 'backend.jar'
+}
 if (Test-Path -LiteralPath $jarPath) {
     $ji = Get-Item -LiteralPath $jarPath
     $jarInfo = [pscustomobject][ordered]@{
@@ -72,6 +75,7 @@ if (Test-Path -LiteralPath $jarPath) {
         bytes  = $ji.Length
         sha256 = (Get-FileHash -LiteralPath $jarPath -Algorithm SHA256).Hash.ToLower()
     }
+    if ($env:NB_TARGET -eq 'headless') { $jarInfo.path = $jarPath }
 }
 
 $gitCommit = ''
@@ -102,6 +106,14 @@ $report = [pscustomobject][ordered]@{
     artifacts   = @($artifacts)
 }
 
+if ($env:NB_TARGET -eq 'headless') {
+    $report.context | Add-Member -NotePropertyName target -NotePropertyValue 'headless'
+    $report.context.javafxVersion = $null
+    if ($env:NB_HEADLESS_INPUT) {
+        $report.context | Add-Member -NotePropertyName metadataDir -NotePropertyValue (Join-Path $env:NB_HEADLESS_INPUT 'metadata')
+        $report.context | Add-Member -NotePropertyName inputManifest -NotePropertyValue (Join-Path $env:NB_HEADLESS_INPUT 'manifest.tsv')
+    }
+}
 $json = $report | ConvertTo-Json -Depth 6
 $outDir = Split-Path -Parent $env:NB_OUT
 if ($outDir -and -not (Test-Path -LiteralPath $outDir)) {
