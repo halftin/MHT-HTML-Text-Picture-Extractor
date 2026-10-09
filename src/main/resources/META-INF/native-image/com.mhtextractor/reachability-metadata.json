@@ -1,6 +1,9 @@
 {
  "reflection": [
   {
+   "type": "com.mhtextractor.cache.PreviewCacheMeta$ImageEntry[]"
+  },
+  {
    "methods": [
     {
      "name": "<init>",
@@ -5985,6 +5988,9 @@
   }
  ],
  "resources": [
+  {
+   "glob": "META-INF/services/java.net.spi.URLStreamHandlerProvider"
+  },
   {
    "bundle": "com.sun.javafx.tk.quantum.QuantumMessagesBundle"
   },
