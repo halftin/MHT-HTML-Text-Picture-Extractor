@@ -501,8 +501,7 @@ public class HtmlViewerProbe extends Application {
         if (item == null) {
             return false;
         }
-        invokeOn(javafx.scene.control.MultipleSelectionModel.class,
-                files.getSelectionModel(), "select", new Class<?>[]{Object.class}, item);
+        files.getSelectionModel().select(files.getItems().indexOf(item));
         invoke(controller, "updateListButtons", new Class<?>[]{});
         System.out.println("selected row " + suffix + " -> selected="
                 + (files.getSelectionModel().getSelectedItem() == item)
@@ -540,8 +539,7 @@ public class HtmlViewerProbe extends Application {
             return;
         }
         Object item = files.getItems().get(0);
-        invokeOn(javafx.scene.control.MultipleSelectionModel.class,
-                files.getSelectionModel(), "select", new Class<?>[]{Object.class}, item);
+        files.getSelectionModel().select(0);
         System.out.println("imported fixtures -> rows=" + files.getItems().size()
                 + " selected=" + (files.getSelectionModel().getSelectedItem() == item)
                 + " itemType=" + item.getClass().getSimpleName());
@@ -565,20 +563,8 @@ public class HtmlViewerProbe extends Application {
         return null;
     }
 
-    /** 在给定（接口）类型上找方法再调用：绕开实现类的可见性限制。 */
-    private static Object invokeOn(Class<?> owner, Object target, String name, Class<?>[] types, Object... args) {
-        try {
-            java.lang.reflect.Method m = owner.getMethod(name, types);
-            return m.invoke(target, args);
-        } catch (Exception e) {
-            System.out.println("      (invoke " + owner.getSimpleName() + "." + name + " failed: " + e + ")");
-            return null;
-        }
-    }
-
-    // ---- E2.1：HtmlSourceViewer 观测面收窄为包级后，探针统一经 invoke/invokeOn 反射观测 ----
-    // 静态入口与常量读取需要两个新原语（invokeStatic / staticString）；按选项 D 登记进
-    // test-access-surface.tsv（reflect-dynamic 通道，按 文件+方法 计）。
+    // 包级查看器入口和内部计数仍缺少等价的公开观察路径，invoke/invokeStatic 保留登记。
+    // 选中列表行和读取 Text.properties 已改用公开 API。
 
     /** 反射调用静态方法（包级/私有均可；E2.1 起查看器的静态入口不再 public）。 */
     private static Object invokeStatic(Class<?> owner, String name, Class<?>[] types, Object... args) {
@@ -592,19 +578,7 @@ public class HtmlViewerProbe extends Application {
         }
     }
 
-    /** 反射读取静态 String 常量（E2.1 起查看器的属性键常量不再 public）。 */
-    private static String staticString(Class<?> owner, String name) {
-        try {
-            java.lang.reflect.Field f = owner.getDeclaredField(name);
-            f.setAccessible(true);
-            return (String) f.get(null);
-        } catch (Exception e) {
-            System.out.println("      (staticString " + owner.getSimpleName() + "." + name + " failed: " + e + ")");
-            return null;
-        }
-    }
-
-    /** 查看器的包级静态入口 showSource（反射转发，签名与生产一致）。 */
+    /** 查看器的同步包级静态入口 showSource；保留原来同帧断言的语义。 */
     private static void showSource(Node anchor, String title, String html) {
         invokeStatic(HtmlSourceViewer.class, "showSource",
                 new Class<?>[]{Node.class, String.class, String.class}, anchor, title, html);
@@ -623,22 +597,13 @@ public class HtmlViewerProbe extends Application {
                 new Class<?>[]{Node.class}, anchor);
     }
 
-    /** 查看器包级常量 RUN_COLUMNS_KEY / RUN_BASE_FILL_KEY 的反射读（各缓存一次）。 */
-    private static String runColumnsKey;
-    private static String runBaseFillKey;
-
+    /** 场景图 Text 节点公开 properties 中的列区间与基础颜色键；原有节点断言校验其值。 */
     private static String runColumnsKey() {
-        if (runColumnsKey == null) {
-            runColumnsKey = staticString(HtmlSourceViewer.class, "RUN_COLUMNS_KEY");
-        }
-        return runColumnsKey;
+        return "htmlSourceViewer.runColumns";
     }
 
     private static String runBaseFillKey() {
-        if (runBaseFillKey == null) {
-            runBaseFillKey = staticString(HtmlSourceViewer.class, "RUN_BASE_FILL_KEY");
-        }
-        return runBaseFillKey;
+        return "htmlSourceViewer.runBaseFill";
     }
 
     // ---- 包级实例成员的类型化反射转发 ----

@@ -152,7 +152,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | `noNewThirdPartyDependencies` | 不得新增第三方依赖（保护 native 打包） |
 | `guiLayerDoesNotInvokeCacheRulesDirectly` | GUI 不得直接调预览缓存的删除规则（须经 `WorkspaceParamService`） |
 | `guiDoesNotMutateDataOrderDirectly` | GUI 不得直接/间接改 workspace 数据序（须经 `WorkspaceModel`）；实测 **0 / 0** |
-| `testAccessSurfaceIsFrozen` | 测试访问面冻结：`src/test/resources/test-access-surface.tsv` **108** 条（direct 79 / reflect 9 / reflect-dynamic 20；S2 曾一次性上调至 124，P2-1 删 5 条 HtmlFindIndex，P3-B1 删 `MainController.ITEM_VIEW`，P3-B2 删 2，P3-B5 删 2，P3-B6 删 6（`ExtractionTaskCoordinator` 下沉接入点）——**均因下沉后成员消失**，且不变式同时校验「发现 ⊆ 清单」与「无陈旧条目」，凭空删行必然失败）**只减不增**；发现集合 ⊆ 清单、清单无陈旧条目、`com.mhtextractor.gui` 同包驱动必须登记。扫描器 `baseline.TestAccessSurface`（字节码成员库 + 驱动类常量池引用；不用反射 API） |
+| `testAccessSurfaceIsFrozen` | 测试访问面冻结：`src/test/resources/test-access-surface.tsv` **88** 条（direct 79 / reflect 3 / reflect-dynamic 6；S2 曾一次性上调至 124，P2-1 删 5 条 HtmlFindIndex，P3-B1 删 `MainController.ITEM_VIEW`，P3-B2 删 2，P3-B5 删 2，P3-B6 删 6（`ExtractionTaskCoordinator` 下沉接入点）——**均因下沉后成员消失**，且不变式同时校验「发现 ⊆ 清单」与「无陈旧条目」，凭空删行必然失败）**只减不增**；发现集合 ⊆ 清单、清单无陈旧条目、`com.mhtextractor.gui` 同包驱动必须登记。扫描器 `baseline.TestAccessSurface`（字节码成员库 + 驱动类常量池引用；不用反射 API） |
 | `allowlistOnlyTargetsBusinessPackages` · `baselineHarnessIsPresent` | 防白名单滥用 / 基线与夹具在位 |
 | `uiportHasNoJavaFxDependency` | **P0 新增**：`uiport` 端口层字节码常量池零 `javafx/`（字节码扫描）。**P3-2 起包已建立，实测 47 类 / 0 违规**（P3-B1…B6 新增 `OutputUnitVm`/`ParamSchemaVm`/`PreparseResult`/`TargetId`/`ImportPlanVm`/`ExtractionChannelEvent` 族等）；基线违规数 **0**，扫描器 `baseline.UiportSignature` |
 | `guiBusinessStateDoesNotGrow` | **P0 新增**：`gui` 层业务状态持有/构造点（`AppConfig` / `Map<String,AppConfig>` 字段 + 缓存/剪贴板/撤销载荷构造点（`new UndoManager.Record(...)` 含 `<>`））**只减不增**；基线 **0**（P1-3 后 a=b=c=d=0；P0 时 9 → P1-1 7 → P1-2 3 → P1-3 0，已提前达 P3 目标并保持只减不增）。扫描器 `baseline.GuiCoupling` |
@@ -337,7 +337,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | `tools/launcher/make-launcher.ps1` | 生成 dynamic 产物的 `启动.cmd` / `Launch.cmd`（修"中文路径下启动失败"） |
 
 **测试怎样访问生产控制器**：生产类**不为测试开放状态面**（`test-support` 标记 = 0）。两条正路：
-① 测试源集的同包 driver `com.mhtextractor.gui.controller.AcceptanceDriver`（**直访，无反射**；`MainController` 现共 **49** 个包级成员、其中 **30** 个被驱动面访问，全测试访问面 **108** 条由第 13 条不变式 `testAccessSurfaceIsFrozen` 冻结）；
+① 测试源集的同包 driver `com.mhtextractor.gui.controller.AcceptanceDriver`（**直访，无反射**；`MainController` 现共 **49** 个包级成员、其中 **30** 个被驱动面访问，全测试访问面 **88** 条由第 13 条不变式 `testAccessSurfaceIsFrozen` 冻结）；
 ② 真正的公开行为（如 `WorkspaceModel` 的公开 API）——**优先用这条**。⚠️ **探针也在访问面扫描范围内**（见 §6）：探针里加反射同样会把第 13 条打红（P4-12 实测），所以**探针也优先走公开 API**（例如用 `Event.fireEvent` 派发真实事件，而不是反射调私有 handler）。
 
 ### 派发实施方：Claude Code CLI 与 Codex CLI（**长活走 detach**，2026-10-08）
@@ -424,5 +424,5 @@ AtlantaFX 2.1.0（主题）· Logback 1.5.26 · Ikonli 12.3.1 · JUnit 6.0.3 · 
   右键菜单文案（`96285bd`）、「只提取选中的列表项」开关 + 右键「应用到所选」5 档动态文案（`5ca1908`）；
   文档收敛为四份、其中两份临时文档不入远程（`c8a700c` / `d31a116` + 本次提交）。
 - 测试控制器的通道是**同包直访**（`AcceptanceDriver`）。口径已拍板为**选项 D**：不数可见性，数**实际被测试访问的
-  (生产类, 成员) 点**，由第 13 条不变式 `testAccessSurfaceIsFrozen` 冻结（清单 **108** 条；见 §3 与
+  (生产类, 成员) 点**，由第 13 条不变式 `testAccessSurfaceIsFrozen` 冻结（清单 **88** 条；见 §3 与
   《遗留目标与未完成事项.md》§1.6 / §2.4）。**本期只冻结、不回收** `private`。

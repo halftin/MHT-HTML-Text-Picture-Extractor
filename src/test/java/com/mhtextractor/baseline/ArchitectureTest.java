@@ -1035,8 +1035,9 @@ class ArchitectureTest {
      *  2026-10-06 P2-1 删除 5 条 HtmlFindIndex（迁入 uicore 并放宽 public，public 成员不入冻结面）→ 119；
      *  2026-10-06 P3-B2 活动编排下沉：删除 {@code MainController.parseToken} 与
      *  {@code PreviewLoader.imageLoadActive}（随类/字段消失）→ 116；
-     *  2026-10-07 P4-1 顺手下调：P3-B5 删 2 条、P3-B6 删 6 条后清单已降至 108，上限 116 → 108（只减不增）。 */
-    private static final int TEST_ACCESS_SURFACE_MAX = 108;
+     *  2026-10-07 P4-1 顺手下调：P3-B5 删 2 条、P3-B6 删 6 条后清单已降至 108，上限 116 → 108（只减不增）；
+     *  2026-10-09 V1 首批：删除可等价迁移的 20 个反射点，保留无公开观察路径的 9 个 → 88。 */
+    private static final int TEST_ACCESS_SURFACE_MAX = 88;
 
     /**
      * 「测试访问面冻结」不变式（D2）：三条断言合取 + 驱动文件完整性守卫，失败信息分区列出。

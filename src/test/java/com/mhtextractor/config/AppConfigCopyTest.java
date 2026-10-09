@@ -6,9 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.util.Arrays;
+import com.mhtextractor.baseline.AppConfigFieldContract;
 import java.util.List;
 
 import com.mhtextractor.app.EffectiveParamsService;
@@ -20,7 +18,7 @@ import org.junit.jupiter.api.Test;
  * {@link AppConfig#copyExtractionParams()} 的字段级守护（Q10 / R7.7）。
  *
  * <p><b>为什么需要它</b>：深拷贝助手是"逐字段显式赋值"实现的（不用反射/序列化，保 native 镜像零元数据
- * 负担），因此<b>最容易出的错是漏字段或误带运行时字段</b>。本用例用反射把 {@code AppConfig} 的<b>每一个实例</b>
+ * 负担），因此<b>最容易出的错是漏字段或误带运行时字段</b>。本用例用公开 setter 把 {@code AppConfig} 的<b>每一个实例</b>
  * 字段（静态常量除外，如 {@code IMAGE_EXTRACTION_RULES_VERSION}）都填成一个独特值，再逐字段核对副本：</p>
  * <ul>
  *   <li>提取参数字段（= 全部字段 − {@link EffectiveParamsService#runtimeOnlyFields()}）必须逐字段复制到；</li>
@@ -75,41 +73,33 @@ class AppConfigCopyTest {
 
         AppConfig src = new AppConfig();
         // 静态常量（如 IMAGE_EXTRACTION_RULES_VERSION）不是"可复制提取参数"，逐字段对账前先滤掉（E4.2）
-        Field[] fields = Arrays.stream(AppConfig.class.getDeclaredFields())
-                .filter(f -> !Modifier.isStatic(f.getModifiers()))
-                .toArray(Field[]::new);
-        assertTrue(fields.length > 25, "装置自检：AppConfig 实例字段数应远多于 4（实际 " + fields.length + "）");
-        for (Field f : fields) {
-            f.setAccessible(true);
-            if (f.getType() == boolean.class) {
-                f.setBoolean(src, true);
-            } else if (f.getType() == String.class) {
-                f.set(src, "f:" + f.getName());
-            } else {
-                throw new IllegalStateException("AppConfig 出现未预期的字段类型：" + f);
-            }
+        AppConfigFieldContract.assertMatchesDeclaredFields();
+        var fields = AppConfigFieldContract.FIELDS;
+        assertTrue(fields.size() > 25, "装置自检：AppConfig 实例字段数应远多于 4（实际 " + fields.size() + "）");
+        AppConfig defaults = new AppConfig();
+        for (var f : fields) {
+            f.write().accept(src, f.differentValue(defaults));
         }
 
         AppConfig copy = src.copyExtractionParams();
         int extractionFields = 0;
-        for (Field f : fields) {
-            f.setAccessible(true);
-            if (runtimeOnly.contains(f.getName())) {
-                if (f.getType() == boolean.class) {
-                    assertFalse(f.getBoolean(copy), "运行时字段不得被复制：" + f.getName());
+        for (var f : fields) {
+            if (runtimeOnly.contains(f.name())) {
+                if (f.descriptor().equals("Z")) {
+                    assertFalse((Boolean) f.read().apply(copy), "运行时字段不得被复制：" + f.name());
                 } else {
-                    assertNull(f.get(copy), "运行时字段不得被复制：" + f.getName());
+                    assertNull(f.read().apply(copy), "运行时字段不得被复制：" + f.name());
                 }
             } else {
                 extractionFields++;
-                if (f.getType() == boolean.class) {
-                    assertTrue(f.getBoolean(copy), "提取参数字段必须被复制：" + f.getName());
+                if (f.descriptor().equals("Z")) {
+                    assertEquals(f.read().apply(src), f.read().apply(copy), "提取参数字段必须被复制：" + f.name());
                 } else {
-                    assertEquals("f:" + f.getName(), f.get(copy), "提取参数字段必须被复制：" + f.getName());
+                    assertEquals("f:" + f.name(), f.read().apply(copy), "提取参数字段必须被复制：" + f.name());
                 }
             }
         }
-        assertEquals(fields.length - runtimeOnly.size(), extractionFields,
+        assertEquals(fields.size() - runtimeOnly.size(), extractionFields,
                 "提取参数字段数 = 全部字段 − 运行时字段");
         // 再按服务的签名口径复算一次（字段级签名覆盖的正是"全部字段 − 运行时字段"）
         assertEquals(EffectiveParamsService.signatureOf(src), EffectiveParamsService.signatureOf(copy),

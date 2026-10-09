@@ -6,8 +6,7 @@ import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ParamScope;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
+import com.mhtextractor.baseline.AppConfigFieldContract;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -435,20 +434,17 @@ class EffectiveParamsServiceTest {
 
     @Test
     void signatureCoversEveryAppConfigFieldExceptRuntimeOnly() throws Exception {
+        AppConfigFieldContract.assertMatchesDeclaredFields();
         List<String> missed = new ArrayList<>();
         int covered = 0;
-        for (Field f : AppConfig.class.getDeclaredFields()) {
-            if (f.isSynthetic() || Modifier.isStatic(f.getModifiers())) {
-                continue;
-            }
-            String name = f.getName();
+        for (var f : AppConfigFieldContract.FIELDS) {
+            String name = f.name();
             if (RUNTIME_ONLY.contains(name)) {
                 continue;
             }
-            f.setAccessible(true);
             AppConfig baseline = cfg();
             AppConfig mutated = cfg();
-            f.set(mutated, probeValue(f, baseline));
+            f.write().accept(mutated, f.differentValue(baseline));
             if (EffectiveParamsService.signatureOf(baseline)
                     .equals(EffectiveParamsService.signatureOf(mutated))) {
                 missed.add(name);
@@ -471,9 +467,7 @@ class EffectiveParamsServiceTest {
         b.setOutputFolder("D:/out");
         b.setOpenFolderAfterComplete(true);
         // imageModeEnabled 为 @JsonIgnore 的主窗口 GUI 状态（AppConfig javadoc 明写"由主窗口模式开关写入"）
-        Field modeField = AppConfig.class.getDeclaredField("imageModeEnabled");
-        modeField.setAccessible(true);
-        modeField.setBoolean(b, true);
+        b.setImageModeEnabled(true);
         assertEquals(EffectiveParamsService.signatureOf(a), EffectiveParamsService.signatureOf(b),
                 "输入/输出目录、模式开关与「完成后打开」属 GUI 运行时状态，不得影响参数统一性判定");
     }
@@ -496,17 +490,6 @@ class EffectiveParamsServiceTest {
         assertNotEquals(EffectiveParamsService.NO_PARAMS,
                 EffectiveParamsService.signatureOf(new AppConfig()),
                 "全默认配置同样是「有生效参数」，其签名不得等于 NO_PARAMS");
-    }
-
-    /** 给字段造一个"与默认值不同"的值（供签名覆盖度守护测试用） */
-    private static Object probeValue(Field f, AppConfig defaults) throws IllegalAccessException {
-        if (f.getType() == boolean.class) {
-            return !((Boolean) f.get(defaults));
-        }
-        if (f.getType() == String.class) {
-            return "probe";
-        }
-        throw new IllegalStateException("未知 AppConfig 字段类型：" + f.getType() + "（请同步本测试）");
     }
 
     // ==================== 8. allGroupNames 收口：模型侧是唯一一份 ====================

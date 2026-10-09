@@ -14,6 +14,9 @@ import com.mhtextractor.gui.controller.ParamSidePanel;
 import com.mhtextractor.gui.controller.PreviewRenderer;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.model.AppConfig;
+import com.mhtextractor.model.GroupItem;
+import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.model.ThumbnailData;
 import com.mhtextractor.model.ParamScope;
 import javafx.application.Application;
@@ -50,6 +53,7 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.lang.reflect.Field;
+import java.lang.classfile.ClassFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -586,10 +590,15 @@ public class SidePanelProbe extends Application {
         check("R3.5 gui-state.json key set unchanged (" + guiStateKeysBefore + ")",
                 after.equals(guiStateKeysBefore));
         List<String> offending = new ArrayList<>();
-        for (Field f : GuiState.class.getDeclaredFields()) {
-            if (f.getName().toLowerCase().matches(".*(panel|sidebar|collaps|expand).*")) {
-                offending.add(f.getName());
+        try (var in = GuiState.class.getResourceAsStream("GuiState.class")) {
+            for (var f : ClassFile.of().parse(in.readAllBytes()).fields()) {
+                String name = f.fieldName().stringValue();
+                if (name.toLowerCase().matches(".*(panel|sidebar|collaps|expand).*")) {
+                    offending.add(name);
+                }
             }
+        } catch (Exception e) {
+            throw new IllegalStateException("无法读取 GuiState 声明字段", e);
         }
         check("R3.5 GuiState has no side-panel field " + offending, offending.isEmpty());
 
@@ -609,13 +618,8 @@ public class SidePanelProbe extends Application {
     private void checkCommitted() {
         check("R1.9 confirming collapses the panel", !panel.isVisible() && !host.isRightShowing());
         check("R1.9 confirming clears the dirty flag (commitDraft ran)", !ParamSidePanel.isDirty(anchor));
-        Object params = fieldDeep(controller, "paramDomain", "textParamsCache");
-        boolean separate = false;
-        try {
-            separate = (Boolean) params.getClass().getMethod("isSeparateFiles").invoke(params);
-        } catch (Exception e) {
-            System.out.println("      (reading the committed params failed: " + e + ")");
-        }
+        AppConfig params = (AppConfig) fieldDeep(controller, "paramDomain", "textParamsCache");
+        boolean separate = params != null && params.isSeparateFiles();
         check("R1.9 the confirmed draft reached MainController.textParamsCache "
                         + "(isSeparateFiles=" + separate + ", expected=" + draftToggleWas + ")",
                 params != null && separate == draftToggleWas);
@@ -993,12 +997,8 @@ public class SidePanelProbe extends Application {
     /** 默认名（未命名）组的名字；没有 → null。 */
     private String manualGroupName() {
         for (Object g : topLevelGroups()) {
-            try {
-                if (Boolean.TRUE.equals(g.getClass().getMethod("isDefaultNamed").invoke(g))) {
-                    return groupName(g);
-                }
-            } catch (Exception ignored) {
-                // 继续找下一个
+            if (g instanceof GroupItem<?> group && group.isDefaultNamed()) {
+                return group.getName();
             }
         }
         return null;
@@ -1197,8 +1197,7 @@ public class SidePanelProbe extends Application {
         if (renderer == null) {
             return;
         }
-        Object pane = invokeOn(PreviewRenderer.Host.class, field(renderer, "host"),
-                "thumbnailPane", new Class<?>[]{});
+        Object pane = ((PreviewRenderer.Host) field(renderer, "host")).thumbnailPane();
         if (!(pane instanceof javafx.scene.layout.Pane pn)) {
             check("E1.2 (a): renderer host exposes the thumbnail pane", false);
             return;
@@ -1292,12 +1291,10 @@ public class SidePanelProbe extends Application {
             Path b = Files.createDirectories(root.resolve("sub2"));
             Files.copy(Path.of(FIXTURES_DIR, "simple-text.mht"), a.resolve("g1.mht"));
             Files.copy(Path.of(FIXTURES_DIR, "titles.mht"), b.resolve("g2.mht"));
-            Object plan = invokeStatic("com.mhtextractor.app.MhtImportPlanner", "scanner",
-                    new Class<?>[]{List.class, int.class, int.class, int.class},
-                    List.of(root.toString()), 6, 50, 5000);
-            Object next = invoke(plan, "nextRound", new Class<?>[]{});
+            MhtImportPlanner.Scanner plan = MhtImportPlanner.scanner(List.of(root.toString()), 6, 50, 5000);
+            MhtImportPlanner.Plan next = plan.nextRound();
             invoke(controller, "applyImportPlan",
-                    new Class<?>[]{Class.forName("com.mhtextractor.app.MhtImportPlanner$Plan")}, next);
+                    new Class<?>[]{MhtImportPlanner.Plan.class}, next);
             sleep(400);
             System.out.println("Q6b: created fixture groups -> groups=" + topLevelGroups().size()
                     + " visibleCount=" + visibleCount());
@@ -1333,12 +1330,8 @@ public class SidePanelProbe extends Application {
     /**
      * 选中列表里的某个对象。
      *
-     * <p>🚩 不能用 {@code getSelectionModel().select(item)}：{@code fileListView} 的静态类型是
-     * {@code ListView<?>}，捕获通配符让 {@code select} 的参数类型不可表达（编译期 CAP 错误）；
-     * 反射 {@code getDeclaredMethod("select", Object.class)} 也拿不到 —— 泛型擦除生成的桥方法
-     * 与具体实现类都不可达（实测 {@code ListViewBitSetSelectionModel} 上两者都查不到）。
-     * 唯一稳的入口是<b>接口</b>{@code MultipleSelectionModel} 上的 {@code select(Object)}
-     * （{@code getMethod} 拿接口/公有成员，不受实现类可见性影响），本探针按此驱动。</p>
+     * <p>{@code ListView<?>} 的捕获通配符不允许按对象调用 select，因此先按实例身份找行号，
+     * 再调用公开的 select(int)。选中结果仍按实例身份检查。</p>
      */
     private void selectRow(Object item) {
         javafx.collections.ObservableList<?> rows = fileListView.getItems();
@@ -1353,24 +1346,12 @@ public class SidePanelProbe extends Application {
             check("Q6b row for " + item + " exists in #fileListView (rows=" + rows.size() + ")", false);
             return;
         }
-        invokeOn(javafx.scene.control.MultipleSelectionModel.class,
-                fileListView.getSelectionModel(), "select", new Class<?>[]{Object.class}, item);
+        fileListView.getSelectionModel().select(index);
         Object now = fileListView.getSelectionModel().getSelectedItem();
         System.out.println("Q6b: row " + index + " select -> selectedItem=" + now
                 + " (sameAsItem=" + (now == item) + ")");
         if (now != item) {
             check("Q6b could select row " + index + " (" + item + ")", false);
-        }
-    }
-
-    /** 在给定（接口）类型上找方法再调用：绕开实现类的可见性限制。 */
-    private static Object invokeOn(Class<?> owner, Object target, String name, Class<?>[] types, Object... args) {
-        try {
-            java.lang.reflect.Method m = owner.getMethod(name, types);
-            return m.invoke(target, args);
-        } catch (Exception e) {
-            System.out.println("      (invoke " + owner.getSimpleName() + "." + name + " failed: " + e + ")");
-            return null;
         }
     }
 
@@ -1412,15 +1393,13 @@ public class SidePanelProbe extends Application {
         return n != null && n.isVisible();
     }
 
-    /** 提取是否在跑（经 MainController.extractionCoordinator 的 running 标记；探针在默认包，反射读）。 */
+    /** 读取真正的后端运行标记；缺失时失败，不能把观察失败当成“未运行”。 */
     private boolean extractionRunning() {
-        Object coord = field(controller, "extractionCoordinator");
-        Object running = coord == null ? null : field(coord, "running");
-        try {
-            return running != null && (Boolean) running.getClass().getMethod("get").invoke(running);
-        } catch (Exception e) {
-            return false;
+        Object state = invoke(controller, "running", new Class<?>[]{});
+        if (!(state instanceof java.util.concurrent.atomic.AtomicBoolean running)) {
+            throw new IllegalStateException("无法观察实际提取运行状态");
         }
+        return running.get();
     }
 
     /** 目标标签：全局 = "GLOBAL"，组 = "group:<组名>"，条目 = "item:<路径>"，未载入 = "null"。 */
@@ -1456,11 +1435,7 @@ public class SidePanelProbe extends Application {
     }
 
     private static String groupName(Object group) {
-        try {
-            return String.valueOf(group.getClass().getMethod("getName").invoke(group));
-        } catch (Exception e) {
-            return "?";
-        }
+        return ((GroupItem<?>) group).getName();
     }
 
     /** 当前居中卡片是否为 {@code Notification}（= 确认卡 / 错误卡，而不是等待卡片 Message）。 */
@@ -1529,18 +1504,6 @@ public class SidePanelProbe extends Application {
         }
         System.out.println("      (reflect " + name + " failed: NoSuchMethodException in the hierarchy)");
         return null;
-    }
-
-    private static Object invokeStatic(String className, String name, Class<?>[] types, Object... args) {
-        try {
-            Class<?> c = Class.forName(className);
-            java.lang.reflect.Method m = c.getDeclaredMethod(name, types);
-            m.setAccessible(true);
-            return m.invoke(null, args);
-        } catch (Exception e) {
-            System.out.println("      (reflect static " + className + "." + name + " failed: " + e + ")");
-            return null;
-        }
     }
 
     @SuppressWarnings("unchecked")
@@ -1655,7 +1618,14 @@ public class SidePanelProbe extends Application {
     private TimerTask at(long delay, Runnable r) {
         return new TimerTask() {
             public void run() {
-                Platform.runLater(r);
+                Platform.runLater(() -> {
+                    try {
+                        r.run();
+                    } catch (Throwable ex) {
+                        check("step threw: " + ex, false);
+                        ex.printStackTrace(System.out);
+                    }
+                });
             }
         };
     }

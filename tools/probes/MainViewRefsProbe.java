@@ -17,8 +17,7 @@ import javafx.stage.Stage;
 
 import java.io.InputStream;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
+import java.lang.classfile.ClassFile;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -37,7 +36,7 @@ import java.util.regex.Pattern;
  * <ol>
  *   <li><b>一个都没漏</b>：{@code MainViewRefs.all()} 的 45 项全非 null，且键集与
  *       {@code MainView.fxml} 里数出来的 {@code fx:id} 集合<b>逐名相等</b>（数量也相等）；
- *       另外把 45 个访问器逐个反射调用一遍，确认"访问器名 = fx:id = all() 里的键"
+ *       另外把 45 个公开访问器逐个调用一遍，确认"访问器名 = fx:id = all() 里的键"
  *       （防止某条访问器写错字符串键 → 运行期 NPE 而编译通过）。</li>
  *   <li><b>反例（控制组）</b>：故意从 namespace 里拿掉一个 {@code fx:id} ⇒
  *       {@code MainViewRefs.from(...)} <b>必须抛异常并指名它</b>；
@@ -140,22 +139,73 @@ public class MainViewRefsProbe extends Application {
         }
         check("all() 的每一项都非 null" + (nulls.isEmpty() ? "" : " —— 为 null 的：" + nulls), nulls.isEmpty());
 
-        // 45 个访问器逐个反射调用：名字必须是 fx:id、返回值必须非 null 且与 all() 同一实例
-        Map<String, Method> accessors = new TreeMap<>();
-        for (Method m : MainViewRefs.class.getDeclaredMethods()) {
-            if (Modifier.isStatic(m.getModifiers()) || m.getParameterCount() != 0
-                    || m.getReturnType() == void.class || m.getName().equals("all")
-                    || m.getName().equals("from")) {
-                continue;
+        // 公开调用保留每个 getter 的实例身份校验；字节码声明集钉住新增/漏登记的访问器。
+        Map<String, Object> accessors = new TreeMap<>();
+        accessors.put("modeToggleGroup", refs.modeToggleGroup());
+        accessors.put("textModeToggle", refs.textModeToggle());
+        accessors.put("imageModeToggle", refs.imageModeToggle());
+        accessors.put("inputFolderField", refs.inputFolderField());
+        accessors.put("outputFolderField", refs.outputFolderField());
+        accessors.put("browseInputButton", refs.browseInputButton());
+        accessors.put("browseOutputButton", refs.browseOutputButton());
+        accessors.put("fileCountLabel", refs.fileCountLabel());
+        accessors.put("selectAllCheck", refs.selectAllCheck());
+        accessors.put("badgeHeaderLabel", refs.badgeHeaderLabel());
+        accessors.put("fileListView", refs.fileListView());
+        accessors.put("dragOverlay", refs.dragOverlay());
+        accessors.put("removeButton", refs.removeButton());
+        accessors.put("clearParamsButton", refs.clearParamsButton());
+        accessors.put("undoButton", refs.undoButton());
+        accessors.put("viewSourceButton", refs.viewSourceButton());
+        accessors.put("groupButton", refs.groupButton());
+        accessors.put("ungroupButton", refs.ungroupButton());
+        accessors.put("applyGlobalButton", refs.applyGlobalButton());
+        accessors.put("modeLabel", refs.modeLabel());
+        accessors.put("outputModeLabel", refs.outputModeLabel());
+        accessors.put("outputNameLabel", refs.outputNameLabel());
+        accessors.put("groupNameBox", refs.groupNameBox());
+        accessors.put("groupNameField", refs.groupNameField());
+        accessors.put("titleEditBox", refs.titleEditBox());
+        accessors.put("titleField", refs.titleField());
+        accessors.put("titleInfoLabel", refs.titleInfoLabel());
+        accessors.put("outputResultLabel", refs.outputResultLabel());
+        accessors.put("adjustCheck", refs.adjustCheck());
+        accessors.put("textPreviewArea", refs.textPreviewArea());
+        accessors.put("imagePreviewBox", refs.imagePreviewBox());
+        accessors.put("imageHintLabel", refs.imageHintLabel());
+        accessors.put("extractResultBanner", refs.extractResultBanner());
+        accessors.put("previewEffectButton", refs.previewEffectButton());
+        accessors.put("renameNoteLabel", refs.renameNoteLabel());
+        accessors.put("imageScrollPane", refs.imageScrollPane());
+        accessors.put("thumbnailPane", refs.thumbnailPane());
+        accessors.put("paramSettingsButton", refs.paramSettingsButton());
+        accessors.put("progressBar", refs.progressBar());
+        accessors.put("statusLabel", refs.statusLabel());
+        accessors.put("startButton", refs.startButton());
+        accessors.put("stopButton", refs.stopButton());
+        accessors.put("logTextArea", refs.logTextArea());
+        accessors.put("extractCheckedOnlyCheck", refs.extractCheckedOnlyCheck());
+        accessors.put("openFolderAfterCompleteCheck", refs.openFolderAfterCompleteCheck());
+        Set<String> declaredAccessors = new LinkedHashSet<>();
+        try (InputStream in = MainViewRefs.class.getResourceAsStream("MainViewRefs.class")) {
+            for (var method : ClassFile.of().parse(in.readAllBytes()).methods()) {
+                String name = method.methodName().stringValue();
+                var type = method.methodTypeSymbol();
+                if ((method.flags().flagsMask() & 0x0008) == 0 && type.parameterCount() == 0
+                        && !type.returnType().descriptorString().equals("V")
+                        && !name.equals("all") && !name.equals("from")) {
+                    declaredAccessors.add(name);
+                }
             }
-            accessors.put(m.getName(), m);
         }
+        check("实例访问器声明集 == 显式公开调用集（新增访问器不得漏测）",
+                declaredAccessors.equals(accessors.keySet()));
         check("MainViewRefs 的访问器正好 " + EXPECTED_FX_IDS + " 个（少一个就漏一个 fx:id）",
-                accessors.size() == EXPECTED_FX_IDS);
-        check("访问器名集合 == MainView.fxml 的 fx:id 集合", accessors.keySet().equals(fxmlIds));
+                declaredAccessors.size() == EXPECTED_FX_IDS);
+        check("访问器名集合 == MainView.fxml 的 fx:id 集合", declaredAccessors.equals(fxmlIds));
         List<String> accessorBad = new ArrayList<>();
-        for (Map.Entry<String, Method> e : accessors.entrySet()) {
-            Object v = e.getValue().invoke(refs);
+        for (Map.Entry<String, Object> e : accessors.entrySet()) {
+            Object v = e.getValue();
             if (v == null || v != all.get(e.getKey())) {
                 accessorBad.add(e.getKey());
             }

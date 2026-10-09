@@ -1,6 +1,5 @@
 import java.io.File;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +28,9 @@ import javafx.scene.control.ScrollBar;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.input.ContextMenuEvent;
+import javafx.scene.input.PickResult;
+import javafx.scene.control.ListCell;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
@@ -47,8 +49,8 @@ import javafx.stage.Stage;
  *
  * <p>被测对象是 {@code MainView.fxml} 加载出的<b>真实</b> {@code MainController}（与 App.start() 同构装配），
  * 菜单实例经反射取私有字段 {@code contextMenu}；因此覆盖"宿主目标类型判定 + 规则 + 落点"的完整链路。
- * R7 的动作也一律经<b>真实菜单项</b> {@code MenuItem.fire()} 触发（只把新类的私有 {@code target}
- * 字段指向被测目标，等价于真实右键命中那一行），故覆盖"菜单项 → Actions → 宿主实现"整条接线。</p>
+ * R7 的动作先在列表行派发右键请求，再经<b>真实菜单项</b> {@code MenuItem.fire()} 触发，
+ * 覆盖"右键拾取 → 菜单项 → Actions → 宿主实现"整条接线。</p>
  *
  * <p>退出码：0 = 全过，1 = 有失败，2 = 看门狗超时（防探针挂死）。</p>
  */
@@ -239,15 +241,9 @@ public class ContextMenuProbe extends Application {
         check("isLiveTarget(已移除条目) == false", !actions.isLiveTarget(removed));
 
         // ---- 5. pickItemAt 的节点遍历：滚动条 / 普通节点 / null ----
-        try {
-            Method pick = FileListContextMenu.class.getDeclaredMethod("pickFrom", Node.class);
-            pick.setAccessible(true);
-            check("pickFrom(ScrollBar) == null（滚动条右键不算列表区域）", pick.invoke(menu, new ScrollBar()) == null);
-            check("pickFrom(普通 Pane) == null（未命中单元格 = 空白区域）", pick.invoke(menu, new Pane()) == null);
-            check("pickFrom(null) == null", pick.invoke(menu, (Node) null) == null);
-        } catch (Exception e) {
-            check("可以反射调用 FileListContextMenu.pickFrom(Node): " + e, false);
-        }
+        check("pickItemAt(ScrollBar) == null（滚动条右键不算列表区域）", pickAt(new ScrollBar()) == null);
+        check("pickItemAt(普通 Pane) == null（未命中单元格 = 空白区域）", pickAt(new Pane()) == null);
+        check("pickItemAt(null) == null", pickAt(null) == null);
 
         // ---- 6. 显示/隐藏生命周期已接线（结构性证据；行为证据见 t=1200ms 之后） ----
         check("菜单显示时挂「点击菜单外即关闭」过滤器（onShown 已设置）", real.getOnShown() != null);
@@ -259,14 +255,7 @@ public class ContextMenuProbe extends Application {
     private void checkMatrix(String what, Object target,
                              boolean select, boolean itemScoped, boolean paramsGlobal,
                              boolean group, boolean ungroup, boolean remove, boolean removeGroup) {
-        try {
-            Method m = MainController.class.getDeclaredMethod("updateContextMenuState", Object.class);
-            m.setAccessible(true);
-            m.invoke(controller, target);
-        } catch (Exception e) {
-            check(what + "：可以反射调用 updateContextMenuState: " + e, false);
-            return;
-        }
+        menu.updateState(target);
         check(what + "：勾选" + (select ? "启用" : "禁用"),
                 dis(FileMenuModel.Entry.SELECT) == !select);
         check(what + "：全选恒启用", !dis(FileMenuModel.Entry.SELECT_ALL));
@@ -286,16 +275,10 @@ public class ContextMenuProbe extends Application {
         check(what + "：移除组" + (removeGroup ? "启用" : "禁用"),
                 dis(FileMenuModel.Entry.REMOVE_GROUP) == !removeGroup);
         // 与宿主自己的判定一致性（不是独立期望：独立期望在无头单测里）
-        try {
-            Method hip = MainController.class.getDeclaredMethod("hasIndependentParams", Object.class);
-            hip.setAccessible(true);
-            boolean indep = (Boolean) hip.invoke(controller, target);
-            check(what + "：清除参数/应用到全局 == 宿主 hasIndependentParams(" + indep + ")",
-                    dis(FileMenuModel.Entry.CLEAR_PARAMS) == !indep
-                            && dis(FileMenuModel.Entry.APPLY_GLOBAL) == !indep);
-        } catch (Exception e) {
-            System.out.println("      (info) hasIndependentParams 反射失败，跳过该一致性断言：" + e);
-        }
+        boolean indep = actions.paramsInfo(target).independent();
+        check(what + "：清除参数/应用到全局 == 宿主 paramsInfo(" + indep + ")",
+                dis(FileMenuModel.Entry.CLEAR_PARAMS) == !indep
+                        && dis(FileMenuModel.Entry.APPLY_GLOBAL) == !indep);
     }
 
     private boolean dis(FileMenuModel.Entry entry) {
@@ -447,7 +430,7 @@ public class ContextMenuProbe extends Application {
                     ((javafx.scene.control.ToggleButton) node("imageModeToggle")).isSelected());
 
             // ---- R7.5：撤销那一条记录必须完整恢复到 before 快照 ----
-            callNoArg(controller, "onUndoClicked");
+            ((javafx.scene.control.Button) node("undoButton")).fire();
             check("R7.5：撤销后 b 的生效参数回到应用前（一条记录携带了 before 快照）",
                     itemParamsOf(b, im) != null
                             && effectiveSignature(itemParamsOf(b, im)).equals(effectiveSignature(params("BEFORE-B"))));
@@ -485,23 +468,36 @@ public class ContextMenuProbe extends Application {
         return com.mhtextractor.app.EffectiveParamsService.signatureOf(c);
     }
 
-    /** 经真实菜单项触发动作：把新类的私有 target 指向被测目标（等价于真实右键命中那一行），再 fire() */
+    /** 真实行上派发右键请求，经生产拾取/选中/状态刷新接线设置目标，再点击菜单项。 */
     private void fire(FileMenuModel.Entry entry, Object target) throws Exception {
-        Field tf = FileListContextMenu.class.getDeclaredField("target");
-        tf.setAccessible(true);
-        tf.set(menu, target);
+        // 模型公开 API 建立夹具后，以其快照提供可渲染行；不改模型数据序或私有菜单目标。
+        listView.setItems(javafx.collections.FXCollections.observableArrayList(workspace().displayOrder()));
+        int index = listView.getItems().indexOf(target);
+        if (index < 0) throw new IllegalStateException("右键目标不在列表中：" + target);
+        listView.scrollTo(index);
+        scene.getRoot().applyCss();
+        scene.getRoot().layout();
+        Node cell = listView.lookupAll(".list-cell").stream()
+                .filter(n -> n instanceof ListCell<?> c && !c.isEmpty() && c.getItem() == target)
+                .findFirst().orElseThrow(() -> new IllegalStateException("右键目标未渲染：" + target));
+        Event.fireEvent(cell, requestedAt(cell));
+        if (menu.target() != target) throw new IllegalStateException("真实右键未路由到目标");
         menu.item(entry).fire();
+        menu.menu().hide();
     }
 
-    /** 直接调宿主的 updateContextMenuState（test-support 可见性经反射）来刷新菜单项状态 */
+    /** 公开菜单刷新接口仍使用真实宿主的目标类型和参数快照。 */
     private void updateState(Object target) {
-        try {
-            Method m = MainController.class.getDeclaredMethod("updateContextMenuState", Object.class);
-            m.setAccessible(true);
-            m.invoke(controller, target);
-        } catch (Exception e) {
-            check("反射调用 updateContextMenuState: " + e, false);
-        }
+        menu.updateState(target);
+    }
+
+    private ContextMenuEvent requestedAt(Node node) {
+        return new ContextMenuEvent(ContextMenuEvent.CONTEXT_MENU_REQUESTED,
+                0, 0, stage.getX() + 30, stage.getY() + 30, false, new PickResult(node, 0, 0));
+    }
+
+    private Object pickAt(Node node) {
+        return menu.pickItemAt(requestedAt(node));
     }
 
     private Object fieldOf(Object owner, String name) throws Exception {
@@ -510,21 +506,13 @@ public class ContextMenuProbe extends Application {
         return f.get(owner);
     }
 
-    /** P6-B：FXML 节点引用现在都在 {@code MainController.refs}（{@code MainViewRefs}）里；按 fx:id 取。 */
+    /** 按 fx:id 观察真实场景图，不访问控制器的节点存储。 */
     private Object node(String fxId) throws Exception {
-        Object refs = fieldOf(controller, "refs");
-        Method m = refs.getClass().getMethod(fxId);
-        return m.invoke(refs);
+        return java.util.Objects.requireNonNull(scene.lookup("#" + fxId), "缺失节点：" + fxId);
     }
 
     private com.mhtextractor.app.WorkspaceModel workspace() throws Exception {
         return (com.mhtextractor.app.WorkspaceModel) fieldOf(controller, "ws");
-    }
-
-    private void callNoArg(Object owner, String name) throws Exception {
-        Method m = owner.getClass().getDeclaredMethod(name);
-        m.setAccessible(true);
-        m.invoke(owner);
     }
 
     // ==================== t=1200ms 起：点击菜单外即关闭（A/B 对照，同一菜单） ====================
