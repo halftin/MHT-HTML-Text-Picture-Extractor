@@ -16,6 +16,9 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.input.PickResult;
 import javafx.scene.image.PixelReader;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.StackPane;
@@ -46,6 +49,9 @@ public class NotificationAcceptance extends Application {
     private int unverified = 0;
     private boolean escControlDelivered;
     private ModalPaneSkin escSkin;
+    private Node clickTarget;
+    private ModalPaneSkin clickSkin;
+    private boolean clickControlDelivered;
     private final String escInput = System.getProperty("probe.esc.input", "scroll-pane");
     private final AtomicReference<String> decision = new AtomicReference<>("(none)");
 
@@ -81,7 +87,12 @@ public class NotificationAcceptance extends Application {
         timer.schedule(at(5000, this::checkEscControl), 5000);
         timer.schedule(at(5600, this::pressEscPersistent), 5600);
         timer.schedule(at(6000, this::checkEscPersistent), 6000);
-        timer.schedule(at(6500, this::finish), 6500);
+        timer.schedule(at(6600, this::showClickControl), 6600);
+        timer.schedule(at(7100, this::pressClickControl), 7100);
+        timer.schedule(at(7500, this::checkClickControl), 7500);
+        timer.schedule(at(8100, this::pressClickPersistent), 8100);
+        timer.schedule(at(8500, this::checkClickPersistent), 8500);
+        timer.schedule(at(9000, this::finish), 9000);
     }
 
     private TimerTask at(long delay, Runnable r) {
@@ -189,6 +200,83 @@ public class NotificationAcceptance extends Application {
         modalPane().setPersistent(true);
         firePrimary(1);   // Cancel, clean up
         check("cleanup: card hidden again", !modalPane().isDisplay());
+    }
+
+    private void showClickControl() {
+        modalPane().setPersistent(false);
+        NotificationHost.confirm(root, "CLICK-CONTROL-CARD", ok -> decision.set(String.valueOf(ok)));
+        decision.set("(none)");
+    }
+
+    private void pressClickControl() { dispatchBackdropClick(); }
+
+    private void checkClickControl() {
+        clickControlDelivered = !modalPane().isDisplay();
+        check("CLICK control: non-persistent live skin dismisses the card", clickControlDelivered);
+        modalPane().setPersistent(true);
+        NotificationHost.confirm(root, "CLICK-PERSISTENT-CARD", ok -> decision.set(String.valueOf(ok)));
+        decision.set("(none)");
+        if (Boolean.getBoolean("probe.click.breakPersistent")) modalPane().setPersistent(false);
+    }
+
+    private void pressClickPersistent() { dispatchBackdropClick(); }
+
+    private void checkClickPersistent() {
+        check("CLICK persistent: delivery control succeeded", clickControlDelivered);
+        check("CLICK persistent: confirmation stays displayed", modalPane().isDisplay());
+        check("CLICK persistent: decision callback not invoked", "(none)".equals(decision.get()));
+        check("CLICK persistent: pending decision retained", NotificationHost.hasPendingDecision(root));
+        modalPane().setPersistent(true);
+        firePrimary(1);
+        check("CLICK cleanup: Cancel delivers false", "false".equals(decision.get()));
+        check("CLICK cleanup: card hidden", !modalPane().isDisplay());
+    }
+
+    /** AtlantaFX installs MOUSE_PRESSED on the direct ScrollPane, the full-window backdrop.
+     * Use a point within it, outside the card and scrollbars. No private skin access.
+     * The capture witness and same-node/same-skin dismissal control guard empty delivery.
+     */
+    private void dispatchBackdropClick() {
+        var pane = modalPane();
+        check("CLICK uses AtlantaFX ModalPaneSkin", pane.getSkin() instanceof ModalPaneSkin);
+        if (!(pane.getSkin() instanceof ModalPaneSkin skin)) return;
+        var targets = pane.getChildrenUnmodifiable().stream().filter(n -> n instanceof ScrollPane).toList();
+        check("CLICK exactly one direct ScrollPane backdrop", targets.size() == 1);
+        if (targets.size() != 1) return;
+        Node target = targets.get(0);
+        if (clickTarget == null) { clickTarget = target; clickSkin = skin; }
+        check("CLICK same backdrop and skin instance", target == clickTarget && skin == clickSkin);
+        scene.getRoot().applyCss();
+        scene.getRoot().layout();
+        double x = target.getBoundsInLocal().getWidth() - 40;
+        double y = target.getBoundsInLocal().getHeight() - 40;
+        var point = target.localToScene(x, y);
+        boolean outside = !pane.getContent().localToScene(pane.getContent().getBoundsInLocal())
+                .contains(point);
+        check("CLICK point inside backdrop and outside card", target.getBoundsInLocal().contains(x, y) && outside);
+        check("CLICK starts with a displayed card", pane.isDisplay());
+        System.out.println("CLICK GEOMETRY point=" + x + "," + y + " cardLayout="
+                + pane.getContent().getLayoutX() + "," + pane.getContent().getLayoutY()
+                + " cardBounds=" + pane.getContent().getLayoutBounds());
+        boolean[] routed = { false };
+        javafx.event.EventHandler<MouseEvent> witness = e -> {
+            if (e.getTarget() == target && e.getButton() == MouseButton.PRIMARY) routed[0] = true;
+            System.out.println("CLICK ROUTE x=" + e.getX() + " y=" + e.getY());
+        };
+        // Ancestor capture sees the event before the skin can consume it.
+        pane.addEventFilter(MouseEvent.MOUSE_PRESSED, witness);
+        var screen = target.localToScreen(x, y);
+        var event = new MouseEvent(target, target, MouseEvent.MOUSE_PRESSED, x, y,
+                screen.getX(), screen.getY(), MouseButton.PRIMARY, 1,
+                false, false, false, false, true, false, false, false, false, true,
+                new PickResult(target, point.getX(), point.getY()));
+        boolean delivery = !Boolean.getBoolean("probe.click.breakDelivery");
+        try { if (delivery) Event.fireEvent(target, event); }
+        finally { pane.removeEventFilter(MouseEvent.MOUSE_PRESSED, witness); }
+        check("CLICK event capture reached backdrop route", routed[0]);
+        System.out.println("CLICK INPUT=scroll-pane target=" + target.getClass().getName()
+                + " persistent=" + pane.getPersistent() + " dispatched=" + delivery
+                + " routeHit=" + routed[0] + " outsideCard=" + outside + " display=" + pane.isDisplay());
     }
 
     /**

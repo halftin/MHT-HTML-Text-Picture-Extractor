@@ -25,6 +25,8 @@ param(
     [switch]$Rebuild,
     [string]$Locale = 'zh_CN',
     [string]$OutDir,
+    # Optional isolated runtime directory (logs/config/fixtures); build paths stay absolute.
+    [string]$WorkingDirectory,
     # Forwarded as -Dprobe.dialog=true. UiProbe only opens the "extraction parameters" window and
     # screenshots it when this is set, so without it a UI probe run silently covers the MAIN window
     # only - and a change to the parameter form would look like "0 changed pixels".
@@ -36,8 +38,9 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)   # tools\probes -> repo root
 Set-Location $repo
 $probeDir = Join-Path $repo 'tools\probes'
-$classDir = Join-Path $probeDir 'out'
 $outDir = if ($OutDir) { $OutDir } else { Join-Path $repo '.claude-work\uiprobe' }
+$outDir = [IO.Path]::GetFullPath($outDir)
+$classDir = if ($OutDir) { Join-Path $outDir 'probe-classes' } else { Join-Path $probeDir 'out' }
 
 if ($List -or -not $Probe) {
     Write-Output "Available probes in $probeDir :"
@@ -127,6 +130,7 @@ Write-Output "[java] $Probe  locale=$Locale  out=$outDir  dialog=$Dialog"
 # defaults for code that reads Locale.getDefault().
 $extra = @()
 if ($Dialog) { $extra += '-Dprobe.dialog=true' }
+if ($WorkingDirectory) { Set-Location -LiteralPath $WorkingDirectory }
 & $java --module-path $modulePath --add-modules javafx.controls,javafx.fxml `
     "-Dprobe.locale=$Locale" `
     "-Duser.language=$($parts[0])" "-Duser.country=$($parts[1])" `
