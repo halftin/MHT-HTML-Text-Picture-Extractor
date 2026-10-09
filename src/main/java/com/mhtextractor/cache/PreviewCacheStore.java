@@ -168,6 +168,8 @@ public record PreviewCacheStore(Path root) {
     /**
      * 列出所有「完整缓存」的键：解析各目录 meta.json，由 source + 指纹 + 格式版本重建 key。
      * 无 .complete 的目录与 .tmp 目录被跳过（它们是孤儿，不属于有效键）。
+     * 不可读/不可识别的元数据逐目录告警并跳过，不影响其它项目的清理；根目录列举失败仍抛出。
+     * 可识别的旧格式/旧规则指纹仍列出，保证生命周期能删除同一来源的历史缓存。
      */
     public List<PreviewCacheKey> listKeys() throws IOException {
         List<PreviewCacheKey> keys = new ArrayList<>();
@@ -180,10 +182,25 @@ public record PreviewCacheStore(Path root) {
                         || !Files.exists(dir.resolve(COMPLETE_MARKER))) {
                     continue;
                 }
-                PreviewCacheMeta meta = MAPPER.readValue(dir.resolve(META_FILE_NAME).toFile(), PreviewCacheMeta.class);
-                keys.add(new PreviewCacheKey(meta.source().absolutePath(), meta.source().size(),
-                        meta.source().mtime(), meta.paramFingerprint(),
-                        meta.source().sidecarFingerprint(), meta.formatVersion()));
+                try {
+                    PreviewCacheMeta meta = MAPPER.readValue(dir.resolve(META_FILE_NAME).toFile(), PreviewCacheMeta.class);
+                    if (meta == null || meta.source() == null
+                            || meta.source().absolutePath() == null || meta.source().absolutePath().isBlank()
+                            || meta.paramFingerprint() == null || meta.paramFingerprint().isBlank()
+                            || meta.formatVersion() <= 0 || meta.source().size() < 0) {
+                        throw new IOException("invalid cache metadata");
+                    }
+                    PreviewCacheKey key = new PreviewCacheKey(meta.source().absolutePath(), meta.source().size(),
+                            meta.source().mtime(), meta.paramFingerprint(),
+                            meta.source().sidecarFingerprint(), meta.formatVersion());
+                    if (!dir.getFileName().toString().equals(key.toDirName())) {
+                        throw new IOException("cache directory does not match metadata");
+                    }
+                    keys.add(key);
+                } catch (IOException e) {
+                    // Only per-entry IO/JSON failures are recoverable; programming errors propagate.
+                    log.warn(I18n.msg("log.previewcachestore.04", dir, e.getMessage()));
+                }
             }
         }
         return keys;

@@ -174,6 +174,11 @@ public boolean runAutomatedTests() {
             this.view.refreshAfterListChange();
         }
 
+        // GUI 验收独占本次缓存根的内容：先清除跨会话残留，再由下方预览生成 C3 的前置缓存。
+        // 直接调用存储层，清场失败必须让验收失败，不能经退出路径的 IO 降级假通过。
+        int clearedCacheEntries = this.view.previewCacheLifecycle().store().deleteAll();
+        out.println("[SETUP] Preview cache entries cleared: " + clearedCacheEntries);
+
         // 临时样例目录（不依赖固定测试数据路径）
         java.nio.file.Path textDir = java.nio.file.Files.createTempDirectory("mht-auto-text");
         java.nio.file.Path imageDir = java.nio.file.Files.createTempDirectory("mht-auto-image");
@@ -866,9 +871,12 @@ public boolean runAutomatedTests() {
             // C8：退出清空（test.mode 跳过弹窗只清空，关窗处理器同样逻辑）
             this.view.previewCacheLifecycle().onShutdown(() -> { });
             java.nio.file.Path cacheRoot = this.view.previewCacheLifecycle().store().root();
-            if (java.nio.file.Files.isDirectory(cacheRoot)
-                    && java.nio.file.Files.list(cacheRoot).findAny().isPresent()) {
-                throw new IllegalStateException("退出清空后缓存根目录应为空（C8）");
+            if (java.nio.file.Files.isDirectory(cacheRoot)) {
+                try (var entries = java.nio.file.Files.list(cacheRoot)) {
+                    if (entries.findAny().isPresent()) {
+                        throw new IllegalStateException("退出清空后缓存根目录应为空（C8）");
+                    }
+                }
             }
             out.println("[PASS] Preview cache lifecycle (C3/C7/C8)"); p++;
         } catch (Exception e) { out.println("[FAIL] Preview cache lifecycle: " + e.getMessage()); f++; }

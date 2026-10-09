@@ -431,6 +431,45 @@ class PreviewCacheStoreTest {
     // ---------- listKeys / deleteAll ----------
 
     @Test
+    void listKeysSkipsMissingMalformedAndInvalidMetadata() throws IOException {
+        PreviewCacheStore store = store();
+        PreviewCacheKey valid = keyFor(mhtFile());
+        store.write(valid, metaFor(valid, List.of()), imagesWriter());
+        Path missing = completeDirectory(store, "1".repeat(64));
+        Path malformed = completeDirectory(store, "2".repeat(64));
+        Files.writeString(malformed.resolve("meta.json"), "{broken");
+        Path oldSchema = completeDirectory(store, "3".repeat(64));
+        Files.writeString(oldSchema.resolve("meta.json"), "{\"formatVersion\":1,\"warnings\":[\"old text\"]}");
+        Path invalid = completeDirectory(store, "4".repeat(64));
+        Files.writeString(invalid.resolve("meta.json"), "{\"formatVersion\":3}");
+        Path wrongDirectory = completeDirectory(store, "5".repeat(64));
+        Files.copy(store.dirFor(valid).resolve("meta.json"), wrongDirectory.resolve("meta.json"));
+
+        assertEquals(List.of(valid), store.listKeys());
+        // Scanning is read-only: an unreadable entry is skipped, not silently deleted.
+        for (Path residue : List.of(missing, malformed, oldSchema, invalid, wrongDirectory)) {
+            assertTrue(Files.isDirectory(residue));
+        }
+        assertEquals(List.of(valid), store.listKeys());
+    }
+
+    @Test
+    void listKeysStillFindsRecognizableOldFormatForDeletion() throws IOException {
+        PreviewCacheStore store = store();
+        PreviewCacheKey current = keyFor(mhtFile());
+        PreviewCacheKey old = new PreviewCacheKey(current.absolutePath(), current.size(), current.mtime(),
+                "old-rules-fingerprint", PreviewCacheMeta.FORMAT_VERSION - 1);
+        store.write(old, metaFor(old, List.of()), imagesWriter());
+        assertEquals(List.of(old), store.listKeys());
+    }
+
+    private Path completeDirectory(PreviewCacheStore store, String name) throws IOException {
+        Path dir = Files.createDirectories(store.root().resolve(name));
+        Files.createFile(dir.resolve(".complete"));
+        return dir;
+    }
+
+    @Test
     void listKeysAndDeleteAll() throws IOException {
         PreviewCacheStore store = store();
         Path f1 = mhtFile();

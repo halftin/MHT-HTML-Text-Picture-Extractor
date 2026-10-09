@@ -74,6 +74,23 @@ class PreviewCacheLifecycleTest {
     }
 
     @Test
+    void invalidResidueDoesNotInterruptParameterOrRemovalCleanup() throws IOException {
+        Path missing = Files.createDirectories(root.resolve("0".repeat(64)));
+        Files.createFile(missing.resolve(".complete"));
+        writeCache(keyA, mhtA);
+        writeCache(keyB, mhtB);
+        assertEquals(1, lifecycle.onParamsChanged(mhtA.toString()));
+        assertFalse(Files.exists(store.dirFor(keyA)));
+        assertTrue(store.load(keyB).isPresent());
+        assertEquals(1, lifecycle.onItemsRemoved(List.of(mhtB.toString())));
+        assertFalse(Files.exists(store.dirFor(keyB)));
+        lifecycle.onShutdown(() -> { });
+        try (var entries = Files.list(root)) {
+            assertEquals(0, entries.count());
+        }
+    }
+
+    @Test
     void paramsChangedAlsoDeletesStaleFingerprintDirsOfSameFile() throws IOException {
         writeCache(keyA, mhtA);
         PreviewCacheKey stale = new PreviewCacheKey(keyA.absolutePath(), keyA.size(), keyA.mtime(),
