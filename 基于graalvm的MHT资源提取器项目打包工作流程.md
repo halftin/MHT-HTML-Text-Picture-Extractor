@@ -2,7 +2,7 @@
 
 > **目标**: 将 JavaFX 25 + Maven 项目编译为 GraalVM Native Image 绿色免安装 Windows EXE。
 > **适用场景**: 从 Git 拉取代码后，在任何 Windows 设备上完成打包。
-> **最后更新**: 2026-10-05 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
+> **最后更新**: 2026-10-09 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
 > **项目版本**: 以 `pom.xml` 的 `<version>` 为**唯一来源**（当前 `3.0.0`）。所有构建脚本（`build-native.cmd` / `.ps1` / `.sh` / `run-native-image.bat`）均从 pom 动态读取，**禁止**在脚本里硬编码 jar 名（历史问题：曾写死 `mhtExtractor-2.3.1.jar` / `-2.2-SNAPSHOT.jar`，与 pom 不一致导致打包找不到 jar）。
 
 > ## 📌 状态更新（2026-09-27 实测）—— **以脚本与 CLAUDE.md 为准**
@@ -2438,3 +2438,22 @@ static 配方不生成启动器（不需要）。
 **已知不在本表覆盖范围内的项**（详见根目录《遗留目标与未完成事项.md》）：
 截图链（JVM vs native 像素对比）、真实 OS 级鼠标交互、`NATIVE_RECIPE=static` 配方的最近一轮复跑、
 以及"英文运行日志中文字符数 = 0"的日志级测量。
+
+### 10.12 GUI 随包后端（P4-17）
+
+先用 `NATIVE_TARGET=headless` 构建 `MhtExtractorBackend.exe`，再构建 JavaFX 发行目录。
+无头目标应选无 JavaFX 的 Oracle GraalVM；NIK Full 的内置 JavaFX feature 会向分析报告加入
+JavaFX 类型，不能通过无头产物的零 JavaFX 断言。
+
+JavaFX dist 步骤从 `BACKEND_DIST_DIR` 复制后端 exe 到 GUI exe 同目录。
+该变量默认 `H:\TEST\mht\p4-3-headless-dist`；发布时应显式指向本次、同一构建标识的无头产物目录。
+缺少后端时构建会给出警告，GUI 启动后显示后端不可用并保留进程内功能。
+后端的 metadata/reports 是验收旁证，不必复制进 JavaFX 发行目录。
+
+`启动.cmd` / `Launch.cmd` 先进入发行目录再启动 GUI；GUI 自行拉起后端、独占 stdio 管道并完成握手，
+启动脚本不另起脱管后端。`-Dmht.backend.executable=<path>` 可覆盖伴随 exe 路径。
+协议与确认生命周期见 `src/main/java/com/mhtextractor/backend/IPC.md`。
+
+native 卡片冒烟产物目录由 `NATIVE_SMOKE_DIR` 覆盖，默认 `H:\TEST\mht\native-card-smoke`。
+本机验证时显式设置 `JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=H:\TEST\temp`，并将 `TEMP` / `TMP`、
+`OUTPUT_DIR`、`LOG_DIR` 和 `NATIVE_SMOKE_DIR` 指向 H 盘。
