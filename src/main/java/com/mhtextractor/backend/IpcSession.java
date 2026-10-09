@@ -52,7 +52,8 @@ final class IpcSession implements AutoCloseable {
 
     IpcSession(ObjectMapper json) throws IOException {
         this.json = json;
-        confirmations = new IpcConfirmations(json, this::dispatch, data -> emit("confirmationRequested", data));
+        confirmations = new IpcConfirmations(json, this::dispatch, data -> emit("confirmationRequested", data),
+                data -> emit("confirmationExpired", data));
         files = new IpcFiles(json);
         previews = PreviewSession.create(files.root.resolve("preview-cache"));
         previewService = new PreviewService(previews.lifecycle());

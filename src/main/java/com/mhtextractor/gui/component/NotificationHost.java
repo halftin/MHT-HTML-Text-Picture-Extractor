@@ -250,9 +250,19 @@ public final class NotificationHost {
      * @param onDecision 用户选择（确定 = true）；卡片被顶替或宿主不可用时按 false 交付
      */
     public static void confirm(Node anchor, String message, FontAwesomeSolid icon, Consumer<Boolean> onDecision) {
+        confirmCancellable(anchor, message, icon, onDecision);
+    }
+
+    /** Cancellation belongs to this card only; an expired IPC card must never dismiss its replacement. */
+    public static Runnable confirmCancellable(Node anchor, String message, FontAwesomeSolid icon,
+                                              Consumer<Boolean> onDecision) {
+        java.util.concurrent.atomic.AtomicBoolean delivered = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicReference<Runnable> dismiss = new java.util.concurrent.atomic.AtomicReference<>();
         withHost(anchor, h -> {
+            if (delivered.get()) return;
             Notification ntf = h.card(message, icon, null);
             Consumer<Boolean> deliver = accepted -> {
+                if (!delivered.compareAndSet(false, true)) return;
                 h.pendingDecision = null;
                 if (onDecision != null) {
                     onDecision.accept(accepted);
@@ -267,13 +277,24 @@ public final class NotificationHost {
             //    若先登记 pendingDecision，等于新卡片一上来就被自己取消掉（实测踩过）
             h.showModal(ntf);
             h.pendingDecision = deliver;
+            dismiss.set(() -> {
+                if (h.pendingDecision == deliver) h.decide(deliver, false);
+            });
         }, () -> {
             // 宿主解析不出来（锚点没挂场景）：绝不能静默——调用方可能正阻塞等待这个决定
             log.error(Texts.msg("log.notificationhost.04", "confirm"));
-            if (onDecision != null) {
+            if (delivered.compareAndSet(false, true) && onDecision != null) {
                 onDecision.accept(false);
             }
         });
+        return () -> {
+            Runnable task = () -> {
+                Runnable cancel = dismiss.get();
+                if (cancel != null) cancel.run();
+                else if (delivered.compareAndSet(false, true) && onDecision != null) onDecision.accept(false);
+            };
+            if (Platform.isFxApplicationThread()) task.run(); else Platform.runLater(task);
+        };
     }
 
     // ==================== 内部实现 ====================

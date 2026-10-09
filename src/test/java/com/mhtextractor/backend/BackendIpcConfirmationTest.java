@@ -248,5 +248,16 @@ class BackendIpcConfirmationTest {
         confirmations.disconnect();
         assertNull(pending.await());
         assertNull(confirmations.confirm(new ConfirmRequest("after.close", Map.of(), List.of("yes"), 0)).await());
+        var brokenExpiry = new IpcConfirmations(JSON, Runnable::run, data2 -> { }, data2 -> {
+            throw new IllegalStateException("broken expiry notification");
+        });
+        var released = brokenExpiry.confirm(new ConfirmRequest("expiry.failure", Map.of(), List.of("yes"), 1));
+        assertThrows(IllegalStateException.class, released::await);
+        var cancellation = new java.util.concurrent.CompletableFuture<String>();
+        Thread.ofPlatform().daemon(true).start(() -> {
+            try { cancellation.complete(released.await()); }
+            catch (Throwable error) { cancellation.completeExceptionally(error); }
+        });
+        assertNull(cancellation.get(2, TimeUnit.SECONDS), "Expiry must complete cancellation even if notification delivery fails");
     }
 }

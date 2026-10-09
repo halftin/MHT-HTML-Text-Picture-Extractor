@@ -5,6 +5,7 @@ import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
+import com.mhtextractor.gui.component.BackendConnectionPresenter;
 import com.mhtextractor.gui.controller.AgentExercise;
 import com.mhtextractor.gui.controller.FeatureExercise;
 import com.mhtextractor.gui.controller.MainController;
@@ -101,6 +102,8 @@ public final class TestMain extends Application {
         primaryStage.setMinHeight(650);
         primaryStage.centerOnScreen();
         primaryStage.show();
+        BackendConnectionPresenter.install(primaryStage,
+                (javafx.scene.control.Label) scene.lookup("#backendStatusLabel"), shell);
 
         String agentDelay = System.getProperty("agent.exit.delay");
         if (agentDelay != null) {

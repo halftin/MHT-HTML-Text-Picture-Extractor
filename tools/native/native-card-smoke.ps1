@@ -43,6 +43,7 @@ if ([string]::IsNullOrWhiteSpace($Repo)) {
     if (-not (Test-Path (Join-Path $Repo 'build-native.cmd'))) { $Repo = (Get-Location).Path }
 }
 if (-not (Test-Path (Join-Path $Repo 'build-native.cmd'))) { Say "[smoke] [ERROR] cannot locate repo root (no build-native.cmd); pass -Repo"; exit 1 }
+if ([string]::IsNullOrWhiteSpace($OutDir) -and $env:NATIVE_SMOKE_DIR) { $OutDir = $env:NATIVE_SMOKE_DIR }
 if ([string]::IsNullOrWhiteSpace($OutDir))    { $OutDir    = Join-Path $Repo '.claude-work\native-card-smoke' }
 if ([string]::IsNullOrWhiteSpace($JavaFxLib)) { $JavaFxLib = Join-Path $Repo 'target\lib' }
 if ([string]::IsNullOrWhiteSpace($JfxDlls))   { $JfxDlls   = Join-Path $Repo 'target\jfx-dlls' }
@@ -85,7 +86,7 @@ if ([string]::IsNullOrWhiteSpace($libJars)) {
     $libJars = (Get-Content -LiteralPath $depsFile -Raw).Trim()
 }
 
-$probeOut = Join-Path $Repo 'tools\probes\out'
+$probeOut = Join-Path $OutDir 'probe-classes'
 if (-not (Test-Path $probeOut)) { New-Item -ItemType Directory -Path $probeOut -Force | Out-Null }
 $mp = (Get-ChildItem $JavaFxLib -Filter 'javafx-*-win.jar' | ForEach-Object { $_.FullName }) -join ';'
 if ([string]::IsNullOrWhiteSpace($mp)) { Say "[smoke] [ERROR] no javafx-*-win.jar in $JavaFxLib"; exit 1 }
@@ -144,7 +145,7 @@ public static class NativeCardSmokeProcess {
 '@
 }
 # File redirection drains both streams concurrently; no pipe read can block the deadline.
-$proc = Start-Process -FilePath $exe -WorkingDirectory $OutDir -NoNewWindow -PassThru `
+$proc = Start-Process -FilePath $exe -WorkingDirectory $OutDir -WindowStyle Hidden -PassThru `
     -RedirectStandardOutput $outLog -RedirectStandardError ($outLog + '.err')
 try {
     $handle = $proc.Handle # Retain the handle even if the probe exits immediately.

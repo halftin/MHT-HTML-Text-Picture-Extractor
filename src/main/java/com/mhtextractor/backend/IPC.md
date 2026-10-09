@@ -86,7 +86,7 @@ P4-2b 方法次之，并追加 `hello`。所有 `--serve` 会话必须先完成 
 默认未重定向的 stderr 改为继承诊断流，禁止合并进 stdout。
 成功后返回 `Connection`：identity、不可变能力集、确认往返标志以及独占的输入/输出流。
 调用方持续消费业务 response/error/event，`close()` 发送 EOF，超时则强制清理进程。
-**本批 GUI 集成未做**；native EXE 的重建/运行需另验。
+P4-17 JavaFX 启动器通过 `app.BackendSession` 复用此启动器；native EXE 的重建/运行需另验。
 无头打包输入复制上述过滤后的属性文件，headless 元数据仅增补 tracing agent 实际记录的资源 glob；
 既有七份 GUI 元数据不变。
 
@@ -143,7 +143,15 @@ P4-3 实际交付为独立无头 native 构建；本处曾误归 P4-3 的确认�
   借用流由调用方关闭；异常后仍阻塞 readLine 的输入线程为 daemon，不阻碍进程自然退出。
   真实管道测试要求确认在途时 EOF 后 **3 秒内自然退出**，并断言无残留进程/非 daemon worker/读线程。
 
-本批 **GUI 集成未做**；JavaFX 前端尚未接入跨进程确认应答。native EXE 重建与上述路径运行另验。
+P4-17 JavaFX 前端已接入确认卡和应答。新增可选事件 `confirmationExpired.data={confirmationId}`：
+后端期限到达时先发此事件，再释放等待者，前端收卡、提示并复位；旧客户端可以忽略此扩展事件。
+前端同时保留当地计时（期限加 250 ms 传输余量，至多 30 s 加余量）与活动终态收卡兜底。
+断连清除本会话在途卡，卡片顶替回送 `actionKey=null`；确认卡取消句柄仅关闭其所属卡片。
+启动默认查找 GUI exe 同目录的 `MhtExtractorBackend.exe`，JVM jar 查找 jar 同目录，
+散装 classes 查找工作目录；`-Dmht.backend.executable=<path>` 可覆盖。拉起命令为
+`<exe> -Djava.io.tmpdir=<GUI tmpdir> --serve --locale <GUI language>`。
+握手必须声明完整后端能力集且确认往返标志为 true。失败显示状态与警告 toast；
+现有列表、预览、提取仍走进程内 app 端口。native EXE 重建与上述路径运行另验。
 `BackendIpcConfirmationTest` 使用真实无头子进程、深度 101 的两个兄弟分支，比较 IPC/in-process 的
 确认次数与逐文件结果：确定询问一次，取消/不回答询问两次，排除“静默按取消”的伪往返。
 CG-1 故意不答；CG-2 在看到确认帧后关客户端输入，并用自然返回的测试宿主检查线程，避免
@@ -182,6 +190,7 @@ CG-1 故意不答；CG-2 在看到确认帧后关客户端输入，并用自然�
 | `extractionProgress` | `{generation,overall}`：进度 0–1；每进入更大的整数百分比桶才发，最多 **101** 帧/任务 |
 | `extractionTerminal` | 与 extract 结果相同的统计摘要，**不含 resultsFile 或 files 数组**；每任务一次 |
 | `confirmationRequested` | `{confirmationId,key,namedParams,actionKeys,defaultAction,timeoutMs}`；不传预渲染文案 |
+| `confirmationExpired` | `{confirmationId}`；P4-17 可选扩展，到期取消后前端收卡与提示 |
 
 ## 批量文件、安全与生命周期
 

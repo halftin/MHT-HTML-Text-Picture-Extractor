@@ -29,6 +29,10 @@ REM  always parses it correctly.
 REM ============================================================================
 setlocal enableextensions
 
+REM GUI starts its companion and owns both stdio pipes; do not detach a backend here.
+REM Root the GUI working directory in the distribution when invoked from elsewhere.
+cd /d "%~dp0"
+
 set "STAGE=%ProgramData%\MhtExtractor\native-dlls"
 if not exist "%STAGE%" mkdir "%STAGE%" >nul 2>&1
 if not exist "%STAGE%" set "STAGE=%PUBLIC%\MhtExtractor\native-dlls"

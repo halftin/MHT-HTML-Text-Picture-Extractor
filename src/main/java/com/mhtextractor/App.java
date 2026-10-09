@@ -5,6 +5,7 @@ import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
+import com.mhtextractor.gui.component.BackendConnectionPresenter;
 import com.mhtextractor.i18n.I18n;
 import javafx.application.Application;
 import javafx.collections.ListChangeListener;
@@ -91,6 +92,8 @@ public class App extends Application {
         primaryStage.setMinHeight(650);
         primaryStage.centerOnScreen();
         primaryStage.show();
+        BackendConnectionPresenter.install(primaryStage,
+                (javafx.scene.control.Label) scene.lookup("#backendStatusLabel"), shell);
 
         // P7（测试面收口）：本类**不再**有任何测试模式分支。
         // 演练（原 -Dagent.exit.delay）与 GUI 自动化（原 -Dtest.mode=true）都由测试源集的

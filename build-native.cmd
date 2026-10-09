@@ -329,6 +329,16 @@ if errorlevel 1 (
     call :say "      已生成 启动.cmd / Launch.cmd（非 ASCII 路径下的补救；static 配方不需要）"
 )
 :skip_launcher
+REM P4-17: bundle a separately built companion; GUI owns launch order and stdio handshake.
+if not defined BACKEND_DIST_DIR set "BACKEND_DIST_DIR=H:\TEST\mht\p4-3-headless-dist"
+if exist "%BACKEND_DIST_DIR%\MhtExtractorBackend.exe" (
+    copy /Y "%BACKEND_DIST_DIR%\MhtExtractorBackend.exe" "%OUTPUT_DIR%\MhtExtractorBackend.exe" >nul
+    if errorlevel 1 ( call :end 1 & set "RC=1" & set "FAILSTEP=6/6 backend companion copy" & goto :done )
+    call :say "      bundled companion: %BACKEND_DIST_DIR%\MhtExtractorBackend.exe"
+) else (
+    call :say "      [WARNING] Backend companion missing. Build NATIVE_TARGET=headless first, or set BACKEND_DIST_DIR."
+    call :say "                GUI remains available and reports backend unavailable at startup."
+)
 if "%NO_EDITBIN%"=="1" goto :skip_editbin
 if not defined EDITBIN goto :no_editbin
 "%EDITBIN%" /SUBSYSTEM:WINDOWS "%OUTPUT_DIR%\MhtExtractor.exe" >nul 2>&1
@@ -352,12 +362,13 @@ REM   Skip with --skip-card-smoke or NATIVE_CARD_SMOKE=0.
 if /i "%SKIP_CARD_SMOKE%"=="1" goto :card_smoke_skipped
 if /i "%NATIVE_CARD_SMOKE%"=="0" goto :card_smoke_skipped
 call :begin "SMOKE" "native card render smoke"
+if not defined NATIVE_SMOKE_DIR set "NATIVE_SMOKE_DIR=%REPO%\.claude-work\native-card-smoke"
 REM Static JavaFX must not load DLLs from either JDK bin (including inherited duplicates).
 REM Scope the sanitized PATH to the smoke child; dynamic keeps its original environment.
 if /i "%RECIPE%"=="static" (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$bins=@(($env:BUILD_JAVA_HOME+'\bin'),($env:GRAALVM_HOME+'\bin')); $env:PATH=($env:PATH -split ';' | Where-Object { $bins -notcontains $_.Trim().Trim([char]34).TrimEnd('\') }) -join ';'; & ($env:REPO+'\tools\native\native-card-smoke.ps1') -Repo $env:REPO -OutDir ($env:REPO+'\.claude-work\native-card-smoke') -JavaHome $env:BUILD_JAVA_HOME -NativeImage $env:NATIVE_IMAGE -PrismCommonLib $env:PRISM_COMMON_LIB; exit $LASTEXITCODE" >> "%LOG%" 2>&1
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$bins=@(($env:BUILD_JAVA_HOME+'\bin'),($env:GRAALVM_HOME+'\bin')); $env:PATH=($env:PATH -split ';' | Where-Object { $bins -notcontains $_.Trim().Trim([char]34).TrimEnd('\') }) -join ';'; & ($env:REPO+'\tools\native\native-card-smoke.ps1') -Repo $env:REPO -OutDir $env:NATIVE_SMOKE_DIR -JavaHome $env:BUILD_JAVA_HOME -NativeImage $env:NATIVE_IMAGE -PrismCommonLib $env:PRISM_COMMON_LIB; exit $LASTEXITCODE" >> "%LOG%" 2>&1
 ) else (
-powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\tools\native\native-card-smoke.ps1" -Repo "%REPO%" -OutDir "%REPO%\.claude-work\native-card-smoke" -JavaHome "%BUILD_JAVA_HOME%" -NativeImage "%NATIVE_IMAGE%" -PrismCommonLib "%PRISM_COMMON_LIB%" >> "%LOG%" 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\tools\native\native-card-smoke.ps1" -Repo "%REPO%" -OutDir "%NATIVE_SMOKE_DIR%" -JavaHome "%BUILD_JAVA_HOME%" -NativeImage "%NATIVE_IMAGE%" -PrismCommonLib "%PRISM_COMMON_LIB%" >> "%LOG%" 2>&1
 )
 if errorlevel 1 (
     call :end 1

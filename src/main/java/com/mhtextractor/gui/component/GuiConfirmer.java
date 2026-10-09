@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
+import java.util.function.Consumer;
 
 /**
  * 端口确认往返的界面实现（B5-1）：把 {@link Confirmer} 的确认请求渲染为应用内居中确认卡
@@ -59,6 +60,12 @@ public final class GuiConfirmer implements Confirmer {
         return token;
     }
 
+    /** Nonblocking IPC presentation; the caller owns deadlines and the scoped dismissal handle. */
+    public Runnable confirmAsync(ConfirmRequest request, Consumer<String> answer) {
+        return NotificationHost.confirmCancellable(anchor.get(), messageOf(request), iconOf(request), accepted ->
+                answer.accept(accepted && !request.actionKeys().isEmpty() ? request.actionKeys().getFirst() : null));
+    }
+
     /** 文案：预渲染 message 直接展示；否则按 key + 具名参数渲染（键 + 参数的口径与 Notice 一致）。 */
     private static String messageOf(ConfirmRequest request) {
         if (request.message() != null) {
@@ -71,7 +78,16 @@ public final class GuiConfirmer implements Confirmer {
             args[i++] = e.getKey();
             args[i++] = e.getValue();
         }
-        return Texts.get(request.key(), args);
+        String text = Texts.get(request.key(), args);
+        if (RECURSION_KEY.equals(request.key())) {
+            return text + "\n" + Texts.get("alert.recursionDepthContent")
+                    + Texts.get("alert.recursionDepthContinue") + Texts.get("alert.recursionDepthSkip");
+        }
+        if (QUOTA_KEY.equals(request.key())) {
+            return text + Texts.get("import.quotaContinue") + Texts.get("import.quotaStop",
+                    "groups", params.get("accumulatedGroups"), "files", params.get("accumulatedFiles"));
+        }
+        return text;
     }
 
     private static FontAwesomeSolid iconOf(ConfirmRequest request) {

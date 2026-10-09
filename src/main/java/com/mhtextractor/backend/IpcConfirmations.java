@@ -19,6 +19,7 @@ final class IpcConfirmations implements Confirmer {
     private final ObjectMapper json;
     private final Consumer<Runnable> dispatch;
     private final Consumer<ObjectNode> events;
+    private final Consumer<ObjectNode> expirations;
     private final long timeoutMs;
     private final Map<String, Pending> pending = new HashMap<>();
     private final String sessionId = java.util.UUID.randomUUID().toString();
@@ -26,9 +27,15 @@ final class IpcConfirmations implements Confirmer {
     private boolean disconnected;
 
     IpcConfirmations(ObjectMapper json, Consumer<Runnable> dispatch, Consumer<ObjectNode> events) {
+        this(json, dispatch, events, data -> { });
+    }
+
+    IpcConfirmations(ObjectMapper json, Consumer<Runnable> dispatch, Consumer<ObjectNode> events,
+                     Consumer<ObjectNode> expirations) {
         this.json = json;
         this.dispatch = dispatch;
         this.events = events;
+        this.expirations = expirations;
         String configured = System.getProperty("mht.ipc.confirmTimeoutMs", String.valueOf(DEFAULT_TIMEOUT_MS));
         timeoutMs = Long.parseLong(configured);
         if (timeoutMs <= 0) throw new IllegalArgumentException("mht.ipc.confirmTimeoutMs must be positive");
@@ -65,7 +72,7 @@ final class IpcConfirmations implements Confirmer {
             throw new IllegalArgumentException("Answer must be an offered action or null");
         }
         if (System.nanoTime() - token.started >= TimeUnit.MILLISECONDS.toNanos(token.limit)) {
-            complete(token, null);
+            expire(token);
             return false;
         }
         return complete(token, action);
@@ -74,6 +81,18 @@ final class IpcConfirmations implements Confirmer {
     private synchronized boolean complete(Pending token, String action) {
         if (!pending.remove(token.id, token)) return false;
         return token.answer.complete(action);
+    }
+
+    private void expire(Pending token) {
+        synchronized (this) {
+            if (!pending.remove(token.id, token)) return;
+        }
+        // Queue expiry before releasing the worker, so it precedes any next card / activity terminal.
+        try {
+            dispatch.accept(() -> expirations.accept(json.createObjectNode().put("confirmationId", token.id)));
+        } finally {
+            token.answer.complete(null); // A broken expiry notification must still release its waiter.
+        }
     }
 
     synchronized void disconnect() {
@@ -103,7 +122,7 @@ final class IpcConfirmations implements Confirmer {
                 long remaining = TimeUnit.MILLISECONDS.toNanos(limit) - (System.nanoTime() - started);
                 return answer.get(Math.max(0, remaining), TimeUnit.NANOSECONDS);
             } catch (TimeoutException e) {
-                cancel();
+                expire(this);
                 return answer.join(); // An answer that won the race remains the sole delivered decision.
             } catch (java.util.concurrent.ExecutionException e) {
                 throw new IllegalStateException(e.getCause());

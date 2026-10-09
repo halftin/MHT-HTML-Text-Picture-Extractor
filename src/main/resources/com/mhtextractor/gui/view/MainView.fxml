@@ -224,6 +224,7 @@
             <!-- 进度条 -->
             <ProgressBar fx:id="progressBar" progress="0" maxWidth="Infinity" visible="false"/>
             <Label fx:id="statusLabel" text="%main.statusReady" styleClass="text-small"/>
+            <Label id="backendStatusLabel" text="%backend.status.connecting" styleClass="text-small text-muted"/>
 
             <!-- 完成后操作 -->
             <ToggleSwitch fx:id="extractCheckedOnlyCheck" text="%main.extractCheckedOnly"/>

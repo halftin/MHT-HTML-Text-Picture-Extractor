@@ -16,8 +16,10 @@ public final class BackendLauncherWireFixture {
         input.readLine();
         BackendIdentity identity = BackendIdentity.current();
         var frame = IpcTestClient.JSON.createObjectNode().put("v", 1).put("type", "response").put("id", "launcher-hello");
-        frame.putObject("result").put("kind", "welcome").put("protocolVersion", identity.protocolVersion())
-                .put("version", identity.version()).put("buildId", "spoofed-build").put("confirmationRoundTrip", false)
+        frame.putObject("result").put("kind", "welcome").put("protocolVersion",
+                        arguments[0].equals("protocol") ? identity.protocolVersion() + 1 : identity.protocolVersion())
+                .put("version", identity.version()).put("buildId", arguments[0].equals("spoof") ? "spoofed-build" : identity.buildId())
+                .put("confirmationRoundTrip", arguments[0].equals("capabilities"))
                 .putArray("capabilities").add("workspace");
         System.out.println(frame);
         while (input.readLine() != null) { }
