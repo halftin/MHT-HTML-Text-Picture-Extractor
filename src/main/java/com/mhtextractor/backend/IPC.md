@@ -147,8 +147,9 @@ P4-17 JavaFX 前端已接入确认卡和应答。新增可选事件 `confirmatio
 后端期限到达时先发此事件，再释放等待者，前端收卡、提示并复位；旧客户端可以忽略此扩展事件。
 前端同时保留当地计时（期限加 250 ms 传输余量，至多 30 s 加余量）与活动终态收卡兜底。
 断连清除本会话在途卡，卡片顶替回送 `actionKey=null`；确认卡取消句柄仅关闭其所属卡片。
-启动默认查找 GUI exe 同目录的 `MhtExtractorBackend.exe`，JVM jar 查找 jar 同目录，
-散装 classes 查找工作目录；`-Dmht.backend.executable=<path>` 可覆盖。拉起命令为
+启动默认查找发行目录下的 `Backend\MhtExtractorBackend.exe`（P4-21 前后端分包）；旧发行包的
+根目录扁平布局仍兼容定位，JVM jar 查找 jar 同目录、散装 classes 查找工作目录；
+`-Dmht.backend.executable=<path>` 可覆盖。拉起命令为
 `<exe> -Djava.io.tmpdir=<GUI tmpdir> --serve --locale <GUI language>`。
 握手必须声明完整后端能力集且确认往返标志为 true。失败显示状态与警告 toast；
 现有列表、预览、提取仍走进程内 app 端口。native EXE 重建与上述路径运行另验。

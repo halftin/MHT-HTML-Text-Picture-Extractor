@@ -2445,13 +2445,19 @@ static 配方不生成启动器（不需要）。
 无头目标应选无 JavaFX 的 Oracle GraalVM；NIK Full 的内置 JavaFX feature 会向分析报告加入
 JavaFX 类型，不能通过无头产物的零 JavaFX 断言。
 
-JavaFX dist 步骤从 `BACKEND_DIST_DIR` 复制后端 exe 到 GUI exe 同目录。
+JavaFX dist 步骤从 `BACKEND_DIST_DIR` 复制后端 exe 到 **`dist\Backend\`**（P4-21 前后端分包：
+前端 `MhtExtractor.exe` 与 JavaFX/VC++ DLL 留在发行目录根，后端独立放在 `Backend\` 子目录）。
 该变量默认 `H:\TEST\mht\p4-3-headless-dist`；发布时应显式指向本次、同一构建标识的无头产物目录。
-缺少后端时构建会给出警告，GUI 启动后显示后端不可用并保留进程内功能。
-后端的 metadata/reports 是验收旁证，不必复制进 JavaFX 发行目录。
+缺少后端时构建会给出警告，`Backend\` 缺失，GUI 启动后显示后端不可用并保留进程内功能。
+构建末尾用 `tools/native/assert-dist-layout.ps1` 断言该布局（根目录不得出现后端 exe；
+dynamic 配方另要求 5 个 JavaFX DLL 在根）。后端的 metadata/reports 是验收旁证，不必复制进发行目录。
 
-`启动.cmd` / `Launch.cmd` 先进入发行目录再启动 GUI；GUI 自行拉起后端、独占 stdio 管道并完成握手，
-启动脚本不另起脱管后端。`-Dmht.backend.executable=<path>` 可覆盖伴随 exe 路径。
+`启动.cmd` / `Launch.cmd` 先进入发行目录再启动 GUI；启动脚本不另起脱管后端。
+⚠️ **P4-20 起（选项 B）**：P5 接线前 GUI **不启动**后端（`App` 不调用 `BackendConnectionPresenter.install`），
+`Backend\` 目前只是交付形态的一部分、运行时不加载；`BackendSession`/`BackendConnectionPresenter`/
+`tools/ipc/verify-gui-backend.ps1` 保留供 P5 生产化（届时需放开 `IpcFiles` 的 `H:/TEST/temp` 与
+`H:/TEST/mht` 开发期约束）。P4-20 前 GUI 自行拉起后端、独占 stdio 管道并完成握手。
+`-Dmht.backend.executable=<path>` 可覆盖后端 exe 路径。
 协议与确认生命周期见 `src/main/java/com/mhtextractor/backend/IPC.md`。
 
 native 卡片冒烟产物目录由 `NATIVE_SMOKE_DIR` 覆盖，默认 `H:\TEST\mht\native-card-smoke`。

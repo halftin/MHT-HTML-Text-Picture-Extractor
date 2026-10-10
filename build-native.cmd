@@ -331,13 +331,18 @@ if errorlevel 1 (
 :skip_launcher
 REM P4-17: bundle a separately built companion; GUI owns launch order and stdio handshake.
 if not defined BACKEND_DIST_DIR set "BACKEND_DIST_DIR=H:\TEST\mht\p4-3-headless-dist"
+REM P4-21: the backend ships in its own subfolder; frontend exe + JavaFX/VC++ DLLs stay in the root.
 if exist "%BACKEND_DIST_DIR%\MhtExtractorBackend.exe" (
-    copy /Y "%BACKEND_DIST_DIR%\MhtExtractorBackend.exe" "%OUTPUT_DIR%\MhtExtractorBackend.exe" >nul
+    REM P4-21 upgrade hygiene: drop the pre-P4-21 flat copy and any stale Backend dir first.
+    if exist "%OUTPUT_DIR%\MhtExtractorBackend.exe" del /Q "%OUTPUT_DIR%\MhtExtractorBackend.exe" >nul 2>&1
+    if exist "%OUTPUT_DIR%\Backend" rmdir /S /Q "%OUTPUT_DIR%\Backend" >nul 2>&1
+    mkdir "%OUTPUT_DIR%\Backend"
+    copy /Y "%BACKEND_DIST_DIR%\MhtExtractorBackend.exe" "%OUTPUT_DIR%\Backend\MhtExtractorBackend.exe" >nul
     if errorlevel 1 ( call :end 1 & set "RC=1" & set "FAILSTEP=6/6 backend companion copy" & goto :done )
-    call :say "      bundled companion: %BACKEND_DIST_DIR%\MhtExtractorBackend.exe"
+    call :say "      bundled companion: %BACKEND_DIST_DIR%\MhtExtractorBackend.exe -> Backend\"
 ) else (
     call :say "      [WARNING] Backend companion missing. Build NATIVE_TARGET=headless first, or set BACKEND_DIST_DIR."
-    call :say "                GUI remains available and reports backend unavailable at startup."
+    call :say "                Backend\ will be absent; the GUI reports backend unavailable."
 )
 if "%NO_EDITBIN%"=="1" goto :skip_editbin
 if not defined EDITBIN goto :no_editbin
@@ -347,6 +352,17 @@ goto :skip_editbin
 :no_editbin
 call :say "      [WARN] 未找到 editbin.exe，EXE 保持控制台子系统（双击会带黑窗）"
 :skip_editbin
+REM P4-21: assert the frontend/backend split (backend under Backend\, never in the root).
+powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\tools\native\assert-dist-layout.ps1" -Dist "%OUTPUT_DIR%" -Recipe "%RECIPE%" >> "%LOG%" 2>&1
+if errorlevel 1 (
+    call :end 1
+    call :say "      [ERROR] dist layout assertion FAILED - backend must live in Backend\, not the root."
+    set "RC=1"
+    set "FAILSTEP=6/6 dist layout"
+    set "STATUS=FAILED"
+    goto :done
+)
+call :say "      布局：前端 exe + DLL 在根目录；后端在 Backend\"
 call :end 0
 set "STATUS=OK"
 set "RC=0"
