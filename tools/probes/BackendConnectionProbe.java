@@ -44,17 +44,20 @@ public final class BackendConnectionProbe extends Application {
         root = Files.createTempDirectory(Path.of("H:/TEST/mht"), "p4-17-gui-");
         System.setProperty("mht.backend.executable", root.resolve("missing.exe").toString());
         I18n.setLocale(I18n.parseLocale(System.getProperty("probe.locale", "en_US")));
-        // Exercise the actual production launcher first: missing backend must leave its full UI alive.
+        // 选项 B（2026-10-10 用户拍板）：P5 接线前 GUI 不启动随包后端 ——
+        // production launcher 必须保持窗口可用，且**不显示**后端状态、**不弹**后端不可用噪音。
         new App().start(stage);
         Platform.setImplicitExit(false);
         Thread.ofPlatform().name("backend-gui-probe").daemon(true).start(() -> {
             try {
-                await(() -> ((Label) stage.getScene().lookup("#backendStatusLabel")).getText()
-                        .equals(Texts.get("backend.status.unavailable")), 15);
+                await(() -> !((Label) stage.getScene().lookup("#backendStatusLabel")).isVisible(), 15);
                 fx(() -> {
                     check("production-missing-backend-state", stage.isShowing());
                     check("production-local-feature-ready", !stage.getScene().lookup("#textModeToggle").isDisabled());
-                    check("production-readable-toast", !stage.getScene().getRoot().lookupAll(".notification").isEmpty());
+                    check("production-backend-label-hidden",
+                            !((Label) stage.getScene().lookup("#backendStatusLabel")).isVisible());
+                    check("production-no-backend-toast",
+                            stage.getScene().getRoot().lookupAll(".notification").isEmpty());
                     stage.hide();
                     status = new Label();
                     shell = new StackPane(new VBox(status));

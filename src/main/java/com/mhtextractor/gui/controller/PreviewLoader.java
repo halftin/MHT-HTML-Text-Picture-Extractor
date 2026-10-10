@@ -92,6 +92,10 @@ public final class PreviewLoader {
                 host.imageHintLabel().setText(Texts.get("preview.parseFailed") + failed.detail());
                 host.imageHintLabel().setVisible(true);
                 host.previewEffectButton().setDisable(false);
+                // 失败也不再静默：右上角 toast（与区域 R2/R3/R4 的提醒同一入口）。
+                com.mhtextractor.gui.component.NotificationHost.toastWarning(host.statusLabel(),
+                        Texts.get("preview.parseFailed") + failed.detail(),
+                        org.kordamp.ikonli.fontawesome5.FontAwesomeSolid.EXCLAMATION_TRIANGLE);
             }
         }
     }

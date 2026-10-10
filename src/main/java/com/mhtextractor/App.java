@@ -5,7 +5,6 @@ import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
-import com.mhtextractor.gui.component.BackendConnectionPresenter;
 import com.mhtextractor.i18n.I18n;
 import javafx.application.Application;
 import javafx.collections.ListChangeListener;
@@ -92,8 +91,15 @@ public class App extends Application {
         primaryStage.setMinHeight(650);
         primaryStage.centerOnScreen();
         primaryStage.show();
-        BackendConnectionPresenter.install(primaryStage,
-                (javafx.scene.control.Label) scene.lookup("#backendStatusLabel"), shell);
+        // 选项 B（2026-10-10 用户拍板）：P5 接线前不启动随包后端。
+        // 后端当前仍带开发期约束（IpcFiles 要求 java.io.tmpdir 在 H:/TEST/temp 下、
+        // 且输入/输出白名单为 H:/TEST/mht），真实环境下必然启动失败并弹"后端不可用"噪音；
+        // GUI 业务也仍走进程内 app。相关类/探针/脚本保留，供 P5 生产化接线。
+        var backendStatus = (javafx.scene.control.Label) scene.lookup("#backendStatusLabel");
+        if (backendStatus != null) {
+            backendStatus.setVisible(false);
+            backendStatus.setManaged(false);
+        }
 
         // P7（测试面收口）：本类**不再**有任何测试模式分支。
         // 演练（原 -Dagent.exit.delay）与 GUI 自动化（原 -Dtest.mode=true）都由测试源集的

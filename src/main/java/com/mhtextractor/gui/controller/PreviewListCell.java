@@ -62,6 +62,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
     private final Region bottomLine = new Region();
     private final Region intoOverlay = new Region();
     private final FontIcon arrowIcon = new FontIcon();
+    private final FontIcon statusIcon = new FontIcon();
     private PreviewItem boundItem;
     /**
      * 当前单元格与条目勾选状态的联动监听器（会话 18 · E1.3a）。
@@ -97,6 +98,10 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         // 程序化 setIconColor 会被样式表覆盖（黑底上变深色不可见）
         arrowIcon.setStyle("-fx-icon-color: white;");
         arrowLabel.setGraphic(arrowIcon);
+        // 状态列改用 Ikonli 图标：原 emoji（⏳/✅/⚠️/❌）在主题字体下会把变体选择符
+        // U+FE0F 渲染成方框（⚠️ → 三角+方框），与折叠箭头弃用 ▾/▸ 同因。
+        statusIcon.setIconSize(14);
+        statusLabel.setGraphic(statusIcon);
         badgeLabel.setMinWidth(BADGE_COL_WIDTH);
         badgeLabel.setPrefWidth(BADGE_COL_WIDTH);
         badgeLabel.setMaxWidth(BADGE_COL_WIDTH);
@@ -245,6 +250,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         // 组行字体加粗 + 白字（拍板）；-fx-text-background-color 不跨节点继承，须直接作用于 Label
         nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
         statusLabel.setText("");
+        statusLabel.setGraphic(null);
         // 选中态灰色高亮（拍板）：inline 深蓝会覆盖默认选中色，需按选中状态显式切换
         boolean isSelected = actions.isRowSelected(g);
         setStyle(isSelected ? GROUP_ROW_SELECTED_STYLE : GROUP_ROW_STYLE);
@@ -292,11 +298,13 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         posLabel.setText(pos + ".");
         nameLabel.setPadding(inGroup ? new Insets(0, 0, 0, 16) : Insets.EMPTY);
         nameLabel.setText(it.name);
-        statusLabel.setText(switch (it.status) {
-            case WAITING -> "⏳";
-            case READY -> "✅";
-            case EMPTY -> "⚠️";
-            case FAILED -> "❌";
+        statusLabel.setText("");
+        statusLabel.setGraphic(statusIcon);
+        statusIcon.setIconLiteral(switch (it.status) {
+            case WAITING -> "fas-hourglass-half";
+            case READY -> "fas-check-circle";
+            case EMPTY -> "fas-exclamation-triangle";
+            case FAILED -> "fas-times-circle";
         });
         String badge = it.badge;
         if (badge == null) {
