@@ -693,6 +693,26 @@
     },
     {
       "type": "sun.util.resources.cldr.CalendarData"
+    },
+    {
+      "type": "com.mhtextractor.model.ExtractWarning",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.String",
+            "java.util.Map"
+          ]
+        },
+        {
+          "name": "args",
+          "parameterTypes": []
+        },
+        {
+          "name": "key",
+          "parameterTypes": []
+        }
+      ]
     }
   ],
   "resources": [
