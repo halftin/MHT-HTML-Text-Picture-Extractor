@@ -4,7 +4,7 @@
 > **最后更新：2026-10-05**（分支 `2.5-beta`，项目版本 `3.0.0`，版本号以 `pom.xml` 为唯一来源）。
 > 文档集**共四份**：**本文件**（工程约定）+《基于graalvm的MHT资源提取器项目打包工作流程.md》（打包手册）+
 > 《遗留目标与未完成事项.md》（尚未收口的目标与边界）+《UI可切换重构方案.md》（UI 可切换 / 无头后端重构，2026-10-05 定稿）。
-> **推送口径（2026-10-05）**：`git push` 时**只有本文件与打包手册**随仓库分发；《遗留目标与未完成事项.md》与《UI可切换重构方案.md》是**临时文档**（本地保留、已 `.gitignore`、不入远程仓库）。
+> **推送口径（2026-10-12 修订）**：**不做远程推送 —— 只提交到本地仓库**（用户 2026-10-12 明确要求；`379d532` 是最后一次 push）。若确需 `git push`（必须**用户显式要求**），**只有本文件与打包手册**随仓库分发；《遗留目标与未完成事项.md》与《UI可切换重构方案.md》是**临时文档**（本地保留、已 `.gitignore`、不入远程仓库）。
 > 其余历史文档已删除，需要追溯请看 git 历史。
 
 ---
@@ -408,6 +408,8 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 - **成本 ≈ 每轮思考 token × 轮数**（实测：14 项 / 540 s 的 `low` 批 ≈ 5 个 5h 额度点；1 轮最小任务 ≈ 0 点）→ **长批 + 高强度是最贵组合**；不要因为"改动大"就升档。
 - 强度不够时优先 **`resume_thread` 同线程升档**（模型标记支持运行中改强度，且不重交启动税），而不是重开一批。
 - 插件侧的自治上限 `maxEffortAllowed`（默认 `xhigh`）在**机制上**兜住"升档漂移"：越过它必须显式放行、且返回值里留痕（`effort_unlocked`）。
+- **选档用 `task_kind`（机制化，2026-10-10）**：派发时给 `codex_run(..., task_kind="mechanical|docs|review|implement|architect|rework")`，插件按 `lib/core.js` 的 `TASK_KINDS` 规则表定模型与强度（mechanical/docs=**low+luna** · review=medium+sol · implement=high+sol · architect/rework=**xhigh+astra**）。规则是**机制**不是自觉：显式 `model`/`effort` 仍优先，返回值回报 `model_source`/`effort_source`（`explicit|task_kind|default`）；表内最高只到 `xhigh`，`max`/`ultra` 必须显式 `unlock_effort=true`；`maxEffortAllowed` 被压低时规则档同样会被拦下。
+- **改默认值/开关不用改提示词、也不用重启**：用 `codex_config` 工具（热生效——`codex_run` 每次调用都重读设置文件）。常用：`codex_config(action="set", key="defaultModel"|"defaultEffort", value=…)`、`key="autoModel"|"autoEffort"`（置 `false` 即"必须显式传 model/effort **或** task_kind"）、`key="codexConfig"`（Codex 配置白名单，见插件 README）；`action="get"` 看生效值与来源，`action="reset"` 删项目级文件。
 
 ---
 
