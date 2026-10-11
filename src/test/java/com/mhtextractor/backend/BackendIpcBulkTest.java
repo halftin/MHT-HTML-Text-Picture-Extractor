@@ -24,8 +24,8 @@ class BackendIpcBulkTest {
 
     @Test void chineseNestedTempRootPreservesPathsAndCleansSession() throws Exception {
         String original = System.getProperty("java.io.tmpdir");
-        Path parent = Files.createTempDirectory(IpcFiles.TEMP, "p4-4-temp-");
-        Path configured = Files.createDirectories(parent.resolve("中文 临时（目录）").resolve("嵌套"));
+        Path parent = Files.createTempDirectory(Path.of(original), "p4-4-temp-");
+        Path configured = parent.resolve("中文 临时（目录）").resolve("嵌套");
         Path sessionRoot;
         try {
             System.setProperty("java.io.tmpdir", configured.toString());
@@ -46,10 +46,10 @@ class BackendIpcBulkTest {
         }
     }
 
-    @Test void tempRootRejectsSiblingPrefixAndNormalizedEscape() throws Exception {
+    @Test void tempRootRejectsRelativePaths() throws Exception {
         String original = System.getProperty("java.io.tmpdir");
         try {
-            for (String bad : List.of("H:/TEST/temp-中文", "H:/TEST/temp/../mht/中文")) {
+            for (String bad : List.of("temp-中文", "temp/../mht/中文")) {
                 System.setProperty("java.io.tmpdir", bad);
                 assertThrows(IOException.class, () -> new IpcFiles(JSON), bad);
             }
@@ -58,27 +58,31 @@ class BackendIpcBulkTest {
         }
     }
 
-    @Test void tempRootRejectsJunctionOutsideTempAllowlist() throws Exception {
+    @Test void absoluteTempJunctionUsesRealSessionRoot() throws Exception {
         String original = System.getProperty("java.io.tmpdir");
-        Path parent = Files.createTempDirectory(IpcFiles.TEMP, "p4-4-link-");
+        Path parent = Files.createTempDirectory(Path.of(original), "p4-4-link-");
+        Path target = Files.createDirectories(parent.resolve("target"));
         Path link = parent.resolve("中文重定向");
         var process = new ProcessBuilder("cmd.exe", "/c", "mklink", "/J", link.toString(),
-                IpcFiles.PRODUCTS.toString()).redirectErrorStream(true).start();
+                target.toString()).redirectErrorStream(true).start();
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         assertTrue(process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS));
         assertEquals(0, process.exitValue(), output);
         try {
             System.setProperty("java.io.tmpdir", link.toString());
-            assertThrows(IOException.class, () -> new IpcFiles(JSON));
+            try (var files = new IpcFiles(JSON)) {
+                assertEquals(target.toRealPath(), files.root.getParent());
+            }
         } finally {
             System.setProperty("java.io.tmpdir", original);
             Files.delete(link); // Remove only the junction, never its target.
+            Files.delete(target);
             Files.delete(parent);
         }
     }
 
     private Path source() throws IOException {
-        Path work = Files.createTempDirectory(IpcFiles.PRODUCTS, "ipc-bulk-test-");
+        Path work = Files.createTempDirectory(Path.of("H:/TEST/mht"), "ipc-bulk-test-");
         Path input = work.resolve("input.html");
         Files.writeString(input, HTML);
         return input;
@@ -150,6 +154,8 @@ class BackendIpcBulkTest {
 
     @Test void pathAllowlistRejectsOutsideInputTraversalAndOutputBeforeMutation() throws Exception {
         Path source = source();
+        String original = System.getProperty("mht.allow.roots");
+        System.setProperty("mht.allow.roots", "H:/TEST/mht");
         String outside = Path.of("CLAUDE.md").toAbsolutePath().toString();
         try (var session = new IpcSession(new ObjectMapper())) {
             var frames = run(session, request("outside", "importPaths", JSON.createObjectNode().set("paths", JSON.valueToTree(List.of(outside))))
@@ -163,6 +169,9 @@ class BackendIpcBulkTest {
             }
             assertEquals(1, response(frames, "w").path("result").path("topLevelItems").size());
             assertTrue(frames.stream().noneMatch(frame -> frame.path("event").asText().equals("extractionTerminal")));
+        } finally {
+            if (original == null) System.clearProperty("mht.allow.roots");
+            else System.setProperty("mht.allow.roots", original);
         }
     }
 
@@ -214,6 +223,8 @@ class BackendIpcBulkTest {
 
     @Test void directoryAndIndividualHtmlRejectSidecarJunctionOutsideAllowlist() throws Exception {
         Path source = source();
+        String original = System.getProperty("mht.allow.roots");
+        System.setProperty("mht.allow.roots", "H:/TEST/mht");
         Path link = source.getParent().resolve("input_files");
         Process junction = new ProcessBuilder("cmd.exe", "/d", "/c", "mklink", "/J", link.toString(),
                 Path.of(".").toAbsolutePath().normalize().toString()).redirectErrorStream(true).start();
@@ -224,6 +235,8 @@ class BackendIpcBulkTest {
             assertThrows(IllegalArgumentException.class, () -> IpcFiles.input(source.toString()));
             assertThrows(IllegalArgumentException.class, () -> IpcFiles.input(source.getParent().toString()));
         } finally {
+            if (original == null) System.clearProperty("mht.allow.roots");
+            else System.setProperty("mht.allow.roots", original);
             Files.delete(link); // Delete only the junction itself; never traverse its target.
         }
     }

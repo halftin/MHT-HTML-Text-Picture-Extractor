@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class BackendIpcConfirmationTest {
     private Path source() throws Exception {
-        Path root = Files.createTempDirectory(IpcFiles.PRODUCTS, "p4-14-confirm-");
+        Path root = Files.createTempDirectory(Path.of("H:/TEST/mht"), "p4-14-confirm-");
         String leaf = "Content-Type: text/html; charset=utf-8\r\n\r\n<html><body>truncated</body></html>";
         String body = "Content-Type: multipart/mixed; boundary=leaf\r\n\r\n--leaf\r\n" + leaf
                 + "\r\n--leaf\r\n" + leaf + "\r\n--leaf--\r\n";

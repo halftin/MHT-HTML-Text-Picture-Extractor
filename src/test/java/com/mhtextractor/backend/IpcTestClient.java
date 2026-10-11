@@ -35,6 +35,10 @@ final class IpcTestClient implements AutoCloseable {
     private boolean finished;
 
     IpcTestClient(Path work, String main, String... arguments) throws Exception {
+        this(work, Path.of(System.getProperty("java.io.tmpdir")), null, main, arguments);
+    }
+
+    IpcTestClient(Path work, Path temp, String allowedRoots, String main, String... arguments) throws Exception {
         Files.createDirectories(work);
         stderr = work.resolve("stderr.txt");
         transcript = work.resolve("frames.txt");
@@ -48,8 +52,10 @@ final class IpcTestClient implements AutoCloseable {
         List<String> cmd = new ArrayList<>(List.of(
                 Path.of(System.getProperty("java.home"), "bin", "java.exe").toString(),
                 "--limit-modules", "java.se", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8",
-                "-Djava.io.tmpdir=" + System.getProperty("java.io.tmpdir"),
-                "-Dlogback.configurationFile=logback-headless.xml", "-cp", cp, main));
+                "-Djava.io.tmpdir=" + temp,
+                "-Dlogback.configurationFile=logback-headless.xml"));
+        if (allowedRoots != null) cmd.add("-Dmht.allow.roots=" + allowedRoots);
+        cmd.addAll(List.of("-cp", cp, main));
         cmd.addAll(List.of(arguments));
         Files.write(work.resolve("command.txt"), cmd, StandardCharsets.UTF_8);
         process = new ProcessBuilder(cmd).directory(work.toFile()).redirectError(stderr.toFile()).start();

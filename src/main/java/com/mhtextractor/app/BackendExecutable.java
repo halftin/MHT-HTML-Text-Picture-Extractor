@@ -23,7 +23,7 @@ public final class BackendExecutable {
     public static Path resolve() {
         String override = System.getProperty("mht.backend.executable");
         if (override != null && !override.isBlank()) return Path.of(override).toAbsolutePath().normalize();
-        return resolveIn(baseFolder());
+        return resolveIn(dataRoot());
     }
 
     /**
@@ -36,7 +36,7 @@ public final class BackendExecutable {
         return Files.isRegularFile(nested) ? nested : folder.resolve(BACKEND_EXE);
     }
 
-    private static Path baseFolder() {
+    static Path dataRoot() {
         Path folder = Path.of("").toAbsolutePath();
         if (System.getProperty("org.graalvm.nativeimage.imagecode") != null) {
             return ProcessHandle.current().info().command().map(Path::of)
@@ -44,15 +44,22 @@ public final class BackendExecutable {
         }
         try {
             Path source = Path.of(BackendExecutable.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            if (Files.isRegularFile(source)) return source.getParent();
-        } catch (Exception ignored) { /* Exploded JVM classes use the launch working directory. */ }
+            Path parent = source.toAbsolutePath().normalize().getParent();
+            if (parent != null) return parent;
+        } catch (Exception ignored) { /* Unavailable code source: use the launch working directory. */ }
         return folder;
+    }
+
+    static Path tempRoot() {
+        return dataRoot().resolve(BACKEND_DIR).resolve("temp");
     }
 
     public static ProcessBuilder command(String locale) throws IOException {
         Path executable = resolve();
         if (!Files.isRegularFile(executable)) throw new IOException("Backend executable missing: " + executable);
-        return new ProcessBuilder(executable.toString(), "-Djava.io.tmpdir=" + System.getProperty("java.io.tmpdir"),
-                "--serve", "--locale", locale);
+        Path temp = tempRoot();
+        Files.createDirectories(temp);
+        return new ProcessBuilder(executable.toString(), "-Djava.io.tmpdir=" + temp,
+                "--serve", "--locale", locale).directory(dataRoot().toFile());
     }
 }
