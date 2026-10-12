@@ -87,6 +87,7 @@ final class IpcServer {
         if (session != null) IpcSession.STRUCTURE_METHODS.forEach(methods::add);
         if (session != null) IpcSession.ACTIVITY_METHODS.forEach(methods::add);
         if (session != null) IpcSession.PARAM_METHODS.forEach(methods::add);
+        if (session != null) IpcSession.EXTRACTION_METHODS.forEach(methods::add);
         AutoCloseable subscription = session == null ? port.events().subscribe(event -> {
             if (event instanceof com.mhtextractor.uiport.PortEvent.WorkspaceChanged changed) {
                 var frame = frame("event").put("event", "workspaceChanged");
@@ -194,7 +195,7 @@ final class IpcServer {
             return request != null && java.util.List.of("confirmAnswer", "cancelWorkspaceActivity", "cancelPreviewLoad",
                     "resolvePreviewRegion", "activityGeneration", "previewGeneration", "previewLoadingPath",
                     "startPreparse", "startPreparseFor", "refreshPreparseProgress", "loadPreview", "awaitPreviewInFlight",
-                    "refreshPreparseProgress").contains(request.path("method").asText());
+                    "refreshPreparseProgress", "startExtraction", "cancelExtraction").contains(request.path("method").asText());
         } catch (JsonProcessingException e) { return true; }
     }
 
@@ -261,7 +262,8 @@ final class IpcServer {
                 default -> {
                     String method = request.path("method").asText();
                     if (session == null || (!IpcSession.METHODS.contains(method) && !IpcSession.STRUCTURE_METHODS.contains(method)
-                            && !IpcSession.ACTIVITY_METHODS.contains(method) && !IpcSession.PARAM_METHODS.contains(method))) {
+                            && !IpcSession.ACTIVITY_METHODS.contains(method) && !IpcSession.PARAM_METHODS.contains(method)
+                            && !IpcSession.EXTRACTION_METHODS.contains(method))) {
                         return error(id, "UNKNOWN_METHOD", "Unknown method: " + method);
                     }
                     if (method.equals("workspacePage")) result = page(params);
@@ -316,6 +318,7 @@ final class IpcServer {
                 .put("buildId", identity.buildId());
         ArrayNode capabilities = welcome.putArray("capabilities").add("workspace").add("setChecked");
         if (session != null) capabilities.add("workspacePage").add("bulkFiles").add("confirmationRoundTrip");
+        if (session != null) IpcSession.EXTRACTION_METHODS.forEach(capabilities::add);
         welcome.put("confirmationRoundTrip", session != null);
         welcome.put("sessionId", sessionId).put("bulkRoot", files.root.toString());
         response.put("revision", revision);

@@ -3,6 +3,7 @@ package com.mhtextractor.backend;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mhtextractor.uiport.ItemVm;
+import com.mhtextractor.uiport.ImportPlanVm;
 import com.mhtextractor.uiport.TargetId;
 import com.mhtextractor.uiport.WorkspaceVm;
 
@@ -44,6 +45,21 @@ final class IpcWorkspaceCodec {
         var folders = entry.putArray("sourceFolders");
         vm.sourceFolders().forEach(folders::add);
         return entry;
+    }
+
+    /** Import events also need a full projection in native, where record reflection is unavailable. */
+    ObjectNode plan(ImportPlanVm vm) {
+        var result = json.createObjectNode().put("ignoredNonMht", vm.ignoredNonMht()).put("hiddenDirs", vm.hiddenDirs())
+                .put("emptyDirs", vm.emptyDirs()).put("unreadable", vm.unreadable()).put("depthLimited", vm.depthLimited())
+                .put("quotaHit", vm.quotaHit()).put("hasMore", vm.hasMore());
+        var batches = result.putArray("batches");
+        for (var batch : vm.batches()) {
+            var value = batches.addObject().put("dirPath", batch.dirPath()).put("folderName", batch.folderName())
+                    .put("grouped", batch.grouped());
+            var paths = value.putArray("filePaths");
+            batch.filePaths().forEach(paths::add);
+        }
+        return result;
     }
 
     ObjectNode file(com.fasterxml.jackson.databind.JsonNode content) throws IOException {

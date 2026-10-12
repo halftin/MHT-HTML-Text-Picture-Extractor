@@ -178,7 +178,7 @@ class BackendIpcContractTest {
             assertEquals(identity.protocolVersion(), result.path("protocolVersion").intValue());
             assertEquals(identity.version(), result.path("version").asText());
             assertEquals(identity.buildId(), result.path("buildId").asText());
-            assertEquals(JSON.readTree("[\"workspace\",\"setChecked\",\"workspacePage\",\"bulkFiles\",\"confirmationRoundTrip\"]"), result.path("capabilities"));
+            assertEquals(JSON.readTree("[\"workspace\",\"setChecked\",\"workspacePage\",\"bulkFiles\",\"confirmationRoundTrip\",\"startExtraction\",\"cancelExtraction\"]"), result.path("capabilities"));
             assertTrue(result.path("confirmationRoundTrip").booleanValue());
             for (String field : List.of("protocolVersion", "version", "buildId")) {
                 var bad = params.deepCopy();

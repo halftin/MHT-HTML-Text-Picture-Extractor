@@ -154,9 +154,14 @@ public sealed interface PortEvent {
      *
      * @param generation run 代际
      * @param stats      已处理单元的 partial 统计
+     * @param sessionOutputFolder 本 run 请求冻结的会话输出目录
      */
     record ExtractionResult(long generation,
-                            com.mhtextractor.model.ExtractionStats stats) implements ExtractionChannelEvent {
+                            com.mhtextractor.model.ExtractionStats stats,
+                            String sessionOutputFolder) implements ExtractionChannelEvent {
+        public ExtractionResult(long generation, com.mhtextractor.model.ExtractionStats stats) {
+            this(generation, stats, null);
+        }
     }
 
     /** 提取终态类别（B6）：成功 / 失败 / 取消，每任务恰好交付其一。 */
@@ -184,8 +189,11 @@ public sealed interface PortEvent {
      * 提取在途状态变更。
      *
      * @param running 提取是否在途
+     * @param generation run 代际；false 不表示 worker 已退出
      */
-    record RunningChanged(boolean running) implements PortEvent {}
+    record RunningChanged(boolean running, long generation) implements PortEvent {
+        public RunningChanged(boolean running) { this(running, 0); }
+    }
 
     /**
      * 提醒（前端按 {@link NoticeLevel} 选择呈现形式：错误居中必点 / 警告·信息右上 toast）。

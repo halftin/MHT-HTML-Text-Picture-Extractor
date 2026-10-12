@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mhtextractor.app.*;
 import com.mhtextractor.core.SourceParsers;
 import com.mhtextractor.model.AppConfig;
+import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.model.ParamScope;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ThumbnailData;
@@ -33,6 +34,7 @@ final class IpcSession implements AutoCloseable {
             "activityGeneration", "previewGeneration", "previewLoadingPath");
     static final List<String> PARAM_METHODS = List.of("setGlobalParams", "setGroupParams", "setItemParams",
             "clearParams", "applyGlobalParams", "undo", "runtimeConfig", "outputUnitPlan", "paramSchema");
+    static final List<String> EXTRACTION_METHODS = List.of("startExtraction", "cancelExtraction");
     private final ObjectMapper json;
     private final WorkspaceModel model = new WorkspaceModel();
     private final GlobalParameterCache global = new GlobalParameterCache();
@@ -67,6 +69,8 @@ final class IpcSession implements AutoCloseable {
     private final IpcParamCodec paramCodec;
     private Runnable inputPump = () -> { };
     private Runnable silentChange = () -> { };
+    private ExtractionPlanService extractionPlans;
+    private boolean synchronousExtraction;
 
     IpcSession(ObjectMapper json) throws IOException {
         this.json = json;
@@ -98,9 +102,10 @@ final class IpcSession implements AutoCloseable {
                 global, clipboard::pushParamUndo);
         // A server import round is bounded to 20k inputs; continuing requires a client decision.
         var imports = new WorkspaceImportCoordinator(model, confirmer, this::dispatch, 200, 20000);
+        extractionPlans = plans;
         extractions = new WorkspaceExtractionCoordinator(new WorkspaceExtractionService(previews.lifecycle()),
-                WorkspaceExtractionCoordinator.productionRequests(plans,
-                        () -> model.allItems().stream().filter(item -> !item.removed).toList(), confirmer), this::dispatch);
+                checked -> WorkspaceExtractionCoordinator.productionRequests(extractionPlans,
+                        () -> model.allItems().stream().filter(item -> !item.removed).toList(), confirmer).apply(checked), this::dispatch);
         port = new InProcessUiport(model, confirmer, plans, activities, paramCommands, imports, extractions,
                 new WorkspaceParamService(previews.lifecycle()));
         port.events().subscribe(this::onEvent);
@@ -171,7 +176,7 @@ final class IpcSession implements AutoCloseable {
                         || t.getName().equals("mht-import-scan")).forEach(workers::add);
     }
 
-    boolean busy() { return importing || !pendingNotices.isEmpty() || port.queries().previewLoadingPath() != null
+    boolean busy() { return extractions.running.get() || importing || !pendingNotices.isEmpty() || port.queries().previewLoadingPath() != null
             || workers.stream().anyMatch(t -> t.isAlive() && t.getName().equals("preview-preparse")); }
 
     private void await(java.util.function.BooleanSupplier done) throws InterruptedException {
@@ -225,7 +230,7 @@ final class IpcSession implements AutoCloseable {
                         .filter(vm -> vm.no() == group.getGroupNo()).findFirst().orElseThrow()));
                 var data = generation(round.generation()).put("newFiles", round.newFiles()).put("newGroups", round.newGroups())
                         .put("madeListNonEmpty", round.madeListNonEmpty());
-                data.set("plan", codec.file(json.valueToTree(round.plan())));
+                data.set("plan", codec.file(codec.plan(round.plan())));
                 data.set("createdGroups", codec.file(groups));
                 emit("importRound", data);
             }
@@ -300,7 +305,7 @@ final class IpcSession implements AutoCloseable {
             case PortEvent.ExtractionProgress progress -> {
                 rawProgress++;
                 int bucket = (int) (Math.clamp(progress.overall(), 0, 1) * 100);
-                if (bucket > progressBucket) {
+                if (!synchronousExtraction || bucket > progressBucket) {
                     progressBucket = bucket;
                     sentProgress++;
                     emit("extractionProgress", json.createObjectNode().put("generation", progress.generation())
@@ -309,13 +314,39 @@ final class IpcSession implements AutoCloseable {
             }
             case PortEvent.ExtractionTerminal end -> {
                 terminal = end;
-                emit("extractionTerminal", terminalSummary(end));
+                var data = terminalSummary(end);
+                data.put("sessionOutputFolder", end.sessionOutputFolder());
+                data.set("stats", end.stats() == null ? json.nullNode() : codec.file(stats(end.stats())));
+                emit("extractionTerminal", data);
             }
-            default -> { } // Extraction/result additions remain P5a-1d; never send thumbnail pixels.
+            case PortEvent.ExtractionResult result -> emit("extractionResult", generation(result.generation())
+                    .put("sessionOutputFolder", result.sessionOutputFolder())
+                    .set("stats", codec.file(stats(result.stats()))));
+            case PortEvent.RunningChanged changed -> emit("runningChanged", generation(changed.generation())
+                    .put("running", changed.running()));
+            default -> { } // Never send thumbnail pixels.
         }
     }
 
     private ObjectNode generation(long value) { return json.createObjectNode().put("generation", value); }
+
+    /** Explicit full DTO encoding also works in native without registering record reflection. */
+    private ObjectNode stats(ExtractionStats stats) {
+        var value = json.createObjectNode().put("summaryLine", stats.summaryLine()).put("failCount", stats.failCount())
+                .put("skipCount", stats.skipCount()).put("warnCount", stats.warnCount());
+        var outcomes = value.putArray("files");
+        for (var outcome : stats.files()) {
+            var file = outcomes.addObject().put("path", outcome.path()).put("outcome", outcome.outcome().name())
+                    .put("message", outcome.message());
+            var warnings = file.putArray("warnings");
+            for (var warning : outcome.warnings()) {
+                var entry = warnings.addObject().put("key", warning.key());
+                var args = entry.putObject("args");
+                warning.args().forEach(args::put);
+            }
+        }
+        return value;
+    }
 
     private void flushImportChanges() {
         var changes = List.copyOf(importChanges);
@@ -573,15 +604,7 @@ final class IpcSession implements AutoCloseable {
             case "extract" -> {
                 boolean checked = bool(p, "checkedOnly");
                 String out = string(p, "outputFolder");
-                if (model.allItems().stream().noneMatch(item -> !item.removed && (!checked || item.selected))) {
-                    throw new IllegalArgumentException("No extraction targets");
-                }
-                // Revalidate imported ids immediately before the parser opens them.
-                for (PreviewItem item : model.allItems()) if (!item.removed) IpcFiles.input(item.path);
-                outputFolder = IpcFiles.output(out).toString();
-                terminal = null;
-                progressBucket = -1;
-                port.commands().startExtraction(checked);
+                startExtraction(checked, null, true, out);
                 await(() -> terminal != null);
                 var result = terminalSummary(terminal);
                 if (terminal.stats() != null) {
@@ -591,8 +614,19 @@ final class IpcSession implements AutoCloseable {
                     result.set("resultsFile", files.write(".json", json.writeValueAsBytes(outcomes), "application/json"));
                 }
                 // Use the lifecycle's batch deletion for completed inputs (same deletion semantics as rule b).
-                previews.lifecycle().onItemsRemoved(model.allItems().stream().map(item -> item.path).toList());
+                if (terminal.end() != PortEvent.ExtractionEnd.CANCELLED)
+                    previews.lifecycle().onItemsRemoved(model.allItems().stream().map(item -> item.path).toList());
                 return result;
+            }
+            case "startExtraction" -> {
+                boolean checked = bool(p, "checkedOnly");
+                var plans = requestPlans(p);
+                startExtraction(checked, plans, false, string(p.path("runtime"), "outputFolder"));
+                return json.nullNode();
+            }
+            case "cancelExtraction" -> {
+                port.commands().cancelExtraction();
+                return json.nullNode();
             }
             case "previewFiles" -> { return preview(p); }
             case "fileInfo" -> {
@@ -647,6 +681,30 @@ final class IpcSession implements AutoCloseable {
         }
         return json.createObjectNode().put("imageCount", thumbs.size())
                 .set("manifest", files.write(".json", json.writeValueAsBytes(manifest), "application/json"));
+    }
+
+    /** Both IPC paths launch the existing port channel; only the script wrapper waits. */
+    private void startExtraction(boolean checked, ExtractionPlanService plans, boolean synchronous, String output) throws IOException {
+        if (extractions.running.get()) throw new IllegalArgumentException("Extraction already running");
+        if (model.allItems().stream().noneMatch(item -> !item.removed && (!checked || item.selected)))
+            throw new IllegalArgumentException("No extraction targets");
+        // Revalidate imported ids immediately before the parser opens them.
+        for (PreviewItem item : model.allItems()) if (!item.removed) IpcFiles.input(item.path);
+        String checkedOutput = IpcFiles.output(output).toString();
+        if (synchronous) outputFolder = checkedOutput;
+        terminal = null;
+        progressBucket = -1;
+        synchronousExtraction = synchronous;
+        var previous = extractionPlans;
+        if (plans != null) extractionPlans = plans;
+        var before = Thread.getAllStackTraces().keySet();
+        try { port.commands().startExtraction(checked); }
+        finally {
+            extractionPlans = previous;
+            // The existing coordinator starts an unnamed worker before returning.
+            Thread.getAllStackTraces().keySet().stream().filter(t -> !before.contains(t) && !t.isDaemon())
+                    .forEach(workers::add);
+        }
     }
 
     private boolean runtime(JsonNode p) throws IOException {

@@ -383,12 +383,18 @@ public final class InProcessUiport implements Uiport {
 
             @Override
             public void startExtraction(boolean checkedOnly) {
-                extractionChannel().startExtraction(checkedOnly);
+                var channel = extractionChannel();
+                channel.startExtraction(checkedOnly);
+                // Commands and coordinator callbacks share the host serial thread. Project its
+                // state after a successful start, before queued worker callbacks can be delivered.
+                var event = new PortEvent.RunningChanged(channel.running.get(), channel.generation());
+                for (var listener : List.copyOf(listeners)) deliver(listener, event);
             }
 
             @Override
             public void cancelExtraction() {
-                extractionChannel().cancelExtraction();
+                var channel = extractionChannel();
+                if (channel.running.get()) channel.cancelExtraction();
             }
         };
     }
@@ -425,7 +431,18 @@ public final class InProcessUiport implements Uiport {
             AutoCloseable activitySubscription = activities.subscribe(listener);
             AutoCloseable paramSubscription = paramCommands.subscribe(listener);
             AutoCloseable importSubscription = imports.subscribe(listener);
-            AutoCloseable extractionSubscription = extractions == null ? () -> { } : extractions.subscribe(listener);
+            AutoCloseable extractionSubscription = extractions == null ? () -> { } : extractions.subscribe(event -> {
+                if (event instanceof PortEvent.ExtractionResult result && result.sessionOutputFolder() == null) {
+                    var channel = extractions.channel();
+                    if (channel != null && channel.runId == result.generation())
+                        event = new PortEvent.ExtractionResult(result.generation(), result.stats(), channel.sessionOutputFolder);
+                }
+                if (event instanceof PortEvent.ExtractionTerminal terminal) {
+                    // Cancellation resets running at request time; false does not imply worker exit.
+                    listener.accept(new PortEvent.RunningChanged(extractions.running.get(), terminal.generation()));
+                }
+                listener.accept(event);
+            });
             return () -> {
                 model.removeListener(bridge);
                 listeners.remove(listener);

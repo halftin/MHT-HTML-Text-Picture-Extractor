@@ -256,8 +256,8 @@ CG-1 故意不答；CG-2 在看到确认帧后关客户端输入，并用自然�
 | `importFinished` | `{generation,count,failed}`：活动收尾一次；count 为本次会话新增累计 |
 | `paramsChanged` | `{kind,affectedCount,imageMode,affectedPaths,revision}`：affectedPaths 为 JSON array<string> 的 FileRef（P5a-1c 追加） |
 | `notice` | `{key}`：业务通知键，不传正文/列表 |
-| `extractionProgress` | `{generation,overall}`：进度 0–1；每进入更大的整数百分比桶才发，最多 **101** 帧/任务 |
-| `extractionTerminal` | 与 extract 结果相同的统计摘要，**不含 resultsFile 或 files 数组**；每任务一次 |
+| `extractionProgress` | `{generation,overall}`：进度 0–1；旧 extract 每进入更大的整数百分比桶才发，最多 **101** 帧/任务；异步 startExtraction 保留端口进度顺序 |
+| `extractionTerminal` | 与 extract 结果相同的统计摘要，追加 sessionOutputFolder 和 stats:FileRef或null，**不含 resultsFile 或 files 数组**；每任务一次 |
 | `confirmationRequested` | `{confirmationId,key,namedParams,actionKeys,defaultAction,timeoutMs}`；不传预渲染文案 |
 | `confirmationExpired` | `{confirmationId}`；P4-17 可选扩展，到期取消后前端收卡与提示 |
 
@@ -508,6 +508,51 @@ C25 后处理预解析因此不依赖下一次同步活动；未产生 wire 事�
 `fileInfo` / `releaseFiles` 同时检查规范化后的会话根与签发集合，拒绝同目录未签发文件、其它实例路径、
 外部输入路径和目录穿越；错误不会泄露文件内容。没有任意路径读取接口。
 这些是 IPC 参数边界检查，不能防御具有相同 OS 权限的本机进程在校验与文件打开之间恶意替换目录。
+
+## P5a-1d 提取结果与统计
+
+认领 C22–C23、E16–E18、E20；E19 的 kind、同 revision 完整 snapshot 沿用 1a/1b。
+已有端口异步通道仍由 WorkspaceExtractionCoordinator 唯一拥有；本批将它暴露到 IPC 并补结果腿。
+ready.data.methods 在原方法之后追加 startExtraction / cancelExtraction，welcome.capabilities 同步追加这两个名称。
+帧类型、错误码、旧字段与旧 extract 同步脚本行为保持兼容。
+
+| 方法 | params | result |
+|---|---|---|
+| startExtraction | checkedOnly:boolean/R，runtime:RuntimeContext/R | null；启动后立即响应，不等待 worker |
+| cancelExtraction | {} | null；取消当前 run，重复请求为空操作 |
+
+RuntimeContext 与 1b 相同。提取必须提供非空绝对 outputFolder，inputFolder 可以为 null；
+目录在启动前按既有文件边界规则校验。模式、参数、输出单元与会话目录在启动时冻结，
+不会写入旧 setParams/extract 的脚本模式。已有任务仍 running 时重入 startExtraction 报 INVALID_PARAMS。
+取消和确认回答始终可在活动期间处理；普通工作区写命令仍排队。
+取消后的 running=false 只表示终态已交付，不能据此删除 worker 使用的文件。
+
+所有事件 data 都带独立递增 revision，generation 为所属 run 代际。
+
+| 事件 | data（另含 revision） |
+|---|---|
+| extractionProgress | generation,overall；异步路径保持端口顺序，旧 extract 保持百分比桶合并 |
+| extractionTerminal | generation,end,outputFolder；旧可选 count/failCount/skipCount/warnCount 保留；追加 sessionOutputFolder:string或null、stats:FileRef或null |
+| extractionResult | generation,sessionOutputFolder:string或null、stats:FileRef；取消 worker 收尾后 partial 恰好一次 |
+| runningChanged | generation,running:boolean；启动 true，终态 false；InProcessUiport 投影协调器既有状态 |
+
+E20 在端口适配层启用：启动命令成功返回后、worker 的宿主回调交付前，投影协调器的 running/generation；
+终态交付时向同一订阅者投影协调器已复位的 running。命令与回调使用同一宿主串行线程；
+适配层不持有第二份任务状态。取消时的 false 与取消终态一起在请求时刻交付，不表示 worker 已退出。
+
+每 run 恰好一个 SUCCEEDED / FAILED / CANCELLED 终态；取消终态在请求时交付，stats=null，
+无需等待 worker。成功的完整统计随终态交付，不额外发 extractionResult；失败（包含 Error）stats=null。
+取消后 worker 返回非空统计时才发 partial；异常没有 partial。旧 run 迟到的结果遵守端口陈旧守卫，
+不会投递到新 run。outputFolder 与 sessionOutputFolder 是同一冻结目录的兼容别名。
+
+stats FileRef 指向完整 UTF-8 JSON：
+`{summaryLine:string或null,failCount:integer,skipCount:integer,warnCount:integer,files:array<FileOutcome>}`。
+FileOutcome 为 `{path:string,outcome:string,message:string或null,warnings:array<ExtractWarning>}`；
+ExtractWarning 为 `{key:string,args:object<string,string>}`。全部字段保留，空 warnings 为 []。
+outcome 为 NONE/SUCCESS/FAILED/SKIPPED/SUCCESS_WARNED；summaryLine/message 沿用兼容诊断字符串。
+统计和文件结果不内联到协议帧，不传缩略图像素。stats 文件由会话签发，遵守既有 releaseFiles 与退出清理规则。
+旧 extract.resultsFile 仍是仅 path/outcome/message 的数组，与完整 stats 文件分别签发。
+统计与 importRound.plan 均采用显式完整投影，避免 native 对未注册 record 反射的依赖；文件字段保持原定义。
 
 ## 可复跑客户端与 C13 压测
 
