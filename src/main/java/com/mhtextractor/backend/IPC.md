@@ -22,7 +22,7 @@
   多余字段忽略，重复 JSON 键和尾随第二个 JSON 值拒绝。id 原样回显；由客户端负责区分在途请求，
   服务端不去重、不缓存 id，同 id 再次请求会再次执行。
 - 启动只发一次 `ready` 事件，之后同步逐行执行、逐行应答；每个请求恰好一个 response 或 error。
-  `setChecked` 复用端口的静默语义，**不生成工作区事件**，客户端在响应后查询新快照。
+  P5a-1a 起，`setChecked` 实际改变时生成 `workspaceChanged(CHECKED_CHANGED)`；重复设置为空操作。
 - `workspace` 返回完整只读 `WorkspaceVm`：组与条目的所有字段、数组顺序、null 序号、
   枚举名称均保留；不额外发送列表逐项事件。
 - `setChecked` 先完整验证 `paths` 数组与布尔 `checked` 再调用端口；路径按工作区 id 精确匹配。
@@ -44,8 +44,8 @@
 
 帧版本仍为整数 `v=1`，四种帧与原有五种错误码的语义不变。P4-2b 扩展添加方法和这些方法产生的事件，
 `ready.data.methods` 在原来的两项后追加支持的方法；客户端应按包含关系检测能力，允许未知方法名。
-原有 `workspace` 的完整映射、顺序、null 与 `setChecked` 静默语义保持不变。旧客户端不调用新方法
-就不会收到新活动事件。P4-13 增加下面的强制启动握手；没有重连或并行命令执行。
+原有 `workspace` 字段、顺序、null 与 `setChecked` 请求/结果保持不变；P5a-1a 仅追加字段与事件。
+旧客户端须忽略未知字段和事件。P4-13 增加下面的强制启动握手；没有自动重连或并行命令执行。
 
 ## P4-13 启动版本/构建标识握手
 
@@ -161,10 +161,10 @@ CG-1 故意不答；CG-2 在看到确认帧后关客户端输入，并用自然�
 | 新方法 | params | result |
 |---|---|---|
 | `importPaths` | `paths`: 非空绝对地址字符串数组（文件或目录） | `{count,failed}`：当前工作区条目数与导入是否报告错误；不含条目列表 |
-| `group` | `paths`: 非空工作区 id 数组；`namePrefix`: 非空字符串 | null；复用端口建组，未知 id 跳过 |
+| `group` | `paths`: 工作区 id 数组，或 `pathsFile`: FileRef（二选一）；`namePrefix`: 非空字符串 | null；复用端口建组，旧数组未知 id 跳过 |
 | `setParams` | `imageMode`: boolean；`config`: 命名配置格式的 AppConfig JSON 对象 | null；复用全局参数写入、撤销和缓存失效；整体替换该模式配置 |
-| `extract` | `checkedOnly`: boolean；`outputFolder`: H 盘产物白名单内的绝对目录 | `{generation,end,outputFolder,count,failCount,skipCount,warnCount,resultsFile}`；失败终态可无统计和结果文件 |
-| `workspacePage` | `offset`: 非负 int；`limit`: 1–256 的 int | `{total,offset,groupCount,items}`；超过总数返回空数组 |
+| `extract` | `checkedOnly`: boolean；`outputFolder`: 绝对目录（可选白名单限制） | `{generation,end,outputFolder,count,failCount,skipCount,warnCount,resultsFile}`；失败终态可无统计和结果文件 |
+| `workspacePage` | `offset`: 非负 int；`limit`: 1–256 的 int；`revision`: integer（可选） | `{total,offset,groupCount,items,revision,snapshotFile}`；超过总数返回空数组，版本不匹配拒绝 |
 | `previewFiles` | `path`: 已导入且未移除的工作区 id | `{imageCount,manifest}`；只传文件描述，不传正文、HTML、图像字节或像素 |
 | `fileInfo` | `path`: 本会话签发的文件路径 | 文件描述；检查存在与规范化后的会话归属，无通用文件内容读取方法 |
 | `releaseFiles` | `paths`: 非空已签发文件路径数组 | null；全部校验成功再去重删除，有一个非法条目就整批拒绝 |
@@ -193,10 +193,131 @@ CG-1 故意不答；CG-2 在看到确认帧后关客户端输入，并用自然�
 | `confirmationRequested` | `{confirmationId,key,namedParams,actionKeys,defaultAction,timeoutMs}`；不传预渲染文案 |
 | `confirmationExpired` | `{confirmationId}`；P4-17 可选扩展，到期取消后前端收卡与提示 |
 
+上述所有事件的 data 均追加必填 `revision:integer`。原字段保持不变。
+
+## P5a-1a 结构、来源、快照与文件上传
+
+本批新增 8 个 wire 方法（C11–C13、C24–C27、Q08），扩展 C09/C10、Q04 与 hello；
+新增 E19，扩展 E22–E24。GUI 仍使用进程内端口。C25–C27 是本批最小端口增量；
+完整参数撤销、运行 Context、活动/预览接线由后续批次实现，不声明完整 GUI 重同步能力。
+
+兼容边界：保留既有 13 方法及 6 个业务事件的全部字段、四种帧与六个错误码。
+所有成功 response 顶层追加必填 `revision:integer`，`result:null` 原样保留。
+每个发出的事件独占一个递增 revision；ready 的 revision 为 0，不消费变更序号。
+查询不推进、结构空操作不推进；同一命令多个事件不能复用序号。
+一个后端实例内单调，进程重建从 0 开始；客户端用 `(sessionId,revision)` 判重。
+`ready.data` 与 `hello.result` 追加必填 `sessionId:string`，hello 另有 `bulkRoot:string`
+（本会话真实绝对目录），保留原有五项 capabilities 与 confirmationRoundTrip。
+ready.methods 保留全部旧名并追加上述八个新方法。
+
+### 字段字典
+
+| 对象 | 追加字段（全部必填） | JSON 类型 / 语义 |
+|---|---|---|
+| ItemVm（顶层、组成员、分页、文件快照统一） | sourceFolder | string 或 null；原始来源，null/空串均原样保留，不读来源目录 |
+| GroupVm | sourceFolders | array<string 或 null>；未移除成员的来源首次出现顺序去重，摘要中空串归一 null，完整路径不按末级名合并 |
+| WorkspaceVm wire | revision、topLevelOrder | integer、FileRef；顺序文件为 array<TargetId>，保留顶层组与条目穿插关系 |
+| workspacePage.result | revision、snapshotFile | integer、FileRef；同版完整 WorkspaceVm，含所有组/成员/来源摘要与顺序文件 |
+| workspaceChanged.data | kind、revision、snapshot | string、integer、FileRef；完成状态的完整同版 WorkspaceVm |
+| canUndo.result | canUndo、undoDepth、revision | boolean、integer、integer；当前栈事实，不声称完整参数撤销已实现 |
+| applyDrop.result | changed、affectedPaths、revision | boolean、FileRef、integer；受影响路径文件为 array<string> |
+
+FileRef=`{path:string,bytes:integer,mediaType:string}`，三字段必填，JSON 文件 mediaType 必须为
+`application/json`，bytes 必须精确等于文件长度。服务端文件名随机生成，客户端不能指定输出文件名。
+TargetId=`{path:string或null,groupNo:integer或null}`，两字段必填且恰一非 null，组号为非负 long。
+revision 为非负 long（JSON integer），客户端须精确存储，不能以浮点数比较。
+
+`workspace` 原 params `{}` / 原五字段结果继续存在，追加上述字段。
+可选 `bulk:boolean` 缺省 false，true 时 result=`{revision:integer,manifest:FileRef}`；
+manifest 内容为完整 WorkspaceVm。大列表客户用 bulk 或 workspacePage，不把完整数组搬进管道。
+第一页捕获不可变 VM 与 revision 一次；后续页带该 revision。任意发出事件使新查询重新捕获，
+旧 revision 页请求返回 INVALID_PARAMS，禁止拼接两版。未携带 revision 的旧分页请求继续工作。
+snapshotFile / 顺序文件由服务端签发，与 releaseFiles 共用生命周期；释放后需重新拉取第一页快照。
+
+### 新命令和请求扩展
+
+| ID / method | params（R 必填，O 选填） | result / 错误 |
+|---|---|---|
+| C09 setChecked | paths:array<string或null> 或 pathsFile:FileRef（二选一 R），checked:boolean/R | null；非法类型/两源同时出现/非法上传 INVALID_PARAMS；旧未知 id/null/空数组跳过 |
+| C10 group | paths:array<string> 或 pathsFile:FileRef（二选一 R），namePrefix:string/R（非空白） | null；非法文件路径/类型 INVALID_PARAMS；旧数组未知 id 跳过 |
+| C11 ungroup | groupNo:integer/R | null；未知组 no-op，非法组号 INVALID_PARAMS |
+| C12 renameGroup | groupNo:integer/R，newName:string/R | null；唯一化由模型负责；null/非字符串 INVALID_PARAMS，未知组 no-op |
+| C13 toggleGroupExpanded | groupNo:integer/R | null；实际翻转才发事件；未知组 no-op，非法组号 INVALID_PARAMS；不自动重放 |
+| C24 clearItems | {} | null；只清数据序，保留 undo 栈/组号；空工作区 no-op |
+| C25 applyDrop | dragged:TargetId/R、target:TargetId或null/R、zone:string/R（TOP/INTO/BOTTOM）、revision:integer/R | 上述 Drop VM；旧 revision/非法 ID/zone INVALID_PARAMS；target=null 仅 BOTTOM，INTO 仅组；自身/原位 no-op |
+| C26 removeItems | paths:FileRef/R（文件 array<string>） | null；隐藏移除、空组销毁、撤销、缓存规则 c / 内存态重置；非法上传/路径 INVALID_PARAMS |
+| C27 removeGroup | groupNo:integer/R | null；整组移除与撤销，缓存规则 c / 内存态重置；非法组号 INVALID_PARAMS，未知组 no-op |
+| Q08 canUndo | {} | 上述 Undo VM；委托端口查询 |
+
+新增 paths 文件为空数组也可用。上传文件允许客户端在 hello.bulkRoot 内创建；校验
+绝对规范化路径、真实路径（拒绝链接/junction 重定向）、普通文件、精确长度及 JSON 类型后再读。
+上传不进入服务端签发集合，不能借 fileInfo/releaseFiles 读取或删除上传；退出时由会话清理。
+其它会话根、根外路径、相对路径、越权业务路径均 INVALID_PARAMS；不开放任意路径读取。
+旧 setChecked 的 paths 是精确匹配 ID，不读取文件，未知字符串（包括相对未知 ID）仍跳过。
+新文件参数中的业务路径必须绝对，并受 mht.allow.roots 约束；旧 group 数组仍仅作为精确匹配 ID。
+
+E19 kind 保留模型九类 `ITEMS_ADDED/GROUPED/UNGROUPED/ITEMS_REMOVED/GROUP_REMOVED/REORDERED/MERGED/UNDO_APPLIED/CLEARED`，
+新增 `CHECKED_CHANGED/GROUP_RENAMED/GROUP_EXPANDED_CHANGED`。结构处理先完成，再发布事件；
+拖放父组变化时清条目独立参数、失效图片缓存并重置内存状态；已有有效参数才触发必要预解析。
+不增加参数 undo 记录，不把两个参数命令拼成一次拖放。缩略图 D13 仍为缓存编码原图路径与真实格式，
+本批不增加预览入口，不转码 PNG、不传 ARGB。
+
+宿主在 stdin 空闲时每 25ms 处理有界回调队列（每轮最多 256），不在输入读线程改模型。
+C25 后处理预解析因此不依赖下一次同步活动；未产生 wire 事件的有效回调也推进 revision。
+新增活动命令与完整预解析事件仍留给 1b；本批只补 C25 所需的宿主回调处理。
+
+### 示例帧（文件内容另述）
+
+```json
+{"v":1,"type":"event","event":"ready","data":{"methods":["workspace","setChecked","importPaths","group","setParams","extract","workspacePage","previewFiles","fileInfo","releaseFiles","metrics","confirmAnswer","hello","ungroup","renameGroup","toggleGroupExpanded","clearItems","applyDrop","removeItems","removeGroup","canUndo"],"sessionId":"session-A","revision":0}}
+{"v":1,"type":"response","id":"h","revision":0,"result":{"kind":"welcome","protocolVersion":1,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1","capabilities":["workspace","setChecked","workspacePage","bulkFiles","confirmationRoundTrip"],"confirmationRoundTrip":true,"sessionId":"session-A","bulkRoot":"H:/TEST/temp/mht-ipc-123"}}
+{"v":1,"type":"request","id":"w","method":"workspace","params":{"bulk":true}}
+{"v":1,"type":"response","id":"w","revision":3,"result":{"revision":3,"manifest":{"path":"H:/TEST/temp/mht-ipc-123/bulk-1.json","bytes":230,"mediaType":"application/json"}}}
+{"v":1,"type":"request","id":"p","method":"workspacePage","params":{"offset":0,"limit":1,"revision":3}}
+{"v":1,"type":"response","id":"p","revision":3,"result":{"total":0,"offset":0,"groupCount":0,"items":[],"revision":3,"snapshotFile":{"path":"H:/TEST/temp/mht-ipc-123/bulk-2.json","bytes":230,"mediaType":"application/json"}}}
+{"v":1,"type":"request","id":"r","method":"renameGroup","params":{"groupNo":1,"newName":"new"}}
+{"v":1,"type":"request","id":"c","method":"setChecked","params":{"pathsFile":{"path":"H:/TEST/temp/mht-ipc-123/client-1.json","bytes":2,"mediaType":"application/json"},"checked":false}}
+{"v":1,"type":"request","id":"g","method":"group","params":{"pathsFile":{"path":"H:/TEST/temp/mht-ipc-123/client-1.json","bytes":2,"mediaType":"application/json"},"namePrefix":"new"}}
+{"v":1,"type":"request","id":"ug","method":"ungroup","params":{"groupNo":1}}
+{"v":1,"type":"request","id":"te","method":"toggleGroupExpanded","params":{"groupNo":1}}
+{"v":1,"type":"request","id":"cl","method":"clearItems","params":{}}
+{"v":1,"type":"request","id":"rg","method":"removeGroup","params":{"groupNo":1}}
+{"v":1,"type":"response","id":"rg","revision":4,"result":null}
+{"v":1,"type":"request","id":"x","method":"removeItems","params":{"paths":{"path":"H:/TEST/temp/mht-ipc-123/client-1.json","bytes":2,"mediaType":"application/json"}}}
+{"v":1,"type":"request","id":"d","method":"applyDrop","params":{"dragged":{"path":"H:/input/a.html","groupNo":null},"target":null,"zone":"BOTTOM","revision":3}}
+{"v":1,"type":"response","id":"d","revision":4,"result":{"changed":true,"revision":4,"affectedPaths":{"path":"H:/TEST/temp/mht-ipc-123/bulk-3.json","bytes":19,"mediaType":"application/json"}}}
+{"v":1,"type":"event","event":"workspaceChanged","data":{"kind":"REORDERED","revision":4,"snapshot":{"path":"H:/TEST/temp/mht-ipc-123/bulk-4.json","bytes":230,"mediaType":"application/json"}}}
+{"v":1,"type":"request","id":"u","method":"canUndo","params":{}}
+{"v":1,"type":"response","id":"u","revision":4,"result":{"canUndo":true,"undoDepth":1,"revision":4}}
+{"v":1,"type":"event","event":"confirmationRequested","data":{"confirmationId":"confirm-1","key":"alert.recursionDepthHeader","namedParams":{},"actionKeys":["continue"],"defaultAction":null,"timeoutMs":30000,"revision":5}}
+{"v":1,"type":"event","event":"confirmationExpired","data":{"confirmationId":"confirm-1","revision":6}}
+{"v":1,"type":"error","id":"p","error":{"code":"INVALID_PARAMS","message":"Invalid method parameters"}}
+```
+
+示例 bytes 为示意，真实请求必须使用实际长度；事件发生在对应命令响应之前。
+
+默认 workspace 的空工作区示例保留旧五字段：
+
+```json
+{"v":1,"type":"request","id":"wl","method":"workspace","params":{}}
+{"v":1,"type":"response","id":"wl","revision":4,"result":{"groups":[],"topLevelItems":[],"canUndo":true,"undoDepth":1,"selection":"NONE","revision":4,"topLevelOrder":{"path":"H:/TEST/temp/mht-ipc-123/bulk-order.json","bytes":2,"mediaType":"application/json"}}}
+```
+
+完整结构文件的来源与混合顺序字段示例（selection 使用实际端口枚举）：
+
+```json
+{"groups":[{"no":1,"name":"new","expanded":true,"defaultNamed":false,"members":[{"id":"H:/input/a.html","name":"a.html","checked":true,"removed":false,"unitIndex":0,"update":"NONE","sourceFolder":"H:/input"}],"sourceFolders":["H:/input"]}],"topLevelItems":[],"canUndo":true,"undoDepth":1,"selection":"ALL","revision":4,"topLevelOrder":{"path":"H:/TEST/temp/mht-ipc-123/bulk-order.json","bytes":27,"mediaType":"application/json"}}
+```
+
+其中顺序文件内容为 `[{"path":null,"groupNo":1}]`；paths 上传空清单为 `[]`。
+`ungroup/toggleGroupExpanded/removeGroup` 请求均仅 `{groupNo:1}`；`clearItems/canUndo` 为 `{}`。
+上传路径文件示例 `["H:/input/a.html"]`；顺序文件示例
+`[{"path":null,"groupNo":1},{"path":"H:/input/b.html","groupNo":null}]`。
+
 ## 批量文件、安全与生命周期
 
-`--serve` 要求显式设置 `-Djava.io.tmpdir=H:/TEST/temp` 或该根下已存在的子目录（允许中文、空格），
-配置目录与根目录均不得经链接跳转到别处。每实例在配置目录下
+`--serve` 使用绝对 `java.io.tmpdir`（允许中文、空格），本机自测设 `H:/TEST/temp`。
+每实例在配置目录下
 创建随机 `mht-ipc-*` 目录；预览缓存也注入此会话根，避免清掉另一个实例/GUI 的缓存。
 文件描述为 `{path,bytes,mediaType}`，path 是服务端签发的绝对路径，bytes 为落盘长度。
 预览 manifest 是一个 JSON 文件，包含 `text` / `html` 文件描述和 `thumbnails` 数组；每个图像描述
@@ -209,7 +330,8 @@ CG-1 故意不答；CG-2 在看到确认帧后关客户端输入，并用自然�
 因而失效。EOF/正常退出/传输 IO 异常结束后删除本实例所有 bulk 文件与缓存，持久化提取产物保留。
 强制杀进程/系统崩溃可能留 H 盘随机会话目录，自动回收孤儿目录未在本批实现。
 
-输入和输出白名单为 **H:/TEST/mht 的子路径**，不允许直接操作根本身。先要求绝对路径、normalize 后
+输入/输出默认只要求绝对路径；`-Dmht.allow.roots` 可选开启白名单（按平台 pathSeparator 分隔绝对根），
+开启时不允许直接操作根本身。先要求绝对路径、normalize 后
 检查目录边界，再用 `toRealPath` 复核真实归属；导入目录预检树中路径，单个 HTML 地址也预检其侧车目录，
 拒绝跳出白名单的链接/junction。
 输出校验最近存在的祖先，再创建目录并复核；preview/extract 在打开文件前再次校验已导入 id。

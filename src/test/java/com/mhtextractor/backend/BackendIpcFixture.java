@@ -15,8 +15,9 @@ public final class BackendIpcFixture {
 
     static Uiport port() {
         WorkspaceModel model = new WorkspaceModel();
-        var items = NAMES.stream().map(name -> new PreviewItem(ROOT + name, name,
-                LocalDateTime.of(2026, 10, 7, 0, 0), ROOT)).toList();
+        var items = java.util.stream.IntStream.range(0, NAMES.size()).mapToObj(index -> new PreviewItem(
+                ROOT + NAMES.get(index), NAMES.get(index), LocalDateTime.of(2026, 10, 7, 0, 0),
+                index == 0 ? null : index == 1 ? "" : ROOT)).toList();
         model.addItems(items);
         var group = model.group(items.subList(0, 2), "fixture");
         model.renameGroup(group.getGroupNo(), "group \"中文\"\n");

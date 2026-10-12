@@ -82,6 +82,10 @@ public final class InProcessUiport implements Uiport {
     private final WorkspaceParamCommandService paramCommands;
     private final WorkspaceImportCoordinator imports;
     private final WorkspaceExtractionCoordinator extractions;
+    private final WorkspaceParamService structureCaches;
+    private final List<Consumer<PortEvent>> listeners = new ArrayList<>();
+    private final List<Runnable> pendingEvents = new ArrayList<>();
+    private boolean completingStructure;
 
     /**
      * @param model     工作区模型（数据序 / 分组关系 / 撤销命令的唯一所有者）
@@ -193,6 +197,14 @@ public final class InProcessUiport implements Uiport {
     public InProcessUiport(WorkspaceModel model, Confirmer confirmer, ExtractionPlanService plans,
                           WorkspaceActivityService activities, WorkspaceParamCommandService paramCommands,
                           WorkspaceImportCoordinator imports, WorkspaceExtractionCoordinator extractions) {
+        this(model, confirmer, plans, activities, paramCommands, imports, extractions,
+                new WorkspaceParamService(PreviewSession.create().lifecycle()));
+    }
+
+    public InProcessUiport(WorkspaceModel model, Confirmer confirmer, ExtractionPlanService plans,
+                          WorkspaceActivityService activities, WorkspaceParamCommandService paramCommands,
+                          WorkspaceImportCoordinator imports, WorkspaceExtractionCoordinator extractions,
+                          WorkspaceParamService structureCaches) {
         this.model = Objects.requireNonNull(model, "model");
         this.confirmer = Objects.requireNonNull(confirmer, "confirmer");
         this.plans = Objects.requireNonNull(plans, "plans");
@@ -200,6 +212,7 @@ public final class InProcessUiport implements Uiport {
         this.paramCommands = Objects.requireNonNull(paramCommands, "paramCommands");
         this.imports = Objects.requireNonNull(imports, "imports");
         this.extractions = extractions;     // 可空：未装配提取通道的构造按诚实化口径拒绝命令
+        this.structureCaches = Objects.requireNonNull(structureCaches);
     }
 
     /**
@@ -234,14 +247,17 @@ public final class InProcessUiport implements Uiport {
 
             @Override
             public void clearItems() {
-                model.clearItems();
+                if (!model.topLevel().isEmpty()) model.clearItems();
             }
 
             // ---- B3：勾选命令 + 分组命令集（处置项 6 / 5）----
 
             @Override
             public void setChecked(List<String> paths, boolean checked) {
-                model.setChecked(resolveItems(paths), checked);
+                var targets = resolveItems(paths);
+                boolean changed = targets.stream().anyMatch(i -> i.selected != checked);
+                model.setChecked(targets, checked);
+                if (changed) changed("CHECKED_CHANGED");
             }
 
             @Override
@@ -256,12 +272,72 @@ public final class InProcessUiport implements Uiport {
 
             @Override
             public void renameGroup(long groupNo, String newName) {
+                var before = groupByNo(groupNo);
+                String name = before == null ? null : before.getName();
+                boolean defaultNamed = before != null && before.isDefaultNamed();
                 model.renameGroup(groupNo, newName);
+                if (before != null && (!Objects.equals(name, before.getName()) || defaultNamed != before.isDefaultNamed())) {
+                    changed("GROUP_RENAMED");
+                }
             }
 
             @Override
             public void toggleGroupExpanded(long groupNo) {
-                model.toggleGroupExpanded(groupNo);
+                if (model.toggleGroupExpanded(groupNo)) changed("GROUP_EXPANDED_CHANGED");
+            }
+
+            public void removeItems(List<String> paths) {
+                completeStructure(() -> {
+                    var targets = resolveItems(paths).stream().filter(i -> !i.removed).distinct().toList();
+                    model.removeItems(targets);
+                    structureCaches.itemsRemoved(targets);
+                    targets.forEach(PreviewItem::resetPreviewState);
+                });
+            }
+
+            public void removeGroup(long groupNo) {
+                completeStructure(() -> {
+                    var group = groupByNo(groupNo);
+                    if (group == null) return;
+                    var members = List.copyOf(group.getMembers());
+                    model.removeGroup(group);
+                    structureCaches.itemsRemoved(members);
+                    members.forEach(PreviewItem::resetPreviewState);
+                });
+            }
+
+            public com.mhtextractor.uiport.DropVm applyDrop(TargetId dragged, TargetId target, String zone) {
+                var source = resolveTarget(dragged);
+                var destination = target == null ? null : resolveTarget(target);
+                var region = DropResolver.Zone.valueOf(zone);
+                if (target == null && region != DropResolver.Zone.BOTTOM) throw new IllegalArgumentException("End requires BOTTOM");
+                if (region == DropResolver.Zone.INTO && destination instanceof PreviewItem) throw new IllegalArgumentException("INTO requires group");
+                var operation = target == null
+                        ? source instanceof GroupItem<?> g ? new DropResolver.MoveGroup(g, model.topLevel().size())
+                        : new DropResolver.InsertTop(source, model.topLevel().size())
+                        : DropResolver.resolve(model.topLevel(), source, destination, region);
+                var result = new com.mhtextractor.uiport.DropVm[1];
+                completeStructure(() -> {
+                    var drop = model.applyResolvedDrop(operation);
+                    if (drop.changed()) {
+                        var reparse = new ArrayList<String>();
+                        for (var item : drop.affected()) {
+                            if (!item.removed && drop.affectedBefore().get(item) != item.parentGroup) {
+                                if (item.parentGroup != null) {
+                                    item.textItemParams = null;
+                                    item.imageItemParams = null;
+                                }
+                                structureCaches.paramsChanged(true, item);
+                                item.resetPreviewState();
+                                if (plans.effectiveParams(item) != null) reparse.add(item.path);
+                            }
+                        }
+                        if (!reparse.isEmpty()) activities.startPreparseFor(reparse);
+                    }
+                    result[0] = new com.mhtextractor.uiport.DropVm(drop.changed(),
+                            drop.changed() ? drop.affected().stream().map(i -> i.path).toList() : List.of());
+                });
+                return result[0];
             }
 
             // ---- B4：参数命令族（处置项 3 / 4）----
@@ -342,8 +418,9 @@ public final class InProcessUiport implements Uiport {
     public PortEvents events() {
         return listener -> {
             Objects.requireNonNull(listener, "listener");
+            listeners.add(listener);
             Consumer<WorkspaceChange> bridge = change ->
-                    listener.accept(new PortEvent.WorkspaceChanged(change.kind().name()));
+                    deliver(listener, new PortEvent.WorkspaceChanged(change.kind().name()));
             model.addListener(bridge);
             AutoCloseable activitySubscription = activities.subscribe(listener);
             AutoCloseable paramSubscription = paramCommands.subscribe(listener);
@@ -351,6 +428,7 @@ public final class InProcessUiport implements Uiport {
             AutoCloseable extractionSubscription = extractions == null ? () -> { } : extractions.subscribe(listener);
             return () -> {
                 model.removeListener(bridge);
+                listeners.remove(listener);
                 activitySubscription.close();
                 paramSubscription.close();
                 importSubscription.close();
@@ -362,6 +440,42 @@ public final class InProcessUiport implements Uiport {
     @Override
     public Confirmer confirmer() {
         return confirmer;
+    }
+
+    private void changed(String kind) {
+        for (var listener : List.copyOf(listeners)) deliver(listener, new PortEvent.WorkspaceChanged(kind));
+    }
+
+    private void deliver(Consumer<PortEvent> listener, PortEvent event) {
+        if (completingStructure) pendingEvents.add(() -> listener.accept(event));
+        else listener.accept(event);
+    }
+
+    private void completeStructure(Runnable operation) {
+        completingStructure = true;
+        try { operation.run(); }
+        finally {
+            completingStructure = false;
+            var pending = List.copyOf(pendingEvents);
+            pendingEvents.clear();
+            pending.forEach(Runnable::run);
+        }
+    }
+
+    private GroupItem<PreviewItem> groupByNo(long no) {
+        return model.topLevel().stream().filter(o -> o instanceof GroupItem<?> g && g.getGroupNo() == no)
+                .map(o -> GroupStructure.asPreviewGroup((GroupItem<?>) o)).findFirst().orElse(null);
+    }
+
+    private Object resolveTarget(TargetId id) {
+        if (id == null) throw new IllegalArgumentException("Target required");
+        if (id.groupNo() != null) {
+            var group = groupByNo(id.groupNo());
+            if (group == null) throw new IllegalArgumentException("Unknown group");
+            return group;
+        }
+        return resolveItems(List.of(id.path())).stream().filter(i -> !i.removed).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown item"));
     }
 
     // ==================== 视图模型快照（只读、每次重新组装、不缓存） ====================
@@ -379,14 +493,17 @@ public final class InProcessUiport implements Uiport {
 
         List<GroupVm> groups = new ArrayList<>();
         List<ItemVm> topLevelItems = new ArrayList<>();
+        List<TargetId> order = new ArrayList<>();
         for (Object o : model.topLevel()) {
             if (o instanceof GroupItem<?> raw) {
                 groups.add(toGroupVm(GroupStructure.asPreviewGroup(raw)));
+                order.add(TargetId.ofGroup(raw.getGroupNo()));
             } else if (o instanceof PreviewItem it) {
                 topLevelItems.add(toItemVm(it, displayIndex.get(it)));
+                order.add(TargetId.ofItem(it.path));
             }
         }
-        return new WorkspaceVm(groups, topLevelItems, model.canUndo(), model.undoDepth(), selection());
+        return new WorkspaceVm(groups, topLevelItems, model.canUndo(), model.undoDepth(), selection(), order);
     }
 
     private static GroupVm toGroupVm(GroupItem<PreviewItem> g) {
@@ -399,7 +516,7 @@ public final class InProcessUiport implements Uiport {
     }
 
     private static ItemVm toItemVm(PreviewItem it, Integer unitIndex) {
-        return new ItemVm(it.path, it.name, it.selected, it.removed, unitIndex, UpdateKind.NONE);
+        return new ItemVm(it.path, it.name, it.selected, it.removed, unitIndex, UpdateKind.NONE, it.sourceFolder);
     }
 
     /** 勾选三态：候选 = 全部可见条目（顶层 + 组内，removed 除外）；口径见 {@link TriState}。 */

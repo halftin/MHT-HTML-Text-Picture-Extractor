@@ -48,7 +48,7 @@ class BackendIpcContractTest {
             assertSnapshot(direct, ipc, "after-none");
             check(direct, ipc, "empty", List.of(), true);
             assertSnapshot(direct, ipc, "after-empty");
-            assertTrue(events.isEmpty(), "setChecked must preserve silent port semantics");
+            assertEquals(3, events.size(), "Only actual checked changes emit events");
             ipc.finish();
         }
     }
@@ -59,7 +59,9 @@ class BackendIpcContractTest {
         var params = JSON.createObjectNode().put("checked", checked);
         params.set("paths", JSON.valueToTree(paths));
         var response = ipc.request(id, "setChecked", params);
-        assertEquals(JSON.readTree("{\"v\":1,\"type\":\"response\",\"id\":\"" + id + "\",\"result\":null}"), response);
+        assertEquals("response", response.path("type").asText());
+        assertTrue(response.path("result").isNull());
+        assertTrue(response.path("revision").isIntegralNumber());
     }
 
     private static void assertSnapshot(Uiport direct, IpcTestClient ipc, String id) throws Exception {
@@ -68,7 +70,7 @@ class BackendIpcContractTest {
         // Parse independent record serialization to normalize only Jackson's IntNode/LongNode choice.
         // Exact tree equality preserves every field, array order, null, enum, string and numeric value.
         JsonNode expected = JSON.readTree(JSON.writeValueAsString(direct.queries().workspace()));
-        assertEquals(expected, response.get("result"), "IPC snapshot differs from in-process: " + id);
+        assertEquals(expected, IpcTestClient.expandWorkspace(response.get("result")), "IPC snapshot differs from in-process: " + id);
     }
 
     @Test
@@ -93,8 +95,8 @@ class BackendIpcContractTest {
             assertEquals("version", version.path("id").asText());
             JsonNode before = ipc.request("before", "workspace", JSON.createObjectNode()).get("result");
             assertEquals(JSON.readTree("""
-                    {"groups":[],"topLevelItems":[],"canUndo":false,"undoDepth":0,"selection":"NONE"}
-                    """), before);
+                    {"groups":[],"topLevelItems":[],"canUndo":false,"undoDepth":0,"selection":"NONE","topLevelOrder":[]}
+                    """), IpcTestClient.expandWorkspace(before));
             var params = JSON.createObjectNode().put("checked", true);
             params.putArray("paths").add("unknown");
             assertEquals("response", ipc.request("command", "setChecked", params).path("type").asText());

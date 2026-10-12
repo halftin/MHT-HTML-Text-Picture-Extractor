@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.mhtextractor.uiport.GroupVm;
 import com.mhtextractor.uiport.ItemVm;
 import com.mhtextractor.uiport.Uiport;
 import com.mhtextractor.uiport.WorkspaceVm;
@@ -28,8 +27,8 @@ import java.util.ArrayDeque;
  * v1 stdio control frames: one UTF-8 JSON object plus LF per frame (see IPC.md).
  * A serial host dispatches to the port and flushes one response per request. A separate
  * daemon reads stdin so answers and EOF are handled while the host waits for an activity.
- * The initial ready event precedes all responses; setChecked is silent at the port and
- * therefore emits no fabricated change events. IO failure ends the session; malformed
+ * The initial ready event precedes all responses; actual port changes carry versioned
+ * file snapshots. IO failure ends the session; malformed
  * requests produce error frames and leave the session usable.
  * Business requests require a matching hello; ready alone grants no business access.
  */
@@ -43,6 +42,14 @@ final class IpcServer {
     private java.util.List<ItemVm> pageItems;
     private final ArrayDeque<String> deferred = new ArrayDeque<>();
     private boolean disconnected;
+    private final String sessionId = java.util.UUID.randomUUID().toString();
+    private long revision;
+    private long pageRevision = -1;
+    private ObjectNode pageFile;
+    private ObjectNode currentSnapshot;
+    private long snapshotRevision = -1;
+    private final IpcFiles files;
+    private final IpcWorkspaceCodec codec;
     private final ObjectMapper json = new ObjectMapper()
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
             .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
@@ -51,12 +58,16 @@ final class IpcServer {
         this.port = Objects.requireNonNull(port, "port");
         this.session = null;
         this.identity = BackendIdentity.current();
+        files = new IpcFiles(json);
+        codec = new IpcWorkspaceCodec(json, files);
     }
 
     IpcServer(IpcSession session) throws IOException {
         this.port = session.port;
         this.session = session;
         this.identity = BackendIdentity.current();
+        files = session.files();
+        codec = new IpcWorkspaceCodec(json, files);
     }
 
     void run(InputStream input, OutputStream output) throws IOException {
@@ -65,24 +76,36 @@ final class IpcServer {
         BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8));
         ObjectNode ready = frame("event").put("event", "ready");
         ArrayNode methods = ready.putObject("data").putArray("methods").add("workspace").add("setChecked");
+        ready.withObject("data").put("sessionId", sessionId).put("revision", revision);
         if (session != null) {
             IpcSession.METHODS.forEach(methods::add);
+            session.silentChanges(() -> revision++);
             session.events(event -> {
-                try { write(writer, event); }
+                try { emit(writer, event); }
                 catch (IOException e) { throw new UncheckedIOException(e); }
             });
         }
         methods.add("hello");
-        write(writer, ready);
+        if (session != null) IpcSession.STRUCTURE_METHODS.forEach(methods::add);
+        AutoCloseable subscription = session == null ? port.events().subscribe(event -> {
+            if (event instanceof com.mhtextractor.uiport.PortEvent.WorkspaceChanged changed) {
+                var frame = frame("event").put("event", "workspaceChanged");
+                frame.putObject("data").put("kind", changed.kind());
+                try { emit(writer, frame); } catch (IOException e) { throw new UncheckedIOException(e); }
+            }
+        }) : () -> { };
         disconnected = false;
         deferred.clear();
         try (var incoming = new IpcInput(input)) {
+            write(writer, ready); // The first write is covered by the same failure cleanup as all later frames.
             if (session != null) session.inputPump(() -> pump(incoming, writer));
             while (!disconnected) {
+                if (session != null) session.drainCallbacks();
                 String line;
                 if (!deferred.isEmpty()) line = deferred.removeFirst();
                 else {
-                    var received = incoming.take();
+                    var received = session == null ? incoming.take() : incoming.poll(25);
+                    if (received == null) continue;
                     if (received.line() == null) {
                         endInput(received);
                         break;
@@ -97,12 +120,32 @@ final class IpcServer {
             Thread.currentThread().interrupt();
             throw new IOException("IPC host interrupted", e);
         } finally {
+            try { subscription.close(); } catch (Exception e) { throw new IOException(e); }
             if (session != null) {
                 session.inputPump(() -> { });
                 session.events(event -> { }); // Failed output must not prevent cancellation or cleanup.
+                session.silentChanges(() -> { });
                 session.disconnect();
             }
+            else files.close();
         }
+    }
+
+    private void emit(BufferedWriter writer, ObjectNode event) throws IOException {
+        var data = (ObjectNode) event.get("data");
+        data.put("revision", ++revision);
+        if (event.path("event").asText().equals("workspaceChanged")) {
+            data.set("snapshot", codec.file(snapshot()));
+        }
+        write(writer, event);
+    }
+
+    private ObjectNode snapshot() throws IOException {
+        if (currentSnapshot == null || snapshotRevision != revision) {
+            currentSnapshot = codec.workspace(port.queries().workspace(), revision);
+            snapshotRevision = revision;
+        }
+        return currentSnapshot;
     }
 
     private void endInput(IpcInput.Received received) throws IOException {
@@ -157,36 +200,57 @@ final class IpcServer {
         try {
             JsonNode result;
             switch (request.path("method").asText()) {
-                case "workspace" -> result = workspace(port.queries().workspace());
+                case "workspace" -> {
+                    if (params.has("bulk") && !params.path("bulk").isBoolean()) throw new IllegalArgumentException("bulk boolean required");
+                    var snapshot = snapshot();
+                    if (params.path("bulk").asBoolean()) {
+                        var bulk = json.createObjectNode().put("revision", revision);
+                        bulk.set("manifest", codec.file(snapshot));
+                        result = bulk;
+                    } else result = snapshot;
+                }
                 case "setChecked" -> {
-                    if (!params.path("paths").isArray() || !params.path("checked").isBoolean()) {
+                    if (!params.path("checked").isBoolean()) {
                         return error(id, "INVALID_PARAMS", "setChecked requires paths array and boolean checked");
                     }
                     // Validate the entire array before invoking a mutating command.
                     var paths = new ArrayList<String>();
-                    for (JsonNode path : params.path("paths")) {
+                    if (params.has("paths") == params.has("pathsFile")) throw new IllegalArgumentException("Exactly one paths source required");
+                    var values = params.has("pathsFile") ? files.readUpload(params.path("pathsFile")) : params.path("paths");
+                    if (!values.isArray()) throw new IllegalArgumentException("Paths array required");
+                    for (JsonNode path : values) {
                         if (!path.isTextual() && !path.isNull()) {
                             return error(id, "INVALID_PARAMS", "paths entries must be strings or null");
                         }
                         paths.add(path.isNull() ? null : path.textValue());
+                        if (params.has("pathsFile") && !path.isNull()) IpcFiles.input(path.textValue());
                     }
                     port.commands().setChecked(paths, params.path("checked").booleanValue());
-                    pageSnapshot = null;
                     result = json.nullNode();
                 }
                 default -> {
                     String method = request.path("method").asText();
-                    if (session == null || !IpcSession.METHODS.contains(method)) {
+                    if (session == null || (!IpcSession.METHODS.contains(method) && !IpcSession.STRUCTURE_METHODS.contains(method))) {
                         return error(id, "UNKNOWN_METHOD", "Unknown method: " + method);
                     }
                     if (method.equals("workspacePage")) result = page(params);
                     else {
+                        if (method.equals("applyDrop") && IpcSession.integer(params, "revision") != revision) {
+                            throw new IllegalArgumentException("Stale revision");
+                        }
                         result = session.call(method, params);
-                        pageSnapshot = null;
+                        if (method.equals("releaseFiles")) {
+                            currentSnapshot = null;
+                            pageSnapshot = null;
+                        }
+                        if (result.isObject() && (method.equals("applyDrop") || method.equals("canUndo"))) {
+                            ((ObjectNode) result).put("revision", revision);
+                        }
                     }
                 }
             }
             ObjectNode response = frame("response").put("id", id);
+            response.put("revision", revision);
             response.set("result", result);
             return response;
         } catch (UncheckedIOException e) {
@@ -220,11 +284,13 @@ final class IpcServer {
         ArrayNode capabilities = welcome.putArray("capabilities").add("workspace").add("setChecked");
         if (session != null) capabilities.add("workspacePage").add("bulkFiles").add("confirmationRoundTrip");
         welcome.put("confirmationRoundTrip", session != null);
+        welcome.put("sessionId", sessionId).put("bulkRoot", files.root.toString());
+        response.put("revision", revision);
         welcomed = true;
         return response;
     }
 
-    private ObjectNode page(JsonNode params) {
+    private ObjectNode page(JsonNode params) throws IOException {
         for (String key : java.util.List.of("offset", "limit")) {
             if (!params.path(key).isIntegralNumber() || !params.path(key).canConvertToInt()) {
                 throw new IllegalArgumentException("Integer page bounds required");
@@ -233,41 +299,24 @@ final class IpcServer {
         int offset = params.path("offset").intValue();
         int limit = params.path("limit").intValue();
         if (offset < 0 || limit < 1 || limit > 256) throw new IllegalArgumentException("Page bounds out of range");
-        if (pageSnapshot == null) {
+        if (params.has("revision") && IpcSession.integer(params, "revision") != revision) {
+            throw new IllegalArgumentException("Stale page revision");
+        }
+        if (pageSnapshot == null || pageRevision != revision) {
             pageSnapshot = port.queries().workspace();
+            pageRevision = revision;
+            pageFile = codec.file(snapshot());
             var flat = new ArrayList<ItemVm>(pageSnapshot.topLevelItems());
             pageSnapshot.groups().forEach(group -> flat.addAll(group.members()));
             pageItems = java.util.List.copyOf(flat);
         }
         ObjectNode result = json.createObjectNode().put("total", pageItems.size()).put("offset", offset)
                 .put("groupCount", pageSnapshot.groups().size());
+        result.put("revision", pageRevision).set("snapshotFile", pageFile);
         ArrayNode entries = result.putArray("items");
         int end = (int) Math.min(pageItems.size(), (long) offset + limit);
-        for (int i = offset; i < end; i++) entries.add(item(pageItems.get(i)));
+        for (int i = offset; i < end; i++) entries.add(codec.item(pageItems.get(i)));
         return result;
-    }
-
-    // Explicit wire mapping avoids reflective DTO registration for a future native backend.
-    // Tests compare this mapping against Jackson's independent serialization of the port records.
-    private ObjectNode workspace(WorkspaceVm vm) {
-        ObjectNode result = json.createObjectNode();
-        ArrayNode groups = result.putArray("groups");
-        for (GroupVm group : vm.groups()) {
-            ObjectNode entry = groups.addObject().put("no", group.no()).put("name", group.name())
-                    .put("expanded", group.expanded()).put("defaultNamed", group.defaultNamed());
-            ArrayNode members = entry.putArray("members");
-            group.members().forEach(item -> members.add(item(item)));
-        }
-        ArrayNode items = result.putArray("topLevelItems");
-        vm.topLevelItems().forEach(item -> items.add(item(item)));
-        return result.put("canUndo", vm.canUndo()).put("undoDepth", vm.undoDepth())
-                .put("selection", vm.selection().name());
-    }
-
-    private ObjectNode item(ItemVm vm) {
-        return json.createObjectNode().put("id", vm.id()).put("name", vm.name())
-                .put("checked", vm.checked()).put("removed", vm.removed())
-                .put("unitIndex", vm.unitIndex()).put("update", vm.update().name());
     }
 
     private ObjectNode frame(String type) {

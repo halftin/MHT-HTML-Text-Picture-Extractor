@@ -33,6 +33,7 @@ final class IpcTestClient implements AutoCloseable {
     private final Path stderr;
     private final Path transcript;
     private boolean finished;
+    private final List<JsonNode> requestEvents = new ArrayList<>();
 
     IpcTestClient(Path work, String main, String... arguments) throws Exception {
         this(work, Path.of(System.getProperty("java.io.tmpdir")), null, main, arguments);
@@ -99,8 +100,25 @@ final class IpcTestClient implements AutoCloseable {
         frame.set("params", params);
         send(JSON.writeValueAsString(frame));
         JsonNode response = receive();
+        while (response.path("type").asText().equals("event")) {
+            requestEvents.add(response);
+            response = receive();
+        }
         assertEquals(id, response.path("id").asText(), "responses must remain ordered");
         return response;
+    }
+
+    List<JsonNode> drainRequestEvents() {
+        var result = List.copyOf(requestEvents);
+        requestEvents.clear();
+        return result;
+    }
+
+    static JsonNode expandWorkspace(JsonNode wire) throws Exception {
+        var expanded = (com.fasterxml.jackson.databind.node.ObjectNode) wire.deepCopy();
+        expanded.remove("revision");
+        expanded.set("topLevelOrder", JSON.readTree(Files.readAllBytes(Path.of(wire.path("topLevelOrder").path("path").asText()))));
+        return expanded;
     }
 
     void ready() throws Exception {

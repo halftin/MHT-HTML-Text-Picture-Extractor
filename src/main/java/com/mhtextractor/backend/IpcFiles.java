@@ -1,6 +1,7 @@
 package com.mhtextractor.backend;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mhtextractor.util.SourceKinds;
 
@@ -23,7 +24,8 @@ final class IpcFiles implements AutoCloseable {
     final Path root;
 
     IpcFiles(ObjectMapper json) throws IOException {
-        this.json = json;
+        this.json = json.copy().enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                .enable(com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
         Path configured = Path.of(System.getProperty("java.io.tmpdir")).normalize();
         if (!configured.isAbsolute()) throw new IOException("Absolute temporary path required");
         Files.createDirectories(configured);
@@ -98,6 +100,21 @@ final class IpcFiles implements AutoCloseable {
         Path file = Files.createTempFile(root, "bulk-", suffix);
         Files.write(file, bytes);
         return issue(file, mediaType);
+    }
+
+    JsonNode readUpload(JsonNode ref) throws IOException {
+        if (!ref.isObject() || !ref.path("path").isTextual()
+                || !ref.path("bytes").isIntegralNumber() || !ref.path("bytes").canConvertToLong()
+                || ref.path("bytes").longValue() < 0 || !ref.path("mediaType").asText().equals("application/json")) {
+            throw new IllegalArgumentException("JSON FileRef required");
+        }
+        Path path = lexical(ref.path("path").asText(), root);
+        // Validate every ancestor as well: a redirected directory must not reach outside the session.
+        if (!path.toRealPath().equals(path) || !Files.isRegularFile(path)
+                || Files.size(path) != ref.path("bytes").longValue()) {
+            throw new IllegalArgumentException("Invalid upload file");
+        }
+        return json.readTree(Files.readAllBytes(path));
     }
 
     ObjectNode issue(Path file, String mediaType) throws IOException {

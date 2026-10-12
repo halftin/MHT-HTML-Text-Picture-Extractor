@@ -13,10 +13,17 @@ import java.util.Objects;
  * @param members      成员条目（{@link List#copyOf} 防御性不可变拷贝）
  */
 public record GroupVm(long no, String name, boolean expanded, boolean defaultNamed,
-                      List<ItemVm> members) {
+                      List<ItemVm> members, List<String> sourceFolders) {
+
+    public GroupVm(long no, String name, boolean expanded, boolean defaultNamed, List<ItemVm> members) {
+        this(no, name, expanded, defaultNamed, members, members.stream().filter(m -> !m.removed())
+                .map(m -> m.sourceFolder() == null || m.sourceFolder().isEmpty() ? null : m.sourceFolder())
+                .distinct().toList());
+    }
 
     public GroupVm {
         Objects.requireNonNull(name, "name");
         members = List.copyOf(Objects.requireNonNull(members, "members"));
+        sourceFolders = java.util.Collections.unmodifiableList(new java.util.ArrayList<>(sourceFolders));
     }
 }

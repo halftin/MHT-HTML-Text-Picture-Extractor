@@ -13,7 +13,12 @@ import java.util.Objects;
  * @param update    列表动画类别（{@link UpdateKind}）
  */
 public record ItemVm(String id, String name, boolean checked, boolean removed,
-                     Integer unitIndex, UpdateKind update) {
+                     Integer unitIndex, UpdateKind update, String sourceFolder) {
+
+    public ItemVm(String id, String name, boolean checked, boolean removed,
+                  Integer unitIndex, UpdateKind update) {
+        this(id, name, checked, removed, unitIndex, update, null);
+    }
 
     public ItemVm {
         Objects.requireNonNull(id, "id");

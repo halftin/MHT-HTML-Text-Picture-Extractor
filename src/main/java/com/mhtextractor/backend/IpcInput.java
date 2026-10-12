@@ -36,6 +36,9 @@ final class IpcInput implements AutoCloseable {
 
     Received take() throws InterruptedException { return lines.take(); }
     Received poll() { return lines.poll(); }
+    Received poll(long millis) throws InterruptedException {
+        return lines.poll(millis, java.util.concurrent.TimeUnit.MILLISECONDS);
+    }
     Received end() { return end; }
 
     @Override public void close() { reader.interrupt(); }

@@ -17,11 +17,18 @@ import java.util.Objects;
  * @param selection     勾选三态（{@link TriState}，从条目勾选状态导出）
  */
 public record WorkspaceVm(List<GroupVm> groups, List<ItemVm> topLevelItems,
-                          boolean canUndo, int undoDepth, TriState selection) {
+                          boolean canUndo, int undoDepth, TriState selection, List<TargetId> topLevelOrder) {
+
+    public WorkspaceVm(List<GroupVm> groups, List<ItemVm> items, boolean canUndo, int undoDepth, TriState selection) {
+        this(groups, items, canUndo, undoDepth, selection,
+                java.util.stream.Stream.concat(groups.stream().map(g -> TargetId.ofGroup(g.no())),
+                        items.stream().map(i -> TargetId.ofItem(i.id()))).toList());
+    }
 
     public WorkspaceVm {
         groups = List.copyOf(Objects.requireNonNull(groups, "groups"));
         topLevelItems = List.copyOf(Objects.requireNonNull(topLevelItems, "topLevelItems"));
         Objects.requireNonNull(selection, "selection");
+        topLevelOrder = List.copyOf(topLevelOrder);
     }
 }

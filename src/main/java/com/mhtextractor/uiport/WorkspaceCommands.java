@@ -153,4 +153,12 @@ public interface WorkspaceCommands {
      * {@code WorkspaceModel#clearItems()} 的既有清场语义一致）。
      */
     void clearItems();
+
+    /** Stable-ID drop; returns changed state and affected paths after backend postprocessing. */
+    default DropVm applyDrop(TargetId dragged, TargetId target, String zone) {
+        throw new UnsupportedOperationException("Drop is not wired");
+    }
+
+    default void removeItems(java.util.List<String> paths) { throw new UnsupportedOperationException("Removal is not wired"); }
+    default void removeGroup(long groupNo) { throw new UnsupportedOperationException("Removal is not wired"); }
 }

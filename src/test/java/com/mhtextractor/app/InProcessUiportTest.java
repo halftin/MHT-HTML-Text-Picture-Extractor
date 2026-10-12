@@ -242,7 +242,7 @@ class InProcessUiportTest {
         assertFalse(b.selected, "未在命令路径内的条目不受影响");
         assertEquals(TriState.SOME, uiport.queries().workspace().selection(),
                 "三态由勾选事实导出（候选 = 全部可见条目）");
-        assertTrue(received.isEmpty(),
+        assertEquals(1, received.size(),
                 "控制组：勾选命令是静默的 —— 不推送任何端口事件（不触发滚动/焦点语义）");
 
         uiport.commands().setChecked(List.of("C:/x/b.mht"), true);

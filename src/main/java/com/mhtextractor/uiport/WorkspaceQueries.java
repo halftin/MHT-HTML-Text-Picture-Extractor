@@ -20,6 +20,8 @@ public interface WorkspaceQueries {
      */
     WorkspaceVm workspace();
 
+    default boolean canUndo() { return workspace().canUndo(); }
+
     public AppConfig runtimeConfig();
 
     public List<OutputUnitVm> outputUnitPlan(boolean checkedOnly);

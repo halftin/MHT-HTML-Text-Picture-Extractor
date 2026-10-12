@@ -25,6 +25,8 @@ import java.util.function.Consumer;
 final class IpcSession implements AutoCloseable {
     static final List<String> METHODS = List.of("importPaths", "group", "setParams", "extract",
             "workspacePage", "previewFiles", "fileInfo", "releaseFiles", "metrics", "confirmAnswer");
+    static final List<String> STRUCTURE_METHODS = List.of(
+            "ungroup", "renameGroup", "toggleGroupExpanded", "clearItems", "applyDrop", "removeItems", "removeGroup", "canUndo");
     private final ObjectMapper json;
     private final WorkspaceModel model = new WorkspaceModel();
     private final GlobalParameterCache global = new GlobalParameterCache();
@@ -49,6 +51,7 @@ final class IpcSession implements AutoCloseable {
     private volatile boolean closing;
     private volatile boolean disconnecting;
     private Runnable inputPump = () -> { };
+    private Runnable silentChange = () -> { };
 
     IpcSession(ObjectMapper json) throws IOException {
         this.json = json;
@@ -81,11 +84,24 @@ final class IpcSession implements AutoCloseable {
         extractions = new WorkspaceExtractionCoordinator(new WorkspaceExtractionService(previews.lifecycle()),
                 WorkspaceExtractionCoordinator.productionRequests(plans,
                         () -> model.allItems().stream().filter(item -> !item.removed).toList(), confirmer), this::dispatch);
-        port = new InProcessUiport(model, confirmer, plans, activities, paramCommands, imports, extractions);
+        port = new InProcessUiport(model, confirmer, plans, activities, paramCommands, imports, extractions,
+                new WorkspaceParamService(previews.lifecycle()));
         port.events().subscribe(this::onEvent);
     }
 
     void events(Consumer<ObjectNode> sink) { events = sink; }
+
+    IpcFiles files() { return files; }
+
+    void silentChanges(Runnable changed) { silentChange = changed; }
+
+    void drainCallbacks() {
+        for (int i = 0; i < 256; i++) {
+            var callback = callbacks.poll();
+            if (callback == null) return;
+            callback.run();
+        }
+    }
 
     void inputPump(Runnable pump) { inputPump = pump; }
 
@@ -137,6 +153,8 @@ final class IpcSession implements AutoCloseable {
 
     private void onEvent(PortEvent event) {
         switch (event) {
+            case PortEvent.PreparseFinished finished -> silentChange.run();
+            case PortEvent.WorkspaceChanged changed -> emit("workspaceChanged", json.createObjectNode().put("kind", changed.kind()));
             case PortEvent.ImportRound round -> emit("importRound", json.createObjectNode()
                     .put("generation", round.generation()).put("newFiles", round.newFiles()).put("newGroups", round.newGroups()));
             case PortEvent.ImportFinished finished -> {
@@ -164,7 +182,7 @@ final class IpcSession implements AutoCloseable {
                 terminal = end;
                 emit("extractionTerminal", terminalSummary(end));
             }
-            default -> { } // No automatic workspace snapshots, per-item payloads, or thumbnail pixels.
+            default -> { } // Remaining activity events are deferred to P5a-1b/d; never send thumbnail pixels.
         }
     }
 
@@ -196,10 +214,43 @@ final class IpcSession implements AutoCloseable {
                 return json.createObjectNode().put("count", model.allItems().size()).put("failed", importFailed);
             }
             case "group" -> {
-                List<String> paths = strings(p, "paths");
+                List<String> paths = paths(p, "paths", "pathsFile", false);
                 String prefix = string(p, "namePrefix");
                 port.commands().group(paths, prefix);
                 return json.nullNode();
+            }
+            case "ungroup", "renameGroup", "toggleGroupExpanded", "removeGroup" -> {
+                long no = integer(p, "groupNo");
+                switch (method) {
+                    case "ungroup" -> port.commands().ungroup(no);
+                    case "renameGroup" -> {
+                        if (!p.path("newName").isTextual()) throw new IllegalArgumentException("newName string required");
+                        port.commands().renameGroup(no, p.path("newName").textValue());
+                    }
+                    case "toggleGroupExpanded" -> port.commands().toggleGroupExpanded(no);
+                    case "removeGroup" -> port.commands().removeGroup(no);
+                }
+                return json.nullNode();
+            }
+            case "clearItems" -> { port.commands().clearItems(); return json.nullNode(); }
+            case "removeItems" -> {
+                port.commands().removeItems(paths(p, "paths", null, false));
+                return json.nullNode();
+            }
+            case "canUndo" -> {
+                return json.createObjectNode().put("canUndo", port.queries().canUndo())
+                        .put("undoDepth", port.queries().workspace().undoDepth());
+            }
+            case "applyDrop" -> {
+                // A parent change can start a parser; revalidate before any structure mutation.
+                for (var item : model.allItems()) if (!item.removed) IpcFiles.input(item.path);
+                var drop = port.commands().applyDrop(target(p.get("dragged"), false),
+                        target(p.get("target"), true), string(p, "zone"));
+                var affected = json.createArrayNode();
+                drop.affectedPaths().forEach(affected::add);
+                var result = json.createObjectNode().put("changed", drop.changed());
+                result.set("affectedPaths", files.write(".json", json.writeValueAsBytes(affected), "application/json"));
+                return result;
             }
             case "setParams" -> {
                 boolean mode = bool(p, "imageMode");
@@ -281,6 +332,46 @@ final class IpcSession implements AutoCloseable {
     static String string(JsonNode p, String key) {
         if (!p.path(key).isTextual() || p.path(key).asText().isBlank()) throw new IllegalArgumentException(key + " string required");
         return p.path(key).asText();
+    }
+
+    static long integer(JsonNode p, String key) {
+        if (!p.path(key).isIntegralNumber() || !p.path(key).canConvertToLong() || p.path(key).longValue() < 0) {
+            throw new IllegalArgumentException(key + " nonnegative integer required");
+        }
+        return p.path(key).longValue();
+    }
+
+    private static TargetId target(JsonNode value, boolean nullable) {
+        if (nullable && value != null && value.isNull()) return null;
+        if (value == null || !value.isObject() || !value.has("path") || !value.has("groupNo")) {
+            throw new IllegalArgumentException("TargetId required");
+        }
+        if (value.path("path").isNull()) return TargetId.ofGroup(integer(value, "groupNo"));
+        if (!value.path("groupNo").isNull()) throw new IllegalArgumentException("One target identity required");
+        return TargetId.ofItem(string(value, "path"));
+    }
+
+    List<String> paths(JsonNode p, String key, String alternate, boolean nullable) throws IOException {
+        JsonNode values;
+        if (alternate == null) values = files.readUpload(p.path(key));
+        else {
+            if (p.has(key) == p.has(alternate)) throw new IllegalArgumentException("Exactly one paths source required");
+            values = p.has(alternate) ? files.readUpload(p.path(alternate)) : p.path(key);
+        }
+        if (!values.isArray()) throw new IllegalArgumentException("Paths array required");
+        var result = new java.util.ArrayList<String>();
+        for (var value : values) {
+            if (nullable && value.isNull()) { result.add(null); continue; }
+            if (!value.isTextual() || (!nullable && value.textValue().isBlank())) throw new IllegalArgumentException("Path string required");
+            // Legacy checked unknown IDs remain harmless, but relative/unauthorized real path inputs are rejected.
+            if (!value.textValue().isBlank() && (alternate == null || p.has(alternate))) {
+                Path path = Path.of(value.textValue());
+                if (path.isAbsolute()) IpcFiles.input(value.textValue());
+                else if (!nullable) throw new IllegalArgumentException("Absolute path required");
+            }
+            result.add(value.textValue());
+        }
+        return result;
     }
 
     static boolean bool(JsonNode p, String key) {
