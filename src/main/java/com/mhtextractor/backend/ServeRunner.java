@@ -17,7 +17,9 @@ public final class ServeRunner {
         I18n.setLocale(args.locale());
         log.info("serve mode entered (JSON Lines v1)");
         try (var session = new IpcSession(new ObjectMapper())) {
-            new IpcServer(session).run(System.in, System.out);
+            // Raw descriptors let the transport cancel pending Windows I/O before close/join.
+            new IpcServer(session).run(new java.io.FileInputStream(java.io.FileDescriptor.in),
+                    new java.io.FileOutputStream(java.io.FileDescriptor.out));
             return BackendCli.EXIT_OK;
         } catch (IOException e) {
             log.error("IPC transport failed", e);

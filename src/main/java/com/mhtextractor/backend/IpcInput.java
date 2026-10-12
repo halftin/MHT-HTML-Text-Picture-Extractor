@@ -12,11 +12,17 @@ final class IpcInput implements AutoCloseable {
     record Received(String line, IOException failure) { }
     private final ArrayBlockingQueue<Received> lines = new ArrayBlockingQueue<>(256);
     private final Thread reader;
+    private final InputStream input;
+    private final boolean standardInput;
     private volatile Received end;
 
-    IpcInput(InputStream input) {
+    IpcInput(InputStream input) throws IOException {
+        this.input = input;
+        standardInput = input == System.in || (input instanceof java.io.FileInputStream file && file.getFD() == java.io.FileDescriptor.in);
         reader = new Thread(() -> {
-            var stream = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
+            InputStream readable = input instanceof java.io.FileInputStream file
+                    ? java.nio.channels.Channels.newInputStream(file.getChannel()) : input;
+            var stream = new BufferedReader(new InputStreamReader(readable, StandardCharsets.UTF_8));
             try {
                 String line;
                 while ((line = stream.readLine()) != null) lines.put(new Received(line, null));
@@ -41,5 +47,16 @@ final class IpcInput implements AutoCloseable {
     }
     Received end() { return end; }
 
-    @Override public void close() { reader.interrupt(); }
+    @Override public void close() throws IOException {
+        if (end == null && reader.isAlive() && standardInput) IpcWindowsIo.cancelInput();
+        reader.interrupt();
+        input.close(); // Unblock a read when output fails while the peer still has stdin open.
+        try {
+            reader.join(2000);
+            if (reader.isAlive()) throw new IOException("IPC input reader did not stop");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("IPC reader join interrupted", e);
+        }
+    }
 }

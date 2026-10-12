@@ -160,15 +160,15 @@ CG-1 故意不答；CG-2 在看到确认帧后关客户端输入，并用自然�
 
 | 新方法 | params | result |
 |---|---|---|
-| `importPaths` | `paths`: 非空绝对地址字符串数组（文件或目录） | `{count,failed}`：当前工作区条目数与导入是否报告错误；不含条目列表 |
+| `importPaths` | `paths`: 非空绝对地址字符串数组，或 `pathsFile`: FileRef（二选一）；可选 `sourceDesc`（默认 IPC）、`fromDrag`（默认 false）、`async`（默认 false） | 同步 `{count,failed}`：当前工作区条目数与导入是否报告错误；异步 null 表示已启动 |
 | `group` | `paths`: 工作区 id 数组，或 `pathsFile`: FileRef（二选一）；`namePrefix`: 非空字符串 | null；复用端口建组，旧数组未知 id 跳过 |
 | `setParams` | `imageMode`: boolean；`config`: 命名配置格式的 AppConfig JSON 对象 | null；复用全局参数写入、撤销和缓存失效；整体替换该模式配置 |
 | `extract` | `checkedOnly`: boolean；`outputFolder`: 绝对目录（可选白名单限制） | `{generation,end,outputFolder,count,failCount,skipCount,warnCount,resultsFile}`；失败终态可无统计和结果文件 |
 | `workspacePage` | `offset`: 非负 int；`limit`: 1–256 的 int；`revision`: integer（可选） | `{total,offset,groupCount,items,revision,snapshotFile}`；超过总数返回空数组，版本不匹配拒绝 |
 | `previewFiles` | `path`: 已导入且未移除的工作区 id | `{imageCount,manifest}`；只传文件描述，不传正文、HTML、图像字节或像素 |
 | `fileInfo` | `path`: 本会话签发的文件路径 | 文件描述；检查存在与规范化后的会话归属，无通用文件内容读取方法 |
-| `releaseFiles` | `paths`: 非空已签发文件路径数组 | null；全部校验成功再去重删除，有一个非法条目就整批拒绝 |
-| `metrics` | `{}` | `{heapPoolPeakBytes,callbackQueuePeak,rawProgress,sentProgress}`，口径见压测 |
+| `releaseFiles` | `paths`: 非空已签发文件路径数组 | null；全部校验成功再释放，非法条目整批拒绝；bulk 文件删除，缓存原图仅撤销签发，实际删除归预览生命周期 |
+| `metrics` | `{}` | `{heapPoolPeakBytes,callbackQueuePeak,rawProgress,sentProgress,callbackQueueSize,activityWorkers}`，口径见压测 |
 | `confirmAnswer` | `confirmationId`: 非空字符串；`actionKey`: 候选动作字符串或 null | `{accepted}`：是否交付了这张在途卡的决定 |
 
 `config` 沿用持久化配置属性名，例如 `enableCustomTemplate`（不是 Java 字段 `enableTemplate`）、
@@ -194,6 +194,107 @@ CG-1 故意不答；CG-2 在看到确认帧后关客户端输入，并用自然�
 | `confirmationExpired` | `{confirmationId}`；P4-17 可选扩展，到期取消后前端收卡与提示 |
 
 上述所有事件的 data 均追加必填 `revision:integer`。原字段保持不变。
+
+## P5a-1b 活动、导入、预览与回调泵
+
+认领 C01–C08、C20–C21、Q01–Q03、E02–E15、E21 与 previewFiles。
+新增 12 方法、12 事件；扩展 importPaths / previewFiles 载荷及 importRound / importFinished / notice 三事件。
+配套扩展 metrics 的泵观测字段、修正 releaseFiles 的缓存借用释放语义；共涉及四个旧方法。
+旧 13 方法仍在 ready.methods 最前，1a 的八方法随后，1b 的十二方法追加。
+帧类型、错误码与旧字段保持不变。所有事件携带独立递增 revision；查询 result 与 response 顶层均带同源 revision。
+
+### 命令与查询
+
+| 方法 | params（R = 必填） | result |
+|---|---|---|
+| cancelWorkspaceActivity | {} | null；只取消预解析/预览 |
+| cancelPreviewLoad | {} | null；无在途也推进预览代际和 revision |
+| startPreparse | runtime: RuntimeContext/R | null；非空目标才推进活动代际并发 started |
+| startPreparseFor | paths: FileRef/R（array<string>）；runtime/R | null；不发 started，不推进活动代际 |
+| refreshPreparseProgress | {} | null；每次发新的进度事件 |
+| loadPreview | path:string/R，largeFileConfirmed:boolean/R，runtime/R | null；大文件未确认时只发 confirmationRequired |
+| resolvePreviewRegion | generation:非负 long/R，path:string/R，accepted:boolean/R | null；旧代际 no-op；仅此命令应答区域确认 |
+| awaitPreviewInFlight | millis:非负 long/R | null；包括清理 worker；到期不承诺全部退出 |
+| applyImportPlan | plan: FileRef/R（ImportPlanVm） | null；不启动扫描，不自动发 importStateChanged |
+| activityGeneration | {} | {generation,revision} |
+| previewGeneration | {} | {generation,revision} |
+| previewLoadingPath | {} | {path:string或null,revision} |
+
+RuntimeContext 四字段全部必填：inputFolder/outputFolder 为绝对路径或 null，
+imageModeEnabled/openFolderAfterComplete 为 boolean。活动启动时同步捕获模式和生效参数；
+该请求的模式不写旧 setParams/extract 脚本模式。当前活动所用目录不参与解析，仍校验路径边界。
+完整 forRequest 门面/参数 schema/完整撤销属于 1c，本批不增加端口签名。
+
+ImportPlanVm 文件全部必填：batches、ignoredNonMht、hiddenDirs、emptyDirs、unreadable、depthLimited、quotaHit、hasMore；
+五个计数为非负 int，两个标志为 boolean。batch 的 dirPath:string、folderName:string或null、grouped:boolean、filePaths:array<string> 全部必填。
+整份计划、地址和所有类型在调用端口前校验，计划/paths 数组均由会话根内上传 FileRef 承载。
+异步导入期间拒绝重入；普通模型写入排队，配额确认仍经 confirmAnswer。每轮恰好一条 ImportRound，撤销按整轮压栈。
+
+### 事件字典
+
+以下各 data 另含 revision:integer。
+
+| 事件 | data |
+|---|---|
+| workspaceActivityChanged | generation |
+| preparseProgress | generation,done,total |
+| importStateChanged | generation,importing:boolean；true/false 各一次 |
+| importRound | 原 generation,newFiles,newGroups；追加 plan:FileRef、madeListNonEmpty:boolean、createdGroups:FileRef（array<GroupVm>） |
+| importFinished | 原 generation,count,failed；追加 accumulatedPaths:FileRef（array<string>） |
+| preparseStarted | generation |
+| preparseFinished | generation,result:FileRef（完整 PreparseResult，含失败项） |
+| previewLoadStateChanged | generation,path:string或null,active:boolean |
+| previewConfirmationRequired | path,name,sizeMiB；用户拒绝无需再发 loadPreview，接受调用 loadPreview(true) |
+| previewLoadFailed | generation,path,fileInfo:boolean,detail:string或null |
+| previewThumbnail | generation,path,index,imagePath,mediaType,extension,coreName,width,height,bytes；path 为来源 id，imagePath 为缓存图像路径，bytes 为图像字节数 |
+| previewLoaded | generation,path,manifest:FileRef或null；取消/无结果 null；同一 owned load 终态恰好一次 |
+| previewRegionConfirmationRequired | generation,path；不产生 confirmationId |
+| previewNotice | generation,path,key,namedParams:object<string,string> |
+| notice | 原 key；追加 namedParams:object<string,string>、level:ERROR/WARNING/INFO |
+
+PreparseResult 文件：path,status,errorKey,errorDetail,text,textAssigned,title,titleAssigned 全部保留，
+status 为 WAITING/READY/EMPTY/FAILED；可空字符串字段显式 null，assigned=false 不清旧缓存。
+导入 WorkspaceChanged 缓冲到本轮撤销压栈后发；其快照与该事件 revision 相等。
+导入结束顺序为 importFinished → importStateChanged(false)。
+
+### D13：真实格式与文件生命周期
+
+覆盖旧设计表的 PNG 要求：不转码 PNG、不传 ARGB/base64。
+previewThumbnail.imagePath 与 manifest.thumbnails[].imagePath 为真实缓存图像绝对路径；
+mediaType 根据实际字节魔数生成（JPEG 为 image/jpeg，扩展名 jpg），extension 为真实格式。
+width/height 为编码原图尺寸，不是 150px 解码缩略图尺寸；不支持的尺寸头为 0，客户端必须解码并处理失败。
+支持标识 PNG/JPEG/GIF/BMP/WebP/ICO/CUR/AVIF；这不等于承诺所有前端都能解码这些格式。
+coreName 复用已有图片命名服务；不因输出顺序改变改写缓存图像。
+
+previewFiles 保留同步脚本导出 text/html/thumbnails 与所有旧字段，图像追加 imagePath/mediaType/extension/coreName/width/height。
+兼容 pngThumbnails:false；true 明确 INVALID_PARAMS，不能假装已转 PNG。
+previewLoaded 的 manifest 同样有 text/html/thumbnails；正文/HTML 的导出在独立 worker 计算、
+写成服务端生成文件名的 UTF-8 文件，再由宿主签发。取消/旧代际时 manifest=null；
+导出异常显式追加 exportError 诊断并返回 manifest=null，不假装文件已导出。
+缓存图片借用预览生命周期，releaseFiles 仅释放签发记录；参数/提取/移除/退出仍可让原图失效。
+manifest/正文/HTML 是独立 bulk 文件，releaseFiles 实际删除。禁止当永久 URL 使用。
+
+### 单写者、背压与关闭
+
+宿主是模型命令/回调交付/事件编码/revision 分配/快照唯一串行点。
+worker 提交到容量 256 的 FIFO 回调队列；满队列每 25ms 重试，以阻塞 worker 背压，不丢终态。
+同一生产者顺序保持，不同生产者以成功入队次序线性化；同一个回调内的事件保持端口顺序。
+宿主每轮最多排空 256 回调，stdin 空闲也以 25ms 周期继续交付。
+所有帧先由宿主序列化，再进入容量 256 的输出 FIFO；唯一 mht-ipc-output 线程执行 write/flush，
+revision 先于入输出队列分配，写出顺序与分配顺序一致。输出排队/单次写停滞 3s 为传输失败，不静默丢帧。
+
+同步脚本 await 与 awaitPreviewInFlight 每个短等待继续泵回调/输入；confirmAnswer、取消、区域决定、活动三查询优先；
+普通请求暂存最多 256，超限 INVALID_REQUEST。旧同步脚本的普通查询继续排队，不抢在它的完成响应之前。
+EOF 取消已有活动、释放确认 waiter，排空已提交回调并等待预解析/导入/预览与清理 worker（10s 上限），
+再停止输出 writer（3.5s join）并由 session owner 删除文件。闲置 EOF 不额外伪造活动变更。
+Windows 同步管道的 write/close/interrupt 本身均可能阻塞；生产 runner 使用原始 stdio 描述符，
+超时后通过 JDK 25 标准 FFM 调用系统 Kernel32.CancelIoEx，先取消本进程的在途 I/O 再 join（另限 1s）。
+输出失败而 stdin 仍打开时，同样先取消输入 read，再关闭输入 reader。正常关闭不加载这个按需取消分支。
+JDK 25 未启用 native access 时会给该异常分支输出警告，可用 --enable-native-access=ALL-UNNAMED；
+FFM 的 native-image 支持和可达性尚需 Gate C 实跑，本批没有修改打包配方或元数据。
+API 依据：[Microsoft CancelIoEx](https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-cancelioex)。
+输出已断开时仍完成内部终态和 worker 收尾，不能承诺向断开的 peer 交付帧。
+超时/输出异常明确失败；自然返回测试宿主检查线程，不用 System.exit 掩盖残留线程。
 
 ## P5a-1a 结构、来源、快照与文件上传
 

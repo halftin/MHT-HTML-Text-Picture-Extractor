@@ -26,14 +26,7 @@ final class IpcWorkspaceCodec {
     ObjectNode workspace(WorkspaceVm vm, long revision) throws IOException {
         var result = json.createObjectNode();
         var groups = result.putArray("groups");
-        for (var group : vm.groups()) {
-            var entry = groups.addObject().put("no", group.no()).put("name", group.name())
-                    .put("expanded", group.expanded()).put("defaultNamed", group.defaultNamed());
-            var members = entry.putArray("members");
-            group.members().forEach(m -> members.add(item(m)));
-            var folders = entry.putArray("sourceFolders");
-            group.sourceFolders().forEach(folders::add);
-        }
+        for (var group : vm.groups()) groups.add(group(group));
         var items = result.putArray("topLevelItems");
         vm.topLevelItems().forEach(i -> items.add(item(i)));
         var order = json.createArrayNode();
@@ -41,6 +34,16 @@ final class IpcWorkspaceCodec {
         result.set("topLevelOrder", file(order));
         return result.put("canUndo", vm.canUndo()).put("undoDepth", vm.undoDepth())
                 .put("selection", vm.selection().name()).put("revision", revision);
+    }
+
+    ObjectNode group(com.mhtextractor.uiport.GroupVm vm) {
+        var entry = json.createObjectNode().put("no", vm.no()).put("name", vm.name())
+                .put("expanded", vm.expanded()).put("defaultNamed", vm.defaultNamed());
+        var members = entry.putArray("members");
+        vm.members().forEach(m -> members.add(item(m)));
+        var folders = entry.putArray("sourceFolders");
+        vm.sourceFolders().forEach(folders::add);
+        return entry;
     }
 
     ObjectNode file(com.fasterxml.jackson.databind.JsonNode content) throws IOException {

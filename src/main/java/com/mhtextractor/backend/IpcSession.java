@@ -27,6 +27,10 @@ final class IpcSession implements AutoCloseable {
             "workspacePage", "previewFiles", "fileInfo", "releaseFiles", "metrics", "confirmAnswer");
     static final List<String> STRUCTURE_METHODS = List.of(
             "ungroup", "renameGroup", "toggleGroupExpanded", "clearItems", "applyDrop", "removeItems", "removeGroup", "canUndo");
+    static final List<String> ACTIVITY_METHODS = List.of("cancelWorkspaceActivity", "cancelPreviewLoad",
+            "startPreparse", "startPreparseFor", "refreshPreparseProgress", "loadPreview",
+            "resolvePreviewRegion", "awaitPreviewInFlight", "applyImportPlan",
+            "activityGeneration", "previewGeneration", "previewLoadingPath");
     private final ObjectMapper json;
     private final WorkspaceModel model = new WorkspaceModel();
     private final GlobalParameterCache global = new GlobalParameterCache();
@@ -50,6 +54,14 @@ final class IpcSession implements AutoCloseable {
     private volatile int queuePeak;
     private volatile boolean closing;
     private volatile boolean disconnecting;
+    private boolean importing;
+    private boolean applyingPlan;
+    private boolean activityImageMode;
+    private final java.util.Set<Thread> workers = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.List<String> importChanges = new java.util.ArrayList<>();
+    private final java.util.Map<Long, PreviewService.Prepared> previewInputs = new java.util.HashMap<>();
+    private final java.util.Map<Long, java.util.List<PortEvent.PreviewNotice>> pendingNotices = new java.util.HashMap<>();
+    private final IpcWorkspaceCodec codec;
     private Runnable inputPump = () -> { };
     private Runnable silentChange = () -> { };
 
@@ -58,6 +70,7 @@ final class IpcSession implements AutoCloseable {
         confirmations = new IpcConfirmations(json, this::dispatch, data -> emit("confirmationRequested", data),
                 data -> emit("confirmationExpired", data));
         files = new IpcFiles(json);
+        codec = new IpcWorkspaceCodec(json, files);
         previews = PreviewSession.create(files.root.resolve("preview-cache"));
         previewService = new PreviewService(previews.lifecycle());
         var plans = new ExtractionPlanService(new ExtractionPlanService.Context() {
@@ -72,10 +85,10 @@ final class IpcSession implements AutoCloseable {
         Confirmer confirmer = confirmations;
         var activities = new WorkspaceActivityService(new WorkspaceActivityService.Context() {
             public List<PreviewItem> items() { return model.allItems(); }
-            public boolean textMode() { return !imageMode; }
-            public AppConfig effectiveParams(PreviewItem item) { return params(item, imageMode); }
+            public boolean textMode() { return !activityImageMode; }
+            public AppConfig effectiveParams(PreviewItem item) { return params(item, activityImageMode); }
             public AppConfig effectiveImageParams(PreviewItem item) { return params(item, true); }
-        }, previewService, (image, index, config) -> new ThumbnailData("", 0, 0, null), this::dispatch);
+        }, previewService, IpcImages::thumbnail, this::dispatch);
         var clipboard = new ParamClipboard(model::push, target -> ParamScope.GLOBAL, (target, mode, config) -> { });
         var paramCommands = new WorkspaceParamCommandService(model, new WorkspaceParamService(previews.lifecycle()),
                 global, clipboard::pushParamUndo);
@@ -113,7 +126,9 @@ final class IpcSession implements AutoCloseable {
             port.commands().cancelExtraction();
         } finally {
             confirmations.disconnect(); // Also release import confirmations, even if terminal delivery broke stdout.
-            port.commands().cancelWorkspaceActivity();
+            if (port.queries().previewLoadingPath() != null
+                    || workers.stream().anyMatch(t -> t.isAlive() && t.getName().equals("preview-preparse")))
+                port.commands().cancelWorkspaceActivity();
         }
     }
 
@@ -126,15 +141,34 @@ final class IpcSession implements AutoCloseable {
     private void dispatch(Runnable callback) {
         if (closing) return;
         if (Thread.currentThread() == host) { callback.run(); return; }
+        String workerName = Thread.currentThread().getName();
+        if (workerName.startsWith("preview-") || workerName.startsWith("mht-import-") || workerName.startsWith("extraction-"))
+            workers.add(Thread.currentThread());
+        boolean interrupted = false;
         try {
-            while (!closing && !callbacks.offer(callback, 100, TimeUnit.MILLISECONDS)) { }
+            while (!closing) {
+                try {
+                    if (callbacks.offer(callback, 25, TimeUnit.MILLISECONDS)) break;
+                } catch (InterruptedException e) { interrupted = true; }
+            }
             queuePeak = Math.max(queuePeak, callbacks.size());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            if (closing || disconnecting) return; // Expected shutdown interrupt must not escape the worker's final dispatch.
-            throw new IllegalStateException("Host dispatch interrupted", e);
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt();
         }
     }
+
+    private void start(Runnable command) {
+        var before = Thread.getAllStackTraces().keySet();
+        command.run();
+        // Existing app coordinators create these workers synchronously before returning.
+        // Keep their handles so shutdown also joins a parser that has not delivered a callback yet.
+        Thread.getAllStackTraces().keySet().stream().filter(t -> !before.contains(t))
+                .filter(t -> t.getName().equals("preview-preparse") || t.getName().equals("preview-image-load")
+                        || t.getName().equals("mht-import-scan")).forEach(workers::add);
+    }
+
+    boolean busy() { return importing || !pendingNotices.isEmpty() || port.queries().previewLoadingPath() != null
+            || workers.stream().anyMatch(t -> t.isAlive() && t.getName().equals("preview-preparse")); }
 
     private void await(java.util.function.BooleanSupplier done) throws InterruptedException {
         // Synchronous methods finish their activity before responding; no worker touches the model afterward.
@@ -152,19 +186,102 @@ final class IpcSession implements AutoCloseable {
     }
 
     private void onEvent(PortEvent event) {
+        try { encodeEvent(event); }
+        catch (IOException e) { throw new java.io.UncheckedIOException(e); }
+    }
+
+    private void encodeEvent(PortEvent event) throws IOException {
         switch (event) {
-            case PortEvent.PreparseFinished finished -> silentChange.run();
-            case PortEvent.WorkspaceChanged changed -> emit("workspaceChanged", json.createObjectNode().put("kind", changed.kind()));
-            case PortEvent.ImportRound round -> emit("importRound", json.createObjectNode()
-                    .put("generation", round.generation()).put("newFiles", round.newFiles()).put("newGroups", round.newGroups()));
+            case PortEvent.WorkspaceActivityChanged changed -> emit("workspaceActivityChanged", generation(changed.generation()));
+            case PortEvent.PreparseStarted started -> emit("preparseStarted", generation(started.generation()));
+            case PortEvent.PreparseProgress progress -> emit("preparseProgress", generation(progress.generation())
+                    .put("done", progress.done()).put("total", progress.total()));
+            case PortEvent.PreparseFinished finished -> {
+                var result = finished.result();
+                var value = json.createObjectNode().put("path", result.path()).put("status", result.status().name())
+                        .put("errorKey", result.errorKey()).put("errorDetail", result.errorDetail())
+                        .put("text", result.text()).put("textAssigned", result.textAssigned())
+                        .put("title", result.title()).put("titleAssigned", result.titleAssigned());
+                emit("preparseFinished", generation(finished.generation()).set("result", codec.file(value)));
+            }
+            case PortEvent.WorkspaceChanged changed -> {
+                if (importing || applyingPlan) importChanges.add(changed.kind());
+                else emit("workspaceChanged", json.createObjectNode().put("kind", changed.kind()));
+            }
+            case PortEvent.ImportStateChanged state -> {
+                importing = state.importing();
+                if (!importing) flushImportChanges();
+                emit("importStateChanged", generation(state.generation()).put("importing", state.importing()));
+            }
+            case PortEvent.ImportRound round -> {
+                flushImportChanges();
+                var groups = json.createArrayNode();
+                var snapshot = port.queries().workspace();
+                for (var group : round.createdGroups()) groups.add(codec.group(snapshot.groups().stream()
+                        .filter(vm -> vm.no() == group.getGroupNo()).findFirst().orElseThrow()));
+                var data = generation(round.generation()).put("newFiles", round.newFiles()).put("newGroups", round.newGroups())
+                        .put("madeListNonEmpty", round.madeListNonEmpty());
+                data.set("plan", codec.file(json.valueToTree(round.plan())));
+                data.set("createdGroups", codec.file(groups));
+                emit("importRound", data);
+            }
             case PortEvent.ImportFinished finished -> {
                 importDone = true;
-                emit("importFinished", json.createObjectNode().put("generation", finished.generation())
-                        .put("count", finished.accumulatedPaths().size()).put("failed", importFailed));
+                emit("importFinished", generation(finished.generation())
+                        .put("count", finished.accumulatedPaths().size()).put("failed", importFailed)
+                        .set("accumulatedPaths", codec.file(json.valueToTree(finished.accumulatedPaths()))));
             }
             case PortEvent.Notice notice -> {
                 importFailed = true;
-                emit("notice", json.createObjectNode().put("key", notice.key()));
+                emit("notice", json.createObjectNode().put("key", notice.key()).put("level", notice.level().name())
+                        .set("namedParams", json.valueToTree(notice.namedParams())));
+            }
+            case PortEvent.PreviewLoadStateChanged state -> {
+                if (state.active()) {
+                    var item = item(state.path());
+                    previewInputs.put(state.generation(), previewService.prepare(Path.of(state.path()), params(item, activityImageMode)));
+                }
+                emit("previewLoadStateChanged", generation(state.generation()).put("path", state.path()).put("active", state.active()));
+            }
+            case PortEvent.PreviewConfirmationRequired required -> emit("previewConfirmationRequired", json.createObjectNode()
+                    .put("path", required.path()).put("name", required.name()).put("sizeMiB", required.sizeMiB()));
+            case PortEvent.PreviewLoadFailed failed -> {
+                previewInputs.remove(failed.generation());
+                emit("previewLoadFailed", generation(failed.generation()).put("path", failed.path())
+                        .put("fileInfo", failed.fileInfo()).put("detail", failed.detail()));
+            }
+            case PortEvent.PreviewThumbnail thumbnail -> {
+                var prepared = previewInputs.get(thumbnail.generation());
+                if (prepared == null) throw new IOException("Missing preview input");
+                var meta = previews.store().load(prepared.cacheKey()).orElseThrow(() -> new IOException("Missing preview cache"));
+                var data = image(meta, thumbnail.index(), thumbnail.thumbnail());
+                data.put("generation", thumbnail.generation()).put("path", thumbnail.path()).put("index", thumbnail.index());
+                emit("previewThumbnail", data);
+            }
+            case PortEvent.PreviewLoaded loaded -> {
+                var data = generation(loaded.generation()).put("path", loaded.path());
+                var item = item(loaded.path());
+                if (item.cachedMeta != null && loaded.generation() == port.queries().previewGeneration()) {
+                    exportLoaded(loaded, item, data);
+                } else {
+                    data.putNull("manifest");
+                    emit("previewLoaded", data);
+                }
+                previewInputs.remove(loaded.generation());
+            }
+            case PortEvent.PreviewRegionConfirmationRequired required -> emit("previewRegionConfirmationRequired",
+                    generation(required.generation()).put("path", required.path()));
+            case PortEvent.PreviewNotice notice -> {
+                if (pendingNotices.containsKey(notice.generation())) {
+                    pendingNotices.get(notice.generation()).add(notice);
+                    return;
+                }
+                var args = json.createObjectNode();
+                var meta = item(notice.path()).cachedMeta;
+                if (meta != null) meta.warnings().stream().filter(w -> w.key().equals(notice.key()))
+                        .findFirst().ifPresent(w -> w.args().forEach(args::put));
+                emit("previewNotice", generation(notice.generation()).put("path", notice.path()).put("key", notice.key())
+                        .set("namedParams", args));
             }
             case PortEvent.ParamStateChanged changed -> emit("paramsChanged", json.createObjectNode()
                     .put("kind", changed.kind().name()).put("affectedCount", changed.affectedPaths().size()));
@@ -182,8 +299,76 @@ final class IpcSession implements AutoCloseable {
                 terminal = end;
                 emit("extractionTerminal", terminalSummary(end));
             }
-            default -> { } // Remaining activity events are deferred to P5a-1b/d; never send thumbnail pixels.
+            default -> { } // Extraction/result additions remain P5a-1d; never send thumbnail pixels.
         }
+    }
+
+    private ObjectNode generation(long value) { return json.createObjectNode().put("generation", value); }
+
+    private void flushImportChanges() {
+        var changes = List.copyOf(importChanges);
+        importChanges.clear();
+        for (var kind : changes) emit("workspaceChanged", json.createObjectNode().put("kind", kind));
+    }
+
+    private PreviewItem item(String path) {
+        return model.allItems().stream().filter(it -> it.path.equals(path)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Imported item required"));
+    }
+
+    private ObjectNode image(com.mhtextractor.cache.PreviewCacheMeta meta, int index, ThumbnailData thumbnail) throws IOException {
+        Path path = previews.store().imageFileFor(meta, index);
+        String ext = IpcImages.extension(Files.readAllBytes(path));
+        var ref = files.borrowImage(path, IpcImages.mediaType(ext));
+        return ref.put("imagePath", path.toString()).put("extension", ext).put("coreName", thumbnail.coreName())
+                .put("width", thumbnail.width()).put("height", thumbnail.height());
+    }
+
+    private void exportLoaded(PortEvent.PreviewLoaded loaded, PreviewItem item, ObjectNode data) throws IOException {
+        var manifest = json.createObjectNode();
+        var thumbnails = manifest.putArray("thumbnails");
+        for (int i = 0; i < item.cachedMeta.images().size(); i++) {
+            var thumb = item.cachedThumbs.get(i);
+            thumbnails.add(image(item.cachedMeta, i, thumb).put("name", thumb.coreName()).put("index", i));
+        }
+        AppConfig textParams = params(item, false).copyExtractionParams();
+        pendingNotices.put(loaded.generation(), new java.util.ArrayList<>());
+        Thread worker = new Thread(() -> {
+            Path textFile = null;
+            Path htmlFile = null;
+            Throwable failed = null;
+            try {
+                var text = SourceParseService.parse(item.path, textParams, true);
+                var parsed = SourceParsers.forPath(item.path).parse(item.path, true, () -> disconnecting, null, null);
+                textFile = Files.createTempFile(files.root, "bulk-", ".txt");
+                htmlFile = Files.createTempFile(files.root, "bulk-", ".html");
+                Files.writeString(textFile, text.text() == null ? "" : text.text(), StandardCharsets.UTF_8);
+                Files.writeString(htmlFile, parsed.getHtmlContent() == null ? "" : parsed.getHtmlContent(), StandardCharsets.UTF_8);
+            } catch (Throwable e) { failed = e; }
+            Path textPath = textFile, htmlPath = htmlFile;
+            Throwable failure = failed;
+            dispatch(() -> {
+                try {
+                    if (failure != null || loaded.generation() != port.queries().previewGeneration() || disconnecting) {
+                        data.putNull("manifest");
+                        if (failure != null) data.put("exportError", failure.toString());
+                        if (textPath != null) Files.deleteIfExists(textPath);
+                        if (htmlPath != null) Files.deleteIfExists(htmlPath);
+                    } else {
+                        manifest.set("text", files.issue(textPath, "text/plain; charset=utf-8"));
+                        manifest.set("html", files.issue(htmlPath, "text/html; charset=utf-8"));
+                        data.set("manifest", codec.file(manifest));
+                    }
+                    emit("previewLoaded", data);
+                    var notices = pendingNotices.remove(loaded.generation());
+                    if (notices != null) for (var notice : notices) onEvent(notice);
+                } catch (IOException e) { throw new java.io.UncheckedIOException(e); }
+                finally { pendingNotices.remove(loaded.generation()); }
+            });
+        }, "preview-payload-export");
+        workers.add(worker);
+        worker.setDaemon(true);
+        worker.start();
     }
 
     private ObjectNode terminalSummary(PortEvent.ExtractionTerminal end) {
@@ -196,6 +381,70 @@ final class IpcSession implements AutoCloseable {
 
     JsonNode call(String method, JsonNode p) throws Exception {
         switch (method) {
+            case "cancelWorkspaceActivity" -> { port.commands().cancelWorkspaceActivity(); return json.nullNode(); }
+            case "cancelPreviewLoad" -> {
+                long old = port.queries().previewGeneration();
+                boolean hadLoad = port.queries().previewLoadingPath() != null;
+                port.commands().cancelPreviewLoad();
+                if (!hadLoad && old != port.queries().previewGeneration()) silentChange.run();
+                return json.nullNode();
+            }
+            case "startPreparse", "startPreparseFor" -> {
+                List<String> targets = method.equals("startPreparseFor") ? paths(p, "paths", null, false)
+                        : model.allItems().stream().filter(it -> !it.removed).map(it -> it.path).toList();
+                for (String path : targets) IpcFiles.input(path);
+                boolean mode = runtime(p);
+                activityImageMode = mode;
+                start(() -> {
+                    if (method.equals("startPreparse")) port.commands().startPreparse();
+                    else port.commands().startPreparseFor(targets);
+                });
+                return json.nullNode();
+            }
+            case "refreshPreparseProgress" -> { port.commands().refreshPreparseProgress(); return json.nullNode(); }
+            case "loadPreview" -> {
+                String path = string(p, "path");
+                boolean confirmed = bool(p, "largeFileConfirmed");
+                boolean mode = runtime(p);
+                if (item(path).removed) throw new IllegalArgumentException("Removed preview item");
+                IpcFiles.input(path);
+                activityImageMode = mode;
+                start(() -> port.commands().loadPreview(path, confirmed));
+                return json.nullNode();
+            }
+            case "resolvePreviewRegion" -> {
+                long generation = integer(p, "generation");
+                String path = string(p, "path");
+                boolean accepted = bool(p, "accepted");
+                IpcFiles.input(path);
+                start(() -> port.commands().resolvePreviewRegion(generation, path, accepted));
+                return json.nullNode();
+            }
+            case "awaitPreviewInFlight" -> {
+                long millis = integer(p, "millis");
+                long duration = TimeUnit.MILLISECONDS.toNanos(millis);
+                long started = System.nanoTime();
+                do {
+                    inputPump.run();
+                    drainCallbacks();
+                    // Short joins retain the port's worker/cleanup semantics without starving input or delivery.
+                    port.commands().awaitPreviewInFlight(Math.min(5, millis));
+                    if (workers.stream().noneMatch(t -> t.isAlive() && t.getName().startsWith("preview-"))) break;
+                } while (System.nanoTime() - started < duration && !disconnecting);
+                drainCallbacks();
+                return json.nullNode();
+            }
+            case "activityGeneration" -> { return generation(port.queries().activityGeneration()); }
+            case "previewGeneration" -> { return generation(port.queries().previewGeneration()); }
+            case "previewLoadingPath" -> { return json.createObjectNode().put("path", port.queries().previewLoadingPath()); }
+            case "applyImportPlan" -> {
+                if (importing) throw new IllegalArgumentException("Import already active");
+                ImportPlanVm plan = plan(files.readUpload(p.path("plan")));
+                applyingPlan = true;
+                try { port.commands().applyImportPlan(plan); }
+                finally { applyingPlan = false; flushImportChanges(); }
+                return json.nullNode();
+            }
             case "confirmAnswer" -> {
                 String id = string(p, "confirmationId");
                 JsonNode action = p.get("actionKey");
@@ -205,12 +454,18 @@ final class IpcSession implements AutoCloseable {
                 return json.createObjectNode().put("accepted", confirmations.answer(id, action.isNull() ? null : action.asText()));
             }
             case "importPaths" -> {
-                List<String> paths = strings(p, "paths");
+                List<String> paths = paths(p, "paths", "pathsFile", false);
+                if (paths.isEmpty() || importing) throw new IllegalArgumentException("Nonempty paths and idle importer required");
+                if (p.has("sourceDesc") && !p.path("sourceDesc").isTextual()) throw new IllegalArgumentException("sourceDesc string required");
+                String source = p.has("sourceDesc") ? p.path("sourceDesc").textValue() : "IPC";
+                boolean fromDrag = p.has("fromDrag") && bool(p, "fromDrag");
+                boolean async = p.has("async") && bool(p, "async");
                 for (String path : paths) IpcFiles.input(path);
                 importDone = false;
                 importFailed = false;
-                port.commands().importPaths(paths, "IPC", false);
-                await(() -> importDone);
+                start(() -> port.commands().importPaths(paths, source, fromDrag));
+                if (async) return json.nullNode();
+                await(() -> importDone && !importing);
                 return json.createObjectNode().put("count", model.allItems().size()).put("failed", importFailed);
             }
             case "group" -> {
@@ -300,6 +555,7 @@ final class IpcSession implements AutoCloseable {
                         .filter(pool -> pool.getType() == java.lang.management.MemoryType.HEAP)
                         .mapToLong(pool -> Math.max(0, pool.getPeakUsage().getUsed())).sum();
                 return json.createObjectNode().put("heapPoolPeakBytes", peak).put("callbackQueuePeak", queuePeak)
+                        .put("callbackQueueSize", callbacks.size()).put("activityWorkers", workers.stream().filter(Thread::isAlive).count())
                         .put("rawProgress", rawProgress).put("sentProgress", sentProgress);
             }
             default -> throw new IllegalArgumentException("Unknown extension method");
@@ -307,6 +563,10 @@ final class IpcSession implements AutoCloseable {
     }
 
     private ObjectNode preview(JsonNode p) throws Exception {
+        if (p.has("pngThumbnails")) {
+            if (!p.path("pngThumbnails").isBoolean() || p.path("pngThumbnails").booleanValue())
+                throw new IllegalArgumentException("PNG transcoding is not supported; use real encoded image files");
+        }
         String id = string(p, "path");
         PreviewItem item = model.allItems().stream().filter(it -> it.path.equals(id) && !it.removed).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Preview requires an imported item id"));
@@ -321,12 +581,58 @@ final class IpcSession implements AutoCloseable {
         var thumbs = manifest.putArray("thumbnails");
         for (int i = 0; i < result.images().size(); i++) {
             Path image = previews.store().imageFileFor(result.meta(), i);
-            ObjectNode ref = files.issue(image, "image/" + result.meta().images().get(i).detectedExt());
-            ref.put("name", result.thumbs().get(i).coreName()).put("index", i);
+            byte[] bytes = Files.readAllBytes(image);
+            String ext = IpcImages.extension(bytes);
+            var metadata = IpcImages.thumbnail(new PreviewImageData(result.images().get(i).originalName(),
+                    result.images().get(i).sourceId(), bytes), i, params(item, true));
+            ObjectNode ref = files.borrowImage(image, IpcImages.mediaType(ext));
+            ref.put("name", result.thumbs().get(i).coreName()).put("index", i).put("imagePath", image.toString())
+                    .put("coreName", metadata.coreName()).put("width", metadata.width()).put("height", metadata.height()).put("extension", ext);
             thumbs.add(ref); // Encoded original: client decodes/scales, never ARGB/base64 over stdio.
         }
         return json.createObjectNode().put("imageCount", thumbs.size())
                 .set("manifest", files.write(".json", json.writeValueAsBytes(manifest), "application/json"));
+    }
+
+    private boolean runtime(JsonNode p) throws IOException {
+        JsonNode r = p.path("runtime");
+        if (!r.isObject()) throw new IllegalArgumentException("RuntimeContext required");
+        for (String key : List.of("inputFolder", "outputFolder")) {
+            if (!r.has(key) || (!r.path(key).isNull() && !r.path(key).isTextual())) throw new IllegalArgumentException("Runtime path required");
+            if (r.path(key).isTextual()) {
+                if (key.equals("outputFolder")) IpcFiles.checkOutput(r.path(key).textValue());
+                else IpcFiles.input(r.path(key).textValue());
+            }
+        }
+        bool(r, "openFolderAfterComplete");
+        return bool(r, "imageModeEnabled");
+    }
+
+    private ImportPlanVm plan(JsonNode value) throws IOException {
+        if (!value.isObject() || !value.path("batches").isArray()) throw new IllegalArgumentException("ImportPlanVm required");
+        var batches = new java.util.ArrayList<ImportPlanVm.ImportBatchVm>();
+        for (var b : value.path("batches")) {
+            String dir = string(b, "dirPath");
+            IpcFiles.input(dir);
+            if (!b.has("folderName") || (!b.path("folderName").isTextual() && !b.path("folderName").isNull()))
+                throw new IllegalArgumentException("folderName required");
+            if (!b.path("filePaths").isArray()) throw new IllegalArgumentException("filePaths required");
+            var paths = new java.util.ArrayList<String>();
+            for (var path : b.path("filePaths")) {
+                if (!path.isTextual() || path.textValue().isBlank()) throw new IllegalArgumentException("File path required");
+                IpcFiles.input(path.textValue()); paths.add(path.textValue());
+            }
+            batches.add(new ImportPlanVm.ImportBatchVm(dir, b.path("folderName").isNull() ? null : b.path("folderName").textValue(),
+                    bool(b, "grouped"), paths));
+        }
+        return new ImportPlanVm(batches, count(value, "ignoredNonMht"), count(value, "hiddenDirs"), count(value, "emptyDirs"),
+                count(value, "unreadable"), count(value, "depthLimited"), bool(value, "quotaHit"), bool(value, "hasMore"));
+    }
+
+    private static int count(JsonNode value, String key) {
+        long n = integer(value, key);
+        if (n > Integer.MAX_VALUE) throw new IllegalArgumentException("Count overflow");
+        return (int) n;
     }
 
     static String string(JsonNode p, String key) {
@@ -389,17 +695,39 @@ final class IpcSession implements AutoCloseable {
         return paths;
     }
 
-    @Override public void close() throws IOException {
-        closing = true;
-        events = event -> { };
-        callbacks.clear();
+    void shutdownWorkers() throws IOException {
+        if (closing) return;
         disconnect();
         try {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            do {
+                drainCallbacks();
+                port.commands().awaitPreviewInFlight(5);
+                for (Thread worker : List.copyOf(workers)) {
+                    if (worker == host) continue;
+                    worker.join(5);
+                }
+                if (workers.stream().noneMatch(Thread::isAlive) && callbacks.isEmpty() && !importing) break;
+                if (System.nanoTime() >= deadline) throw new IOException("IPC workers did not finish during shutdown");
+            } while (true);
             var channel = extractions.channel();
             if (channel != null) channel.result.get(10, TimeUnit.SECONDS);
         } catch (Exception e) {
             throw new IOException("Extraction worker did not finish during shutdown", e);
         } finally {
+            closing = true;
+            events = event -> { };
+            callbacks.clear();
+        }
+    }
+
+    private boolean filesClosed;
+
+    @Override public void close() throws IOException {
+        if (filesClosed) return;
+        try { shutdownWorkers(); }
+        finally {
+            filesClosed = true;
             previews.lifecycle().onShutdown(() -> { });
             files.close();
         }

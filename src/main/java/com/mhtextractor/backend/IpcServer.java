@@ -12,13 +12,10 @@ import com.mhtextractor.uiport.Uiport;
 import com.mhtextractor.uiport.WorkspaceVm;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
 import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.ArrayDeque;
@@ -72,8 +69,9 @@ final class IpcServer {
 
     void run(InputStream input, OutputStream output) throws IOException {
         welcomed = false;
-        // Borrowed stdio: the caller owns stream lifetime. Never use PrintWriter (swallows IO errors).
-        BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8));
+        // Output is borrowed; the reader closes input on termination. Never swallow transport IO errors.
+        IpcOutput writer = new IpcOutput(output);
+        boolean outputFailed = false;
         ObjectNode ready = frame("event").put("event", "ready");
         ArrayNode methods = ready.putObject("data").putArray("methods").add("workspace").add("setChecked");
         ready.withObject("data").put("sessionId", sessionId).put("revision", revision);
@@ -87,6 +85,7 @@ final class IpcServer {
         }
         methods.add("hello");
         if (session != null) IpcSession.STRUCTURE_METHODS.forEach(methods::add);
+        if (session != null) IpcSession.ACTIVITY_METHODS.forEach(methods::add);
         AutoCloseable subscription = session == null ? port.events().subscribe(event -> {
             if (event instanceof com.mhtextractor.uiport.PortEvent.WorkspaceChanged changed) {
                 var frame = frame("event").put("event", "workspaceChanged");
@@ -100,9 +99,10 @@ final class IpcServer {
             write(writer, ready); // The first write is covered by the same failure cleanup as all later frames.
             if (session != null) session.inputPump(() -> pump(incoming, writer));
             while (!disconnected) {
+                writer.check();
                 if (session != null) session.drainCallbacks();
                 String line;
-                if (!deferred.isEmpty()) line = deferred.removeFirst();
+                if (!deferred.isEmpty() && (session == null || !session.busy())) line = deferred.removeFirst();
                 else {
                     var received = session == null ? incoming.take() : incoming.poll(25);
                     if (received == null) continue;
@@ -112,26 +112,37 @@ final class IpcServer {
                     }
                     line = received.line();
                 }
-                write(writer, dispatch(line));
+                if (session != null && session.busy() && !priority(line)) {
+                    defer(line, writer);
+                } else write(writer, dispatch(line));
             }
         } catch (UncheckedIOException e) {
+            outputFailed = true;
             throw e.getCause();
+        } catch (IOException e) {
+            outputFailed = true;
+            throw e;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("IPC host interrupted", e);
         } finally {
-            try { subscription.close(); } catch (Exception e) { throw new IOException(e); }
-            if (session != null) {
-                session.inputPump(() -> { });
-                session.events(event -> { }); // Failed output must not prevent cancellation or cleanup.
-                session.silentChanges(() -> { });
-                session.disconnect();
-            }
-            else files.close();
+            try {
+                try { subscription.close(); } catch (Exception e) { throw new IOException(e); }
+                if (session != null) {
+                    if (outputFailed) session.events(event -> { });
+                    session.inputPump(() -> { });
+                    try { session.shutdownWorkers(); }
+                    finally {
+                        session.events(event -> { });
+                        session.silentChanges(() -> { });
+                    }
+                }
+                else files.close();
+            } finally { writer.close(); }
         }
     }
 
-    private void emit(BufferedWriter writer, ObjectNode event) throws IOException {
+    private void emit(IpcOutput writer, ObjectNode event) throws IOException {
         var data = (ObjectNode) event.get("data");
         data.put("revision", ++revision);
         if (event.path("event").asText().equals("workspaceChanged")) {
@@ -154,9 +165,10 @@ final class IpcServer {
         if (session != null) session.disconnect();
     }
 
-    private void pump(IpcInput incoming, BufferedWriter writer) {
+    private void pump(IpcInput incoming, IpcOutput writer) {
         if (disconnected) return;
         try {
+            writer.check();
             // EOF is not delayed behind a backlog of ordinary requests while a confirmation is pending.
             if (incoming.end() != null) { endInput(incoming.end()); return; }
             var received = incoming.poll();
@@ -165,16 +177,33 @@ final class IpcServer {
             JsonNode request;
             try { request = json.readTree(received.line()); }
             catch (JsonProcessingException e) { write(writer, dispatch(received.line())); return; }
-            if (request != null && request.path("method").asText().equals("confirmAnswer")) {
+            if (request != null && priority(received.line())) {
                 write(writer, dispatch(received.line()));
-            } else if (deferred.size() < 256) {
-                deferred.addLast(received.line()); // No other command may mutate an active model snapshot.
             } else {
-                String id = request != null && request.path("id").isTextual() ? request.path("id").asText() : null;
-                write(writer, error(id, "INVALID_REQUEST", "Too many queued requests during activity"));
+                defer(received.line(), writer);
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+    }
+
+    private boolean priority(String line) {
+        try {
+            JsonNode request = json.readTree(line);
+            return request != null && java.util.List.of("confirmAnswer", "cancelWorkspaceActivity", "cancelPreviewLoad",
+                    "resolvePreviewRegion", "activityGeneration", "previewGeneration", "previewLoadingPath",
+                    "startPreparse", "startPreparseFor", "refreshPreparseProgress", "loadPreview", "awaitPreviewInFlight",
+                    "refreshPreparseProgress").contains(request.path("method").asText());
+        } catch (JsonProcessingException e) { return true; }
+    }
+
+    private void defer(String line, IpcOutput writer) throws IOException {
+        if (deferred.size() < 256) deferred.addLast(line);
+        else {
+            JsonNode request;
+            try { request = json.readTree(line); } catch (JsonProcessingException e) { write(writer, dispatch(line)); return; }
+            String id = request != null && request.path("id").isTextual() ? request.path("id").asText() : null;
+            write(writer, error(id, "INVALID_REQUEST", "Too many queued requests during activity"));
         }
     }
 
@@ -230,7 +259,8 @@ final class IpcServer {
                 }
                 default -> {
                     String method = request.path("method").asText();
-                    if (session == null || (!IpcSession.METHODS.contains(method) && !IpcSession.STRUCTURE_METHODS.contains(method))) {
+                    if (session == null || (!IpcSession.METHODS.contains(method) && !IpcSession.STRUCTURE_METHODS.contains(method)
+                            && !IpcSession.ACTIVITY_METHODS.contains(method))) {
                         return error(id, "UNKNOWN_METHOD", "Unknown method: " + method);
                     }
                     if (method.equals("workspacePage")) result = page(params);
@@ -243,7 +273,8 @@ final class IpcServer {
                             currentSnapshot = null;
                             pageSnapshot = null;
                         }
-                        if (result.isObject() && (method.equals("applyDrop") || method.equals("canUndo"))) {
+                        if (result.isObject() && (method.equals("applyDrop") || method.equals("canUndo")
+                                || java.util.List.of("activityGeneration", "previewGeneration", "previewLoadingPath").contains(method))) {
                             ((ObjectNode) result).put("revision", revision);
                         }
                     }
@@ -329,9 +360,7 @@ final class IpcServer {
         return frame;
     }
 
-    private void write(BufferedWriter writer, ObjectNode frame) throws IOException {
+    private void write(IpcOutput writer, ObjectNode frame) throws IOException {
         writer.write(json.writeValueAsString(frame));
-        writer.write('\n');
-        writer.flush();
     }
 }

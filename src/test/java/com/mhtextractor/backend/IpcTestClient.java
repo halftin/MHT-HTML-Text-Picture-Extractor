@@ -177,6 +177,31 @@ final class IpcTestClient implements AutoCloseable {
         return frames;
     }
 
+    void stopReadingAndDisconnect() throws Exception {
+        stopReadingAndDisconnect(true);
+    }
+
+    void stopReadingAndDisconnect(boolean closeInput) throws Exception {
+        long started = System.nanoTime();
+        if (closeInput) input.close();
+        boolean stopped = process.waitFor(8, TimeUnit.SECONDS);
+        if (!stopped) {
+            Path dump = stderr.resolveSibling("threads.txt");
+            var diagnostic = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "jcmd.exe").toString(),
+                    String.valueOf(process.pid()), "Thread.print").redirectErrorStream(true).redirectOutput(dump.toFile()).start();
+            if (!diagnostic.waitFor(5, TimeUnit.SECONDS)) diagnostic.destroyForcibly();
+            System.out.println("STALLED PIPE THREADS: " + Files.readString(dump));
+        }
+        assertTrue(stopped, "Stalled real stdout pipe must not block shutdown");
+        assertEquals(0, process.exitValue(), Files.readString(stderr)); // Fixture expects runner transport failure.
+        String diagnostics = Files.readString(stderr);
+        assertTrue(diagnostics.contains("outputWriters=0"), diagnostics);
+        assertTrue(diagnostics.contains("runnerExit=1 naturalReturn=true"), diagnostics);
+        System.out.println("STALLED PIPE GREEN: exit=0 shutdownMs=" + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
+                + "; " + diagnostics.strip());
+        finished = true;
+    }
+
     @Override
     public void close() throws Exception {
         try {

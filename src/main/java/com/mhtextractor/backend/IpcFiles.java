@@ -21,6 +21,7 @@ import java.util.regex.Pattern;
 final class IpcFiles implements AutoCloseable {
     private final ObjectMapper json;
     private final Set<Path> issued = new HashSet<>();
+    private final Set<Path> borrowed = new HashSet<>();
     final Path root;
 
     IpcFiles(ObjectMapper json) throws IOException {
@@ -57,18 +58,21 @@ final class IpcFiles implements AutoCloseable {
     }
 
     static Path output(String value) throws IOException {
+        Path path = checkOutput(value);
+        Files.createDirectories(path);
+        List<Path> roots = allowedRoots();
+        if (!roots.isEmpty() && !path.toRealPath().startsWith(allowedRoot(path, roots))) throw new IllegalArgumentException("Output escapes allowlist");
+        return path;
+    }
+
+    static Path checkOutput(String value) throws IOException {
         Path path = absolute(value);
         List<Path> roots = allowedRoots();
-        if (roots.isEmpty()) {
-            Files.createDirectories(path);
-            return path;
-        }
+        if (roots.isEmpty()) return path;
         Path allowed = allowedRoot(path, roots);
         Path ancestor = path;
         while (!Files.exists(ancestor, java.nio.file.LinkOption.NOFOLLOW_LINKS)) ancestor = ancestor.getParent();
         if (!ancestor.toRealPath().startsWith(allowed)) throw new IllegalArgumentException("Output escapes allowlist");
-        Files.createDirectories(path);
-        if (!path.toRealPath().startsWith(allowed)) throw new IllegalArgumentException("Output escapes allowlist");
         return path;
     }
 
@@ -125,6 +129,12 @@ final class IpcFiles implements AutoCloseable {
                 .put("mediaType", mediaType);
     }
 
+    ObjectNode borrowImage(Path file, String mediaType) throws IOException {
+        ObjectNode ref = issue(file, mediaType);
+        borrowed.add(file.toRealPath());
+        return ref;
+    }
+
     Path validateIssued(String value) throws IOException {
         Path path = lexical(value, root);
         if (!issued.contains(path) || !path.toRealPath().equals(path)) {
@@ -135,7 +145,8 @@ final class IpcFiles implements AutoCloseable {
 
     void release(String value) throws IOException {
         Path path = validateIssued(value);
-        Files.delete(path);
+        // Cache images have the preview lifecycle's lease, rather than a bulk-output lease.
+        if (!borrowed.remove(path)) Files.delete(path);
         issued.remove(path);
     }
 
