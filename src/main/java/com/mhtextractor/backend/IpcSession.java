@@ -31,6 +31,8 @@ final class IpcSession implements AutoCloseable {
             "startPreparse", "startPreparseFor", "refreshPreparseProgress", "loadPreview",
             "resolvePreviewRegion", "awaitPreviewInFlight", "applyImportPlan",
             "activityGeneration", "previewGeneration", "previewLoadingPath");
+    static final List<String> PARAM_METHODS = List.of("setGlobalParams", "setGroupParams", "setItemParams",
+            "clearParams", "applyGlobalParams", "undo", "runtimeConfig", "outputUnitPlan", "paramSchema");
     private final ObjectMapper json;
     private final WorkspaceModel model = new WorkspaceModel();
     private final GlobalParameterCache global = new GlobalParameterCache();
@@ -62,6 +64,7 @@ final class IpcSession implements AutoCloseable {
     private final java.util.Map<Long, PreviewService.Prepared> previewInputs = new java.util.HashMap<>();
     private final java.util.Map<Long, java.util.List<PortEvent.PreviewNotice>> pendingNotices = new java.util.HashMap<>();
     private final IpcWorkspaceCodec codec;
+    private final IpcParamCodec paramCodec;
     private Runnable inputPump = () -> { };
     private Runnable silentChange = () -> { };
 
@@ -71,6 +74,7 @@ final class IpcSession implements AutoCloseable {
                 data -> emit("confirmationExpired", data));
         files = new IpcFiles(json);
         codec = new IpcWorkspaceCodec(json, files);
+        paramCodec = new IpcParamCodec(json);
         previews = PreviewSession.create(files.root.resolve("preview-cache"));
         previewService = new PreviewService(previews.lifecycle());
         var plans = new ExtractionPlanService(new ExtractionPlanService.Context() {
@@ -283,8 +287,16 @@ final class IpcSession implements AutoCloseable {
                 emit("previewNotice", generation(notice.generation()).put("path", notice.path()).put("key", notice.key())
                         .set("namedParams", args));
             }
-            case PortEvent.ParamStateChanged changed -> emit("paramsChanged", json.createObjectNode()
-                    .put("kind", changed.kind().name()).put("affectedCount", changed.affectedPaths().size()));
+            case PortEvent.ParamStateChanged changed -> {
+                // The GUI host already resets derived preview state after parameter events.
+                // This host must also discard in-memory references to invalidated cache files.
+                var affected = new java.util.HashSet<>(changed.affectedPaths());
+                for (var item : model.allItems()) if (affected.contains(item.path)) item.resetPreviewState();
+                emit("paramsChanged", json.createObjectNode()
+                        .put("kind", changed.kind().name()).put("affectedCount", changed.affectedPaths().size())
+                        .put("imageMode", changed.imageMode())
+                        .set("affectedPaths", codec.file(json.valueToTree(changed.affectedPaths()))));
+            }
             case PortEvent.ExtractionProgress progress -> {
                 rawProgress++;
                 int bucket = (int) (Math.clamp(progress.overall(), 0, 1) * 100);
@@ -381,6 +393,49 @@ final class IpcSession implements AutoCloseable {
 
     JsonNode call(String method, JsonNode p) throws Exception {
         switch (method) {
+            case "setGlobalParams", "setGroupParams", "setItemParams" -> {
+                boolean mode = bool(p, "imageMode");
+                AppConfig config = paramCodec.readConfig(p.path("params"));
+                switch (method) {
+                    case "setGlobalParams" -> port.commands().setGlobalParams(mode, config);
+                    case "setGroupParams" -> port.commands().setGroupParams(integer(p, "groupNo"), mode, config);
+                    case "setItemParams" -> port.commands().setItemParams(string(p, "path"), mode, config);
+                }
+                return json.nullNode();
+            }
+            case "clearParams" -> {
+                boolean mode = bool(p, "imageMode");
+                var values = files.readUpload(p.path("fallbackTargets"));
+                if (!values.isArray()) throw new IllegalArgumentException("TargetId array required");
+                var targets = new java.util.ArrayList<TargetId>();
+                for (var value : values) targets.add(target(value, false));
+                port.commands().clearParams(targets, mode);
+                return json.nullNode();
+            }
+            case "applyGlobalParams" -> {
+                boolean mode = bool(p, "imageMode");
+                port.commands().applyGlobalParams(target(p.get("target"), false), mode);
+                return json.nullNode();
+            }
+            case "undo" -> {
+                int depth = port.queries().workspace().undoDepth();
+                port.commands().undo();
+                if (depth > 0 && port.queries().workspace().undoDepth() == depth) {
+                    // U2: the model preserves unsupported parameter records. Never report false success.
+                    throw new UnsupportedOperationException("U2: parameter undo is not supported; record retained");
+                }
+                return json.nullNode();
+            }
+            case "paramSchema" -> {
+                return json.createObjectNode().set("schema", paramCodec.schema(port.queries().paramSchema(bool(p, "imageMode"))));
+            }
+            case "runtimeConfig" -> {
+                return json.createObjectNode().set("config", paramCodec.runtimeConfig(requestPlans(p).runtimeConfig()));
+            }
+            case "outputUnitPlan" -> {
+                boolean checked = bool(p, "checkedOnly");
+                return json.createObjectNode().set("units", codec.file(paramCodec.units(requestPlans(p).outputUnitPlan(checked))));
+            }
             case "cancelWorkspaceActivity" -> { port.commands().cancelWorkspaceActivity(); return json.nullNode(); }
             case "cancelPreviewLoad" -> {
                 long old = port.queries().previewGeneration();
@@ -606,6 +661,24 @@ final class IpcSession implements AutoCloseable {
         }
         bool(r, "openFolderAfterComplete");
         return bool(r, "imageModeEnabled");
+    }
+
+    /** Synchronous request-local context; never overwrite the legacy script mode/output directory. */
+    private ExtractionPlanService requestPlans(JsonNode p) throws IOException {
+        boolean mode = runtime(p);
+        JsonNode runtime = p.path("runtime");
+        String input = runtime.path("inputFolder").isNull() ? null : runtime.path("inputFolder").textValue();
+        String output = runtime.path("outputFolder").isNull() ? null : runtime.path("outputFolder").textValue();
+        boolean open = bool(runtime, "openFolderAfterComplete");
+        return new ExtractionPlanService(new ExtractionPlanService.Context() {
+            public List<Object> dataOrder() { return model.topLevel(); }
+            public boolean imageMode() { return mode; }
+            public AppConfig textParamsCache() { return global.text(); }
+            public AppConfig imageParamsCache() { return global.image(); }
+            public String inputFolder() { return input; }
+            public String outputFolder() { return output; }
+            public boolean openFolderAfterComplete() { return open; }
+        });
     }
 
     private ImportPlanVm plan(JsonNode value) throws IOException {

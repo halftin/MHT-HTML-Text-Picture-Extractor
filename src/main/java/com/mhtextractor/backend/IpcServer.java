@@ -86,6 +86,7 @@ final class IpcServer {
         methods.add("hello");
         if (session != null) IpcSession.STRUCTURE_METHODS.forEach(methods::add);
         if (session != null) IpcSession.ACTIVITY_METHODS.forEach(methods::add);
+        if (session != null) IpcSession.PARAM_METHODS.forEach(methods::add);
         AutoCloseable subscription = session == null ? port.events().subscribe(event -> {
             if (event instanceof com.mhtextractor.uiport.PortEvent.WorkspaceChanged changed) {
                 var frame = frame("event").put("event", "workspaceChanged");
@@ -260,7 +261,7 @@ final class IpcServer {
                 default -> {
                     String method = request.path("method").asText();
                     if (session == null || (!IpcSession.METHODS.contains(method) && !IpcSession.STRUCTURE_METHODS.contains(method)
-                            && !IpcSession.ACTIVITY_METHODS.contains(method))) {
+                            && !IpcSession.ACTIVITY_METHODS.contains(method) && !IpcSession.PARAM_METHODS.contains(method))) {
                         return error(id, "UNKNOWN_METHOD", "Unknown method: " + method);
                     }
                     if (method.equals("workspacePage")) result = page(params);
@@ -274,7 +275,8 @@ final class IpcServer {
                             pageSnapshot = null;
                         }
                         if (result.isObject() && (method.equals("applyDrop") || method.equals("canUndo")
-                                || java.util.List.of("activityGeneration", "previewGeneration", "previewLoadingPath").contains(method))) {
+                                || java.util.List.of("activityGeneration", "previewGeneration", "previewLoadingPath",
+                                        "runtimeConfig", "outputUnitPlan", "paramSchema").contains(method))) {
                             ((ObjectNode) result).put("revision", revision);
                         }
                     }

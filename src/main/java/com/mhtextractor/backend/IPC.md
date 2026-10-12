@@ -40,6 +40,74 @@
 
 本地方案 §7 现为 C1–C20 冲突表，没有独立 D3 条目；传输依据取 §14 决策 9 中的 D3 引用。
 
+## P5a-1c 参数命令、查询与撤销边界
+
+认领 C14–C19、Q05–Q07、E01 和旧 setParams 共用底座。ready.methods 在既有方法后追加以下九项。
+仍用 v1 四类帧及六个既有错误码，所有旧字段保留。GUI 接线保持现状。
+
+| ID / 方法 | params（全部 R） | result |
+|---|---|---|
+| C14 setGlobalParams | imageMode:boolean，params:Config | null |
+| C15 setGroupParams | groupNo:非负 long，imageMode:boolean，params:Config | null；未知组 no-op |
+| C16 setItemParams | path:非空白 string，imageMode:boolean，params:Config | null；未知条目 id no-op；不读取源文件识别目标 |
+| C17 clearParams | fallbackTargets:FileRef（array<TargetId>），imageMode:boolean | null；后端勾选优先，回退第一个可解析目标；整批恰好一条撤销 |
+| C18 applyGlobalParams | target:TargetId，imageMode:boolean | null；目标有效参数应用到该模式全局，清该模式全部独立覆盖；另一模式不变 |
+| C19 undo | {} | null（空栈或成功撤销结构记录）；未支持参数记录返回 INTERNAL_ERROR，原记录保留 |
+| Q05 runtimeConfig | runtime:RuntimeContext | {config:RuntimeConfig,revision} |
+| Q06 outputUnitPlan | checkedOnly:boolean，runtime:RuntimeContext | {units:FileRef,revision}；文件为 array<OutputUnitVm> |
+| Q07 paramSchema | imageMode:boolean | {schema:ParamSchemaVm,revision} |
+
+参数写入复用同一 WorkspaceParamCommandService、GlobalParameterCache、WorkspaceModel 撤销栈和
+WorkspaceParamService 缓存规则。Config 整体替换，缺失字段沿用 AppConfig 初值（autoFixEncoding=true，
+其余 boolean=false，string=null）；新命令严格验证每个已提供属性的类型，未知属性、runtime 属性、
+boolean 的 null/字符串/数字及 string 的非字符串非 null 值均为 INVALID_PARAMS，完整验证后才执行。
+setParams 仍接受旧 `{imageMode,config}`，继续保存旧脚本提取模式，其旧反序列化行为不改。
+新五命令的 imageMode 只决定参数作用模式，不改变脚本模式。
+
+Config 为 AppConfig 的 29 个持久化属性，使用既有 JSON 名称（并非 schema 的 Java 字段 id）：
+separateFiles、enableLimit、startMarker、endMarker、useRegex、enableCustomTemplate、startTemplate、
+endTemplate、addChapterNumber、autoFixEncoding、enableTitleExtract、titleStartMarker、titleEndMarker、
+titleUseRegex、imageNameExtractEnabled、imageNameStartMarker、imageNameEndMarker、imageRegionExtractEnabled、
+imageRegionStartMarker、imageRegionEndMarker、imageRenameEnabled、imageZipEnabled、imageCbzEnabled、
+singleOutputMode、legacyMemoryMode、nameLimitStart、nameLimitEnd、contentLimitStart、contentLimitEnd。
+最后四个废弃兼容属性仍保留，不静默丢弃。
+
+RuntimeConfig 显式输出上述全部属性，加 inputFolder/outputFolder（string 或 null）、
+imageModeEnabled/openFolderAfterComplete（boolean），共 33 项，包括四个 JsonIgnore 属性。
+请求的 RuntimeContext 四项全部必填；目录按既有路径边界校验，查询不创建输出目录。
+Q05/Q06 每次创建请求局部计划上下文，读取同一后端参数权威源，调用现有 ExtractionPlanService；
+不保存前端偏好、不覆盖 setParams/extract 的脚本模式或目录，不推进 revision。
+尚未实现 P1 的 Java Uiport.forRequest 门面（须随未来 IpcUiport/前置 root 迁移闭合）；
+本批同步查询已绑定本次 runtime，活动/提取的更广 Context 迁移不在此处冒称完成。
+
+OutputUnitVm 文件每项恰好六字段：outputName:string 或 null、group:boolean、params:RuntimeConfig、
+paths:array<string>、outputPath:string 或 null、labelKey:string 或 null。数组顺序和 null 保留，
+不添加 fileCount（数量为 paths.length）。生效参数解析与输出规划复用进程内实现。
+
+ParamSchemaVm 顶层为 imageMode/groups/fields；group 为 id/labelKey/noteKey（最后一项可 null）。
+每个 field 显式且始终发送十项：id、type（BOOLEAN/TEXT）、labelKey、group、defaultValue、enabledBy、
+disabledValue、nullWhenDisabled、promptText、templateEnter。defaultValue/disabledValue 只允许
+boolean/string/null。其余可空字符串及提示文本原样保留。来源是 ParamSchemaService 的同一 schema，
+文本 14 个 field、图片 11 个 field；“十字段”指每个 field 的十个属性，不是表单字段数。
+编码不用 schema record 反射，不增加 native 元数据。
+
+E01 paramsChanged 保留 kind/affectedCount，追加 imageMode、affectedPaths:FileRef、revision。
+affectedPaths 文件为 array<string>，顺序与端口事件相同；在参数写入、压栈及磁盘缓存失效之后发布。
+图片参数变化实际删除受影响预览缓存，文本参数变化保留图片缓存，遵循既有规则。
+后端同时通过 PreviewItem.resetPreviewState 清理受影响条目的内存预览态，防止下一次 loadPreview
+复用已经删除的文件。自动重解析的完整 GUI 后处理仍属前置迁移；当前客户端可用既有预解析命令发起。
+未知组/条目与无可清参数的 no-op 不压栈、不发 E01、不推进 revision。
+
+**⚠️ U2 未闭合**：本批 C19 仅暴露现有 InProcessUiport 的结构撤销语义。
+WorkspaceModel.undo 对 PARAM_SET/CLEAR_PARAMS/APPLY_GLOBAL 返回 false 并原样压回，
+IPC 检查非空栈深度未减少时明确返回 INTERNAL_ERROR，不清栈、不发成功事件、可重复查询原状态。
+结构成功时保留 workspaceChanged(UNDO_APPLIED)；空栈保持 no-op。
+尚未迁移 GUI ParamDomainController.applyParamUndo/restoreParamSnapshots 和
+WorkspaceLifecycleController.onUndoClicked 的全部后处理：参数恢复、缓存/派生态失效、必要重解析、
+IMPORT 清勾选及缓存、REORDER/MERGE 后处理、选择提示与单出口。不能把本批 C19 接为完整 GUI 撤销。
+P1 §5 S3 要求同时修改上述 app/gui 段，与本批禁止改 gui 和 app 服务的边界冲突，按本批明确允许的部分交付。
+C29/Q10 及完整编辑会话确认态/混合态查询仍需该前置迁移，本批没有虚构对应 wire 方法。
+
 ## P4-2b 兼容规则与方法发现
 
 帧版本仍为整数 `v=1`，四种帧与原有五种错误码的语义不变。P4-2b 扩展添加方法和这些方法产生的事件，
@@ -186,7 +254,7 @@ CG-1 故意不答；CG-2 在看到确认帧后关客户端输入，并用自然�
 |---|---|
 | `importRound` | `{generation,newFiles,newGroups}`：一轮一次，不含计划中的文件路径数组 |
 | `importFinished` | `{generation,count,failed}`：活动收尾一次；count 为本次会话新增累计 |
-| `paramsChanged` | `{kind,affectedCount}`：不传 affectedPaths |
+| `paramsChanged` | `{kind,affectedCount,imageMode,affectedPaths,revision}`：affectedPaths 为 JSON array<string> 的 FileRef（P5a-1c 追加） |
 | `notice` | `{key}`：业务通知键，不传正文/列表 |
 | `extractionProgress` | `{generation,overall}`：进度 0–1；每进入更大的整数百分比桶才发，最多 **101** 帧/任务 |
 | `extractionTerminal` | 与 extract 结果相同的统计摘要，**不含 resultsFile 或 files 数组**；每任务一次 |
@@ -223,7 +291,7 @@ CG-1 故意不答；CG-2 在看到确认帧后关客户端输入，并用自然�
 RuntimeContext 四字段全部必填：inputFolder/outputFolder 为绝对路径或 null，
 imageModeEnabled/openFolderAfterComplete 为 boolean。活动启动时同步捕获模式和生效参数；
 该请求的模式不写旧 setParams/extract 脚本模式。当前活动所用目录不参与解析，仍校验路径边界。
-完整 forRequest 门面/参数 schema/完整撤销属于 1c，本批不增加端口签名。
+P5a-1c 增加参数/schema 查询与有限撤销，见下。Java forRequest 门面及完整 U2 仍待前置迁移；当前不增加端口签名。
 
 ImportPlanVm 文件全部必填：batches、ignoredNonMht、hiddenDirs、emptyDirs、unreadable、depthLimited、quotaHit、hasMore；
 五个计数为非负 int，两个标志为 boolean。batch 的 dirPath:string、folderName:string或null、grouped:boolean、filePaths:array<string> 全部必填。
