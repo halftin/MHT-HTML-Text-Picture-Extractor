@@ -13,12 +13,17 @@ final class IpcInput implements AutoCloseable {
     private final ArrayBlockingQueue<Received> lines = new ArrayBlockingQueue<>(256);
     private final Thread reader;
     private final InputStream input;
-    private final boolean standardInput;
+    private final IpcWindowsIo.Cancellation cancellation;
     private volatile Received end;
 
     IpcInput(InputStream input) throws IOException {
+        this(input, input == System.in || (input instanceof java.io.FileInputStream file && file.getFD() == java.io.FileDescriptor.in)
+                ? IpcWindowsIo::cancelInput : () -> false);
+    }
+
+    IpcInput(InputStream input, IpcWindowsIo.Cancellation cancellation) {
         this.input = input;
-        standardInput = input == System.in || (input instanceof java.io.FileInputStream file && file.getFD() == java.io.FileDescriptor.in);
+        this.cancellation = cancellation;
         reader = new Thread(() -> {
             InputStream readable = input instanceof java.io.FileInputStream file
                     ? java.nio.channels.Channels.newInputStream(file.getChannel()) : input;
@@ -48,7 +53,7 @@ final class IpcInput implements AutoCloseable {
     Received end() { return end; }
 
     @Override public void close() throws IOException {
-        if (end == null && reader.isAlive() && standardInput) IpcWindowsIo.cancelInput();
+        if (end == null && reader.isAlive()) IpcWindowsIo.bestEffort(cancellation);
         reader.interrupt();
         input.close(); // Unblock a read when output fails while the peer still has stdin open.
         try {

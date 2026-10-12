@@ -16,10 +16,15 @@ final class IpcOutput implements AutoCloseable {
     private volatile boolean stopping;
     private volatile boolean aborting;
     private volatile long writingSince;
-    private final boolean standardOutput;
+    private final IpcWindowsIo.Cancellation cancellation;
 
     IpcOutput(OutputStream output) throws IOException {
-        standardOutput = output == System.out || (output instanceof java.io.FileOutputStream file && file.getFD() == java.io.FileDescriptor.out);
+        this(output, output == System.out || (output instanceof java.io.FileOutputStream file && file.getFD() == java.io.FileDescriptor.out)
+                ? IpcWindowsIo::cancelOutput : () -> false);
+    }
+
+    IpcOutput(OutputStream output, IpcWindowsIo.Cancellation cancellation) {
+        this.cancellation = cancellation;
         writer = new Thread(() -> {
             var stream = new BufferedWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8));
             try {
@@ -63,7 +68,7 @@ final class IpcOutput implements AutoCloseable {
             writer.join(3500);
             if (writer.isAlive()) {
                 aborting = true;
-                if (standardOutput) IpcWindowsIo.cancelOutput();
+                IpcWindowsIo.bestEffort(cancellation);
                 writer.interrupt();
                 writer.join(1000);
                 if (writer.isAlive()) throw new IOException("IPC output worker did not stop after cancellation");
