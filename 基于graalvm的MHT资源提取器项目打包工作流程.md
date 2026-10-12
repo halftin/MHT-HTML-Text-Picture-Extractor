@@ -228,6 +228,7 @@ echo "=== 检查完成: $errors 项缺失 ==="
 | `proxy-config.json` | **手工编写** | 动态代理接口 |
 | `serialization-config.json` | **手工编写** | Java 序列化目标类 |
 | `resource-config.json` | **手工编写** | 资源文件 glob 匹配模式 |
+| （`reachability-metadata.json` 内的 **`foreign`** 段） | **Tracing Agent 采集**（见 §4.10） | **FFM downcall 注册** —— GraalVM 25 起 native 镜像里 `Linker.downcallHandle` 必须**预先注册**，否则运行时抛 `MissingForeignRegistrationError`（JVM 下正常） |
 
 > **说明**: `reachability-metadata.json` 是 GraalVM 25 引入的新格式（将反射和资源合并到一个文件）。旧的分离格式（`reflect-config.json` 等）仍然被支持，两者可以共存，native-image 会合并它们。Tracing Agent 在 GraalVM 25 中输出新格式，手工编写的配置仍可用旧格式。
 
@@ -1249,10 +1250,49 @@ java -agentlib:native-image-agent=config-output-dir=target/agent-out \
   **类型级对账 loss = 0**；另补注册了效果用的 HLSL 着色器资源 `LinearConvolveShadow_8.obj`。
 - **审计脚本（随仓库分发）**：`tools/native/audit-native-metadata.ps1` —— 过时项扫描 +
   `-AgentDir` 差集（自动过滤 FXMLLoader 失败查找造成的幻影条目）。
+
+- **其余可复跑 native 冒烟（随仓库分发，均支持 `-MetadataDir` 切快照做红组）**：
+  `tools/native/native-preview-warning-smoke.ps1`（警告预览路径 + "重放旧镜像即报错"防伪控制）、
+  `tools/native/native-ffm-smoke.ps1`（**FFM downcall 注册**，见 §4.10）、
+  `tools/native/native-backend-exit-smoke.ps1`（无头后端 `--once` / `--serve`+EOF 退出冒烟）。
+- **注册深度体检**：`tools/native/audit-metadata-depth.ps1` —— GUI/headless **双边 type 注册深度差集**
+  （一边裸 `type`、另一边有成员注册 → 候选缺口）。**候选 ≠ 都要补**：必须分"实证需要 / 可能不需要 / 不确定"三类并给判据，
+  **禁止为清空清单而批量补注册**。
 - **清理后回归**：native 产物基线 **42 passed / 0 failed**（2026-10-05 复核；21 例 × zh/en）。
 - ⚠️ **仍然不要"整文件重写"**：任何元数据改动都按 §4.9.3 的纯增量 + 方法/字段级对账执行。
 
 （§4.4 的手工模板仅作历史参考；若仍保留旧格式文件，注意其条目会与统一格式合并。）
+
+---
+
+### 4.10 FFM downcall 注册（GraalVM 25 起必需；2026-10-12 P5a-1b-r 实测）
+
+**症状**：native 镜像里调用 `java.lang.foreign.Linker.downcallHandle(...)` 抛
+`org.graalvm.nativeimage.MissingForeignRegistrationError: Cannot perform downcall …` —— **JVM 下同一代码完全正常**（native-only）。
+构建日志会出现 `0 downcalls and 0 upcalls registered for foreign access`；注册成功后变为 `2 downcalls and 0 upcalls registered`。
+
+**注册位置**：`tools/native/headless/reachability-metadata.json` 顶层的 `foreign.downcalls`（**纯增量**，只加实际用到的条目）：
+
+```json
+"foreign": {
+  "downcalls": [
+    { "returnType": "jint",  "parameterTypes": ["void*", "void*"] },
+    { "returnType": "void*", "parameterTypes": ["jint"] }
+  ]
+}
+```
+
+**怎么拿到精确描述符**：GraalVM 的报错只说 "add the following to the 'foreign' section"，**实际输出可能是空白** ——
+**不要凭猜写**。用 **Tracing Agent** 实跑一遍采集：
+`java --enable-native-access=ALL-UNNAMED -agentlib:native-image-agent=config-output-dir=<dir> <主类>`，
+读 `<dir>/reachability-metadata.json` 的 `foreign` 段即可（P5a-1b-r 即此法，未编造描述符）。
+
+**可复跑红/绿验证**：`tools/native/native-ffm-smoke.ps1`
+（`-MetadataDir <注册前快照> -ExpectMissingRegistration` → **红** exit 1 且报错逐字一致；默认元数据 → `FFM_OK` **绿** exit 0）。
+
+**配套纪律**：该文件属**后端子集**，任何改动必须**纯增量**且只动这一份；
+`tools/native/assert-headless-metadata.ps1` 仍须 exit 0（零 JavaFX）；
+`audit-native-metadata.ps1` **必须在 `mvn package` 之后跑**（否则 classpath 不全 → 假 STALE，见 CLAUDE.md §6）。
 
 ---
 
