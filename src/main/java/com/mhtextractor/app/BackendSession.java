@@ -21,6 +21,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /** Owns the companion process and its pipes; view callbacks never perform IO or wait for a worker. */
 public final class BackendSession implements AutoCloseable {
@@ -32,6 +33,7 @@ public final class BackendSession implements AutoCloseable {
         void confirmationRequested(String id, ConfirmRequest request, Consumer<String> answer);
         void confirmationFinished(String id, End reason);
         default void confirmationAnswerReceived(String id, boolean accepted) { }
+        default void confirmationFailed(String id, Throwable error) { }
     }
 
     private final ObjectMapper json = new ObjectMapper().enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
@@ -46,6 +48,24 @@ public final class BackendSession implements AutoCloseable {
     private boolean started;
     private boolean closed;
     private long sequence;
+    private long revision = -1;
+    private final CompletableFuture<Void> connected = new CompletableFuture<>();
+    private final List<Consumer<JsonNode>> eventListeners = new CopyOnWriteArrayList<>();
+
+    /** Listeners only enqueue work: reading files or waiting here would stop response delivery. */
+    public AutoCloseable subscribeEvents(Consumer<JsonNode> listener) {
+        eventListeners.add(java.util.Objects.requireNonNull(listener));
+        return () -> eventListeners.remove(listener);
+    }
+
+    public CompletableFuture<Void> connected() { return connected.copy(); }
+    public synchronized long revision() { return revision; }
+
+    public static final class RemoteError extends IOException {
+        private final String code;
+        public RemoteError(String code, String message) { super(message); this.code = code; }
+        public String code() { return code; }
+    }
 
     public BackendSession(Consumer<Runnable> dispatch, View view) {
         this.dispatch = java.util.Objects.requireNonNull(dispatch);
@@ -81,6 +101,7 @@ public final class BackendSession implements AutoCloseable {
                 connection = launched;
                 welcomed = true;
                 status(State.CONNECTED, launched.identity().version() + " / " + launched.identity().buildId());
+                connected.complete(null);
             }
             String line;
             while ((line = launched.output().readLine()) != null) receive(json.readTree(line));
@@ -91,6 +112,7 @@ public final class BackendSession implements AutoCloseable {
                     closed = true;
                     finishPending(End.DISCONNECTED);
                     failRequests(error);
+                    connected.completeExceptionally(error);
                     status(welcomed ? State.DISCONNECTED : State.UNAVAILABLE, error.getMessage());
                 }
             }
@@ -109,9 +131,11 @@ public final class BackendSession implements AutoCloseable {
                 || frame.path("v").intValue() != 1) throw new IOException("Malformed backend IPC frame");
         String type = frame.path("type").asText();
         if (type.equals("response") || type.equals("error")) {
+            if (type.equals("response")) checkRevision(frame.path("revision"), false);
             CompletableFuture<JsonNode> result = requests.remove(frame.path("id").asText());
             if (result != null) {
-                if (type.equals("error")) result.completeExceptionally(new IOException(frame.path("error").toString()));
+                if (type.equals("error")) result.completeExceptionally(new RemoteError(
+                        frame.path("error").path("code").asText(), frame.path("error").path("message").asText()));
                 else result.complete(frame.path("result"));
             }
             return;
@@ -119,6 +143,8 @@ public final class BackendSession implements AutoCloseable {
         if (!type.equals("event")) throw new IOException("Unknown backend frame type: " + type);
         String event = frame.path("event").asText();
         JsonNode data = frame.path("data");
+        checkRevision(data.path("revision"), true);
+        for (var listener : eventListeners) listener.accept(frame.deepCopy());
         if (event.equals("confirmationRequested")) {
             ConfirmRequest request = confirmation(data);
             if (pending != null) answer(pending.id, null, End.REPLACED);
@@ -141,6 +167,14 @@ public final class BackendSession implements AutoCloseable {
                 status(State.CONNECTED, "");
             }
         }
+    }
+
+    private void checkRevision(JsonNode value, boolean event) throws IOException {
+        if (!value.isIntegralNumber() || !value.canConvertToLong() || value.longValue() < 0
+                || (event ? value.longValue() <= revision : value.longValue() < revision)) {
+            throw new IOException("Invalid or regressing backend revision: " + value + " after " + revision);
+        }
+        revision = value.longValue();
     }
 
     private ConfirmRequest confirmation(JsonNode data) throws IOException {
@@ -172,7 +206,11 @@ public final class BackendSession implements AutoCloseable {
         ObjectNode params = json.createObjectNode().put("confirmationId", id);
         if (action == null) params.putNull("actionKey"); else params.put("actionKey", action);
         request("confirmAnswer", params).whenComplete((result, error) -> {
-            if (error == null) {
+            if (error != null) {
+                dispatch.accept(() -> view.confirmationFailed(id, error));
+            } else if (!result.path("accepted").isBoolean()) {
+                dispatch.accept(() -> view.confirmationFailed(id, new IOException("Malformed confirmAnswer response")));
+            } else {
                 boolean accepted = result.path("accepted").asBoolean();
                 dispatch.accept(() -> view.confirmationAnswerReceived(id, accepted));
                 if (!accepted && reason == End.ANSWERED) dispatch.accept(() -> view.confirmationFinished(id, End.TIMEOUT));
@@ -209,6 +247,7 @@ public final class BackendSession implements AutoCloseable {
             closed = true;
             finishPending(End.DISCONNECTED);
             failRequests(error);
+            connected.completeExceptionally(error);
             status(State.DISCONNECTED, error.getMessage());
         }
         stopProcess();
@@ -237,6 +276,7 @@ public final class BackendSession implements AutoCloseable {
             closed = true;
             finishPending(End.DISCONNECTED);
             failRequests(new IOException("Backend session closed"));
+            connected.completeExceptionally(new IOException("Backend session closed"));
             status(State.CLOSED, "");
         }
         stopProcess();

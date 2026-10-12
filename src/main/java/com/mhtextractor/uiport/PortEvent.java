@@ -1,5 +1,6 @@
 package com.mhtextractor.uiport;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -69,13 +70,21 @@ public sealed interface PortEvent {
      * @param newGroups        本轮自动新建的组数
      * @param madeListNonEmpty 本轮首个非跳过批次应用前列表为空（导入首轮选中首行的判定）
      * @param createdGroups    本轮新建的组（模型对象，按落地顺序；前端挂接名字刷新监听）
+     * @param groupSnapshots   IPC 新建组的不可变 VM；IPC 不重造模型身份，createdGroups 留空
      */
     record ImportRound(long generation, ImportPlanVm plan, int newFiles, int newGroups,
                        boolean madeListNonEmpty,
-                       List<com.mhtextractor.model.GroupItem<com.mhtextractor.model.PreviewItem>> createdGroups)
+                       List<com.mhtextractor.model.GroupItem<com.mhtextractor.model.PreviewItem>> createdGroups,
+                       @JsonInclude(JsonInclude.Include.NON_EMPTY) List<GroupVm> groupSnapshots)
             implements PortEvent {
+        public ImportRound(long generation, ImportPlanVm plan, int newFiles, int newGroups,
+                           boolean madeListNonEmpty,
+                           List<com.mhtextractor.model.GroupItem<com.mhtextractor.model.PreviewItem>> createdGroups) {
+            this(generation, plan, newFiles, newGroups, madeListNonEmpty, createdGroups, List.of());
+        }
         public ImportRound {
             createdGroups = List.copyOf(Objects.requireNonNull(createdGroups, "createdGroups"));
+            groupSnapshots = List.copyOf(groupSnapshots);
         }
     }
 
@@ -102,16 +111,37 @@ public sealed interface PortEvent {
 
     record PreviewLoadFailed(long generation, String path, boolean fileInfo, String detail) implements PortEvent {}
 
+    /** imageFile != null selects the IPC encoded-file representation; local pixels remain frontend-owned. */
     record PreviewThumbnail(long generation, String path, int index,
-                            com.mhtextractor.model.ThumbnailData thumbnail) implements PortEvent {}
+                            com.mhtextractor.model.ThumbnailData thumbnail,
+                            @JsonInclude(JsonInclude.Include.NON_NULL) ImageFile imageFile) implements PortEvent {
+        public PreviewThumbnail(long generation, String path, int index, com.mhtextractor.model.ThumbnailData thumbnail) {
+            this(generation, path, index, thumbnail, null);
+        }
+    }
+
+    /** Encoded original cache image, with its real format. The frontend decodes/scales it locally. */
+    record ImageFile(String path, long bytes, String mediaType, String extension, String coreName,
+                     int width, int height, int index) {}
+
+    record PreviewPayload(String text, String html, List<ImageFile> images) {
+        public PreviewPayload { images = List.copyOf(images); }
+    }
 
     /** Terminal/repaint signal, also emitted on cancellation or stale completion.
      * A null thumbnail cache means return to the lazy prompt, never reenter loading. */
-    record PreviewLoaded(long generation, String path) implements PortEvent {}
+    record PreviewLoaded(long generation, String path,
+                         @JsonInclude(JsonInclude.Include.NON_NULL) PreviewPayload payload) implements PortEvent {
+        public PreviewLoaded(long generation, String path) { this(generation, path, null); }
+    }
 
     record PreviewRegionConfirmationRequired(long generation, String path) implements PortEvent {}
 
-    record PreviewNotice(long generation, String path, String key) implements PortEvent {}
+    record PreviewNotice(long generation, String path, String key,
+                         @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String,String> namedParams) implements PortEvent {
+        public PreviewNotice(long generation, String path, String key) { this(generation,path,key,Map.of()); }
+        public PreviewNotice { namedParams = Map.copyOf(namedParams); }
+    }
 
     // ---- B6：提取任务通道（矩阵处置项 1）----
 
@@ -179,7 +209,9 @@ public sealed interface PortEvent {
      *
      * @param kind 变更类别（类别枚举留后续批次定稿；前端据此决定刷新粒度）
      */
-    record WorkspaceChanged(String kind) implements PortEvent {
+    record WorkspaceChanged(String kind,
+                            @JsonInclude(JsonInclude.Include.NON_NULL) WorkspaceVm snapshot) implements PortEvent {
+        public WorkspaceChanged(String kind) { this(kind, null); }
         public WorkspaceChanged {
             Objects.requireNonNull(kind, "kind");
         }
