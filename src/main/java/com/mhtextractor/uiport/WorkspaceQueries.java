@@ -12,6 +12,10 @@ public interface WorkspaceQueries {
     default ParameterStateVm parameterState(boolean imageMode, List<TargetId> fallbackTargets) {
         throw new UnsupportedOperationException("Parameter state is not wired");
     }
+    default ParameterStateVm parameterState(boolean imageMode, List<TargetId> targets, TargetResolution resolution) {
+        if (resolution == TargetResolution.SELECTED_FIRST) return parameterState(imageMode, targets);
+        throw new UnsupportedOperationException("Explicit parameter state is not wired");
+    }
     default PreStartStateVm preStartState(AppConfig runtime, boolean checkedOnly) {
         throw new UnsupportedOperationException("Pre-start state is not wired");
     }

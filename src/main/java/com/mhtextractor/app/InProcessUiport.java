@@ -506,9 +506,17 @@ public final class InProcessUiport implements Uiport {
                         detailPreviews.lastObservedTotalBytes(), new WorkspaceParamService(detailPreviews.lifecycle()).hasCachedEntries());
             }
             public com.mhtextractor.uiport.ParameterStateVm parameterState(boolean imageMode, List<TargetId> fallbackTargets) {
+                return parameterState(imageMode, fallbackTargets, com.mhtextractor.uiport.TargetResolution.SELECTED_FIRST);
+            }
+            public com.mhtextractor.uiport.ParameterStateVm parameterState(boolean imageMode, List<TargetId> fallbackTargets,
+                    com.mhtextractor.uiport.TargetResolution resolution) {
                 var globals = confirmedContext(imageMode);
                 var effective = new EffectiveParamsService();
-                var targets = parameterTargets(fallbackTargets);
+                java.util.Objects.requireNonNull(resolution, "targetResolution");
+                var targets = resolution == com.mhtextractor.uiport.TargetResolution.EXPLICIT
+                        ? (fallbackTargets == null ? java.util.List.<Object>of()
+                            : fallbackTargets.stream().distinct().map(InProcessUiport.this::resolveTarget).toList())
+                        : parameterTargets(fallbackTargets);
                 var states = targets.stream().map(target -> {
                     var config = effective.effectiveFor(target, globals);
                     return new com.mhtextractor.uiport.ParameterStateVm.TargetState(targetId(target),

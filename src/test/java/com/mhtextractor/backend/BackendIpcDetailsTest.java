@@ -119,6 +119,45 @@ class BackendIpcDetailsTest {
     }
     private static JsonNode contents(JsonNode file) throws Exception {return JSON.readTree(Files.readAllBytes(Path.of(file.path("path").asText())));}
 
+    @Test void optionalTargetResolutionKeepsDefaultAndReturnsExplicitItemAndGroupWithoutRevisionChange() throws Exception {
+        try (var p=new Pair()) {
+            var a=TargetId.ofItem(p.paths.getFirst()); var b=TargetId.ofItem(p.paths.get(1));
+            p.direct.commands().group(p.paths.subList(1,3),"B-group");
+            p.call("group",object().put("namePrefix","B-group").set("paths",JSON.valueToTree(p.paths.subList(1,3))));
+            var group=TargetId.ofGroup(1);
+            var config=new AppConfig(); config.setStartMarker("group-source");
+            p.direct.commands().setGroupParams(1,false,config);
+            p.call("setGroupParams",object().put("groupNo",1).put("imageMode",false).set("params",JSON.valueToTree(config)));
+            p.direct.commands().setChecked(List.of(p.paths.getFirst()),true);
+            p.call("setChecked",object().put("checked",true).set("paths",JSON.valueToTree(List.of(p.paths.getFirst()))));
+            long revision=p.revision;
+            var requested=List.of(b,group);
+            ObjectNode params=object().put("imageMode",false).put("revision",revision)
+                    .set("fallbackTargets",p.upload(JSON.valueToTree(requested)));
+            var original=contents(p.call("parameterState",params).path("state"));
+            assertEquals(JSON.valueToTree(p.direct.queries().parameterState(false,requested)),original);
+            assertEquals(JSON.valueToTree(List.of(a)),original.path("targets"));
+            assertEquals(original,contents(p.call("parameterState",params.deepCopy().put("targetResolution","selectedFirst")).path("state")));
+            var explicit=contents(p.call("parameterState",params.deepCopy().put("targetResolution","explicit")).path("state"));
+            assertEquals(canonical(JSON.valueToTree(p.direct.queries().parameterState(false,requested,TargetResolution.EXPLICIT))),canonical(explicit));
+            assertEquals(canonical(JSON.valueToTree(requested)),canonical(explicit.path("targets")));
+            assertEquals("GROUP",explicit.path("states").get(0).path("source").asText());
+            assertEquals("GROUP",explicit.path("states").get(1).path("source").asText());
+            assertEquals(revision,p.revision,"Q10 must not advance revision");
+            var defaultFields=new java.util.HashSet<String>(); original.fieldNames().forEachRemaining(defaultFields::add);
+            var explicitFields=new java.util.HashSet<String>(); explicit.fieldNames().forEachRemaining(explicitFields::add);
+            assertEquals(defaultFields,explicitFields,"explicit must not add response fields");
+            for (var invalid : List.of(JSON.nullNode(),JSON.getNodeFactory().booleanNode(true),JSON.getNodeFactory().textNode("unknown"))) {
+                var frame=p.ipc.request("invalid-resolution","parameterState",params.deepCopy().set("targetResolution",invalid));
+                assertEquals("error",frame.path("type").asText());
+                assertEquals("INVALID_PARAMS",frame.path("error").path("code").asText());
+            }
+            p.same();
+            assertEquals(revision,p.revision,"invalid queries must not advance revision");
+            System.out.println("Q10_WIRE_PASS omitted=selectedFirst; explicit item+group exact fields; revision="+revision+" unchanged; invalid=INVALID_PARAMS");
+        }
+    }
+
     @Test void parameterQueriesKeepUnconfirmedNullMixedSourcesAndCheckedPriority() throws Exception {
         try(var p=new Pair()) {
             var fallback=List.of(TargetId.ofItem(p.paths.getLast()));

@@ -295,6 +295,13 @@ public final class IpcUiport implements Uiport, AutoCloseable {
             var n = uploadCall("parameterState",p().put("imageMode",mode).put("revision",revision()),"fallbackTargets",targets(fallback));
             return decode(() -> codec.parameterState(files.consumeJson(n.path("state"))));
         }
+        public ParameterStateVm parameterState(boolean mode, List<TargetId> targets, TargetResolution resolution) {
+            java.util.Objects.requireNonNull(resolution, "targetResolution");
+            if (resolution == TargetResolution.SELECTED_FIRST) return parameterState(mode, targets);
+            var n = uploadCall("parameterState",p().put("imageMode",mode).put("revision",revision())
+                    .put("targetResolution",resolution.wireValue()),"fallbackTargets",targets(targets));
+            return decode(() -> codec.parameterState(files.consumeJson(n.path("state"))));
+        }
         public PreStartStateVm preStartState(AppConfig runtime, boolean checkedOnly) {
             return codec.preStart(call("preStartState",runtime(p().put("checkedOnly",checkedOnly).put("revision",revision()),runtime)));
         }

@@ -11,13 +11,17 @@
 |---|---|---|
 | C28 `setTitleOverride` | `path:string,title:string或null,revision:integer` | null；trim、空串转 null，无撤销记录；实际变化发 `workspaceChanged(TITLE_CHANGED)`，snapshot 含同版 ItemVm |
 | C29 `applyParamsToTargets` | `imageMode:boolean,params:完整Config,fallbackTargets:FileRef,revision:integer` | null；`config` 是 `params` 的兼容别名，必须且只能给其中一项；完整 Config 是全部持久化提取字段，不包含四个运行时字段 |
-| Q10 `parameterState` | `imageMode:boolean,fallbackTargets:FileRef,revision:integer` | `{state:FileRef,revision}`，文件内容见下 |
+| Q10 `parameterState` | `imageMode:boolean,fallbackTargets:FileRef,revision:integer,targetResolution?:selectedFirst/explicit` | `{state:FileRef,revision}`，文件内容见下 |
 | Q11 `preStartState` | `runtime:RuntimeContext,checkedOnly:boolean,revision:integer` | 下述 PreStartState VM + revision |
 | Q12 `presentation` | `paths:FileRef,runtime:RuntimeContext,revision:integer` | `{items:FileRef,revision}`，文件为有序 PresentationVm 数组 |
 | Q13 `exportSource` | `path:string` | `{status,htmlFile,imageCount,warningCount,detail,sessionId,revision}`；无需预先导入工作区 |
 
 `fallbackTargets` 文件为 `array<TargetId>`，`paths` 文件为 `array<string>`，沿用会话内上传校验。
 C29 与 Q10 共用后端勾选优先解析：有未移除的勾选项时忽略 fallback，否则采用首个可解析 fallback。
+Q10 可选 `targetResolution` 省略或为 `selectedFirst` 时保持上述语义；`explicit` 忽略勾选，
+按上传的稳定 TargetId 顺序逐目标返回既有 TargetState，重复 ID 取首次，空集合返回空状态。
+`explicit` 的目标必须存在且未移除；未知目标或非法解析方式沿用 `INVALID_PARAMS`。
+两种查询均只读，不改变勾选、参数、撤销栈或 revision；响应字段不变，C29 不受此选项影响。
 组内条目的参数应用路由到所属组；重复组路由去重。C29 在任何写入前捕获整批 before，
 只压一条 `PARAM_SET`，不循环逐项参数命令；相同参数为空操作。完成缓存失效后发
 `paramsChanged(SET_TARGETS)` 与 `workspaceChanged(PARAMS_CHANGED)`。

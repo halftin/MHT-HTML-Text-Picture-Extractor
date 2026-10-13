@@ -448,11 +448,14 @@ final class IpcSession implements AutoCloseable {
         switch (method) {
             case "parameterState" -> {
                 boolean mode = bool(p, "imageMode");
+                var resolution = p.has("targetResolution")
+                        ? com.mhtextractor.uiport.TargetResolution.fromWire(string(p, "targetResolution"))
+                        : com.mhtextractor.uiport.TargetResolution.SELECTED_FIRST;
                 var values = files.readUpload(p.path("fallbackTargets"));
                 if (!values.isArray()) throw new IllegalArgumentException("TargetId array required");
                 var targets = new java.util.ArrayList<TargetId>();
                 for (var value : values) targets.add(target(value, false));
-                var state = port.queries().parameterState(mode, targets);
+                var state = port.queries().parameterState(mode, targets, resolution);
                 return json.createObjectNode().set("state", codec.file(new IpcDetailCodec(json, files).parameters(state)));
             }
             case "preStartState" -> {

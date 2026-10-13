@@ -106,6 +106,64 @@ class IpcUiportTest {
         }
     }
 
+    @Test void explicitParameterStateReturnsRequestedTargetWhileAnotherItemIsChecked() throws Exception {
+        Path root=root(); var paths=sources(root,2); var cards=new Cards();
+        var local=new InProcessUiport(new WorkspaceModel(),cards);
+        try (var ipc=real(root,cards)) {
+            var a=TargetId.ofItem(paths.getFirst()); var b=TargetId.ofItem(paths.getLast());
+            for (boolean mode : List.of(false,true)) {
+                var global=new AppConfig(); global.setStartMarker("global");
+                var independent=new AppConfig(); independent.setStartMarker("B-independent");
+                for (var port : List.<Uiport>of(local,ipc)) {
+                    if (!mode) port.commands().applyImportPlan(plan(root,paths,false));
+                    port.commands().setGlobalParams(mode,global);
+                    port.commands().setItemParams(paths.getLast(),mode,independent);
+                    port.commands().setChecked(List.of(paths.getFirst()),true);
+                }
+                var before=ipc.queries().workspace();
+                var events=new ArrayList<PortEvent>();
+                try (var subscription=ipc.events().subscribe(events::add)) {
+                    var state=ipc.queries().parameterState(mode,List.of(b),TargetResolution.EXPLICIT);
+                    assertEquals(List.of(b),state.targets(),"explicit must not resolve checked A instead of requested B");
+                    assertEquals(1,state.count()); assertTrue(state.uniform()); assertTrue(state.hasEffective());
+                    assertEquals(new ParameterStateVm.TargetState(b,true,true,"GROUP",independent),state.states().getFirst());
+                    assertEquals(local.queries().parameterState(mode,List.of(b),TargetResolution.EXPLICIT),state);
+                    assertEquals(local.queries().parameterState(mode,List.of(a,b),TargetResolution.EXPLICIT),
+                            ipc.queries().parameterState(mode,List.of(a,b),TargetResolution.EXPLICIT));
+                    assertEquals(before,ipc.queries().workspace(),"queries must not modify the authoritative workspace");
+                    assertTrue(events.isEmpty(),"queries must not emit mutation events or advance revision");
+                    assertEquals(List.of(a),ipc.queries().parameterState(mode,List.of(b)).targets());
+                    assertEquals(ipc.queries().parameterState(mode,List.of(b)),
+                            ipc.queries().parameterState(mode,List.of(b),TargetResolution.SELECTED_FIRST));
+                }
+            }
+            System.out.println("Q10_EXPLICIT_PASS checked=A requested=B source=GROUP; text/image dual-path every field equal; read-only");
+        }
+    }
+
+    @Test void explicitParameterStatePreservesOrderDeduplicatesAndDoesNotUseSelectionForEmptyInput() throws Exception {
+        Path root=root(); var paths=sources(root,2); var cards=new Cards();
+        var local=new InProcessUiport(new WorkspaceModel(),cards);
+        try (var ipc=real(root,cards)) {
+            var a=TargetId.ofItem(paths.getFirst()); var b=TargetId.ofItem(paths.getLast());
+            for (var port : List.<Uiport>of(local,ipc)) {
+                port.commands().applyImportPlan(plan(root,paths,false)); port.commands().setChecked(paths,true);
+                var empty=port.queries().parameterState(false,List.of(),TargetResolution.EXPLICIT);
+                assertEquals(0,empty.count()); assertTrue(empty.uniform()); assertFalse(empty.hasEffective());
+                assertEquals(List.of(),empty.targets()); assertEquals(List.of(),empty.states());
+                assertEquals(List.of(b,a),port.queries().parameterState(false,List.of(b,a,b),TargetResolution.EXPLICIT).targets());
+            }
+            assertEquals(local.queries().parameterState(false,List.of(b,a,b),TargetResolution.EXPLICIT),
+                    ipc.queries().parameterState(false,List.of(b,a,b),TargetResolution.EXPLICIT));
+            var error=assertThrows(IpcFailure.class,()->ipc.queries().parameterState(false,
+                    List.of(TargetId.ofItem("missing")),TargetResolution.EXPLICIT));
+            assertEquals("INVALID_PARAMS",error.code());
+            assertThrows(IllegalArgumentException.class,()->local.queries().parameterState(false,
+                    List.of(TargetId.ofItem("missing")),TargetResolution.EXPLICIT));
+            assertFalse(ipc.failure().isDone());
+        }
+    }
+
     @Test void dualPathCommandsQueriesAndEventsMatchFieldForField() throws Exception {
         Path root = root(); List<String> paths = sources(root,3);
         Cards cards = new Cards(); WorkspaceModel model = new WorkspaceModel();
