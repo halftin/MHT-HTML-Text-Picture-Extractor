@@ -111,6 +111,74 @@ public final class WorkspaceParamCommandService {
         }
     }
 
+    /**
+     * U2：只恢复已由模型弹出的参数记录，不压栈、不发第二个完成事件。
+     * 模型在真实值、派生态及规则 (a) 磁盘失效全部完成后发布 UNDO_APPLIED。
+     */
+    List<PreviewItem> restoreUndo(UndoManager.Record<PreviewItem> record) {
+        boolean imageMode;
+        List<PreviewItem> affected;
+        switch (record.type()) {
+            case PARAM_SET -> {
+                imageMode = record.paramImageMode();
+                if (!record.clearItemParamsBefore().isEmpty() || !record.clearGroupParamsBefore().isEmpty()) {
+                    affected = restoreParamSnapshots(imageMode, record.clearItemParamsBefore(), record.clearGroupParamsBefore());
+                } else if (record.paramTargetPath() != null) {
+                    Map<String, AppConfig> before = new HashMap<>();
+                    before.put(record.paramTargetPath(), record.paramBefore());
+                    affected = restoreParamSnapshots(imageMode, before, Map.of());
+                } else if (record.paramTargetGroupNo() != null) {
+                    Map<Integer, AppConfig> before = new HashMap<>();
+                    before.put(record.paramTargetGroupNo(), record.paramBefore());
+                    affected = restoreParamSnapshots(imageMode, Map.of(), before);
+                } else {
+                    context.globalParams().set(imageMode, record.paramBefore());
+                    affected = context.allItems();
+                }
+            }
+            case CLEAR_PARAMS -> {
+                imageMode = record.clearImageMode();
+                affected = restoreParamSnapshots(imageMode, record.clearItemParamsBefore(), record.clearGroupParamsBefore());
+            }
+            case APPLY_GLOBAL -> {
+                imageMode = record.applyGlobalImageMode();
+                context.globalParams().set(imageMode, record.applyGlobalBefore());
+                restoreParamSnapshots(imageMode, record.applyGlobalItemParamsBefore(), record.applyGlobalGroupParamsBefore());
+                affected = context.allItems();
+            }
+            default -> throw new IllegalArgumentException("Parameter undo record required");
+        }
+        affected = List.copyOf(new LinkedHashSet<>(affected));
+        for (PreviewItem item : affected) {
+            item.resetPreviewState();
+            item.extractOutcome = com.mhtextractor.model.ExtractOutcome.NONE;
+            item.extractDetail = null;
+        }
+        context.cacheService().paramsChanged(imageMode, affected);
+        return affected;
+    }
+
+    /** null 值也是 before：恢复未确认状态；按目标失效，组成员排除 removed。 */
+    private List<PreviewItem> restoreParamSnapshots(boolean imageMode, Map<String, AppConfig> itemBefore,
+                                                   Map<Integer, AppConfig> groupBefore) {
+        List<PreviewItem> affected = new ArrayList<>();
+        for (PreviewItem item : context.allItems()) {
+            if (itemBefore.containsKey(item.path)) {
+                if (imageMode) item.imageItemParams = itemBefore.get(item.path);
+                else item.textItemParams = itemBefore.get(item.path);
+                affected.add(item);
+            }
+        }
+        for (Object target : context.dataOrder()) {
+            if (target instanceof GroupItem<?> group && groupBefore.containsKey(group.getGroupNo())) {
+                if (imageMode) group.setImageParamsCache(groupBefore.get(group.getGroupNo()));
+                else group.setTextParamsCache(groupBefore.get(group.getGroupNo()));
+                affected.addAll(WorkspaceStructure.asPreviewGroup(group).getMembers().stream().filter(i -> !i.removed).toList());
+            }
+        }
+        return affected;
+    }
+
     // ==================== B4-1：参数应用三命令（原 applyConfirmedParams / applyGroupParams / applyItemParams） ====================
 
     /**

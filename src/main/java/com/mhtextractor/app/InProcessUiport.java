@@ -323,8 +323,7 @@ public final class InProcessUiport implements Uiport {
             public void awaitPreviewInFlight(long millis) { activities.awaitPreviewInFlight(millis); }
             @Override
             public void undo() {
-                if (model.canUndo() && !model.undo())
-                    throw new UnsupportedOperationException("U2: parameter undo is not supported; record retained");
+                model.undo(paramCommands);
             }
 
             @Override
@@ -588,7 +587,8 @@ public final class InProcessUiport implements Uiport {
             Consumer<WorkspaceChange> bridge = change -> {
                 var affected = change.affected().stream().map(i -> TargetId.ofItem(i.path)).toList();
                 boolean undo = change.kind() == WorkspaceChange.Kind.UNDO_APPLIED;
-                deliver(listener, new PortEvent.WorkspaceChanged(change.kind().name(), null,
+                boolean paramUndo = undo && List.of("PARAM_SET", "CLEAR_PARAMS", "APPLY_GLOBAL").contains(model.lastUndoKind());
+                deliver(listener, new PortEvent.WorkspaceChanged(change.kind().name(), paramUndo ? snapshot() : null,
                         undo ? model.lastUndoKind() : null, affected, undo && !affected.isEmpty() ? affected.getFirst() : null));
             };
             model.addListener(bridge);

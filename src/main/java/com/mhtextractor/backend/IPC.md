@@ -51,7 +51,7 @@ GroupVm 追加 `confirmation:{textConfirmed,imageConfirmed}`（该组独立参�
 lastStats 是完整 ExtractionStats 的 JSON FileRef，不以 StatsVm 四计数代替；所有状态随宿主串行事件快照投影。
 
 E19 追加 `undoKind:string或null,affected:FileRef,suggestedSelection:TargetId或null`，affected 文件为有序 TargetId 数组。
-撤销完成才提供 undoKind/选择建议，参数撤销 U2 仍显式拒绝并保留栈。Q09 `cacheState` 返回
+撤销完成才提供 undoKind/选择建议，U2 参数撤销已由后端恢复 before 并恰好消耗一条记录。Q09 `cacheState` 返回
 `root,totalBytes,hasCachedEntries,revision`，hasCachedEntries 读取真实缓存目录，不从 bytes>0 推断。
 
 Java 端口的新细节查询需要与参数命令服务共享真实 GlobalParameterCache/PreviewSession；
@@ -110,7 +110,7 @@ Java 端口的新细节查询需要与参数命令服务共享真实 GlobalParam
 | C16 setItemParams | path:非空白 string，imageMode:boolean，params:Config | null；未知条目 id no-op；不读取源文件识别目标 |
 | C17 clearParams | fallbackTargets:FileRef（array<TargetId>），imageMode:boolean | null；后端勾选优先，回退第一个可解析目标；整批恰好一条撤销 |
 | C18 applyGlobalParams | target:TargetId，imageMode:boolean | null；目标有效参数应用到该模式全局，清该模式全部独立覆盖；另一模式不变 |
-| C19 undo | {} | null（空栈或成功撤销结构记录）；未支持参数记录返回 INTERNAL_ERROR，原记录保留 |
+| C19 undo | {} | null（空栈 no-op，或成功撤销结构/参数记录）；非空栈恰好消耗一条记录 |
 | Q05 runtimeConfig | runtime:RuntimeContext | {config:RuntimeConfig,revision} |
 | Q06 outputUnitPlan | checkedOnly:boolean，runtime:RuntimeContext | {units:FileRef,revision}；文件为 array<OutputUnitVm> |
 | Q07 paramSchema | imageMode:boolean | {schema:ParamSchemaVm,revision} |
@@ -156,15 +156,16 @@ affectedPaths 文件为 array<string>，顺序与端口事件相同；在参数�
 复用已经删除的文件。自动重解析的完整 GUI 后处理仍属前置迁移；当前客户端可用既有预解析命令发起。
 未知组/条目与无可清参数的 no-op 不压栈、不发 E01、不推进 revision。
 
-**⚠️ U2 未闭合**：本批 C19 仅暴露现有 InProcessUiport 的结构撤销语义。
-WorkspaceModel.undo 对 PARAM_SET/CLEAR_PARAMS/APPLY_GLOBAL 返回 false 并原样压回，
-IPC 检查非空栈深度未减少时明确返回 INTERNAL_ERROR，不清栈、不发成功事件、可重复查询原状态。
-结构成功时保留 workspaceChanged(UNDO_APPLIED)；空栈保持 no-op。
-尚未迁移 GUI ParamDomainController.applyParamUndo/restoreParamSnapshots 和
-WorkspaceLifecycleController.onUndoClicked 的全部后处理：参数恢复、缓存/派生态失效、必要重解析、
-IMPORT 清勾选及缓存、REORDER/MERGE 后处理、选择提示与单出口。不能把本批 C19 接为完整 GUI 撤销。
-P1 §5 S3 要求同时修改上述 app/gui 段，与本批禁止改 gui 和 app 服务的边界冲突，按本批明确允许的部分交付。
-C29/Q10 已由 P5a-1e 补齐（见本文开头）；完整参数撤销 U2 仍属后续迁移。
+**U2 后端完整参数撤销已实现（P5a-1f）**：C19 在同一后端模型内弹出一条记录，
+经 WorkspaceParamCommandService 恢复 PARAM_SET（全局/组/项/批量）、CLEAR_PARAMS、
+APPLY_GLOBAL 的 before 快照。null 恢复未确认；只恢复记录对应模式，另一模式不变。
+恢复后的 Q10 independent/effective/source/Config、uniform/hasEffective 与操作前一致。
+派生预览态与提取结果重置；磁盘缓存复用前向 WorkspaceParamService.paramsChanged 规则 (a)：
+图片模式全局恢复保守全删、目标恢复按 affected 删除，文本模式保留图片缓存。
+全部恢复与缓存失效完成后只发布 workspaceChanged(UNDO_APPLIED)，含 undoKind、affected、
+suggestedSelection 与同版完整 snapshot；响应、Q08/canUndo、工作区与后续 Q10 观察一致。
+IPC 校验非空栈恰好减少一条；空栈保持 no-op。帧类型和既有错误码集合不变。
+GUI 本地撤销路径删除与自动重解析接线留 P5a-3；本批不修改 GUI，也不改变结构撤销行为。
 
 ## P4-2b 兼容规则与方法发现
 
@@ -349,7 +350,7 @@ CG-1 故意不答；CG-2 在看到确认帧后关客户端输入，并用自然�
 RuntimeContext 四字段全部必填：inputFolder/outputFolder 为绝对路径或 null，
 imageModeEnabled/openFolderAfterComplete 为 boolean。活动启动时同步捕获模式和生效参数；
 该请求的模式不写旧 setParams/extract 脚本模式。当前活动所用目录不参与解析，仍校验路径边界。
-P5a-1c 增加参数/schema 查询与有限撤销，见下。Java forRequest 门面及完整 U2 仍待前置迁移；当前不增加端口签名。
+P5a-1c 增加参数/schema 查询；P5a-1f 完成后端 U2 参数撤销。Java forRequest 门面迁移另批处理；当前不增加端口签名。
 
 ImportPlanVm 文件全部必填：batches、ignoredNonMht、hiddenDirs、emptyDirs、unreadable、depthLimited、quotaHit、hasMore；
 五个计数为非负 int，两个标志为 boolean。batch 的 dirPath:string、folderName:string或null、grouped:boolean、filePaths:array<string> 全部必填。
@@ -446,7 +447,7 @@ ready.methods 保留全部旧名并追加上述八个新方法。
 | WorkspaceVm wire | revision、topLevelOrder | integer、FileRef；顺序文件为 array<TargetId>，保留顶层组与条目穿插关系 |
 | workspacePage.result | revision、snapshotFile | integer、FileRef；同版完整 WorkspaceVm，含所有组/成员/来源摘要与顺序文件 |
 | workspaceChanged.data | kind、revision、snapshot | string、integer、FileRef；完成状态的完整同版 WorkspaceVm |
-| canUndo.result | canUndo、undoDepth、revision | boolean、integer、integer；当前栈事实，不声称完整参数撤销已实现 |
+| canUndo.result | canUndo、undoDepth、revision | boolean、integer、integer；后端唯一栈事实，结构与 U2 参数记录均可撤销 |
 | applyDrop.result | changed、affectedPaths、revision | boolean、FileRef、integer；受影响路径文件为 array<string> |
 
 FileRef=`{path:string,bytes:integer,mediaType:string}`，三字段必填，JSON 文件 mediaType 必须为

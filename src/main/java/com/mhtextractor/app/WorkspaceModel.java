@@ -833,25 +833,40 @@ public final class WorkspaceModel {
     // ==================== 变更：撤销 ====================
 
     /**
-     * 撤销一步。
+     * 模型独立使用时撤销一步（结构记录）。
      *
      * <p><b>范围说明（诚实标注）</b>：本类实现与"列表结构"相关的撤销类型
      * （{@code IMPORT / GROUP / UNGROUP / REMOVE / REMOVE_GROUP}），
      * 覆盖了"桩 UI 跑通工作区功能"与生产 GUI 的结构类撤销所需。
-     * 参数类撤销（{@code PARAM_SET / CLEAR_PARAMS / APPLY_GLOBAL}）<b>仍</b>未纳入 ——
-     * 它们需要参数快照与作用域寻址，属后续步骤（见 {@code docs/handoff/H17.md}）。
+     * 参数类撤销（{@code PARAM_SET / CLEAR_PARAMS / APPLY_GLOBAL}）由端口经
+     * {@link #undo(WorkspaceParamCommandService)} 完成，以访问同一会话的全局缓存与磁盘失效服务。
+     * 此无服务入口保留原结构语义，参数记录原样压回。
      * 原本文中列为"尚未纳入"的 {@code REORDER / MERGE_GROUPS} 已于 Q0/P0 纳入本类
      * （见 {@link #applyUndo}：恢复方式是结构快照，不需要落点解析）。</p>
      *
      * @return true = 确实撤销了一步；false = 栈空或该类型尚未支持（不产生任何变更）
      */
     public boolean undo() {
+        return undo(null);
+    }
+
+    /** 端口完整撤销：模型独占弹栈，参数服务恢复同一会话的 before 与缓存。 */
+    boolean undo(WorkspaceParamCommandService params) {
         if (undoManager.isEmpty()) {
             return false;
         }
         // UndoManager 只提供 pop()（无 peek）。故先弹出，遇到尚未支持的类型再原样压回 ——
         // 这样"不支持"不会静默改变状态（若直接忽略，用户会看到"撤销了但什么都没变"）。
         UndoManager.Record<PreviewItem> record = undoManager.pop();
+        if (params != null && switch (record.type()) {
+            case PARAM_SET, CLEAR_PARAMS, APPLY_GLOBAL -> true;
+            default -> false;
+        }) {
+            lastUndoAffected = params.restoreUndo(record);
+            lastUndoKind = record.type().name();
+            publish(WorkspaceChange.Kind.UNDO_APPLIED, lastUndoAffected);
+            return true;
+        }
         if (!applyUndo(record)) {
             undoManager.push(record);   // 原样压回，保持栈序不变
             return false;

@@ -72,6 +72,7 @@ class BackendIpcParamsTest {
         final Path bulk;
         final List<String> paths = new ArrayList<>();
         final List<PortEvent.ParamStateChanged> changes = new ArrayList<>();
+        final List<PortEvent.WorkspaceChanged> workspaceChanges = new ArrayList<>();
         ObjectNode context;
         long revision;
 
@@ -101,6 +102,7 @@ class BackendIpcParamsTest {
             direct = new InProcessUiport(model, request -> null, plans, activity, commands,
                     new WorkspaceImportCoordinator(model, request -> null, Runnable::run), null, cache, global, previews);
             direct.events().subscribe(e -> { if (e instanceof PortEvent.ParamStateChanged c) changes.add(c); });
+            direct.events().subscribe(e -> { if (e instanceof PortEvent.WorkspaceChanged c) workspaceChanges.add(c); });
             ipc = new IpcTestClient(root.resolve("child"), BackendCli.class.getName(), "--serve", "--locale", "en");
             var ready = ipc.receive();
             for (String method : List.of("setGlobalParams", "setGroupParams", "setItemParams", "clearParams",
@@ -124,6 +126,7 @@ class BackendIpcParamsTest {
         }
 
         JsonNode call(String method, ObjectNode params) throws Exception {
+            if (method.equals("parameterState") || method.equals("applyParamsToTargets")) params.put("revision", revision);
             var frame = ipc.request(method, method, params);
             assertEquals("response", frame.path("type").asText(), frame.toString());
             revision = frame.path("revision").longValue();
@@ -152,6 +155,77 @@ class BackendIpcParamsTest {
         void sameWorkspace() throws Exception {
             assertEquals(JSON.readTree(JSON.writeValueAsBytes(direct.queries().workspace())),
                     IpcTestClient.expandWorkspace(call("workspace", object())));
+        }
+
+        List<TargetId> targets() {
+            var targets = new ArrayList<TargetId>();
+            paths.forEach(path -> targets.add(TargetId.ofItem(path)));
+            targets.add(TargetId.ofGroup(group()));
+            return targets;
+        }
+
+        JsonNode parameterStates() throws Exception {
+            var result = JSON.createArrayNode();
+            for (boolean mode : List.of(false, true)) {
+                var state = direct.queries().parameterState(mode, targets(), TargetResolution.EXPLICIT);
+                // Q10 Config carries extraction parameters; RuntimeContext belongs to Q05/Q06.
+                var expected = JSON.readTree(JSON.writeValueAsBytes(state));
+                var remote = call("parameterState", object().put("imageMode", mode).put("targetResolution", "explicit")
+                        .set("fallbackTargets", upload(JSON.valueToTree(targets()))));
+                assertEquals(expected, file(remote.path("state")), "Q10 every target/source/Config and aggregate");
+                result.add(expected);
+            }
+            return result;
+        }
+
+        List<List<Path>> cacheFiles() throws Exception {
+            var directFiles = new ArrayList<Path>();
+            var remoteFiles = new ArrayList<Path>();
+            for (var item : model.allItems()) {
+                var cached = preview.ensureCachedLocked(preview.prepare(Path.of(item.path), effective(item, true)), () -> false);
+                directFiles.add(previews.store().imageFileFor(cached.meta(), 0));
+                var manifest = file(call("previewFiles", object().put("path", item.path)).path("manifest"));
+                remoteFiles.add(Path.of(manifest.path("thumbnails").get(0).path("imagePath").asText()));
+            }
+            for (var files : List.of(directFiles, remoteFiles)) for (var path : files) assertTrue(Files.exists(path));
+            ipc.drainRequestEvents();
+            return List.of(directFiles, remoteFiles);
+        }
+
+        void undoTo(JsonNode stateBefore, WorkspaceVm workspaceBefore, boolean imageMode, Set<String> affected) throws Exception {
+            var cached = cacheFiles();
+            int depth = direct.queries().workspace().undoDepth();
+            workspaceChanges.clear();
+            direct.commands().undo();
+            assertEquals(depth - 1, direct.queries().workspace().undoDepth(), "Exactly one record consumed");
+            assertTrue(call("undo", object()).isNull());
+            var events = ipc.drainRequestEvents();
+            assertEquals(1, events.size(), "One undo completion event");
+            var event = events.getFirst();
+            assertEquals("workspaceChanged", event.path("event").asText());
+            assertEquals("UNDO_APPLIED", event.path("data").path("kind").asText());
+            assertEquals(1, workspaceChanges.size());
+            var localEvent = workspaceChanges.getFirst();
+            assertEquals(direct.queries().workspace(), localEvent.snapshot(), "In-process completion snapshot");
+            assertEquals(localEvent.undoKind(), event.path("data").path("undoKind").asText());
+            assertEquals(JSON.valueToTree(localEvent.affected()), file(event.path("data").path("affected")));
+            assertEquals(JSON.valueToTree(localEvent.suggestedSelection()), event.path("data").path("suggestedSelection"));
+            assertEquals(revision, event.path("data").path("revision").longValue());
+            assertEquals(JSON.readTree(JSON.writeValueAsBytes(direct.queries().workspace())),
+                    IpcTestClient.expandWorkspace(file(event.path("data").path("snapshot"))), "Event snapshot is the completed state");
+            assertEquals(workspaceBefore, direct.queries().workspace(), "Workspace restored");
+            sameWorkspace();
+            var canUndo = call("canUndo", object());
+            assertEquals(depth - 1, canUndo.path("undoDepth").intValue());
+            assertEquals(direct.queries().canUndo(), canUndo.path("canUndo").booleanValue());
+            assertEquals(stateBefore, parameterStates(), "Both modes restored, including null before");
+            queryBothModes();
+            for (int side = 0; side < cached.size(); side++) for (int i = 0; i < paths.size(); i++) {
+                Path path = cached.get(side).get(i);
+                boolean deleted = imageMode && affected.contains(paths.get(i));
+                assertEquals(!deleted, Files.exists(path), "UNDO_CACHE side=" + side + " path=" + path);
+                System.out.println("UNDO_CACHE imageMode=" + imageMode + " side=" + side + " deleted=" + deleted + " exists=" + Files.exists(path) + " path=" + path);
+            }
         }
 
         void queryBothModes() throws Exception {
@@ -296,32 +370,89 @@ class BackendIpcParamsTest {
         }
     }
 
-    @Test void unsupportedParameterUndoReportsErrorAndPreservesRecordAndState() throws Exception {
-        for (String method : List.of("setGlobalParams", "clearParams", "applyGlobalParams")) {
-            try (var pair = new Pair("undo-" + method)) {
+    @Test void parameterUndoSucceedsAndRestoresStateAndInvalidatesCache() throws Exception {
+        for (boolean mode : List.of(false, true)) {
+          for (String method : List.of("setGlobalParams", "setGroupParams", "setItemParams", "clearParams", "applyGlobalParams", "applyParamsToTargets")) {
+            try (var pair = new Pair("undo-" + mode + "-" + method)) {
                 pair.seed();
-                pair.set("setGlobalParams", false, richConfig("before"), 1);
-                pair.set("setItemParams", false, richConfig("item"), 1);
+                for (boolean baselineMode : List.of(false, true)) {
+                    pair.set("setGlobalParams", baselineMode, object().put("startMarker", "global-before"), 1);
+                    pair.set("setGroupParams", baselineMode, object().put("startMarker", "group-before"), 1);
+                    pair.set("setItemParams", baselineMode, object().put("startMarker", "item-before"), 1);
+                }
+                if (method.equals("clearParams") || method.equals("applyParamsToTargets")) {
+                    var checked = List.of(pair.paths.get(0), pair.paths.get(2));
+                    pair.direct.commands().setChecked(checked, true);
+                    pair.call("setChecked", object().put("checked", true).set("paths", JSON.valueToTree(checked)));
+                    pair.ipc.drainRequestEvents();
+                }
+                var stateBefore = pair.parameterStates();
+                var workspaceBefore = pair.direct.queries().workspace();
                 var target = TargetId.ofItem(pair.paths.get(2));
                 if (method.equals("clearParams")) {
-                    var targets = List.of(target);
-                    pair.command(method, object().put("imageMode", false).set("fallbackTargets", pair.upload(JSON.valueToTree(targets))),
-                            () -> pair.direct.commands().clearParams(targets, false), 1);
+                    pair.command(method, object().put("imageMode", mode).set("fallbackTargets", pair.upload(JSON.valueToTree(List.of(target)))),
+                            () -> pair.direct.commands().clearParams(List.of(target), mode), 1);
                 } else if (method.equals("applyGlobalParams")) {
-                    pair.command(method, object().put("imageMode", false).set("target", JSON.valueToTree(target)),
-                            () -> pair.direct.commands().applyGlobalParams(target, false), 1);
+                    pair.command(method, object().put("imageMode", mode).set("target", JSON.valueToTree(target)),
+                            () -> pair.direct.commands().applyGlobalParams(target, mode), 1);
+                } else if (method.equals("applyParamsToTargets")) {
+                    ObjectNode value = JSON.valueToTree(new AppConfig());
+                    value.put("startMarker", "batch-after");
+                    var targets = List.of(TargetId.ofGroup(pair.group()), target);
+                    var c = JSON.treeToValue(value, AppConfig.class);
+                    pair.direct.commands().applyParamsToTargets(mode, c, targets);
+                    var request = object().put("imageMode", mode);
+                    request.set("params", value);
+                    request.set("fallbackTargets", pair.upload(JSON.valueToTree(targets)));
+                    pair.call(method, request);
+                    pair.ipc.drainRequestEvents();
+                } else {
+                    pair.set(method, mode, object().put("startMarker", "after"), 1);
                 }
-                var before = pair.direct.queries().workspace();
-                for (int attempt = 0; attempt < 2; attempt++) {
-                    var rejected = assertThrows(UnsupportedOperationException.class, () -> pair.direct.commands().undo());
-                    assertEquals("U2: parameter undo is not supported; record retained", rejected.getMessage());
-                    var error = pair.ipc.request("undo", "undo", object());
-                    assertEquals("INTERNAL_ERROR", error.path("error").path("code").asText());
-                    assertTrue(pair.ipc.drainRequestEvents().isEmpty());
-                    assertEquals(before, pair.direct.queries().workspace());
-                    pair.sameWorkspace();
-                    pair.queryBothModes();
-                }
+                assertNotEquals(stateBefore, pair.parameterStates(), "Forward command really changed parameters");
+                Set<String> affected = switch (method) {
+                    case "setGroupParams" -> Set.copyOf(pair.paths.subList(0, 2));
+                    case "applyParamsToTargets", "clearParams" -> Set.copyOf(pair.paths.subList(0, 3));
+                    case "setItemParams" -> Set.of(pair.paths.get(2));
+                    default -> Set.copyOf(pair.paths);
+                };
+                pair.undoTo(stateBefore, workspaceBefore, mode, affected);
+            }
+          }
+        }
+    }
+
+    @Test void threeParameterRoundsUndoOneRecordAtATime() throws Exception {
+        try (var pair = new Pair("undo-three")) {
+            pair.seed();
+            pair.set("setGroupParams", true, object().put("startMarker", "group"), 1);
+            var states = new ArrayList<JsonNode>();
+            var workspaces = new ArrayList<WorkspaceVm>();
+            var target = TargetId.ofItem(pair.paths.get(2));
+            states.add(pair.parameterStates()); workspaces.add(pair.direct.queries().workspace());
+            pair.set("setItemParams", true, object().put("startMarker", "item"), 1);
+            states.add(pair.parameterStates()); workspaces.add(pair.direct.queries().workspace());
+            pair.command("clearParams", object().put("imageMode", true).set("fallbackTargets", pair.upload(JSON.valueToTree(List.of(target)))),
+                    () -> pair.direct.commands().clearParams(List.of(target), true), 1);
+            states.add(pair.parameterStates()); workspaces.add(pair.direct.queries().workspace());
+            var group = TargetId.ofGroup(pair.group());
+            pair.command("applyGlobalParams", object().put("imageMode", true).set("target", JSON.valueToTree(group)),
+                    () -> pair.direct.commands().applyGlobalParams(group, true), 1);
+            for (int i = 2; i >= 0; i--) pair.undoTo(states.get(i), workspaces.get(i), true,
+                    i == 2 ? Set.copyOf(pair.paths) : Set.of(pair.paths.get(2)));
+        }
+    }
+
+    @Test void parameterUndoRestoresUnconfirmedNullBefore() throws Exception {
+        for (boolean mode : List.of(false, true)) for (String method : List.of("setGlobalParams", "setGroupParams", "setItemParams")) {
+            try (var pair = new Pair("undo-null-" + mode + method)) {
+                pair.seed();
+                var before = pair.parameterStates();
+                var workspace = pair.direct.queries().workspace();
+                pair.set(method, mode, object().put("startMarker", "confirmed"), 1);
+                var affected = method.equals("setGlobalParams") ? Set.copyOf(pair.paths)
+                        : method.equals("setGroupParams") ? Set.copyOf(pair.paths.subList(0, 2)) : Set.of(pair.paths.get(2));
+                pair.undoTo(before, workspace, mode, affected);
             }
         }
     }

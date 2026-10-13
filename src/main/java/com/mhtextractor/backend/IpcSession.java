@@ -530,9 +530,8 @@ final class IpcSession implements AutoCloseable {
             case "undo" -> {
                 int depth = port.queries().workspace().undoDepth();
                 port.commands().undo();
-                if (depth > 0 && port.queries().workspace().undoDepth() == depth) {
-                    // U2: the model preserves unsupported parameter records. Never report false success.
-                    throw new UnsupportedOperationException("U2: parameter undo is not supported; record retained");
+                if (port.queries().workspace().undoDepth() != Math.max(0, depth - 1)) {
+                    throw new IllegalStateException("Undo must consume exactly one record");
                 }
                 return json.nullNode();
             }

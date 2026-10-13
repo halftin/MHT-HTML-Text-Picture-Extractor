@@ -166,6 +166,8 @@ class IpcUiportTest {
 
     @Test void dualPathCommandsQueriesAndEventsMatchFieldForField() throws Exception {
         Path root = root(); List<String> paths = sources(root,3);
+        Path imageFixture = imageSource(root);
+        for (String path : paths) Files.copy(imageFixture, Path.of(path), StandardCopyOption.REPLACE_EXISTING);
         Cards cards = new Cards(); WorkspaceModel model = new WorkspaceModel();
         var global = new GlobalParameterCache();
         var previews = PreviewSession.create(root.resolve("inprocess-cache"));
@@ -235,12 +237,47 @@ class IpcUiportTest {
             assertEquals(local.queries().paramSchema(false),ipc.queries().paramSchema(false));
             assertEquals(local.queries().paramSchema(true),ipc.queries().paramSchema(true));
             for (var event : ipcEvents) if (event instanceof PortEvent.WorkspaceChanged e) assertNotNull(e.snapshot());
-            var error = assertThrows(IpcFailure.class,ipc.commands()::undo);
-            assertEquals(IpcFailure.Kind.REMOTE,error.kind()); assertEquals("INTERNAL_ERROR",error.code());
-            assertEquals(local.queries().workspace().undoDepth(),ipc.queries().workspace().undoDepth());
+            var targets = paths.stream().map(TargetId::ofItem).toList();
+            var expectedGlobal = global.text().copyExtractionParams();
+            assertNull(model.allItems().getFirst().textItemParams);
+            var cached = new ArrayList<Path>();
+            var remoteCached = new ArrayList<Path>();
+            var previewService = new PreviewService(previews.lifecycle());
+            for (var item : model.allItems()) {
+                var c = plans.effectiveImageParams(item);
+                var entry = previewService.ensureCachedLocked(previewService.prepare(Path.of(item.path), c), () -> false);
+                cached.add(previews.store().imageFileFor(entry.meta(), 0));
+                remoteCached.add(Path.of(ipc.queries().previewFiles(item.path).images().getFirst().path()));
+            }
+            for (var files : List.of(cached, remoteCached)) for (Path path : files) assertTrue(Files.exists(path));
+            int depth = local.queries().workspace().undoDepth();
+            local.commands().undo(); ipc.commands().undo();
+            assertEquals(depth - 1, local.queries().workspace().undoDepth());
+            assertEquals(local.queries().workspace(), ipc.queries().workspace());
+            assertEquals(config.copyExtractionParams(), model.allItems().getFirst().textItemParams.copyExtractionParams(), "Apply-global before restored");
+            assertEquals(expectedGlobal, global.text().copyExtractionParams());
+            for (boolean mode : List.of(false, true)) assertEquals(local.queries().parameterState(mode,targets,TargetResolution.EXPLICIT),
+                    ipc.queries().parameterState(mode,targets,TargetResolution.EXPLICIT));
+            for (var files : List.of(cached, remoteCached)) for (Path path : files) assertTrue(Files.exists(path), "Text undo preserves image caches");
+            // SET_ITEM(text) precedes SET_GROUP(image); both consume exactly one record.
+            depth = local.queries().workspace().undoDepth();
+            local.commands().undo(); ipc.commands().undo();
+            assertEquals(depth - 1, local.queries().workspace().undoDepth());
+            assertEquals(local.queries().workspace(), ipc.queries().workspace());
+            assertNull(model.allItems().getFirst().textItemParams);
+            depth = local.queries().workspace().undoDepth();
+            local.commands().undo(); ipc.commands().undo();
+            assertEquals(depth - 1, local.queries().workspace().undoDepth());
+            assertNull(model.allItems().getFirst().parentGroup.getImageParamsCache());
+            assertEquals(3, model.allItems().getFirst().parentGroup.getMembers().size());
+            for (var files : List.of(cached, remoteCached)) for (Path path : files)
+                assertFalse(Files.exists(path), "Image group undo invalidates all three members after drop");
+            assertEquals(local.queries().workspace(), ipc.queries().workspace());
+            for (boolean mode : List.of(false, true)) assertEquals(local.queries().parameterState(mode,targets,TargetResolution.EXPLICIT),
+                    ipc.queries().parameterState(mode,targets,TargetResolution.EXPLICIT));
             local.commands().clearItems(); ipc.commands().clearItems();
             assertEquals(local.queries().workspace(),ipc.queries().workspace());
-            System.out.println("DUAL_PATH_PASS steps="+steps+" events="+ipcEvents.size()+" workspace/config/units/schema exact; U2 rejected explicitly");
+            System.out.println("DUAL_PATH_PASS steps="+steps+" events="+ipcEvents.size()+" workspace/config/units/schema exact; U2 restored/depth-1/cache-deleted");
         }
     }
 
