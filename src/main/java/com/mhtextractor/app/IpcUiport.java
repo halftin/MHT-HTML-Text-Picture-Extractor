@@ -190,22 +190,37 @@ public final class IpcUiport implements Uiport, AutoCloseable {
                 .put("outputFolder",r.outputFolder()).put("openFolderAfterComplete",r.openFolderAfterComplete());
         return params;
     }
+    private ObjectNode runtime(ObjectNode params, AppConfig r) {
+        Objects.requireNonNull(r,"runtime");
+        params.putObject("runtime").put("imageModeEnabled",r.isImageModeEnabled()).put("inputFolder",r.getInputFolder())
+                .put("outputFolder",r.getOutputFolder()).put("openFolderAfterComplete",r.isOpenFolderAfterComplete());
+        return params;
+    }
     private void command(String method, ObjectNode params) {
         JsonNode result = call(method,params);
         if (!result.isNull()) throw new IpcFailure(IpcFailure.Kind.PROTOCOL,null,"Expected null command response: " + method,null);
     }
     private void upload(String method, ObjectNode params, String key, JsonNode content) {
+        JsonNode result = uploadCall(method,params,key,content);
+        if (!result.isNull()) throw new IpcFailure(IpcFailure.Kind.PROTOCOL,null,"Expected null command response: " + method,null);
+    }
+    private JsonNode uploadCall(String method, ObjectNode params, String key, JsonNode content) {
         check();
         Path path = null;
         try {
             path = Files.createTempFile(Objects.requireNonNull(bulkRoot,"Start IPC port first"),"client-",".json");
             Files.write(path,json.writeValueAsBytes(content));
             params.set(key,p().put("path",path.toString()).put("bytes",Files.size(path)).put("mediaType","application/json"));
-            command(method,params);
+            return call(method,params);
         } catch (IOException e) { throw classify(e); }
         finally {
             if (path != null) try { Files.deleteIfExists(path); } catch (IOException e) { fail(e); }
         }
+    }
+    private JsonNode targets(List<TargetId> targets) {
+        var values = json.createArrayNode();
+        if (targets != null) targets.stream().filter(Objects::nonNull).forEach(t -> values.add(codec.target(t)));
+        return values;
     }
     private void pathsCommand(String method, ObjectNode params, List<String> paths) {
         if (paths == null && List.of("setChecked","group","removeItems").contains(method)) paths = List.of();
@@ -224,6 +239,14 @@ public final class IpcUiport implements Uiport, AutoCloseable {
     @Override public Confirmer confirmer() { return confirmer; }
 
     private final WorkspaceCommands commands = new WorkspaceCommands() {
+        public void setTitleOverride(String path, String title) {
+            command("setTitleOverride",p().put("path",path).put("title",title).put("revision",revision()));
+        }
+        public void applyParamsToTargets(boolean mode, AppConfig config, List<TargetId> fallback) {
+            var params = p().put("imageMode",mode).put("revision",revision());
+            params.set("params",json.valueToTree(config));
+            upload("applyParamsToTargets",params,"fallbackTargets",targets(fallback));
+        }
         public void cancelWorkspaceActivity() { command("cancelWorkspaceActivity",p()); }
         public void cancelPreviewLoad() { command("cancelPreviewLoad",p()); }
         public void startPreparse() { command("startPreparse",runtime(p())); }
@@ -264,6 +287,27 @@ public final class IpcUiport implements Uiport, AutoCloseable {
         }
     };
     private final Queries queries = new Queries() {
+        public CacheStateVm cacheState() {
+            var n = call("cacheState",p());
+            return new CacheStateVm(text(n,"root"),number(n,"totalBytes"),bool(n,"hasCachedEntries"));
+        }
+        public ParameterStateVm parameterState(boolean mode, List<TargetId> fallback) {
+            var n = uploadCall("parameterState",p().put("imageMode",mode).put("revision",revision()),"fallbackTargets",targets(fallback));
+            return decode(() -> codec.parameterState(files.consumeJson(n.path("state"))));
+        }
+        public PreStartStateVm preStartState(AppConfig runtime, boolean checkedOnly) {
+            return codec.preStart(call("preStartState",runtime(p().put("checkedOnly",checkedOnly).put("revision",revision()),runtime)));
+        }
+        public List<PresentationVm> presentation(List<String> paths, AppConfig runtime) {
+            var n = uploadCall("presentation",runtime(p().put("revision",revision()),runtime),"paths",json.valueToTree(paths));
+            return decode(() -> codec.presentation(files.consumeJson(n.path("items"))));
+        }
+        public ExportSourceVm exportSource(String path) {
+            var n = call("exportSource",p().put("path",path));
+            if (session.sessionId() == null || !session.sessionId().equals(text(n,"sessionId")))
+                throw new IpcFailure(IpcFailure.Kind.PROTOCOL,null,"Source export session mismatch",null);
+            return decode(() -> codec.exportSource(n));
+        }
         public WorkspacePage workspacePage(int offset,int limit) { return IpcUiport.this.workspacePage(offset,limit); }
         public IpcFilesClient.FileRef fileInfo(IpcFilesClient.FileRef ref) { return IpcUiport.this.fileInfo(ref); }
         public Metrics metrics() { return IpcUiport.this.metrics(); }

@@ -135,7 +135,7 @@ class BackendIpcActivityTest {
             var clipboard = new ParamClipboard(model::push, t -> ParamScope.GLOBAL, (t,m,c) -> { });
             var commands = new WorkspaceParamCommandService(model, new WorkspaceParamService(previews.lifecycle()), global, clipboard::pushParamUndo);
             var imports = new WorkspaceImportCoordinator(model, request -> { throw new AssertionError("Unexpected direct confirmation"); }, callbacks::add, 200, 20000);
-            port = new InProcessUiport(model, request -> null, activity, commands, imports);
+            port = new InProcessUiport(model, request -> null, activity, commands, imports, global, previews);
             port.events().subscribe(events::add);
         }
         private AppConfig effective(com.mhtextractor.model.PreviewItem i, boolean m) {
@@ -177,7 +177,10 @@ class BackendIpcActivityTest {
     private void compareImport(Direct direct, PortEvent expected, JsonNode event) throws Exception {
         if (expected instanceof PortEvent.WorkspaceChanged changed) {
             assertEquals(changed.kind(), event.path("data").path("kind").asText());
-            assertEquals(JSON.readTree(JSON.writeValueAsBytes(direct.port.queries().workspace())),
+            var atRound = (ObjectNode) JSON.readTree(JSON.writeValueAsBytes(direct.port.queries().workspace()));
+            // The round snapshot precedes importStateChanged(false), while this oracle is read after completion.
+            ((ObjectNode) atRound.path("details")).put("importing", true);
+            assertEquals(atRound,
                     IpcTestClient.expandWorkspace(file(event.path("data").path("snapshot"))));
         } else if (expected instanceof PortEvent.ImportRound round) {
             var data = event.path("data");

@@ -35,6 +35,8 @@ final class IpcSession implements AutoCloseable {
     static final List<String> PARAM_METHODS = List.of("setGlobalParams", "setGroupParams", "setItemParams",
             "clearParams", "applyGlobalParams", "undo", "runtimeConfig", "outputUnitPlan", "paramSchema");
     static final List<String> EXTRACTION_METHODS = List.of("startExtraction", "cancelExtraction");
+    static final List<String> DETAIL_METHODS = List.of("setTitleOverride", "applyParamsToTargets",
+            "parameterState", "preStartState", "presentation", "exportSource", "cacheState");
     private final ObjectMapper json;
     private final WorkspaceModel model = new WorkspaceModel();
     private final GlobalParameterCache global = new GlobalParameterCache();
@@ -62,7 +64,7 @@ final class IpcSession implements AutoCloseable {
     private boolean applyingPlan;
     private boolean activityImageMode;
     private final java.util.Set<Thread> workers = java.util.concurrent.ConcurrentHashMap.newKeySet();
-    private final java.util.List<String> importChanges = new java.util.ArrayList<>();
+    private final java.util.List<PortEvent.WorkspaceChanged> importChanges = new java.util.ArrayList<>();
     private final java.util.Map<Long, PreviewService.Prepared> previewInputs = new java.util.HashMap<>();
     private final java.util.Map<Long, java.util.List<PortEvent.PreviewNotice>> pendingNotices = new java.util.HashMap<>();
     private final IpcWorkspaceCodec codec;
@@ -107,7 +109,7 @@ final class IpcSession implements AutoCloseable {
                 checked -> WorkspaceExtractionCoordinator.productionRequests(extractionPlans,
                         () -> model.allItems().stream().filter(item -> !item.removed).toList(), confirmer).apply(checked), this::dispatch);
         port = new InProcessUiport(model, confirmer, plans, activities, paramCommands, imports, extractions,
-                new WorkspaceParamService(previews.lifecycle()));
+                new WorkspaceParamService(previews.lifecycle()), global, previews);
         port.events().subscribe(this::onEvent);
     }
 
@@ -214,8 +216,8 @@ final class IpcSession implements AutoCloseable {
                 emit("preparseFinished", generation(finished.generation()).set("result", codec.file(value)));
             }
             case PortEvent.WorkspaceChanged changed -> {
-                if (importing || applyingPlan) importChanges.add(changed.kind());
-                else emit("workspaceChanged", json.createObjectNode().put("kind", changed.kind()));
+                if (importing || applyingPlan) importChanges.add(changed);
+                else emit("workspaceChanged", workspaceChangeData(changed));
             }
             case PortEvent.ImportStateChanged state -> {
                 importing = state.importing();
@@ -293,10 +295,6 @@ final class IpcSession implements AutoCloseable {
                         .set("namedParams", args));
             }
             case PortEvent.ParamStateChanged changed -> {
-                // The GUI host already resets derived preview state after parameter events.
-                // This host must also discard in-memory references to invalidated cache files.
-                var affected = new java.util.HashSet<>(changed.affectedPaths());
-                for (var item : model.allItems()) if (affected.contains(item.path)) item.resetPreviewState();
                 emit("paramsChanged", json.createObjectNode()
                         .put("kind", changed.kind().name()).put("affectedCount", changed.affectedPaths().size())
                         .put("imageMode", changed.imageMode())
@@ -351,7 +349,20 @@ final class IpcSession implements AutoCloseable {
     private void flushImportChanges() {
         var changes = List.copyOf(importChanges);
         importChanges.clear();
-        for (var kind : changes) emit("workspaceChanged", json.createObjectNode().put("kind", kind));
+        for (var change : changes) {
+            try { emit("workspaceChanged", workspaceChangeData(change)); }
+            catch (IOException e) { throw new java.io.UncheckedIOException(e); }
+        }
+    }
+
+    private ObjectNode workspaceChangeData(PortEvent.WorkspaceChanged changed) throws IOException {
+        var data = json.createObjectNode().put("kind", changed.kind()).put("undoKind", changed.undoKind());
+        var affected = json.createArrayNode();
+        var details = new IpcDetailCodec(json, files);
+        changed.affected().forEach(id -> affected.add(details.target(id)));
+        data.set("affected", codec.file(affected));
+        data.set("suggestedSelection", changed.suggestedSelection() == null ? json.nullNode() : details.target(changed.suggestedSelection()));
+        return data;
     }
 
     private PreviewItem item(String path) {
@@ -363,8 +374,19 @@ final class IpcSession implements AutoCloseable {
         Path path = previews.store().imageFileFor(meta, index);
         String ext = IpcImages.extension(Files.readAllBytes(path));
         var ref = files.borrowImage(path, IpcImages.mediaType(ext));
-        return ref.put("imagePath", path.toString()).put("extension", ext).put("coreName", thumbnail.coreName())
+        var item = item(meta.source().absolutePath());
+        ref.put("imagePath", path.toString()).put("extension", ext).put("coreName", thumbnail.coreName())
+                .put("displayName", imageDisplayName(item, thumbnail.coreName()))
                 .put("width", thumbnail.width()).put("height", thumbnail.height());
+        ref.putObject("dimensions").put("width", thumbnail.width()).put("height", thumbnail.height());
+        return ref;
+    }
+
+    private String imageDisplayName(PreviewItem item, String coreName) {
+        var config = params(item, true);
+        if (!config.isSingleOutputMode() || config.isEnableBatchRenaming() || model.visibleCount() <= 1) return coreName;
+        var visible = model.allItems().stream().filter(i -> !i.removed).toList();
+        return String.format("f%02d_", visible.indexOf(item) + 1) + coreName;
     }
 
     private void exportLoaded(PortEvent.PreviewLoaded loaded, PreviewItem item, ObjectNode data) throws IOException {
@@ -424,6 +446,60 @@ final class IpcSession implements AutoCloseable {
 
     JsonNode call(String method, JsonNode p) throws Exception {
         switch (method) {
+            case "parameterState" -> {
+                boolean mode = bool(p, "imageMode");
+                var values = files.readUpload(p.path("fallbackTargets"));
+                if (!values.isArray()) throw new IllegalArgumentException("TargetId array required");
+                var targets = new java.util.ArrayList<TargetId>();
+                for (var value : values) targets.add(target(value, false));
+                var state = port.queries().parameterState(mode, targets);
+                return json.createObjectNode().set("state", codec.file(new IpcDetailCodec(json, files).parameters(state)));
+            }
+            case "preStartState" -> {
+                var runtime = detailsRuntime(p);
+                return new IpcDetailCodec(json, files).preStart(port.queries().preStartState(runtime, bool(p, "checkedOnly")));
+            }
+            case "presentation" -> {
+                var paths = paths(p, "paths", null, false);
+                var runtime = detailsRuntime(p);
+                return json.createObjectNode().set("items", codec.file(new IpcDetailCodec(json, files)
+                        .presentation(port.queries().presentation(paths, runtime))));
+            }
+            case "cacheState" -> {
+                var vm = port.queries().cacheState();
+                return json.createObjectNode().put("root", vm.root()).put("totalBytes", vm.totalBytes()).put("hasCachedEntries", vm.hasCachedEntries());
+            }
+            case "setTitleOverride" -> {
+                String path = string(p, "path");
+                if (!p.has("title") || (!p.path("title").isNull() && !p.path("title").isTextual()))
+                    throw new IllegalArgumentException("title string or null required");
+                port.commands().setTitleOverride(path, p.path("title").isNull() ? null : p.path("title").textValue());
+                return json.nullNode();
+            }
+            case "applyParamsToTargets" -> {
+                boolean mode = bool(p, "imageMode");
+                if (p.has("params") == p.has("config")) throw new IllegalArgumentException("Exactly one Config source required");
+                var configValue = p.has("params") ? p.path("params") : p.path("config");
+                var config = paramCodec.readConfig(configValue);
+                // Unlike the older partial configuration writes, C29 requires the complete value.
+                if (configValue.size() != paramCodec.config(new AppConfig()).size())
+                    throw new IllegalArgumentException("Complete Config required");
+                var values = files.readUpload(p.path("fallbackTargets"));
+                if (!values.isArray()) throw new IllegalArgumentException("TargetId array required");
+                var targets = new java.util.ArrayList<TargetId>();
+                for (var value : values) targets.add(target(value, false));
+                port.commands().applyParamsToTargets(mode, config, targets);
+                return json.nullNode();
+            }
+            case "exportSource" -> {
+                String path = string(p, "path");
+                IpcFiles.input(path);
+                var vm = port.queries().exportSource(path);
+                var value = json.createObjectNode().put("status", vm.status()).put("imageCount", vm.imageCount())
+                        .put("warningCount", vm.warningCount()).put("detail", vm.detail());
+                value.set("htmlFile", vm.htmlFile() == null ? json.nullNode() : exportedHtml(vm.htmlFile()));
+                return value;
+            }
             case "setGlobalParams", "setGroupParams", "setItemParams" -> {
                 boolean mode = bool(p, "imageMode");
                 AppConfig config = paramCodec.readConfig(p.path("params"));
@@ -719,6 +795,46 @@ final class IpcSession implements AutoCloseable {
         }
         bool(r, "openFolderAfterComplete");
         return bool(r, "imageModeEnabled");
+    }
+
+    /** Preserve relative img/ references and the page basename when issuing a source export. */
+    private ObjectNode exportedHtml(FileRef ref) throws IOException {
+        Path page = Path.of(ref.path());
+        Path source = page.getParent().toRealPath();
+        Path destination = Files.createTempDirectory(files.root, "source-export-");
+        try (var walk = Files.walk(source)) {
+            for (var entries = walk.iterator(); entries.hasNext();) {
+                Path entry = entries.next();
+                if (!entry.toRealPath().startsWith(source)) throw new IOException("Export bundle escapes source directory");
+                Path target = destination.resolve(source.relativize(entry));
+                if (Files.isDirectory(entry)) Files.createDirectories(target);
+                else if (Files.isRegularFile(entry)) {
+                    Files.copy(entry, target);
+                    files.issue(target, entry.equals(page) ? ref.mediaType() : "application/octet-stream");
+                }
+            }
+        }
+        return files.issue(destination.resolve(page.getFileName()), ref.mediaType());
+    }
+
+    /** Gate queries accept blank paths as facts so the ordered denial can describe them. */
+    private AppConfig detailsRuntime(JsonNode p) throws IOException {
+        var value = p.path("runtime");
+        if (!value.isObject()) throw new IllegalArgumentException("RuntimeContext required");
+        for (String key : List.of("inputFolder", "outputFolder")) {
+            if (!value.has(key) || (!value.path(key).isNull() && !value.path(key).isTextual()))
+                throw new IllegalArgumentException("Runtime path required");
+            if (value.path(key).isTextual() && !value.path(key).textValue().isBlank()) {
+                if (key.equals("inputFolder")) IpcFiles.input(value.path(key).textValue());
+                else IpcFiles.checkOutput(value.path(key).textValue());
+            }
+        }
+        var config = new AppConfig();
+        config.setInputFolder(value.path("inputFolder").isNull() ? null : value.path("inputFolder").textValue());
+        config.setOutputFolder(value.path("outputFolder").isNull() ? null : value.path("outputFolder").textValue());
+        config.setImageModeEnabled(bool(value, "imageModeEnabled"));
+        config.setOpenFolderAfterComplete(bool(value, "openFolderAfterComplete"));
+        return config;
     }
 
     /** Synchronous request-local context; never overwrite the legacy script mode/output directory. */

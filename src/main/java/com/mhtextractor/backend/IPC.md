@@ -1,5 +1,59 @@
 # JSON Lines 控制协议 v1（P4-2a + P4-2b + P4-13 启动握手 + P4-14 确认往返）
 
+## P5a-1e：C28/C29、Q10–Q13 与完整状态投影
+
+`ready.data.methods` 与 welcome 能力列表追加 `setTitleOverride`、`applyParamsToTargets`、
+`parameterState`、`preStartState`、`presentation`、`exportSource`，并开放 Q09 `cacheState`。
+帧类型、错误码及旧方法不变。C28/C29/Q10/Q11/Q12 必须携带当前 `revision`；
+不匹配返回 `INVALID_PARAMS`，先重新读取快照，再由用户重试；不得自动重放写操作。
+
+| ID / 方法 | params | result |
+|---|---|---|
+| C28 `setTitleOverride` | `path:string,title:string或null,revision:integer` | null；trim、空串转 null，无撤销记录；实际变化发 `workspaceChanged(TITLE_CHANGED)`，snapshot 含同版 ItemVm |
+| C29 `applyParamsToTargets` | `imageMode:boolean,params:完整Config,fallbackTargets:FileRef,revision:integer` | null；`config` 是 `params` 的兼容别名，必须且只能给其中一项；完整 Config 是全部持久化提取字段，不包含四个运行时字段 |
+| Q10 `parameterState` | `imageMode:boolean,fallbackTargets:FileRef,revision:integer` | `{state:FileRef,revision}`，文件内容见下 |
+| Q11 `preStartState` | `runtime:RuntimeContext,checkedOnly:boolean,revision:integer` | 下述 PreStartState VM + revision |
+| Q12 `presentation` | `paths:FileRef,runtime:RuntimeContext,revision:integer` | `{items:FileRef,revision}`，文件为有序 PresentationVm 数组 |
+| Q13 `exportSource` | `path:string` | `{status,htmlFile,imageCount,warningCount,detail,sessionId,revision}`；无需预先导入工作区 |
+
+`fallbackTargets` 文件为 `array<TargetId>`，`paths` 文件为 `array<string>`，沿用会话内上传校验。
+C29 与 Q10 共用后端勾选优先解析：有未移除的勾选项时忽略 fallback，否则采用首个可解析 fallback。
+组内条目的参数应用路由到所属组；重复组路由去重。C29 在任何写入前捕获整批 before，
+只压一条 `PARAM_SET`，不循环逐项参数命令；相同参数为空操作。完成缓存失效后发
+`paramsChanged(SET_TARGETS)` 与 `workspaceChanged(PARAMS_CHANGED)`。
+
+Q10 文件：`textConfirmed:boolean,textGlobal:Config或null,imageConfirmed:boolean,imageGlobal:Config或null,
+targets:array<TargetId>,count:integer,states:array<TargetState>,uniform:boolean,hasEffective:boolean`。
+TargetState：`target:TargetId,independent:boolean,effective:boolean,source:NONE/GLOBAL/GROUP,config:Config或null`。
+null 表示未确认/无生效参数，不能替换为默认 Config；null 参与混合值判定，空集合 uniform=true、hasEffective=false。
+
+Q11：`denial:{key,level,namedParams}或null,textConfirmed,imageConfirmed,defaultNamedGroups:array<string>,subsetMergedName:boolean`。
+拒绝顺序为输入空、输出空、输入非目录、无可提取项、checkedOnly 下无勾选项；级别沿用既有业务规则。
+默认名组及合并单元来自同版后端计划。runtime 的空路径作为事实返回 denial；查询不创建输出目录、不含 draftDirty、不发确认卡。
+
+Q12 每项：`path,displayName:string或null,parsing:boolean,imageMode:boolean,status,head,tail,textFile:FileRef或null,images:array<ImageFile>`。
+正文始终走 UTF-8 文件；head/tail 与显示名复用模板/命名业务规则；未解析显示名保留 parsing 状态。
+图片描述与 E12/E13 共用实际缓存原图表示：`path,bytes,mediaType,imagePath,extension,coreName,displayName,width,height,index,dimensions:{width,height}`。
+`imagePath` 为真实缓存图片路径，不能伪称 PNG；mediaType/extension 按魔数，displayName 随当前序与参数重算。
+共享缓存图片仍由原缓存生命周期回收，客户端 release 不得删除借用原图。
+
+Q13 status 为 `unparseable/failed/success`。成功的 htmlFile 为 UTF-8 HTML FileRef，附带 imageCount/warningCount；
+失败保留导出器/解析器诊断 detail。sessionId 用于丢弃旧会话结果，HTML 不应在浏览器仍引用时释放。
+
+ItemVm 追加 `modifiedTime,status,errorMsg,chapterEnabled,badge,cachedTitle,titleOverride,extractOutcome,extractDetail,textFile,previewManifest`。
+modifiedTime 为 LocalDateTime 的 ISO 字符串，textFile/previewManifest 为 FileRef 或 null（空可省略），不传 cachedText 正文。
+GroupVm 追加 `confirmation:{textConfirmed,imageConfirmed}`（该组独立参数确认摘要）。WorkspaceVm 追加 `details`：
+`textConfirmed,imageConfirmed,activityGeneration,previewGeneration,loadingPath,importing,importGeneration,running,extractionGeneration,lastStats,sessionOutputFolder`。
+lastStats 是完整 ExtractionStats 的 JSON FileRef，不以 StatsVm 四计数代替；所有状态随宿主串行事件快照投影。
+
+E19 追加 `undoKind:string或null,affected:FileRef,suggestedSelection:TargetId或null`，affected 文件为有序 TargetId 数组。
+撤销完成才提供 undoKind/选择建议，参数撤销 U2 仍显式拒绝并保留栈。Q09 `cacheState` 返回
+`root,totalBytes,hasCachedEntries,revision`，hasCachedEntries 读取真实缓存目录，不从 bytes>0 推断。
+
+Java 端口的新细节查询需要与参数命令服务共享真实 GlobalParameterCache/PreviewSession；
+注入外部参数服务的旧 InProcessUiport 构造器保留，细节查询使用新增完整构造器装配，不能另存确认状态。
+新字段及构造器均追加；旧构造器的空补充字段用 NON_NULL/NON_EMPTY 排除，保留其原进程内 JSON 形状。
+
 启动 `com.mhtextractor.backend.BackendCli --serve`，stdin/stdout 为 UTF-8 JSON Lines：
 每行恰好一个 JSON 对象，输出行尾为 LF，字符串中的换行由 JSON 转义。每帧立即 flush。
 日志沿用独立 logback 文件配置（`logs/backend.log`）；stderr 留给 JVM/启动诊断。
@@ -106,7 +160,7 @@ IPC 检查非空栈深度未减少时明确返回 INTERNAL_ERROR，不清栈、�
 WorkspaceLifecycleController.onUndoClicked 的全部后处理：参数恢复、缓存/派生态失效、必要重解析、
 IMPORT 清勾选及缓存、REORDER/MERGE 后处理、选择提示与单出口。不能把本批 C19 接为完整 GUI 撤销。
 P1 §5 S3 要求同时修改上述 app/gui 段，与本批禁止改 gui 和 app 服务的边界冲突，按本批明确允许的部分交付。
-C29/Q10 及完整编辑会话确认态/混合态查询仍需该前置迁移，本批没有虚构对应 wire 方法。
+C29/Q10 已由 P5a-1e 补齐（见本文开头）；完整参数撤销 U2 仍属后续迁移。
 
 ## P4-2b 兼容规则与方法发现
 

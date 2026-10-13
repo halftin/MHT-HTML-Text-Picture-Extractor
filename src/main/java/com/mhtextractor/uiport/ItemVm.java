@@ -13,7 +13,24 @@ import java.util.Objects;
  * @param update    列表动画类别（{@link UpdateKind}）
  */
 public record ItemVm(String id, String name, boolean checked, boolean removed,
-                     Integer unitIndex, UpdateKind update, String sourceFolder) {
+                     Integer unitIndex, UpdateKind update, String sourceFolder,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String modifiedTime,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String status,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String errorMsg,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) Boolean chapterEnabled,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String badge,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String cachedTitle,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String titleOverride,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String extractOutcome,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String extractDetail,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) FileRef textFile,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) FileRef previewManifest) {
+
+    public ItemVm(String id, String name, boolean checked, boolean removed,
+                  Integer unitIndex, UpdateKind update, String sourceFolder) {
+        this(id, name, checked, removed, unitIndex, update, sourceFolder,
+                null, null, null, null, null, null, null, null, null, null, null);
+    }
 
     public ItemVm(String id, String name, boolean checked, boolean removed,
                   Integer unitIndex, UpdateKind update) {

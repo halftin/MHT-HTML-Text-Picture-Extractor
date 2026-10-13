@@ -7,6 +7,20 @@ import java.util.List;
  * 工作区查询（最小切片）：视图模型快照。
  */
 public interface WorkspaceQueries {
+    default CacheStateVm cacheState() { throw new UnsupportedOperationException("Cache state is not wired"); }
+
+    default ParameterStateVm parameterState(boolean imageMode, List<TargetId> fallbackTargets) {
+        throw new UnsupportedOperationException("Parameter state is not wired");
+    }
+    default PreStartStateVm preStartState(AppConfig runtime, boolean checkedOnly) {
+        throw new UnsupportedOperationException("Pre-start state is not wired");
+    }
+    default List<PresentationVm> presentation(List<String> paths, AppConfig runtime) {
+        throw new UnsupportedOperationException("Presentation is not wired");
+    }
+    default ExportSourceVm exportSource(String path) {
+        throw new UnsupportedOperationException("Source export is not wired");
+    }
 
     long activityGeneration();
     long previewGeneration();

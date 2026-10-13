@@ -37,6 +37,17 @@ public final class IpcCodec {
         if (!n.has(key)) throw new IllegalArgumentException("Missing field: " + key);
         return n.path(key).isNull() ? null : text(n, key);
     }
+    private static String optional(JsonNode n, String key) {
+        return n.hasNonNull(key) ? text(n,key) : null;
+    }
+    /** Keep value-object references leased until the caller releases them or the session closes. */
+    public FileRef reference(JsonNode n) {
+        if (n.isMissingNode() || n.isNull()) return null;
+        var ref = files.accept(n);
+        try { files.validate(ref); }
+        catch (IOException e) { throw new IllegalArgumentException("Invalid retained FileRef",e); }
+        return new FileRef(ref.path(),ref.bytes(),ref.mediaType());
+    }
     public static <T> List<T> list(JsonNode n, Function<JsonNode,T> mapper) {
         if (!n.isArray()) throw new IllegalArgumentException("Array required");
         var values = new ArrayList<T>();
@@ -59,11 +70,18 @@ public final class IpcCodec {
         if (!n.has("unitIndex")) throw new IllegalArgumentException("Missing unitIndex");
         return new ItemVm(text(n,"id"),text(n,"name"),bool(n,"checked"),bool(n,"removed"),
                 n.path("unitIndex").isNull() ? null : integer(n,"unitIndex"),
-                UpdateKind.valueOf(text(n,"update")),nullable(n,"sourceFolder"));
+                UpdateKind.valueOf(text(n,"update")),nullable(n,"sourceFolder"),
+                optional(n,"modifiedTime"),optional(n,"status"),optional(n,"errorMsg"),
+                n.hasNonNull("chapterEnabled") ? bool(n,"chapterEnabled") : null,
+                optional(n,"badge"),optional(n,"cachedTitle"),optional(n,"titleOverride"),
+                optional(n,"extractOutcome"),optional(n,"extractDetail"),
+                reference(n.path("textFile")),reference(n.path("previewManifest")));
     }
     public GroupVm group(JsonNode n) {
         return new GroupVm(number(n,"no"),text(n,"name"),bool(n,"expanded"),bool(n,"defaultNamed"),
-                list(n.path("members"),this::item),list(n.path("sourceFolders"),v -> v.isNull() ? null : string(v)));
+                list(n.path("members"),this::item),list(n.path("sourceFolders"),v -> v.isNull() ? null : string(v)),
+                n.hasNonNull("confirmation") ? new GroupVm.Confirmation(bool(n.path("confirmation"),"textConfirmed"),
+                        bool(n.path("confirmation"),"imageConfirmed")) : null);
     }
     public static TargetId target(JsonNode n) {
         return new TargetId(nullable(n,"path"),n.path("groupNo").isNull() ? null : number(n,"groupNo"));
@@ -71,7 +89,46 @@ public final class IpcCodec {
     public WorkspaceVm workspace(JsonNode n) throws IOException {
         return new WorkspaceVm(list(n.path("groups"),this::group),list(n.path("topLevelItems"),this::item),
                 bool(n,"canUndo"),integer(n,"undoDepth"),TriState.valueOf(text(n,"selection")),
-                list(files.consumeJson(n.path("topLevelOrder")),IpcCodec::target));
+                list(files.consumeJson(n.path("topLevelOrder")),IpcCodec::target),details(n.path("details")));
+    }
+    private WorkspaceVm.Details details(JsonNode n) {
+        if (n.isMissingNode() || n.isNull()) return null;
+        return new WorkspaceVm.Details(bool(n,"textConfirmed"),bool(n,"imageConfirmed"),number(n,"activityGeneration"),
+                number(n,"previewGeneration"),nullable(n,"loadingPath"),bool(n,"importing"),number(n,"importGeneration"),
+                bool(n,"running"),number(n,"extractionGeneration"),reference(n.path("lastStats")),nullable(n,"sessionOutputFolder"));
+    }
+    private AppConfig parameters(JsonNode n) throws IOException {
+        return n.isNull() ? null : json.treeToValue(n,AppConfig.class);
+    }
+    public ParameterStateVm parameterState(JsonNode n) throws IOException {
+        var states = new ArrayList<ParameterStateVm.TargetState>();
+        for (var s : n.path("states")) states.add(new ParameterStateVm.TargetState(target(s.path("target")),
+                bool(s,"independent"),bool(s,"effective"),text(s,"source"),parameters(s.path("config"))));
+        return new ParameterStateVm(bool(n,"textConfirmed"),parameters(n.path("textGlobal")),bool(n,"imageConfirmed"),
+                parameters(n.path("imageGlobal")),list(n.path("targets"),IpcCodec::target),integer(n,"count"),states,
+                bool(n,"uniform"),bool(n,"hasEffective"));
+    }
+    public PreStartStateVm preStart(JsonNode n) {
+        var d = n.path("denial");
+        return new PreStartStateVm(d.isNull() ? null : new PreStartStateVm.Denial(text(d,"key"),text(d,"level"),map(d.path("namedParams"))),
+                bool(n,"textConfirmed"),bool(n,"imageConfirmed"),strings(n.path("defaultNamedGroups")),bool(n,"subsetMergedName"));
+    }
+    public synchronized List<PresentationVm> presentation(JsonNode n) throws IOException {
+        if (!n.isArray()) throw new IllegalArgumentException("Presentation array required");
+        var result = new ArrayList<PresentationVm>();
+        for (var p : n) {
+            var images = new ArrayList<PortEvent.ImageFile>();
+            for (var i : p.path("images")) images.add(image(i));
+            result.add(new PresentationVm(text(p,"path"),nullable(p,"displayName"),bool(p,"parsing"),bool(p,"imageMode"),
+                    text(p,"status"),nullable(p,"head"),nullable(p,"tail"),reference(p.path("textFile")),images));
+        }
+        // Presentation images are retained value references, not transient preview-event payloads.
+        imageLeases.clear();
+        return List.copyOf(result);
+    }
+    public ExportSourceVm exportSource(JsonNode n) {
+        return new ExportSourceVm(text(n,"status"),reference(n.path("htmlFile")),integer(n,"imageCount"),
+                integer(n,"warningCount"),nullable(n,"detail"));
     }
     public ImportPlanVm plan(JsonNode n) {
         return new ImportPlanVm(list(n.path("batches"), b -> new ImportPlanVm.ImportBatchVm(text(b,"dirPath"),
@@ -134,8 +191,13 @@ public final class IpcCodec {
         imageLeases.put(ref.path(), ref);
             // Ownership/existence are checked without converting the original into pixels or retaining its bytes.
             files.validate(ref);
-            return new PortEvent.ImageFile(text(n,"imagePath"),ref.bytes(),ref.mediaType(),text(n,"extension"),
-                    text(n,"coreName"),integer(n,"width"),integer(n,"height"),integer(n,"index"));
+            if (n.hasNonNull("dimensions") && (integer(n.path("dimensions"),"width") != integer(n,"width")
+                    || integer(n.path("dimensions"),"height") != integer(n,"height"))) throw new IOException("Image dimensions mismatch");
+            return n.has("displayName")
+                    ? new PortEvent.ImageFile(text(n,"imagePath"),ref.bytes(),ref.mediaType(),text(n,"extension"),
+                        text(n,"coreName"),integer(n,"width"),integer(n,"height"),integer(n,"index"),nullable(n,"displayName"))
+                    : new PortEvent.ImageFile(text(n,"imagePath"),ref.bytes(),ref.mediaType(),text(n,"extension"),
+                        text(n,"coreName"),integer(n,"width"),integer(n,"height"),integer(n,"index"));
     }
     private void releaseImages() {
         imageLeases.values().forEach(files::releaseAfterUse);
@@ -156,7 +218,9 @@ public final class IpcCodec {
     public synchronized PortEvent event(String name, JsonNode n) throws IOException {
         return switch (name) {
             case "confirmationRequested", "confirmationExpired" -> null;
-            case "workspaceChanged" -> new PortEvent.WorkspaceChanged(text(n,"kind"),workspace(files.consumeJson(n.path("snapshot"))));
+            case "workspaceChanged" -> new PortEvent.WorkspaceChanged(text(n,"kind"),workspace(files.consumeJson(n.path("snapshot"))),
+                    optional(n,"undoKind"),n.hasNonNull("affected") ? list(files.consumeJson(n.path("affected")),IpcCodec::target) : List.of(),
+                    n.hasNonNull("suggestedSelection") ? target(n.path("suggestedSelection")) : null);
             case "workspaceActivityChanged" -> new PortEvent.WorkspaceActivityChanged(number(n,"generation"));
             case "preparseStarted" -> new PortEvent.PreparseStarted(number(n,"generation"));
             case "preparseProgress" -> new PortEvent.PreparseProgress(number(n,"generation"),integer(n,"done"),integer(n,"total"));

@@ -67,6 +67,9 @@ public final class WorkspaceModel {
 
     /** 上一次 {@link #applyUndo} 中受影响的条目（供 {@link #applyUndoAffected} 查询；见其 javadoc 的状态契约） */
     private List<PreviewItem> lastUndoAffected = List.of();
+    private String lastUndoKind;
+
+    public String lastUndoKind() { return lastUndoKind; }
 
     private static final Predicate<Object> REMOVED = o -> o instanceof PreviewItem it && it.removed;
 
@@ -81,6 +84,57 @@ public final class WorkspaceModel {
      * 需要"带初始内容的模型"的调用方改用复制型命令 {@link #importAll(List)}。</p>
      */
     public WorkspaceModel() {
+    }
+
+    /** Business write entry; title edits have no undo record. */
+    public boolean setTitleOverride(String path, String title) {
+        PreviewItem item = allItems().stream().filter(i -> i.path.equals(path) && !i.removed).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown title target"));
+        String normalized = title == null ? null : title.trim();
+        if (normalized != null && normalized.isEmpty()) normalized = null;
+        if (java.util.Objects.equals(item.titleOverride, normalized)) return false;
+        item.titleOverride = normalized;
+        return true;
+    }
+
+    /** One whole-batch before image and one PARAM_SET, without invoking single-target commands. */
+    public List<PreviewItem> applyParamsToTargets(boolean imageMode, com.mhtextractor.model.AppConfig params,
+                                                 List<Object> targets) {
+        java.util.Objects.requireNonNull(params, "params");
+        Map<String, com.mhtextractor.model.AppConfig> itemBefore = new java.util.LinkedHashMap<>();
+        Map<Integer, com.mhtextractor.model.AppConfig> groupBefore = new java.util.LinkedHashMap<>();
+        Set<PreviewItem> affected = new LinkedHashSet<>();
+        // Capture every before value before making any assignment, deduplicating group routes.
+        for (Object target : targets) {
+            GroupItem<PreviewItem> group = target instanceof GroupItem<?> g
+                    ? GroupStructure.asPreviewGroup(g) : target instanceof PreviewItem i ? i.parentGroup : null;
+            if (group != null) {
+                var before = imageMode ? group.getImageParamsCache() : group.getTextParamsCache();
+                if (!EffectiveParamsService.signatureOf(before).equals(EffectiveParamsService.signatureOf(params))) {
+                    groupBefore.putIfAbsent(group.getGroupNo(), before == null ? null : before.copyExtractionParams());
+                    affected.addAll(group.getMembers().stream().filter(i -> !i.removed).toList());
+                }
+            } else if (target instanceof PreviewItem item && !item.removed) {
+                var before = imageMode ? item.imageItemParams : item.textItemParams;
+                if (!EffectiveParamsService.signatureOf(before).equals(EffectiveParamsService.signatureOf(params))) {
+                    itemBefore.putIfAbsent(item.path, before == null ? null : before.copyExtractionParams());
+                    affected.add(item);
+                }
+            }
+        }
+        if (affected.isEmpty()) return List.of();
+        for (PreviewItem item : allItems()) if (itemBefore.containsKey(item.path)) {
+            if (imageMode) item.imageItemParams = params.copyExtractionParams();
+            else item.textItemParams = params.copyExtractionParams();
+        }
+        for (GroupItem<PreviewItem> group : groups()) if (groupBefore.containsKey(group.getGroupNo())) {
+            if (imageMode) group.setImageParamsCache(params.copyExtractionParams());
+            else group.setTextParamsCache(params.copyExtractionParams());
+        }
+        push(new UndoManager.Record<>(UndoManager.RecordType.PARAM_SET, List.copyOf(affected),
+                null, -1, List.of(), List.of(), List.of(), List.of(), false, null, null, null,
+                imageMode, null, null, null, false, itemBefore, groupBefore));
+        return List.copyOf(affected);
     }
 
     /**
@@ -842,6 +896,7 @@ public final class WorkspaceModel {
                 return false;
             }
         }
+        lastUndoKind = record.type().name();
         publish(WorkspaceChange.Kind.UNDO_APPLIED, undoAffectedOf(record));
         return true;
     }

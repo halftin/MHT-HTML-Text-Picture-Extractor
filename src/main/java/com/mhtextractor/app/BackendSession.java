@@ -60,6 +60,7 @@ public final class BackendSession implements AutoCloseable {
 
     public CompletableFuture<Void> connected() { return connected.copy(); }
     public synchronized long revision() { return revision; }
+    public synchronized String sessionId() { return connection == null ? null : connection.sessionId(); }
 
     public static final class RemoteError extends IOException {
         private final String code;

@@ -95,6 +95,7 @@ public final class BackendLauncher {
                 connection.identity = actual;
                 connection.capabilities = List.copyOf(capabilities);
                 connection.confirmationRoundTrip = welcome.path("confirmationRoundTrip").booleanValue();
+                connection.sessionId = welcome.path("sessionId").isTextual() ? welcome.path("sessionId").textValue() : null;
                 return connection;
             }).get(timeout.toNanos(), TimeUnit.NANOSECONDS);
             completed = true;
@@ -134,6 +135,7 @@ public final class BackendLauncher {
         private BackendIdentity identity;
         private List<String> capabilities;
         private boolean confirmationRoundTrip;
+        private String sessionId;
 
         private Connection(Process process) {
             this.process = process;
@@ -144,6 +146,7 @@ public final class BackendLauncher {
         public BackendIdentity identity() { return identity; }
         public List<String> capabilities() { return capabilities; }
         public boolean confirmationRoundTrip() { return confirmationRoundTrip; }
+        public String sessionId() { return sessionId; }
         public BufferedReader output() { return output; }
         public BufferedWriter input() { return input; }
         public Process process() { return process; }

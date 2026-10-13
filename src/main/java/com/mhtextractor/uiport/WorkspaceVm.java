@@ -17,7 +17,18 @@ import java.util.Objects;
  * @param selection     勾选三态（{@link TriState}，从条目勾选状态导出）
  */
 public record WorkspaceVm(List<GroupVm> groups, List<ItemVm> topLevelItems,
-                          boolean canUndo, int undoDepth, TriState selection, List<TargetId> topLevelOrder) {
+                          boolean canUndo, int undoDepth, TriState selection, List<TargetId> topLevelOrder,
+                          @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) Details details) {
+
+    public WorkspaceVm(List<GroupVm> groups, List<ItemVm> items, boolean canUndo, int undoDepth,
+                       TriState selection, List<TargetId> order) {
+        this(groups, items, canUndo, undoDepth, selection, order, null);
+    }
+
+    public record Details(boolean textConfirmed, boolean imageConfirmed, long activityGeneration,
+                          long previewGeneration, String loadingPath, boolean importing,
+                          long importGeneration, boolean running, long extractionGeneration,
+                          FileRef lastStats, String sessionOutputFolder) {}
 
     public WorkspaceVm(List<GroupVm> groups, List<ItemVm> items, boolean canUndo, int undoDepth, TriState selection) {
         this(groups, items, canUndo, undoDepth, selection,

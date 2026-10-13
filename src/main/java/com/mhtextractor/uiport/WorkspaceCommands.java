@@ -20,6 +20,12 @@ package com.mhtextractor.uiport;
  */
 public interface WorkspaceCommands {
 
+    default void setTitleOverride(String path, String title) { throw new UnsupportedOperationException("Title editing is not wired"); }
+    default void applyParamsToTargets(boolean imageMode, com.mhtextractor.model.AppConfig params,
+                                      java.util.List<TargetId> fallbackTargets) {
+        throw new UnsupportedOperationException("Batch parameters are not wired");
+    }
+
     void cancelWorkspaceActivity();
     void cancelPreviewLoad();
     void startPreparse();

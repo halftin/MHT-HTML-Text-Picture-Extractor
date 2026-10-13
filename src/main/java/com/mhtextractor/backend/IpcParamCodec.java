@@ -33,7 +33,7 @@ final class IpcParamCodec {
     }
 
     @SuppressWarnings("deprecation")
-    private ObjectNode config(AppConfig c) {
+    ObjectNode config(AppConfig c) {
         return json.createObjectNode()
                 .put("separateFiles", c.isSeparateFiles())
                 .put("enableLimit", c.isEnableContentLimit()).put("startMarker", c.getStartMarker())

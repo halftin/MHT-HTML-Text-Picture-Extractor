@@ -99,7 +99,7 @@ class BackendIpcParamsTest {
             var cache = new WorkspaceParamService(previews.lifecycle());
             var commands = new WorkspaceParamCommandService(model, cache, global, clipboard::pushParamUndo);
             direct = new InProcessUiport(model, request -> null, plans, activity, commands,
-                    new WorkspaceImportCoordinator(model, request -> null, Runnable::run), null, cache);
+                    new WorkspaceImportCoordinator(model, request -> null, Runnable::run), null, cache, global, previews);
             direct.events().subscribe(e -> { if (e instanceof PortEvent.ParamStateChanged c) changes.add(c); });
             ipc = new IpcTestClient(root.resolve("child"), BackendCli.class.getName(), "--serve", "--locale", "en");
             var ready = ipc.receive();
@@ -220,6 +220,8 @@ class BackendIpcParamsTest {
         }
 
         List<JsonNode> load(ObjectNode request) throws Exception {
+            direct.commands().loadPreview(request.path("path").asText(), request.path("largeFileConfirmed").asBoolean());
+            direct.commands().awaitPreviewInFlight(10000);
             call("loadPreview", request);
             var events = new ArrayList<>(ipc.drainRequestEvents());
             while (events.stream().noneMatch(e -> e.path("event").asText().equals("previewLoaded"))) {
@@ -311,7 +313,8 @@ class BackendIpcParamsTest {
                 }
                 var before = pair.direct.queries().workspace();
                 for (int attempt = 0; attempt < 2; attempt++) {
-                    pair.direct.commands().undo();
+                    var rejected = assertThrows(UnsupportedOperationException.class, () -> pair.direct.commands().undo());
+                    assertEquals("U2: parameter undo is not supported; record retained", rejected.getMessage());
                     var error = pair.ipc.request("undo", "undo", object());
                     assertEquals("INTERNAL_ERROR", error.path("error").path("code").asText());
                     assertTrue(pair.ipc.drainRequestEvents().isEmpty());

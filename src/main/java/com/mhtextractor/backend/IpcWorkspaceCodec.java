@@ -21,7 +21,22 @@ final class IpcWorkspaceCodec {
                 .put("checked", vm.checked()).put("removed", vm.removed())
                 .put("unitIndex", vm.unitIndex()).put("update", vm.update().name());
         result.put("sourceFolder", vm.sourceFolder());
+        putOptional(result, "modifiedTime", vm.modifiedTime());
+        putOptional(result, "status", vm.status());
+        putOptional(result, "errorMsg", vm.errorMsg());
+        if (vm.chapterEnabled() != null) result.put("chapterEnabled", vm.chapterEnabled());
+        putOptional(result, "badge", vm.badge());
+        putOptional(result, "cachedTitle", vm.cachedTitle());
+        putOptional(result, "titleOverride", vm.titleOverride());
+        putOptional(result, "extractOutcome", vm.extractOutcome());
+        putOptional(result, "extractDetail", vm.extractDetail());
+        if (vm.textFile() != null) result.set("textFile", reference(vm.textFile()));
+        if (vm.previewManifest() != null) result.set("previewManifest", reference(vm.previewManifest()));
         return result;
+    }
+
+    private static void putOptional(ObjectNode value, String key, String text) {
+        if (text != null) value.put(key, text);
     }
 
     ObjectNode workspace(WorkspaceVm vm, long revision) throws IOException {
@@ -33,6 +48,14 @@ final class IpcWorkspaceCodec {
         var order = json.createArrayNode();
         for (TargetId target : vm.topLevelOrder()) order.addObject().put("path", target.path()).put("groupNo", target.groupNo());
         result.set("topLevelOrder", file(order));
+        if (vm.details() != null) {
+            var d = vm.details();
+            var details = result.putObject("details").put("textConfirmed", d.textConfirmed()).put("imageConfirmed", d.imageConfirmed())
+                    .put("activityGeneration", d.activityGeneration()).put("previewGeneration", d.previewGeneration())
+                    .put("loadingPath", d.loadingPath()).put("importing", d.importing()).put("importGeneration", d.importGeneration())
+                    .put("running", d.running()).put("extractionGeneration", d.extractionGeneration()).put("sessionOutputFolder", d.sessionOutputFolder());
+            details.set("lastStats", reference(d.lastStats()));
+        }
         return result.put("canUndo", vm.canUndo()).put("undoDepth", vm.undoDepth())
                 .put("selection", vm.selection().name()).put("revision", revision);
     }
@@ -44,6 +67,8 @@ final class IpcWorkspaceCodec {
         vm.members().forEach(m -> members.add(item(m)));
         var folders = entry.putArray("sourceFolders");
         vm.sourceFolders().forEach(folders::add);
+        if (vm.confirmation() != null) entry.putObject("confirmation").put("textConfirmed", vm.confirmation().textConfirmed())
+                .put("imageConfirmed", vm.confirmation().imageConfirmed());
         return entry;
     }
 
@@ -64,5 +89,27 @@ final class IpcWorkspaceCodec {
 
     ObjectNode file(com.fasterxml.jackson.databind.JsonNode content) throws IOException {
         return files.write(".json", json.writeValueAsBytes(content), "application/json");
+    }
+
+    com.fasterxml.jackson.databind.JsonNode reference(com.mhtextractor.uiport.FileRef ref) {
+        if (ref == null) return json.nullNode();
+        try {
+            // Copy value files into this session's issued set; a frontend cannot release another owner's files.
+            byte[] bytes = java.nio.file.Files.readAllBytes(java.nio.file.Path.of(ref.path()));
+            if (ref.mediaType().equals("application/json")) {
+                var content = json.readTree(bytes);
+                issueNested(content);
+                return files.write(".json", json.writeValueAsBytes(content), ref.mediaType());
+            }
+            return files.write(ref.mediaType().startsWith("text/html") ? ".html" : ".txt", bytes, ref.mediaType());
+        } catch (IOException e) { throw new java.io.UncheckedIOException(e); }
+    }
+
+    private void issueNested(com.fasterxml.jackson.databind.JsonNode node) throws IOException {
+        if (node.isObject() && node.has("path") && node.has("bytes") && node.has("mediaType")) {
+            var path = java.nio.file.Path.of(node.path("path").asText());
+            if (node.path("mediaType").asText().startsWith("image/")) files.borrowImage(path, node.path("mediaType").asText());
+            else files.issue(path, node.path("mediaType").asText());
+        } else if (node.isContainerNode()) for (var child : node) issueNested(child);
     }
 }

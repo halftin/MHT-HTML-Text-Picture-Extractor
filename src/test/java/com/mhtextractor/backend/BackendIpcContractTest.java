@@ -95,7 +95,10 @@ class BackendIpcContractTest {
             assertEquals("version", version.path("id").asText());
             JsonNode before = ipc.request("before", "workspace", JSON.createObjectNode()).get("result");
             assertEquals(JSON.readTree("""
-                    {"groups":[],"topLevelItems":[],"canUndo":false,"undoDepth":0,"selection":"NONE","topLevelOrder":[]}
+                    {"groups":[],"topLevelItems":[],"canUndo":false,"undoDepth":0,"selection":"NONE","topLevelOrder":[],
+                    "details":{"textConfirmed":false,"imageConfirmed":false,"activityGeneration":0,"previewGeneration":0,
+                    "loadingPath":null,"importing":false,"importGeneration":0,"running":false,"extractionGeneration":0,
+                    "lastStats":null,"sessionOutputFolder":null}}
                     """), IpcTestClient.expandWorkspace(before));
             var params = JSON.createObjectNode().put("checked", true);
             params.putArray("paths").add("unknown");
@@ -178,7 +181,7 @@ class BackendIpcContractTest {
             assertEquals(identity.protocolVersion(), result.path("protocolVersion").intValue());
             assertEquals(identity.version(), result.path("version").asText());
             assertEquals(identity.buildId(), result.path("buildId").asText());
-            assertEquals(JSON.readTree("[\"workspace\",\"setChecked\",\"workspacePage\",\"bulkFiles\",\"confirmationRoundTrip\",\"startExtraction\",\"cancelExtraction\"]"), result.path("capabilities"));
+            assertEquals(JSON.readTree("[\"workspace\",\"setChecked\",\"workspacePage\",\"bulkFiles\",\"confirmationRoundTrip\",\"startExtraction\",\"cancelExtraction\",\"setTitleOverride\",\"applyParamsToTargets\",\"parameterState\",\"preStartState\",\"presentation\",\"exportSource\",\"cacheState\"]"), result.path("capabilities"));
             assertTrue(result.path("confirmationRoundTrip").booleanValue());
             for (String field : List.of("protocolVersion", "version", "buildId")) {
                 var bad = params.deepCopy();

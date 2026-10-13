@@ -19,6 +19,8 @@ public sealed interface PortEvent {
     enum ParamChangeKind {
         /** 全局已确认参数写入（{@code applyConfirmedParams} 语义）：全部条目受影响 */
         SET_GLOBAL,
+        /** One batch of backend-resolved targets, with one undo record. */
+        SET_TARGETS,
         /** 组参数写入（{@code applyGroupParams} 语义）：该组未移除成员受影响 */
         SET_GROUP,
         /** 条目级参数写入（{@code applyItemParams} 语义）：该条目受影响 */
@@ -122,7 +124,21 @@ public sealed interface PortEvent {
 
     /** Encoded original cache image, with its real format. The frontend decodes/scales it locally. */
     record ImageFile(String path, long bytes, String mediaType, String extension, String coreName,
-                     int width, int height, int index) {}
+                     int width, int height, int index,
+                     @JsonInclude(JsonInclude.Include.NON_NULL) String displayName,
+                     @JsonInclude(JsonInclude.Include.NON_NULL) Dimensions dimensions,
+                     @JsonInclude(JsonInclude.Include.NON_NULL) String imagePath) {
+        public record Dimensions(int width, int height) {}
+        public ImageFile(String path, long bytes, String mediaType, String extension, String coreName,
+                         int width, int height, int index, String displayName) {
+            this(path, bytes, mediaType, extension, coreName, width, height, index, displayName,
+                    new Dimensions(width, height), path);
+        }
+        public ImageFile(String path, long bytes, String mediaType, String extension, String coreName,
+                         int width, int height, int index) {
+            this(path, bytes, mediaType, extension, coreName, width, height, index, null, null, null);
+        }
+    }
 
     record PreviewPayload(String text, String html, List<ImageFile> images) {
         public PreviewPayload { images = List.copyOf(images); }
@@ -210,10 +226,15 @@ public sealed interface PortEvent {
      * @param kind 变更类别（类别枚举留后续批次定稿；前端据此决定刷新粒度）
      */
     record WorkspaceChanged(String kind,
-                            @JsonInclude(JsonInclude.Include.NON_NULL) WorkspaceVm snapshot) implements PortEvent {
+                            @JsonInclude(JsonInclude.Include.NON_NULL) WorkspaceVm snapshot,
+                            @JsonInclude(JsonInclude.Include.NON_NULL) String undoKind,
+                            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<TargetId> affected,
+                            @JsonInclude(JsonInclude.Include.NON_NULL) TargetId suggestedSelection) implements PortEvent {
+        public WorkspaceChanged(String kind, WorkspaceVm snapshot) { this(kind, snapshot, null, List.of(), null); }
         public WorkspaceChanged(String kind) { this(kind, null); }
         public WorkspaceChanged {
             Objects.requireNonNull(kind, "kind");
+            affected = List.copyOf(affected);
         }
     }
 

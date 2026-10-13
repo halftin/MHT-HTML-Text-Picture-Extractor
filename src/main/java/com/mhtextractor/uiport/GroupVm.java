@@ -13,7 +13,15 @@ import java.util.Objects;
  * @param members      成员条目（{@link List#copyOf} 防御性不可变拷贝）
  */
 public record GroupVm(long no, String name, boolean expanded, boolean defaultNamed,
-                      List<ItemVm> members, List<String> sourceFolders) {
+                      List<ItemVm> members, List<String> sourceFolders,
+                      @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) Confirmation confirmation) {
+
+    public record Confirmation(boolean textConfirmed, boolean imageConfirmed) {}
+
+    public GroupVm(long no, String name, boolean expanded, boolean defaultNamed,
+                   List<ItemVm> members, List<String> sourceFolders) {
+        this(no, name, expanded, defaultNamed, members, sourceFolders, null);
+    }
 
     public GroupVm(long no, String name, boolean expanded, boolean defaultNamed, List<ItemVm> members) {
         this(no, name, expanded, defaultNamed, members, members.stream().filter(m -> !m.removed())

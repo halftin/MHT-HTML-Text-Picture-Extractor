@@ -68,6 +68,44 @@ class IpcUiportTest {
         return event;
     }
 
+    @Test void detailMethodsAndSupplementalFieldsSurviveClientRoundTrip() throws Exception {
+        Path root=root(); var paths=sources(root,2); var cards=new Cards();
+        var local=new InProcessUiport(new WorkspaceModel(),cards);
+        try (var ipc=real(root,cards)) {
+            var events=new LinkedBlockingQueue<PortEvent>(); ipc.events().subscribe(events::add);
+            for (var port : List.<Uiport>of(local,ipc)) {
+                port.commands().applyImportPlan(plan(root,paths,false));
+                port.commands().setChecked(paths,true);
+                port.commands().setTitleOverride(paths.getFirst(),"  edited title  ");
+                port.commands().applyParamsToTargets(false,new AppConfig(),List.of());
+            }
+            assertEquals(local.queries().workspace(),ipc.queries().workspace());
+            assertEquals(local.queries().parameterState(false,List.of()),ipc.queries().parameterState(false,List.of()));
+            assertEquals(2,ipc.queries().parameterState(false,List.of()).count());
+            var runtime=new AppConfig(); runtime.setInputFolder(root.toString()); runtime.setOutputFolder(root.resolve("query-only").toString());
+            assertEquals(local.queries().preStartState(runtime,true),ipc.queries().preStartState(runtime,true));
+            assertFalse(Files.exists(root.resolve("query-only")));
+            assertEquals(local.queries().presentation(paths,runtime),ipc.queries().presentation(paths,runtime));
+            var title=events.stream().filter(e -> e instanceof PortEvent.WorkspaceChanged w && w.kind().equals("TITLE_CHANGED"))
+                    .map(PortEvent.WorkspaceChanged.class::cast).findFirst().orElseThrow();
+            assertEquals("edited title",title.snapshot().topLevelItems().getFirst().titleOverride());
+            var a=local.queries().exportSource(paths.getFirst()); var b=ipc.queries().exportSource(paths.getFirst());
+            assertEquals(a.status(),b.status()); assertEquals(a.detail(),b.detail());
+            assertEquals(a.imageCount(),b.imageCount()); assertEquals(a.warningCount(),b.warningCount());
+            assertArrayEquals(Files.readAllBytes(Path.of(a.htmlFile().path())),Files.readAllBytes(Path.of(b.htmlFile().path())));
+            assertEquals(a.htmlFile().bytes(),b.htmlFile().bytes()); assertEquals(a.htmlFile().mediaType(),b.htmlFile().mediaType());
+            ipc.commands().startPreparse(); until(events,PortEvent.PreparseFinished.class::isInstance);
+            until(events,PortEvent.PreparseFinished.class::isInstance);
+            var item=ipc.queries().workspace().topLevelItems().getFirst();
+            assertEquals("READY",item.status()); assertEquals("",item.errorMsg()); assertNotNull(item.textFile());
+            assertEquals("content 0",Files.readString(Path.of(item.textFile().path())));
+            var presentation=ipc.queries().presentation(List.of(paths.getFirst()),runtime).getFirst();
+            assertEquals(Files.readString(Path.of(item.textFile().path())),Files.readString(Path.of(presentation.textFile().path())));
+            assertEquals("edited title",ipc.queries().workspace().topLevelItems().getFirst().titleOverride());
+            assertFalse(ipc.failure().isDone());
+        }
+    }
+
     @Test void dualPathCommandsQueriesAndEventsMatchFieldForField() throws Exception {
         Path root = root(); List<String> paths = sources(root,3);
         Cards cards = new Cards(); WorkspaceModel model = new WorkspaceModel();
@@ -91,7 +129,9 @@ class IpcUiportTest {
             },new PreviewService(previews.lifecycle()),(image,index,config) -> new ThumbnailData("unused",0,0,null),Runnable::run);
             var clipboard = new ParamClipboard(model::push,target -> ParamScope.GLOBAL,(target,mode,config) -> {});
             var params = new WorkspaceParamCommandService(model,new WorkspaceParamService(previews.lifecycle()),global,clipboard::pushParamUndo);
-            var local = new InProcessUiport(model,cards,plans,activities,params);
+            var local = new InProcessUiport(model,cards,plans,activities,params,
+                    new WorkspaceImportCoordinator(model,cards,Runnable::run),null,
+                    new WorkspaceParamService(previews.lifecycle()),global,previews);
             var localEvents = new ArrayList<PortEvent>(); var ipcEvents = new CopyOnWriteArrayList<PortEvent>();
             local.events().subscribe(localEvents::add); ipc.events().subscribe(ipcEvents::add);
             var sequence = new ArrayList<Consumer<WorkspaceCommands>>();
@@ -220,6 +260,27 @@ class IpcUiportTest {
             var thumb=preview.stream().filter(PortEvent.PreviewThumbnail.class::isInstance).map(PortEvent.PreviewThumbnail.class::cast).findFirst().orElseThrow();
             assertNotNull(thumb.imageFile()); assertEquals("png",thumb.imageFile().extension()); assertNull(thumb.thumbnail().pixels());
             var loaded=(PortEvent.PreviewLoaded)preview.getLast(); assertEquals("hello",loaded.payload().text()); assertEquals(1,loaded.payload().images().size());
+            assertEquals(new PortEvent.ImageFile.Dimensions(thumb.imageFile().width(),thumb.imageFile().height()),thumb.imageFile().dimensions());
+            assertNotNull(thumb.imageFile().displayName());
+            var runtime=new AppConfig(); runtime.setImageModeEnabled(true);
+            var presented=ipc.queries().presentation(List.of(source.toString()),runtime).getFirst();
+            assertEquals(1,presented.images().size());
+            var shown=presented.images().getFirst();
+            assertEquals(thumb.imageFile().dimensions(),shown.dimensions());
+            assertEquals(shown.path(),shown.imagePath()); assertNotNull(shown.displayName());
+            assertTrue(ipc.queries().cacheState().hasCachedEntries());
+            // A data URI stays inline during source export; a CID part exercises copied companion files.
+            Path mime=root.resolve("source-with-cid.mht");
+            Files.writeString(mime,"MIME-Version: 1.0\r\nContent-Type: multipart/related; boundary=parts\r\n\r\n"
+                    +"--parts\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n<html><body><img src=\"cid:pic\"></body></html>\r\n"
+                    +"--parts\r\nContent-Type: image/png\r\nContent-ID: <pic>\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+                    +"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==\r\n--parts--\r\n");
+            var exported=ipc.queries().exportSource(mime.toString());
+            assertEquals("success",exported.status(),exported.toString()); assertEquals(1,exported.imageCount());
+            Path html=Path.of(exported.htmlFile().path());
+            var document=org.jsoup.Jsoup.parse(Files.readString(html));
+            assertEquals(1,document.select("img[src]").size());
+            for (var img : document.select("img[src]")) assertTrue(Files.isRegularFile(html.getParent().resolve(img.attr("src"))),img.attr("src"));
             ipc.commands().awaitPreviewInFlight(2000); ipc.commands().cancelPreviewLoad(); ipc.commands().cancelWorkspaceActivity(); ipc.commands().refreshPreparseProgress();
             assertTrue(ipc.queries().activityGeneration()>0); assertTrue(ipc.queries().previewGeneration()>0); assertNull(ipc.queries().previewLoadingPath());
             assertFalse(ipc.failure().isDone()); System.out.println("ASYNC_EVENTS_PASS import/preparse/preview filePayload; generation/revision="+ipc.revision());
@@ -325,6 +386,11 @@ class IpcUiportTest {
                     assertNotNull(terminal.stats()); assertFalse(terminal.stats().files().isEmpty());
                     assertEquals(source.toString(),terminal.stats().files().getFirst().path());
                     assertTrue(delivered.stream().anyMatch(PortEvent.ExtractionProgress.class::isInstance));
+                    var snapshot=ipc.queries().workspace();
+                    assertEquals(terminal.stats().files().getFirst().outcome().name(),snapshot.topLevelItems().getFirst().extractOutcome());
+                    assertEquals(terminal.sessionOutputFolder(),snapshot.details().sessionOutputFolder());
+                    assertNotNull(snapshot.details().lastStats());
+                    assertEquals(terminal.stats().files().size(),JSON.readTree(Files.readString(Path.of(snapshot.details().lastStats().path()))).path("files").size());
                 }
                 ipc.commands().cancelExtraction(); assertFalse(ipc.failure().isDone());
                 System.out.println("REAL_EXTRACTION_CONFIRM_PASS mode="+mode+" end="+terminal.end()+" stats="+terminal.stats());
