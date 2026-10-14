@@ -2,7 +2,7 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.model.AppConfig;
-import com.mhtextractor.config.GuiState;
+import com.mhtextractor.uicore.GuiState;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.uicore.GroupRow;
 import com.mhtextractor.uicore.PreviewRow;

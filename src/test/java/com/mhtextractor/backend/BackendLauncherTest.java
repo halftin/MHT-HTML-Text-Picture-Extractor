@@ -53,7 +53,8 @@ class BackendLauncherTest {
             assertEquals(identity, connection.identity());
             assertEquals(List.of("workspace", "setChecked", "workspacePage", "bulkFiles", "confirmationRoundTrip",
                     "startExtraction", "cancelExtraction", "setTitleOverride", "applyParamsToTargets", "parameterState",
-                    "preStartState", "presentation", "exportSource", "cacheState"), connection.capabilities());
+                    "preStartState", "presentation", "exportSource", "cacheState",
+                    "listNamedConfigs", "loadNamedConfig", "saveNamedConfig", "deleteNamedConfig"), connection.capabilities());
             assertTrue(connection.confirmationRoundTrip());
             connection.input().write("{\"v\":1,\"type\":\"request\",\"id\":\"after-hello\",\"method\":\"workspace\",\"params\":{}}\n");
             connection.input().flush();

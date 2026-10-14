@@ -1,4 +1,4 @@
-package com.mhtextractor.config;
+package com.mhtextractor.uicore;
 
 import com.mhtextractor.model.AppConfig;
 import com.fasterxml.jackson.databind.DeserializationFeature;

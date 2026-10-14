@@ -124,7 +124,7 @@ public final class ParamSidePanel {
     private ParamSidePanel(SidePanelHost host, com.mhtextractor.uiport.Uiport port) {
         this.pane = new ParamFormPane(port);
         this.host = host;
-        new ParamPanelActions(pane).install();
+        new ParamPanelActions(pane, port).install();
         pane.setCloseHandler(this::onExit);
         // Q6b/R1.7：草稿状态通知的落点 —— 信号只有"可能变了"，真值仍由 pane.isDirty() 回答，
         // 按钮态由 MainController.updateStartButtonState()（唯一派生函数）算。

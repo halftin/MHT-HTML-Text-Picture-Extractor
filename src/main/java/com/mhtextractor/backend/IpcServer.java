@@ -89,6 +89,7 @@ final class IpcServer {
         if (session != null) IpcSession.PARAM_METHODS.forEach(methods::add);
         if (session != null) IpcSession.EXTRACTION_METHODS.forEach(methods::add);
         if (session != null) IpcSession.DETAIL_METHODS.forEach(methods::add);
+        if (session != null) IpcSession.NAMED_CONFIG_METHODS.forEach(methods::add);
         AutoCloseable subscription = session == null ? port.events().subscribe(event -> {
             if (event instanceof com.mhtextractor.uiport.PortEvent.WorkspaceChanged changed) {
                 var frame = frame("event").put("event", "workspaceChanged");
@@ -264,7 +265,8 @@ final class IpcServer {
                     String method = request.path("method").asText();
                     if (session == null || (!IpcSession.METHODS.contains(method) && !IpcSession.STRUCTURE_METHODS.contains(method)
                             && !IpcSession.ACTIVITY_METHODS.contains(method) && !IpcSession.PARAM_METHODS.contains(method)
-                            && !IpcSession.EXTRACTION_METHODS.contains(method) && !IpcSession.DETAIL_METHODS.contains(method))) {
+                            && !IpcSession.EXTRACTION_METHODS.contains(method) && !IpcSession.DETAIL_METHODS.contains(method)
+                            && !IpcSession.NAMED_CONFIG_METHODS.contains(method))) {
                         return error(id, "UNKNOWN_METHOD", "Unknown method: " + method);
                     }
                     if (method.equals("workspacePage")) result = page(params);
@@ -274,13 +276,19 @@ final class IpcServer {
                                 && IpcSession.integer(params, "revision") != revision) {
                             throw new IllegalArgumentException("Stale revision");
                         }
-                        result = session.call(method, params);
+                        try { result = session.call(method, params); }
+                        catch (IOException error) {
+                            if (IpcSession.NAMED_CONFIG_METHODS.contains(method))
+                                return error(id, "CONFIG_IO_ERROR", error.getMessage());
+                            throw error;
+                        }
                         if (method.equals("exportSource")) ((ObjectNode) result).put("sessionId", sessionId);
                         if (method.equals("releaseFiles")) {
                             currentSnapshot = null;
                             pageSnapshot = null;
                         }
                         if (result.isObject() && (method.equals("applyDrop") || method.equals("canUndo")
+                                || IpcSession.NAMED_CONFIG_METHODS.contains(method)
                                 || java.util.List.of("activityGeneration", "previewGeneration", "previewLoadingPath",
                                         "runtimeConfig", "outputUnitPlan", "paramSchema", "parameterState", "preStartState",
                                         "presentation", "cacheState", "exportSource").contains(method))) {
@@ -325,6 +333,7 @@ final class IpcServer {
         if (session != null) capabilities.add("workspacePage").add("bulkFiles").add("confirmationRoundTrip");
         if (session != null) IpcSession.EXTRACTION_METHODS.forEach(capabilities::add);
         if (session != null) IpcSession.DETAIL_METHODS.forEach(capabilities::add);
+        if (session != null) IpcSession.NAMED_CONFIG_METHODS.forEach(capabilities::add);
         welcome.put("confirmationRoundTrip", session != null);
         welcome.put("sessionId", sessionId).put("bulkRoot", files.root.toString());
         response.put("revision", revision);

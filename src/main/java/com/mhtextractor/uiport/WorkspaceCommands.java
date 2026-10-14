@@ -20,6 +20,15 @@ package com.mhtextractor.uiport;
  */
 public interface WorkspaceCommands {
 
+    /** Named parameters only; overwrite and filename rules match the existing persistence service. */
+    default void saveNamedConfig(String name, com.mhtextractor.model.AppConfig config) throws java.io.IOException {
+        throw new UnsupportedOperationException("Named configs are not wired");
+    }
+    /** Missing names and filesystem failures throw IOException. No workspace event is emitted. */
+    default void deleteNamedConfig(String name) throws java.io.IOException {
+        throw new UnsupportedOperationException("Named configs are not wired");
+    }
+
     default void setTitleOverride(String path, String title) { throw new UnsupportedOperationException("Title editing is not wired"); }
     default void applyParamsToTargets(boolean imageMode, com.mhtextractor.model.AppConfig params,
                                       java.util.List<TargetId> fallbackTargets) {

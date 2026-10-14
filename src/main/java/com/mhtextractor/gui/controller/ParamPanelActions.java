@@ -1,6 +1,7 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.NamedConfigService;
+import com.mhtextractor.uiport.Uiport;
+import com.mhtextractor.uicore.FrontendPort;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.NotificationHost;
@@ -15,7 +16,7 @@ import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
  * （模态窗口壳与非模态侧边栏），D 起只剩侧边栏 {@link ParamSidePanel}。
  * 这两段动作里带日志键（{@code log.paramdialogcontroller.01..06}）与提醒卡片文案，
  * <b>属产品行为</b>：复制一份会让日志调用点凭空翻倍（本项目对 {@code log.*} 逐键对账），
- * 所以抽成共用件，两个宿主各自 {@code new ParamPanelActions(pane).install()} 一次即可，
+ * 所以抽成共用件，两个宿主各自 {@code new ParamPanelActions(pane, port).install()} 一次即可，
  * 文案 / 图标 / 日志键与拆分前逐字一致。</p>
  *
  * <p>它<b>不持窗口</b>：命名配置名仍走既有的模态 {@link TextInputDialog}（产品语义不变），
@@ -30,10 +31,11 @@ import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 final class ParamPanelActions {
 
     private final ParamFormPane pane;
-    private final NamedConfigService namedConfigService = new NamedConfigService();
+    private final FrontendPort port;
 
-    ParamPanelActions(ParamFormPane pane) {
+    ParamPanelActions(ParamFormPane pane, Uiport port) {
         this.pane = pane;
+        this.port = (FrontendPort) java.util.Objects.requireNonNull(port);
     }
 
     /** 接线：命名配置三动作 + 高速内存模式监听 + 配置列表初值。调用时机与拆分前一致。 */
@@ -56,15 +58,18 @@ final class ParamPanelActions {
         dialog.setHeaderText(Texts.get("dialog.inputConfigName"));
         dialog.setContentText(Texts.get("dialog.saveConfigNote"));
         dialog.showAndWait().ifPresent(name -> {
-            try {
-                namedConfigService.save(name, pane.collect());
-                refreshConfigList();
+            AppConfig config = pane.collect();
+            port.namedConfig(backend -> {
+                backend.commands().saveNamedConfig(name, config);
+                return backend.queries().listNamedConfigs();
+            }, names -> {
+                pane.setConfigNames(names);
                 pane.configComboBox.getSelectionModel().select(name);
                 log.info(Texts.msg("log.paramdialogcontroller.01", name));
-            } catch (Exception e) {
+            }, e -> {
                 log.error(Texts.msg("log.paramdialogcontroller.02"), e);
                 NotificationHost.error(pane.configComboBox, Texts.get("error.CONFIG_SAVE_FAILED"), FontAwesomeSolid.SAVE);
-            }
+            }, true);
         });
     }
 
@@ -74,15 +79,12 @@ final class ParamPanelActions {
             NotificationHost.toastWarning(pane.configComboBox, Texts.get("error.CONFIG_SELECT_TO_LOAD"), FontAwesomeSolid.HAND_POINTER);
             return;
         }
-        try {
-            AppConfig config = namedConfigService.load(selected);
+        boolean imageMode = pane.isImageMode();
+        port.namedConfig(backend -> backend.queries().loadNamedConfig(selected), config -> {
             // 只填充当前模式参数组，另一组保持隔离（确定后才生效）
-            pane.applyLoadedConfig(config);
+            pane.applyLoadedConfig(config, imageMode);
             log.info(Texts.msg("log.paramdialogcontroller.03", selected));
-        } catch (Exception e) {
-            log.error(Texts.msg("log.paramdialogcontroller.04"), e);
-            NotificationHost.error(pane.configComboBox, Texts.get("error.CONFIG_LOAD_FAILED"), FontAwesomeSolid.FILE_DOWNLOAD);
-        }
+        }, this::loadFailed, true);
     }
 
     private void deleteNamedConfig() {
@@ -96,19 +98,26 @@ final class ParamPanelActions {
                     if (!ok) {
                         return;
                     }
-                    try {
-                        namedConfigService.delete(selected);
-                        refreshConfigList();
+                    port.namedConfig(backend -> {
+                        backend.commands().deleteNamedConfig(selected);
+                        return backend.queries().listNamedConfigs();
+                    }, names -> {
+                        pane.setConfigNames(names);
                         log.info(Texts.msg("log.paramdialogcontroller.05", selected));
-                    } catch (Exception e) {
+                    }, e -> {
                         log.error(Texts.msg("log.paramdialogcontroller.06"), e);
                         NotificationHost.error(pane.configComboBox, Texts.get("error.CONFIG_DELETE_FAILED"), FontAwesomeSolid.TRASH_ALT);
-                    }
+                    }, true);
                 });
     }
 
     private void refreshConfigList() {
-        pane.setConfigNames(namedConfigService.names());
+        port.namedConfig(backend -> backend.queries().listNamedConfigs(), pane::setConfigNames, this::loadFailed, false);
+    }
+
+    private void loadFailed(Throwable error) {
+        log.error(Texts.msg("log.paramdialogcontroller.04"), error);
+        NotificationHost.error(pane.configComboBox, Texts.get("error.CONFIG_LOAD_FAILED"), FontAwesomeSolid.FILE_DOWNLOAD);
     }
 
     /** 高速内存模式确认（会话 19：窗口内居中确认卡片，取代嵌套模态 Alert） */

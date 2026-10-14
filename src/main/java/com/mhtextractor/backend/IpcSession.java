@@ -34,6 +34,7 @@ final class IpcSession implements AutoCloseable {
             "activityGeneration", "previewGeneration", "previewLoadingPath");
     static final List<String> PARAM_METHODS = List.of("setGlobalParams", "setGroupParams", "setItemParams",
             "clearParams", "applyGlobalParams", "undo", "runtimeConfig", "outputUnitPlan", "paramSchema");
+    static final List<String> NAMED_CONFIG_METHODS = List.of("listNamedConfigs", "loadNamedConfig", "saveNamedConfig", "deleteNamedConfig");
     static final List<String> EXTRACTION_METHODS = List.of("startExtraction", "cancelExtraction");
     static final List<String> DETAIL_METHODS = List.of("setTitleOverride", "applyParamsToTargets",
             "parameterState", "preStartState", "presentation", "exportSource", "cacheState");
@@ -459,6 +460,22 @@ final class IpcSession implements AutoCloseable {
 
     JsonNode call(String method, JsonNode p) throws Exception {
         switch (method) {
+            case "listNamedConfigs" -> {
+                return json.createObjectNode().set("names", json.valueToTree(port.queries().listNamedConfigs()));
+            }
+            case "loadNamedConfig" -> {
+                var config = port.queries().loadNamedConfig(namedConfigName(p));
+                return json.createObjectNode().set("config", config == null ? json.nullNode() : paramCodec.config(config));
+            }
+            case "saveNamedConfig" -> {
+                if (!p.has("config")) throw new IllegalArgumentException("Config required");
+                port.commands().saveNamedConfig(namedConfigName(p), p.path("config").isNull() ? null : paramCodec.readConfig(p.path("config")));
+                return json.nullNode();
+            }
+            case "deleteNamedConfig" -> {
+                port.commands().deleteNamedConfig(namedConfigName(p));
+                return json.nullNode();
+            }
             case "parameterState" -> {
                 boolean mode = bool(p, "imageMode");
                 var resolution = p.has("targetResolution")
@@ -895,6 +912,12 @@ final class IpcSession implements AutoCloseable {
         long n = integer(value, key);
         if (n > Integer.MAX_VALUE) throw new IllegalArgumentException("Count overflow");
         return (int) n;
+    }
+
+    private static String namedConfigName(JsonNode p) {
+        if (!p.has("name") || (!p.path("name").isTextual() && !p.path("name").isNull()))
+            throw new IllegalArgumentException("Name string or null required");
+        return p.path("name").isNull() ? null : p.path("name").textValue();
     }
 
     static String string(JsonNode p, String key) {

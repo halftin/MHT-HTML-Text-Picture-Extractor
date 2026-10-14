@@ -243,7 +243,20 @@ public final class IpcUiport implements Uiport, AutoCloseable {
     }; }
     @Override public Confirmer confirmer() { return confirmer; }
 
+    private JsonNode namedConfigCall(String method, ObjectNode params) throws IOException {
+        try { return call(method, params); }
+        catch (IpcFailure error) {
+            if (error.kind() == IpcFailure.Kind.REMOTE && "CONFIG_IO_ERROR".equals(error.code()))
+                throw new IOException(error.getMessage(), error);
+            throw error;
+        }
+    }
+
     private final WorkspaceCommands commands = new WorkspaceCommands() {
+        public void saveNamedConfig(String name, AppConfig config) throws IOException {
+            namedConfigCall("saveNamedConfig", p().put("name", name).set("config", json.valueToTree(config)));
+        }
+        public void deleteNamedConfig(String name) throws IOException { namedConfigCall("deleteNamedConfig", p().put("name", name)); }
         public void setTitleOverride(String path, String title) {
             command("setTitleOverride",p().put("path",path).put("title",title).put("revision",revision()));
         }
@@ -332,6 +345,18 @@ public final class IpcUiport implements Uiport, AutoCloseable {
             return decode(() -> codec.workspace(files.consumeJson(result.path("manifest"))));
         }
         public boolean canUndo() { return bool(call("canUndo",p()),"canUndo"); }
+        public List<String> listNamedConfigs() {
+            var result = call("listNamedConfigs", p());
+            return new ArrayList<>(decode(() -> strings(result.path("names"))));
+        }
+        public AppConfig loadNamedConfig(String name) throws IOException {
+            var result = namedConfigCall("loadNamedConfig", p().put("name", name));
+            return decode(() -> {
+                var config = result.path("config");
+                if (!config.isNull() && !config.isObject()) throw new IllegalArgumentException("Named config object or null required");
+                return config.isNull() ? null : json.treeToValue(config, AppConfig.class);
+            });
+        }
         public AppConfig runtimeConfig() { JsonNode result = call("runtimeConfig",runtime(p())); return decode(() -> codec.config(result.path("config"))); }
         public List<OutputUnitVm> outputUnitPlan(boolean checked) {
             JsonNode result = call("outputUnitPlan",runtime(p().put("checkedOnly",checked)));

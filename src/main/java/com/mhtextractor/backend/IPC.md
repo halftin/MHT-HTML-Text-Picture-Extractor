@@ -1,5 +1,26 @@
 # JSON Lines 控制协议 v1（P4-2a + P4-2b + P4-13 启动握手 + P4-14 确认往返）
 
+## P5a-8：命名配置端口
+
+`ready.data.methods` 与 `welcome.capabilities` 追加以下四方法。沿用握手、帧类型和响应 revision；
+命名配置读写不改变工作区、撤销栈或 revision，不发布工作区事件。
+
+| 方法 | params | result |
+|---|---|---|
+| `listNamedConfigs` | `{}` | `{names:array<string>,revision}`，保留文件系统枚举顺序，不排序 |
+| `loadNamedConfig` | `{name:string或null}` | `{config:Config或null,revision}`，仅持久化提取参数 |
+| `saveNamedConfig` | `{name:string或null,config:Config或null}` | null；重名覆盖 |
+| `deleteNamedConfig` | `{name:string或null}` | null；缺文件为错误 |
+
+Config 使用既有持久化提取字段和默认值，不含 inputFolder/outputFolder/imageModeEnabled/openFolderAfterComplete。
+GUI 经端口访问后端工作目录的 `config/`，不另建前端读写路径。
+名称原样拼接 `.json`，不 trim、不主动校验；空串/空白可保存，null 与既有 Java 拼接一致，使用 `null.json`。
+名字已有 `.json` 时再追加一份后缀；路径分隔符按既有文件系统规则解释。
+首次访问创建目录（失败仅日志告警）；初始化后目录消失不自动重建，列表为空，保存失败。
+缺文件、非法文件名、读写/解析/删除失败返回新增 `CONFIG_IO_ERROR`，message 保留原 IOException 诊断。
+Java IPC 适配器将此码映射回 IOException；调用方继续使用原错误卡。该错误不会使连接失效。
+缺 name、非 string/null 的 name、缺 config 或非法 Config 形状沿用 `INVALID_PARAMS`；空/null 的合法值不混同缺字段。
+
 ## P5a-7：缓存台阶与后端诊断事件
 
 两类事件沿用 `v/type/event/data` 帧和服务端统一递增 `data.revision`；不改变工作区。

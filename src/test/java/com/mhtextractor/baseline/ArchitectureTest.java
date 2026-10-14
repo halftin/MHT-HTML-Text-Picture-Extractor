@@ -16,6 +16,7 @@ import java.util.TreeSet;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -989,6 +990,10 @@ class ArchitectureTest {
         try (Stream<Path> walk = Files.walk(appDir)) {
             for (Path p : walk.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
                 String rel = appDir.relativize(p).toString().replace('\\', '/');
+                String codeWithoutComments = SourceScanUtils.stripComments(Files.readString(p, StandardCharsets.UTF_8));
+                assertFalse(java.util.regex.Pattern.compile("com\\.mhtextractor\\.uicore\\.(GuiState(?:Manager)?|SessionStateService)\\b")
+                                .matcher(codeWithoutComments).find(),
+                        "app must not depend on frontend session persistence: " + rel);
                 for (String line : Files.readAllLines(p, StandardCharsets.UTF_8)) {
                     String code = line.split("//")[0].trim();
                     if (!code.startsWith("import ")) continue;
@@ -1152,6 +1157,13 @@ class ArchitectureTest {
      */
     @Test
     void guiDirectBusinessPackageUsageDoesNotGrow() throws IOException {
+        try (Stream<Path> walk = Files.walk(GuiCoupling.GUI_SOURCES)) {
+            for (Path p : walk.filter(f -> f.toString().endsWith(".java")).toList()) {
+                String code = SourceScanUtils.stripComments(Files.readString(p, StandardCharsets.UTF_8));
+                assertFalse(code.contains("NamedConfigService") || code.contains("ConfigManager"),
+                        "GUI named configs must use the port: " + p);
+            }
+        }
         Set<String> types = GuiCoupling.distinctBusinessTypes(GuiCoupling.GUI_SOURCES);
         assertTrue(types.size() <= GUI_DIRECT_BUSINESS_TYPES_MAX,
                 "gui 直连业务包 distinct 类型数增长：" + types.size() + " > " + GUI_DIRECT_BUSINESS_TYPES_MAX

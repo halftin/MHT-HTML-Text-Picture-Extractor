@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mhtextractor.App;
 import com.mhtextractor.cache.PreviewCacheMeta;
-import com.mhtextractor.config.GuiState;
+import com.mhtextractor.uicore.GuiState;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
 import com.mhtextractor.gui.controller.ParamFormPane;

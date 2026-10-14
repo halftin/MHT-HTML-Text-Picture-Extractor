@@ -3,7 +3,7 @@ package com.mhtextractor.gui.controller;
 import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.app.PreviewService;
 import com.mhtextractor.app.PreviewSession;
-import com.mhtextractor.app.SessionStateService;
+import com.mhtextractor.uicore.SessionStateService;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.app.WorkspaceImportService;
 import com.mhtextractor.app.WorkspaceModel;

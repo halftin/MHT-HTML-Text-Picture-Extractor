@@ -79,6 +79,11 @@ public final class InProcessUiport implements Uiport {
     private final Confirmer confirmer;
     private final ExtractionPlanService plans;
     private final WorkspaceActivityService activities;
+    private NamedConfigService namedConfigService;
+    private NamedConfigService namedConfigs() {
+        if (namedConfigService == null) namedConfigService = new NamedConfigService();
+        return namedConfigService;
+    }
     private final WorkspaceParamCommandService paramCommands;
     private final WorkspaceImportCoordinator imports;
     private final WorkspaceExtractionCoordinator extractions;
@@ -314,6 +319,8 @@ public final class InProcessUiport implements Uiport {
                         PortEvent.ParamChangeKind.SET_TARGETS, imageMode, affected.stream().map(i -> i.path).toList()));
                 changed("PARAMS_CHANGED");
             }
+            public void saveNamedConfig(String name, AppConfig config) throws java.io.IOException { namedConfigs().save(name, config); }
+            public void deleteNamedConfig(String name) throws java.io.IOException { namedConfigs().delete(name); }
             public void cancelWorkspaceActivity() { activities.cancelWorkspaceActivity(); }
             public void cancelPreviewLoad() { activities.cancelPreviewLoad(); }
             public void startPreparse() { activities.startPreparse(); }
@@ -496,6 +503,8 @@ public final class InProcessUiport implements Uiport {
     @Override
     public WorkspaceQueries queries() {
         return new WorkspaceQueries() {
+            public List<String> listNamedConfigs() { return namedConfigs().names(); }
+            public AppConfig loadNamedConfig(String name) throws java.io.IOException { return namedConfigs().load(name); }
             public long activityGeneration() { return activities.generation(); }
             public long previewGeneration() { return activities.previewGeneration(); }
             public String previewLoadingPath() { return activities.loadingPath(); }

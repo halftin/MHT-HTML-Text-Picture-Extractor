@@ -113,6 +113,29 @@ public final class FrontendPort implements Uiport, AutoCloseable {
     public <T> void execute(Function<Uiport,T> operation, Consumer<T> finished) {
         execute(operation,finished,true);
     }
+    @FunctionalInterface public interface NamedConfigOperation<T> {
+        T apply(Uiport port) throws java.io.IOException;
+    }
+    /** Named file operations share the serial queue but neither refresh nor mutate workspace snapshots. */
+    public <T> void namedConfig(NamedConfigOperation<T> operation, Consumer<T> finished,
+                                Consumer<Throwable> failed, boolean requested) {
+        long version=connectionVersion.get();
+        Runnable unavailableForRequest=unavailableAction;
+        enqueue(()->{
+            if(closed.get()||version!=connectionVersion.get())return;
+            try {
+                T result=operation.apply(backend);
+                ui.accept(()->{
+                    if(closed.get()||version!=connectionVersion.get())return;
+                    try{finished.accept(result);}catch(Throwable error){failed.accept(error);}
+                });
+            } catch(Throwable error) {
+                if(version!=connectionVersion.get())return;
+                if(unavailable.test(error))reportFailure(error,requested,unavailableForRequest);
+                else ui.accept(()->{if(!closed.get()&&version==connectionVersion.get())failed.accept(error);});
+            }
+        });
+    }
     private <T> void execute(Function<Uiport,T> operation, Consumer<T> finished, boolean notify) {
         request(operation,finished,notify,true);
     }

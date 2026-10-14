@@ -7,6 +7,13 @@ import java.util.List;
  * 工作区查询（最小切片）：视图模型快照。
  */
 public interface WorkspaceQueries {
+    /** Filesystem enumeration order, with no sorting or name normalization. */
+    default List<String> listNamedConfigs() { throw new UnsupportedOperationException("Named configs are not wired"); }
+    /** Loads parameter fields only; missing names and filesystem failures throw IOException. */
+    default AppConfig loadNamedConfig(String name) throws java.io.IOException {
+        throw new UnsupportedOperationException("Named configs are not wired");
+    }
+
     default CacheStateVm cacheState() { throw new UnsupportedOperationException("Cache state is not wired"); }
 
     default ParameterStateVm parameterState(boolean imageMode, List<TargetId> fallbackTargets) {

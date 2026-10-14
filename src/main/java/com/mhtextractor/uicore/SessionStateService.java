@@ -1,18 +1,16 @@
-package com.mhtextractor.app;
+package com.mhtextractor.uicore;
 
-import com.mhtextractor.config.GuiState;
-import com.mhtextractor.config.GuiStateManager;
 
 /**
  * GUI 会话状态持久化（logs/gui-state.json）的无头服务（P3-3b-5）：把
  * {@code gui.controller.MainController} 的 {@code restoreGuiState}/{@code saveGuiState}
- * 对 {@link GuiState}/{@link GuiStateManager} 的直接使用原样下沉到 app 层 ——
+ * 对 {@link GuiState}/{@link GuiStateManager} 的直接使用原样迁至 uicore 前端共用层 ——
  * 持久化文件路径/字段名/读写语义/时序一律不变（只搬不改）。
  *
  * <p>locale 拼接规则（{@code language + "_" + country}，country 为空则不加后缀）仍留在 gui 层
  * 由 {@code I18n.currentLocale()} 算好后传入，本类只透传已拼好的字符串。</p>
  *
- * <p>本类<b>零 JavaFX、零 I18n</b>，属 {@code app} 层。</p>
+ * <p>本类<b>零 JavaFX、零 I18n</b>，属 {@code uicore} 层。</p>
  */
 public final class SessionStateService {
 

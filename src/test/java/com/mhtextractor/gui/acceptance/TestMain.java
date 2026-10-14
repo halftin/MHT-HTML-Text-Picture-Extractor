@@ -1,8 +1,8 @@
 package com.mhtextractor.gui.acceptance;
 
 import atlantafx.base.theme.NordLight;
-import com.mhtextractor.config.GuiState;
-import com.mhtextractor.config.GuiStateManager;
+import com.mhtextractor.uicore.GuiState;
+import com.mhtextractor.uicore.GuiStateManager;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
 import com.mhtextractor.gui.component.BackendConnectionPresenter;

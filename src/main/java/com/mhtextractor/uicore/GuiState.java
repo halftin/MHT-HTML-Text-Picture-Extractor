@@ -1,4 +1,4 @@
-package com.mhtextractor.config;
+package com.mhtextractor.uicore;
 
 import lombok.Data;
 
