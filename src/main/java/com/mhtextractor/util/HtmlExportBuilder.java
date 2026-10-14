@@ -62,11 +62,15 @@ public final class HtmlExportBuilder {
      * 缓存命中（.complete 标记存在）时直接复用既有产物，不重新生成。
      */
     public static ExportResult export(String mhtPath, MimeParser.ParsedMht parsed) {
+        return export(mhtPath, parsed, Paths.get(System.getProperty("java.io.tmpdir"), TEMP_ROOT_NAME));
+    }
+
+    /** Explicit session-owned root for ports; the legacy browser API retains its cache root. */
+    public static ExportResult export(String mhtPath, MimeParser.ParsedMht parsed, Path root) {
         if (parsed == null || parsed.getHtmlContent() == null) {
             return ExportResult.failure(parsed == null ? I18n.get("browser.exportParseEmpty") : I18n.get("browser.exportUnparseable"));
         }
         try {
-            Path root = Paths.get(System.getProperty("java.io.tmpdir"), TEMP_ROOT_NAME);
             Path dir = root.resolve(cacheKey(mhtPath));
             Path htmlFile = dir.resolve(pageName(mhtPath));
 

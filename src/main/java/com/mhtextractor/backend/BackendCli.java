@@ -72,6 +72,16 @@ public final class BackendCli {
      * 用户已显式设置 {@code logback.configurationFile} 时不覆盖（尊重外部注入，运行时闸门仍会校验结果）。
      */
     private static void selectHeadlessLogbackConfig() {
+        if (System.getProperty("mht.logs.root") == null) {
+            java.nio.file.Path root = java.nio.file.Path.of("").toAbsolutePath().normalize();
+            if (System.getProperty("org.graalvm.nativeimage.imagecode") != null) {
+                root = ProcessHandle.current().info().command().map(java.nio.file.Path::of)
+                        .map(java.nio.file.Path::getParent).orElse(root);
+            }
+            if (root.getFileName() != null && root.getFileName().toString().equalsIgnoreCase("Backend"))
+                root = root.getParent();
+            System.setProperty("mht.logs.root", root.resolve("logs").toString());
+        }
         if (System.getProperty("logback.configurationFile") == null) {
             System.setProperty("logback.configurationFile", HEADLESS_LOGBACK_CONFIG);
         }

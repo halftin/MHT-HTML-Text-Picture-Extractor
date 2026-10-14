@@ -45,6 +45,11 @@ public final class FrontendPort implements Uiport, AutoCloseable {
     }
     private void subscribe(Uiport source) {
         subscription=source.events().subscribe(event->{if(closed.get()||backend!=source)return;
+            if (event instanceof PortEvent.CacheSizeAlert || event instanceof PortEvent.BackendLog) {
+                ui.accept(() -> { if (!closed.get() && backend == source)
+                    for (var listener : listeners) listener.accept(event); });
+                return;
+            }
             boolean wasBusy=busy();observeActivity(event);eventVersion.incrementAndGet();
             if(event instanceof PortEvent.ExtractionProgress || event instanceof PortEvent.PreparseProgress){
                 ui.accept(()->{if(!closed.get()&&backend==source)for(var listener:listeners)listener.accept(event);});

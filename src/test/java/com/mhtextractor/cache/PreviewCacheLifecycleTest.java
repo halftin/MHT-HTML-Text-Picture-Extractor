@@ -74,6 +74,25 @@ class PreviewCacheLifecycleTest {
     }
 
     @Test
+    void failingSizeAlertHookDoesNotInterruptRemovalOrInvalidateOtherItems() throws IOException {
+        writeCache(keyA, mhtA);
+        writeCache(keyB, mhtB);
+        lifecycle = new PreviewCacheLifecycle(store, 1);
+        var attempts = new AtomicInteger();
+        lifecycle.setSizeAlertHook(step -> {
+            attempts.incrementAndGet();
+            throw new AssertionError("size-alert-delivery-failure");
+        });
+
+        assertEquals(1, lifecycle.onItemRemoved(mhtA.toString()));
+        assertEquals(1, attempts.get(), "Removal must exercise the failing delivery hook");
+        assertFalse(Files.exists(store.dirFor(keyA)));
+        assertTrue(store.load(keyB).isPresent());
+        assertEquals(1, lifecycle.onItemRemoved(mhtB.toString()));
+        assertTrue(store.listKeys().isEmpty());
+    }
+
+    @Test
     void invalidResidueDoesNotInterruptParameterOrRemovalCleanup() throws IOException {
         Path missing = Files.createDirectories(root.resolve("0".repeat(64)));
         Files.createFile(missing.resolve(".complete"));

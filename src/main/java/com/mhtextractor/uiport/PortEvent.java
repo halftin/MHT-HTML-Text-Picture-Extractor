@@ -12,6 +12,19 @@ import java.util.Objects;
  */
 public sealed interface PortEvent {
 
+    /** Cache measurements are bytes, never rounded GiB; revision is session-local. */
+    record CacheSizeAlert(int step, long actualBytes, long stepBytes, String root,
+                          String key, Map<String, String> namedParams, String level, long revision)
+            implements PortEvent {
+        public CacheSizeAlert { namedParams = Map.copyOf(namedParams); }
+    }
+
+    /** Backend diagnostics retain the bundle key and named (including numeric) placeholders. */
+    record BackendLog(String level, String key, Map<String, String> namedParams,
+                      long timestamp, long revision) implements PortEvent {
+        public BackendLog { namedParams = Map.copyOf(namedParams); }
+    }
+
     /**
      * 参数状态变更类别（B4）：后端参数命令完成「写入 + 撤销压栈 + 磁盘缓存失效（规则 a）」后
      * 按此类别发布 {@link ParamStateChanged}；前端据此决定列表刷新与参数色刷新的粒度。

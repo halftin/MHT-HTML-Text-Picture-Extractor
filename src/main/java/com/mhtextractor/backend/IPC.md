@@ -1,5 +1,32 @@
 # JSON Lines 控制协议 v1（P4-2a + P4-2b + P4-13 启动握手 + P4-14 确认往返）
 
+## P5a-7：缓存台阶与后端诊断事件
+
+两类事件沿用 `v/type/event/data` 帧和服务端统一递增 `data.revision`；不改变工作区。
+
+| event | data（另含 revision） |
+|---|---|
+| `cacheSizeAlert` | `step:integer,actualBytes:integer,stepBytes:integer,root:string,key:"cache.sizeAlert",namedParams:{dir:string},level:"WARN"` |
+| `backendLog` | `level:"WARN"/"ERROR",key:string,namedParams:object<string,string>,timestamp:integer` |
+
+缓存测量均为字节，stepBytes 默认 10×1024³；前端用载荷换算 GiB（actual 保留一位），
+沿用 `cache.sizeAlert` 与 `cache.sizeAlertNote`，不为呈现再查询 cacheState。
+恰好达到台阶即提醒；同台阶并发/重复检查一次；一次跨多个台阶只提醒当前台阶。
+检查发现回落时更新观测台阶，不提醒；再次上升到该台阶可以重新提醒。
+缓存删除后也重新观测，两个传输各在后端注册一次 hook，共用同一前端消费入口。
+
+后端日志文件接收原有日志；只有 WARN/ERROR 经会话 appender 转发。
+`I18n.msg` 保留同一次同步日志调用的原键和具名参数（数字名 `0/1/…` 对应既有日志占位符）；
+前端按当前 locale 渲染。没有结构化来源的日志以 `log.backend.unstructured` 加 logger/异常类型呈现，
+完整诊断留在 backend.log；IPC 不携带渲染后的 message。timestamp 为 Unix epoch 毫秒。
+日志实参若是 `I18n.render(ExtractWarning)`，用具名参数中的 `$key.N` 与 `$arg.N.name`
+保留嵌套键/原参，`N` 的值为空；前端先解析嵌套文案再替换外层占位符，避免后台 locale 固化。
+INFO/DEBUG 不产生 backendLog；前端另有级别过滤。日志事件与缓存事件不触发快照查询。
+
+GUI 启动后端前创建发行根 logs；启动参数固定日志根，后端独立启动也把 Backend 目录归并至其父发行根。
+会话根包含 preview-cache、端口导出原文件、签发副本和上传/未签发残留；关闭按缓存规则清空后删除会话树，
+不跟随目录重定向。清理最多等待 2 秒，失败记录日志并继续关闭；未删成功的目录留作可观察证据。
+
 ## P5a-1e：C28/C29、Q10–Q13 与完整状态投影
 
 `ready.data.methods` 与 welcome 能力列表追加 `setTitleOverride`、`applyParamsToTargets`、

@@ -151,10 +151,36 @@ final class IpcFiles implements AutoCloseable {
     }
 
     @Override public void close() throws IOException {
+        close(() -> { });
+    }
+
+    void close(Runnable beforeDelete) throws IOException {
+        var done = new java.util.concurrent.CompletableFuture<Void>();
+        Thread cleaner = Thread.ofPlatform().name("ipc-file-cleanup").daemon(true).start(() -> {
+            try {
+                try { beforeDelete.run(); } finally { deleteTree(); }
+                done.complete(null);
+            }
+            catch (Throwable failure) { done.completeExceptionally(failure); }
+        });
+        try { done.get(2, java.util.concurrent.TimeUnit.SECONDS); }
+        catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Session cleanup interrupted", failure);
+        } catch (java.util.concurrent.ExecutionException | java.util.concurrent.TimeoutException failure) {
+            cleaner.interrupt();
+            throw new IOException("Session cleanup failed or exceeded 2 seconds", failure);
+        } finally { issued.clear(); borrowed.clear(); }
+    }
+
+    private void deleteTree() throws IOException {
+        if (!Files.exists(root, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return;
+        var failures = new java.util.ArrayList<IOException>();
         // Default walkFileTree uses NOFOLLOW_LINKS. Windows junctions can still appear
         // as directories, so reject redirected directories before visiting their children.
         Files.walkFileTree(root, new SimpleFileVisitor<>() {
             @Override public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                if (Thread.currentThread().isInterrupted()) return FileVisitResult.TERMINATE;
                 if (!dir.toRealPath().equals(dir.toAbsolutePath().normalize())) {
                     Files.delete(dir);
                     return FileVisitResult.SKIP_SUBTREE;
@@ -163,16 +189,26 @@ final class IpcFiles implements AutoCloseable {
             }
 
             @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                Files.deleteIfExists(file);
+                if (Thread.currentThread().isInterrupted()) return FileVisitResult.TERMINATE;
+                try { Files.deleteIfExists(file); } catch (IOException failure) { failures.add(failure); }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override public FileVisitResult visitFileFailed(Path file, IOException failure) {
+                failures.add(failure);
                 return FileVisitResult.CONTINUE;
             }
 
             @Override public FileVisitResult postVisitDirectory(Path dir, IOException failure) throws IOException {
-                if (failure != null) throw failure;
-                Files.deleteIfExists(dir);
+                if (failure != null) failures.add(failure);
+                try { Files.deleteIfExists(dir); } catch (IOException error) { failures.add(error); }
                 return FileVisitResult.CONTINUE;
             }
         });
-        issued.clear();
+        if (!failures.isEmpty()) {
+            IOException error = new IOException("Could not remove " + failures.size() + " session entries");
+            failures.forEach(error::addSuppressed);
+            throw error;
+        }
     }
 }

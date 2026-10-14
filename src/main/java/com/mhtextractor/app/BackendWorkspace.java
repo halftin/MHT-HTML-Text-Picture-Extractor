@@ -55,6 +55,11 @@ public final class BackendWorkspace implements AutoCloseable {
                         () -> model.allItems().stream().filter(item -> !item.removed).toList(), confirmer), dispatcher);
         port = new InProcessUiport(model, confirmer, plans, activities, parameters,
                 new WorkspaceImportCoordinator(model, confirmer, dispatcher), extractions, caches, globals, previews);
+        var revision = new java.util.concurrent.atomic.AtomicLong();
+        previews.setSizeAlertHook(step -> {
+            var event = CacheSizeEvents.alert(previews, step, revision.incrementAndGet());
+            dispatcher.accept(() -> port.publish(event));
+        });
     }
 
     public Uiport port() { return port; }

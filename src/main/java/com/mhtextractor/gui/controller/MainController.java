@@ -711,6 +711,7 @@ public class MainController {
 
     /** 端口事件入口：只消费导入编排事件与后端提醒（其余事件由各自协作者订阅） */
     private void onPortEvent(PortEvent event) {
+        onFx(() -> com.mhtextractor.gui.component.BackendEventPresenter.accept(event, refs.statusLabel(), refs.logTextArea()));
         if (event instanceof PortEvent.WorkspaceChanged change) { if("FRONTEND_REFRESH".equals(change.kind())) { refs.fileListView().refresh(); return; }
             if (!listInteraction.isDragActive() && !groupCommand.isAnimating()) refreshAfterListChange();
         }
@@ -1608,20 +1609,4 @@ public class MainController {
         }
     }
 
-    // ==================== 辅助 ====================
-
-    /**
-     * 会话 12：磁盘占用跨台阶回调（在预览后台线程被 checkSizeAlert 同步调用）。
-     * 台阶序号换算 GiB、取当前实际占用后，回 FX 线程弹<b>右上角非阻塞 toast</b>
-     * （会话 19：原非模态 Alert 换成应用内提醒；连续跨台阶由 toast 图层自行限流，不再需要"先关再弹"）。
-     */
-    void onSizeAlertStep(int step) {
-        long stepGiB = step * 10L * 1024 * 1024 * 1024 / (1024L * 1024 * 1024);
-        double actualGiB = activityPort.queries().cacheState().totalBytes() / (1024.0 * 1024 * 1024);
-        String message = Texts.get("cache.sizeAlert",
-                        "step", stepGiB, "actual", String.format("%.1f", actualGiB),
-                        "dir", activityPort.queries().cacheState().root())
-                + Texts.get("cache.sizeAlertNote");
-        GuiNotifications.cacheStepWarning(refs.statusLabel(), message);
-    }
 }

@@ -217,6 +217,11 @@ public final class IpcCodec {
     /** Null is reserved for the two known confirmation control events. Unknown kinds always fail. */
     public synchronized PortEvent event(String name, JsonNode n) throws IOException {
         return switch (name) {
+            case "cacheSizeAlert" -> new PortEvent.CacheSizeAlert(integer(n,"step"), number(n,"actualBytes"),
+                    number(n,"stepBytes"), text(n,"root"), text(n,"key"), map(n.path("namedParams")),
+                    text(n,"level"), number(n,"revision"));
+            case "backendLog" -> new PortEvent.BackendLog(text(n,"level"), text(n,"key"),
+                    map(n.path("namedParams")), number(n,"timestamp"), number(n,"revision"));
             case "confirmationRequested", "confirmationExpired" -> null;
             case "workspaceChanged" -> new PortEvent.WorkspaceChanged(text(n,"kind"),workspace(files.consumeJson(n.path("snapshot"))),
                     optional(n,"undoKind"),n.hasNonNull("affected") ? list(files.consumeJson(n.path("affected")),IpcCodec::target) : List.of(),

@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class BackendIpcActivityTest {
     @TempDir Path tmp;
     private long revision;
+    private int diagnostics;
     private Path bulkRoot;
     private static final String PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1sAAAAASUVORK5CYII=";
     // The valid 1x1 JPEG also used by the repository's MIME product fixtures.
@@ -70,7 +71,18 @@ class BackendIpcActivityTest {
         return object().put("path", path.toString()).put("bytes", Files.size(path)).put("mediaType", "application/json");
     }
     private List<JsonNode> events(IpcTestClient ipc) {
-        var events = ipc.drainRequestEvents(); checkRevisions(events); return new ArrayList<>(events);
+        var events = ipc.drainRequestEvents(); checkRevisions(events);
+        return new ArrayList<>(events.stream().filter(this::activityEvent).toList());
+    }
+    /** Diagnostics own revisions too, but are independent of the in-process activity event sequence. */
+    private boolean activityEvent(JsonNode event) {
+        if (!event.path("event").asText().equals("backendLog")) return true;
+        var data = event.path("data");
+        assertTrue(List.of("WARN", "ERROR").contains(data.path("level").asText()));
+        assertTrue(data.path("key").isTextual()); assertTrue(data.path("namedParams").isObject());
+        assertTrue(data.path("timestamp").isIntegralNumber()); assertFalse(data.has("message"));
+        diagnostics++;
+        return false;
     }
     private void checkRevisions(List<JsonNode> events) {
         for (var event : events) {
@@ -83,7 +95,7 @@ class BackendIpcActivityTest {
     private List<JsonNode> until(IpcTestClient ipc, String name) throws Exception {
         var values = events(ipc);
         while (values.stream().noneMatch(e -> e.path("event").asText().equals(name))) {
-            JsonNode event = ipc.receive(); checkRevisions(List.of(event)); values.add(event);
+            JsonNode event = ipc.receive(); checkRevisions(List.of(event)); if (activityEvent(event)) values.add(event);
         }
         return values;
     }
@@ -275,6 +287,7 @@ class BackendIpcActivityTest {
             var loaded = until(ipc, "previewLoaded");
             ipc.request("await", "awaitPreviewInFlight", object().put("millis", 5000)); loaded.addAll(events(ipc));
             assertEquals(List.of("previewLoadStateChanged", "previewThumbnail", "previewThumbnail", "previewLoadStateChanged", "previewLoaded", "previewNotice"), names(loaded));
+            assertTrue(diagnostics > 0, "The actual backend warning must also reach the diagnostic channel");
             assertEquals(direct.events.size(), loaded.size());
             for (int i = 0; i < loaded.size(); i++) compare(direct.events.get(i), loaded.get(i));
             var manifest = file(loaded.get(4).path("data").path("manifest"));

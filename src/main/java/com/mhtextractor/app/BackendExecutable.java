@@ -55,11 +55,13 @@ public final class BackendExecutable {
     }
 
     public static ProcessBuilder command(String locale) throws IOException {
+        Files.createDirectories(dataRoot().resolve("logs"));
         Path executable = resolve();
         if (!Files.isRegularFile(executable)) throw new IOException("Backend executable missing: " + executable);
         Path temp = tempRoot();
         Files.createDirectories(temp);
         return new ProcessBuilder(executable.toString(), "-Djava.io.tmpdir=" + temp,
+                "-Dmht.logs.root=" + dataRoot().resolve("logs"),
                 "--serve", "--locale", locale).directory(dataRoot().toFile());
     }
 }

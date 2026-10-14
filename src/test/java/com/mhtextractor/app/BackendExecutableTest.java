@@ -148,9 +148,9 @@ class BackendExecutableTest {
             }
             Path root = Path.of(arguments[1]);
             Path temp = root.resolve("Backend/temp");
-            if (!root.toFile().equals(command.directory()) || !Files.isDirectory(temp)
+            if (!root.toFile().equals(command.directory()) || !Files.isDirectory(temp) || !Files.isDirectory(root.resolve("logs"))
                     || !command.command().equals(List.of(arguments[2], "-Djava.io.tmpdir=" + temp,
-                    "--serve", "--locale", "en"))) throw new AssertionError(command.command());
+                    "-Dmht.logs.root=" + root.resolve("logs"), "--serve", "--locale", "en"))) throw new AssertionError(command.command());
             System.out.println("LAYOUT OK cwd=" + command.directory() + " temp=" + temp);
         }
     }

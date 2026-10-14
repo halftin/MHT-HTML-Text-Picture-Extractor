@@ -124,9 +124,11 @@ public class PreviewCacheLifecycle {
      * 规则 (d)：退出前清空整个会话缓存（只清本应用专属根目录，绝不触碰 java.io.tmpdir 整体）。
      * 清空完成后回调 afterCleared（放行关窗用）；IO 失败不抛（退出路径不允许因缓存问题阻止关闭）。
      */
-    public void onShutdown(Runnable afterCleared) {
+    public synchronized void onShutdown(Runnable afterCleared) {
         try {
             store.deleteAll();
+            lastReportedStep.set(0);
+            lastObservedTotalBytes = 0;
         } catch (IOException e) {
             log.warn(I18n.msg("log.previewcachelifecycle.02", e.getMessage()));
         }
@@ -152,11 +154,11 @@ public class PreviewCacheLifecycle {
 
     /**
      * 写盘成功后的磁盘占用提醒检查（会话 12）：计数口径 = 缓存根当前真实总字节数（覆盖写不重复计数）。
-     * currentStep = totalBytes / 台阶 → 仅当 currentStep 大于已提醒台阶时用 CAS 抢占，成功者提醒一次。
+     * currentStep = totalBytes / 台阶；CAS 更新上次观测台阶，上升提醒、回落重置。
      * 同台阶内重复调用不触发（幂等）；一次跨越多个台阶只触发一次（参数 = 当前台阶序号）；
-     * 并发同台阶调用恰好一次触发。totalBytes 失败静默降级（log.warn），绝不打断预览流程。
+     * 并发同台阶调用恰好一次触发；同步检查保住 hook 读取的实际字节数。IO 失败不打断预览。
      */
-    public void checkSizeAlert() {
+    public synchronized void checkSizeAlert() {
         long total;
         try {
             total = store.totalBytes();
@@ -165,11 +167,11 @@ public class PreviewCacheLifecycle {
             return;
         }
         long currentStep = total / sizeAlertStepBytes;
+        lastObservedTotalBytes = total;
         long prev;
-        while ((prev = lastReportedStep.get()) < currentStep) {
+        while ((prev = lastReportedStep.get()) != currentStep) {
             if (lastReportedStep.compareAndSet(prev, currentStep)) {
-                lastObservedTotalBytes = total;
-                fireSizeAlert((int) currentStep, total);
+                if (currentStep > prev) fireSizeAlert((int) currentStep, total);
                 return;
             }
         }
@@ -180,7 +182,10 @@ public class PreviewCacheLifecycle {
         log.warn(I18n.msg("log.previewcachelifecycle.05", stepGiB, String.format("%.1f", totalBytes / (1024.0 * 1024 * 1024)), store.root()));
         IntConsumer hook = sizeAlertHook;
         if (hook != null) {
-            hook.accept(step);
+            // 提醒投递必须是 best-effort：本方法已从删除路径（logIfDeleted）被调用，
+            // 钩子异常若冒泡会打断缓存失效、进而让业务请求（如 applyDrop）返回 error。
+            try { hook.accept(step); }
+            catch (Throwable error) { log.warn(I18n.msg("log.previewcachelifecycle.04", error.getMessage())); }
         }
     }
 
@@ -214,6 +219,7 @@ public class PreviewCacheLifecycle {
 
     private void logIfDeleted(int deleted) {
         if (deleted > 0) {
+            checkSizeAlert();
             log.info(I18n.msg("log.previewcachelifecycle.07", deleted, store.root()));
         }
     }

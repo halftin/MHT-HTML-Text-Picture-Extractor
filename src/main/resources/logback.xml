@@ -6,10 +6,10 @@
 
     <!-- 文件输出：按天 + 按大小滚动 -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/mht-extractor.log</file>
+        <file>${mht.gui.logs.root:-logs}/mht-extractor.log</file>
         <append>true</append>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>logs/mht-extractor.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <fileNamePattern>${mht.gui.logs.root:-logs}/mht-extractor.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <maxFileSize>10MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>1GB</totalSizeCap>

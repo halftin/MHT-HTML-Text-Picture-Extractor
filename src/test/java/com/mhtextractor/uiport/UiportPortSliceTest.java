@@ -89,6 +89,7 @@ class UiportPortSliceTest {
                         "PreviewLoadStateChanged", "PreviewConfirmationRequired", "PreviewLoadFailed",
                         "PreviewThumbnail", "PreviewLoaded", "PreviewRegionConfirmationRequired", "PreviewNotice",
                         "ExtractionChannelEvent",
+                        "CacheSizeAlert", "BackendLog",
                         "WorkspaceChanged", "RunningChanged", "Notice"),
                 Arrays.stream(permitted).map(Class::getSimpleName).collect(Collectors.toSet()),
                 "PortEvent 直接子类成员名单（新增成员须显式登记）");

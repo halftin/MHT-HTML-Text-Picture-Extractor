@@ -22,6 +22,18 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Public in-process ports versus a real CLI child. No production package-private access. */
 class BackendIpcParamsTest {
+    /** Preserve the parameter/undo sequence while validating the independent diagnostic frames. */
+    private static List<JsonNode> businessEvents(List<JsonNode> frames) {
+        return frames.stream().filter(frame -> {
+            if (!frame.path("event").asText().equals("backendLog")) return true;
+            var data = frame.path("data");
+            assertTrue(List.of("WARN", "ERROR").contains(data.path("level").asText()));
+            assertTrue(data.path("key").isTextual()); assertTrue(data.path("namedParams").isObject());
+            assertTrue(data.path("revision").isIntegralNumber()); assertTrue(data.path("timestamp").isIntegralNumber());
+            assertFalse(data.has("message"));
+            return false;
+        }).toList();
+    }
     @TempDir Path tmp;
     private static final String PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1sAAAAASUVORK5CYII=";
     private static ObjectNode object() { return JSON.createObjectNode(); }
@@ -199,7 +211,7 @@ class BackendIpcParamsTest {
             direct.commands().undo();
             assertEquals(depth - 1, direct.queries().workspace().undoDepth(), "Exactly one record consumed");
             assertTrue(call("undo", object()).isNull());
-            var events = ipc.drainRequestEvents();
+            var events = businessEvents(ipc.drainRequestEvents());
             assertEquals(1, events.size(), "One undo completion event");
             var event = events.getFirst();
             assertEquals("workspaceChanged", event.path("event").asText());
@@ -257,7 +269,7 @@ class BackendIpcParamsTest {
             int before = direct.queries().workspace().undoDepth();
             action.run();
             assertTrue(call(method, params).isNull());
-            var events = ipc.drainRequestEvents();
+            var events = businessEvents(ipc.drainRequestEvents());
             assertEquals(changes.size(), events.size());
             for (int i = 0; i < changes.size(); i++) {
                 var expected = changes.get(i);
@@ -306,7 +318,7 @@ class BackendIpcParamsTest {
             }
             call("awaitPreviewInFlight", object().put("millis", 10000));
             events.addAll(ipc.drainRequestEvents());
-            return events;
+            return businessEvents(events);
         }
 
         @Override public void close() throws Exception {
@@ -467,7 +479,7 @@ class BackendIpcParamsTest {
                 int before = pair.direct.queries().workspace().undoDepth();
                 pair.direct.commands().undo();
                 assertTrue(pair.call("undo", object()).isNull());
-                var events = pair.ipc.drainRequestEvents();
+                var events = businessEvents(pair.ipc.drainRequestEvents());
                 assertEquals(before == 0 ? 0 : 1, events.size());
                 if (!events.isEmpty()) assertEquals("UNDO_APPLIED", events.getFirst().path("data").path("kind").asText());
                 assertEquals(Math.max(0, before - 1), pair.direct.queries().workspace().undoDepth());

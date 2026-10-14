@@ -1155,7 +1155,18 @@ public boolean runAutomatedTests() {
             listView().getSelectionModel().select(target); FxDelay.pause(200);
             previewEffectButton().fire();
             long deadline = System.currentTimeMillis() + 20000;
-            while (System.currentTimeMillis() < deadline && this.view.imageLoadActive()) pumpFxEvents();
+            // An idle IPC snapshot also occurs before the queued request starts. Wait for
+            // decoded thumbnails and the terminal state, within the original 20-second bound.
+            out.println("[EVIDENCE] C8 immediately after fire: active=" + this.view.imageLoadActive()
+                    + " thumbnails=" + (target.cachedThumbs == null ? 0 : target.cachedThumbs.size()));
+            while (System.currentTimeMillis() < deadline
+                    && (target.cachedThumbs == null || target.cachedThumbs.isEmpty() || this.view.imageLoadActive())) {
+                pumpFxEvents();
+            }
+            if (target.cachedThumbs == null || target.cachedThumbs.isEmpty() || this.view.imageLoadActive())
+                throw new IllegalStateException("C8 预览未在原有时限内完成加载");
+            out.println("[EVIDENCE] C8 preview loaded: active=" + this.view.imageLoadActive()
+                    + " thumbnails=" + target.cachedThumbs.size());
             FxDelay.pause(200);
             CacheEvidence cache = this.view.previewCacheLifecycle();
             if (cache.listKeys().isEmpty()) throw new IllegalStateException("C8 前置必须有后端缓存");

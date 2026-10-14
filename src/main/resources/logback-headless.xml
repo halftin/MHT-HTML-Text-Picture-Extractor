@@ -6,10 +6,10 @@
 
     <!-- 文件输出：按天 + 按大小滚动（与 GUI 配置同策略；独立文件，避免与 GUI 运行时的日志互相污染） -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/backend.log</file>
+        <file>${mht.logs.root:-logs}/backend.log</file>
         <append>true</append>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>logs/backend.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <fileNamePattern>${mht.logs.root:-logs}/backend.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <maxFileSize>10MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>1GB</totalSizeCap>

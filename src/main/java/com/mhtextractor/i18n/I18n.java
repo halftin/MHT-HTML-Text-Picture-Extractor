@@ -70,7 +70,7 @@ public final class I18n {
         IN_MSG.set(Boolean.TRUE);
         try {
             if (args.length == 0) {
-                return get(key);
+                return LogMessage.remember(key, args, get(key));
             }
             Object[] pairs = new Object[args.length * 2];
             for (int i = 0; i < args.length; i++) {
@@ -81,7 +81,7 @@ public final class I18n {
                 // 否则会退化成把模板里的 {0} 原样打进日志。
                 pairs[i * 2 + 1] = String.valueOf(args[i]);
             }
-            return get(key, pairs);
+            return LogMessage.remember(key, args, get(key, pairs));
         } finally {
             IN_MSG.set(Boolean.FALSE);
         }
@@ -118,7 +118,7 @@ public final class I18n {
             flat[i++] = e.getKey();
             flat[i++] = e.getValue();
         }
-        return get(warning.key(), flat);
+        return LogMessage.rememberNamed(warning.key(), args, get(warning.key(), flat));
     }
 
     /**

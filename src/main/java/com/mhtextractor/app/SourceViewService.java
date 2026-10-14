@@ -52,11 +52,16 @@ public final class SourceViewService {
      *         {@code catch (Exception)} 承接，异常语义不变）
      */
     public static Export export(String path) throws IOException {
+        return export(path, null);
+    }
+
+    public static Export export(String path, Path root) throws IOException {
         MimeParser.ParsedMht parsed = SourceParsers.forPath(path).parse(path, false, () -> false, null, null);
         if (parsed.getHtmlContent() == null) {
             return new Export.Unparseable();
         }
-        HtmlExportBuilder.ExportResult r = HtmlExportBuilder.export(path, parsed);
+        HtmlExportBuilder.ExportResult r = root == null ? HtmlExportBuilder.export(path, parsed)
+                : HtmlExportBuilder.export(path, parsed, root);
         if (!r.success()) {
             return new Export.Failed(r.error());
         }

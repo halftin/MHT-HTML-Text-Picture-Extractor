@@ -272,6 +272,8 @@ class BackendIpcStructureTest {
             var workspace = ipc.request("q", "workspace", object()).path("result");
             long group = workspace.path("groups").get(0).path("no").longValue();
             Path image = previewImage(ipc, paths.get(0));
+            // previewFiles can emit diagnostics; every IPC event advances the protocol revision.
+            workspace = ipc.request("beforeDrop", "workspace", object()).path("result");
             var drop = object().put("zone", "INTO").put("revision", workspace.path("revision").longValue());
             drop.set("dragged", JSON.valueToTree(TargetId.ofItem(paths.get(0))));
             drop.set("target", JSON.valueToTree(TargetId.ofGroup(group)));

@@ -48,7 +48,8 @@ final class IpcSession implements AutoCloseable {
     private final WorkspaceExtractionCoordinator extractions;
     private final IpcConfirmations confirmations;
     final Uiport port;
-    private Consumer<ObjectNode> events;
+    private Consumer<ObjectNode> events = event -> { };
+    private final BackendLogForwarder logForwarder;
     private boolean importDone;
     private boolean importFailed;
     private PortEvent.ExtractionTerminal terminal;
@@ -111,6 +112,11 @@ final class IpcSession implements AutoCloseable {
         port = new InProcessUiport(model, confirmer, plans, activities, paramCommands, imports, extractions,
                 new WorkspaceParamService(previews.lifecycle()), global, previews);
         port.events().subscribe(this::onEvent);
+        previews.setSizeAlertHook(step -> {
+            var event = CacheSizeEvents.alert(previews, step, 0);
+            dispatch(() -> onEvent(event));
+        });
+        logForwarder = new BackendLogForwarder(event -> dispatch(() -> onEvent(event)));
     }
 
     void events(Consumer<ObjectNode> sink) { events = sink; }
@@ -203,6 +209,13 @@ final class IpcSession implements AutoCloseable {
 
     private void encodeEvent(PortEvent event) throws IOException {
         switch (event) {
+            case PortEvent.CacheSizeAlert alert -> emit("cacheSizeAlert", json.createObjectNode()
+                    .put("step", alert.step()).put("actualBytes", alert.actualBytes()).put("stepBytes", alert.stepBytes())
+                    .put("root", alert.root()).put("key", alert.key()).put("level", alert.level())
+                    .set("namedParams", json.valueToTree(alert.namedParams())));
+            case PortEvent.BackendLog entry -> emit("backendLog", json.createObjectNode()
+                    .put("level", entry.level()).put("key", entry.key()).put("timestamp", entry.timestamp())
+                    .set("namedParams", json.valueToTree(entry.namedParams())));
             case PortEvent.WorkspaceActivityChanged changed -> emit("workspaceActivityChanged", generation(changed.generation()));
             case PortEvent.PreparseStarted started -> emit("preparseStarted", generation(started.generation()));
             case PortEvent.PreparseProgress progress -> emit("preparseProgress", generation(progress.generation())
@@ -977,8 +990,12 @@ final class IpcSession implements AutoCloseable {
         try { shutdownWorkers(); }
         finally {
             filesClosed = true;
-            previews.lifecycle().onShutdown(() -> { });
-            files.close();
+            logForwarder.close();
+            try { files.close(() -> previews.lifecycle().onShutdown(() -> { })); }
+            catch (IOException failure) {
+                org.slf4j.LoggerFactory.getLogger(IpcSession.class).warn(
+                        com.mhtextractor.i18n.I18n.msg("log.backend.cleanupFailed", failure.getMessage()), failure);
+            }
         }
     }
 }

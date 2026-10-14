@@ -565,7 +565,7 @@ public final class InProcessUiport implements Uiport {
             }
             public com.mhtextractor.uiport.ExportSourceVm exportSource(String path) {
                 try {
-                    return switch (SourceViewService.export(path)) {
+                    return switch (SourceViewService.export(path, detailRoot.resolve("source-view"))) {
                         case SourceViewService.Export.Success success -> new com.mhtextractor.uiport.ExportSourceVm(
                                 "success", new com.mhtextractor.uiport.FileRef(success.htmlFile().toString(),
                                 java.nio.file.Files.size(success.htmlFile()), "text/html; charset=utf-8"),
@@ -619,6 +619,10 @@ public final class InProcessUiport implements Uiport {
                 extractionSubscription.close();
             };
         };
+    }
+
+    void publish(PortEvent event) {
+        for (var listener : List.copyOf(listeners)) deliver(listener, event);
     }
 
     @Override
