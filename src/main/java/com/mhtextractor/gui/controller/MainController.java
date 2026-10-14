@@ -268,7 +268,7 @@ public class MainController {
         @Override public boolean extractionRunning() { return MainController.this.running().get(); }
         @Override public Object animLockedSelection() { return groupCommand.animLockedSelection(); }
         @Override public boolean isCurrentModeConfirmed() { return currentModeConfirmed(); }
-        @Override public void cancelPreviewLoad() { activityPort.commands().cancelPreviewLoad(); }
+        @Override public void cancelPreviewLoad() { activityPort.cancelPreviewForSelection(); }
         @Override public void updateListButtons() { MainController.this.updateListButtons(); }
         @Override public void updateInfoArea(Object sel) { infoPresenter.updateInfoArea(sel); }
         @Override public void updateContentArea(Object sel) { MainController.this.updateContentArea(sel); }

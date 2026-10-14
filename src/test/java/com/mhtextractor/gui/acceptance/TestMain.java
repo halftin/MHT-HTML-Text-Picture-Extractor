@@ -97,6 +97,7 @@ public final class TestMain extends Application {
         StackPane shell = new StackPane(overlay);
         Scene scene = new Scene(shell);
         NotificationHost.install(scene, shell);
+        com.mhtextractor.gui.component.BackendConnectionPresenter.bind(runtime, scene.lookup("#statusLabel"));
         MainController controller = loader.getController();
 
         Application.setUserAgentStylesheet(new NordLight().getUserAgentStylesheet());

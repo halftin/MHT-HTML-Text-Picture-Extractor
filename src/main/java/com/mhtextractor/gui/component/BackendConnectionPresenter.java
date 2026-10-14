@@ -2,6 +2,8 @@ package com.mhtextractor.gui.component;
 
 import com.mhtextractor.app.BackendSession;
 import com.mhtextractor.app.Texts;
+import com.mhtextractor.app.UiportRuntime;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import com.mhtextractor.uiport.ConfirmRequest;
 import javafx.application.Platform;
 import javafx.scene.Node;
@@ -21,6 +23,36 @@ public final class BackendConnectionPresenter implements BackendSession.View {
     private final GuiConfirmer confirmer;
     private String activeId;
     private Runnable dismiss;
+    private boolean deciding,rebuilding;
+
+    /** Request failures drive D1. Connection status notifications never open this flow. */
+    public static BackendConnectionPresenter bind(UiportRuntime runtime,Node anchor) {
+        var presenter=new BackendConnectionPresenter(null,anchor);
+        runtime.onUnavailable(()->presenter.requestUnavailable(runtime::rebuild));
+        return presenter;
+    }
+
+    public void requestUnavailable(Consumer<Consumer<Boolean>> rebuild) {
+        if(!Platform.isFxApplicationThread()){Platform.runLater(()->requestUnavailable(rebuild));return;}
+        if(deciding||rebuilding)return;
+        log.error(Texts.msg("log.backend.unavailable"));
+        deciding=true;
+        NotificationHost.confirmYesNo(anchor,Texts.get("backend.rebuild.confirm"),accepted->{
+            deciding=false;
+            if(!accepted){NotificationHost.error(anchor,Texts.get("backend.rebuild.declined"),FontAwesomeSolid.EXCLAMATION_CIRCLE);return;}
+            rebuilding=true;
+            var delivered=new java.util.concurrent.atomic.AtomicBoolean();
+            Consumer<Boolean> finished=success->{
+                Runnable update=()->{
+                    if(!delivered.compareAndSet(false,true))return;
+                    rebuilding=false;
+                    if(!success)NotificationHost.error(anchor,Texts.get("backend.rebuild.failed"),FontAwesomeSolid.EXCLAMATION_CIRCLE);
+                };
+                if(Platform.isFxApplicationThread())update.run();else Platform.runLater(update);
+            };
+            try{rebuild.accept(finished);}catch(RuntimeException error){finished.accept(false);}
+        });
+    }
 
     public BackendConnectionPresenter(Label status, Node anchor) {
         this.status = status;
@@ -41,9 +73,6 @@ public final class BackendConnectionPresenter implements BackendSession.View {
         status.setText(message);
         status.setTooltip(new Tooltip(update.detail().isBlank() ? message : update.detail()));
         log.info(Texts.msg("log.backendconnection.01", message, update.detail()));
-        if (update.state() == BackendSession.State.UNAVAILABLE || update.state() == BackendSession.State.DISCONNECTED) {
-            NotificationHost.toastWarning(anchor, Texts.get("backend.unavailable", "reason", update.detail()));
-        }
     }
 
     @Override public void confirmationRequested(String id, ConfirmRequest request, Consumer<String> answer) {

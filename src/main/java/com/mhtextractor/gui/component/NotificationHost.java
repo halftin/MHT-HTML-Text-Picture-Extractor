@@ -256,11 +256,21 @@ public final class NotificationHost {
     /** Cancellation belongs to this card only; an expired IPC card must never dismiss its replacement. */
     public static Runnable confirmCancellable(Node anchor, String message, FontAwesomeSolid icon,
                                               Consumer<Boolean> onDecision) {
+        return confirmCancellable(anchor,message,icon,onDecision,"notification.ok","notification.cancel",null);
+    }
+
+    /** D1 uses the same persistent confirmation card with explicit yes/no labels. */
+    static void confirmYesNo(Node anchor,String message,Consumer<Boolean> onDecision) {
+        confirmCancellable(anchor,message,FontAwesomeSolid.EXCLAMATION_CIRCLE,onDecision,"backend.rebuild.yes","backend.rebuild.no",Styles.DANGER);
+    }
+
+    private static Runnable confirmCancellable(Node anchor,String message,FontAwesomeSolid icon,
+                                                Consumer<Boolean> onDecision,String yesKey,String noKey,String styleClass) {
         java.util.concurrent.atomic.AtomicBoolean delivered = new java.util.concurrent.atomic.AtomicBoolean();
         java.util.concurrent.atomic.AtomicReference<Runnable> dismiss = new java.util.concurrent.atomic.AtomicReference<>();
         withHost(anchor, h -> {
             if (delivered.get()) return;
-            Notification ntf = h.card(message, icon, null);
+            Notification ntf = h.card(message, icon, styleClass);
             Consumer<Boolean> deliver = accepted -> {
                 if (!delivered.compareAndSet(false, true)) return;
                 h.pendingDecision = null;
@@ -269,8 +279,8 @@ public final class NotificationHost {
                 }
             };
             ntf.setPrimaryActions(
-                    h.button(Texts.get("notification.ok"), () -> h.decide(deliver, true), true),
-                    h.button(Texts.get("notification.cancel"), () -> h.decide(deliver, false), false));
+                    h.button(Texts.get(yesKey), () -> h.decide(deliver, true), true),
+                    h.button(Texts.get(noKey), () -> h.decide(deliver, false), false));
             // ✕ 等价于"取消"（persistent 只挡遮挡层与 ESC，不挡显式按钮）
             ntf.setOnClose(e -> h.decide(deliver, false));
             // ⚠️ 顺序不能反：showModal 开头会把"上一张未回答的确认卡"按取消交付，

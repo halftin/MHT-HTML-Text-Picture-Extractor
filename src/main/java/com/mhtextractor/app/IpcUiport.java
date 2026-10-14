@@ -83,7 +83,7 @@ public final class IpcUiport implements Uiport, AutoCloseable {
     /** Explicit startup is independent of UI wiring. No in-process fallback is installed. */
     public void start(BackendSession.Command command, Duration handshakeTimeout) {
         session.start(command,handshakeTimeout);
-        try { await(session.connected()); }
+        try { await(session.connected(),handshakeTimeout); }
         catch (IpcFailure e) {
             var problem = startupFailure(e.getMessage(),e);
             fail(problem); throw problem;
@@ -147,7 +147,10 @@ public final class IpcUiport implements Uiport, AutoCloseable {
         return new IpcFailure(mismatch ? IpcFailure.Kind.PROTOCOL : IpcFailure.Kind.UNAVAILABLE,null,detail,cause);
     }
     private <T> T await(CompletableFuture<T> future) {
-        try { return future.get(requestTimeout.toMillis(),TimeUnit.MILLISECONDS); }
+        return await(future,requestTimeout);
+    }
+    private <T> T await(CompletableFuture<T> future,Duration timeout) {
+        try { return future.get(timeout.toMillis(),TimeUnit.MILLISECONDS); }
         catch (InterruptedException e) { Thread.currentThread().interrupt(); throw classify(e); }
         catch (ExecutionException | TimeoutException e) { throw classify(e); }
     }
@@ -234,7 +237,9 @@ public final class IpcUiport implements Uiport, AutoCloseable {
     @Override public WorkspaceCommands commands() { return commands; }
     @Override public Queries queries() { return queries; }
     @Override public PortEvents events() { return listener -> {
-        check(); listeners.add(Objects.requireNonNull(listener)); return () -> listeners.remove(listener);
+        // Subscription is local view wiring, including a disconnected startup; it is not a request.
+        if(closed)throw new IpcFailure(IpcFailure.Kind.CLOSED,null,"IPC port closed",null);
+        listeners.add(Objects.requireNonNull(listener)); return () -> listeners.remove(listener);
     }; }
     @Override public Confirmer confirmer() { return confirmer; }
 

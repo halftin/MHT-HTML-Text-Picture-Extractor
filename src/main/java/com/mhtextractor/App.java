@@ -78,6 +78,7 @@ public class App extends Application {
         StackPane shell = new StackPane(overlay);
         Scene scene = new Scene(shell);
         NotificationHost.install(scene, shell);
+        com.mhtextractor.gui.component.BackendConnectionPresenter.bind(runtime, scene.lookup("#statusLabel"));
         // 控制器由 FXMLLoader 装配（生产启动器<b>不</b>持有它的引用：P7 起没有任何测试模式分支，
         // 也不再需要"把控制器交给测试侧"这条通路 —— 那道通路已移到测试源集的 gui.acceptance.TestMain）
 
@@ -103,10 +104,7 @@ public class App extends Application {
         primaryStage.setMinHeight(650);
         primaryStage.centerOnScreen();
         primaryStage.show();
-        // 选项 B（2026-10-10 用户拍板）：P5 接线前不启动随包后端。
-        // 后端当前仍带开发期约束（IpcFiles 要求 java.io.tmpdir 在 H:/TEST/temp 下、
-        // 且输入/输出白名单为 H:/TEST/mht），真实环境下必然启动失败并弹"后端不可用"噪音；
-        // GUI 业务也仍走进程内 app。相关类/探针/脚本保留，供 P5 生产化接线。
+        // 后端请求无响应时由 D1 通知流程处理，旧连接状态标签继续隐藏。
         var backendStatus = (javafx.scene.control.Label) scene.lookup("#backendStatusLabel");
         if (backendStatus != null) {
             backendStatus.setVisible(false);

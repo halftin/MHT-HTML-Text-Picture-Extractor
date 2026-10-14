@@ -10,13 +10,16 @@ import java.util.function.*;
 
 /** Serial business requests and atomic UI snapshots; progress and stop do not wait behind snapshot queries. */
 public final class FrontendPort implements Uiport, AutoCloseable {
-    private final Uiport backend;
+    private volatile Uiport backend;
     private final Consumer<Runnable> ui;
     private final Consumer<AppConfig> requestContext;
     private final boolean deferQueriesWhileBusy;
     private final ExecutorService requests=Executors.newSingleThreadExecutor(r->{var t=new Thread(r,"frontend-port");t.setDaemon(true);return t;});
     private final List<Consumer<PortEvent>> listeners=new CopyOnWriteArrayList<>();
-    private final AutoCloseable subscription;
+    private AutoCloseable subscription;
+    private volatile Predicate<Throwable> unavailable=error->false;
+    private volatile Runnable unavailableAction=()->{};
+    private final java.util.concurrent.atomic.AtomicLong connectionVersion=new java.util.concurrent.atomic.AtomicLong();
     private volatile PortSnapshot snapshot;
     private Supplier<AppConfig> runtime=AppConfig::new;
     private volatile AppConfig lastRuntime=new AppConfig();
@@ -38,27 +41,65 @@ public final class FrontendPort implements Uiport, AutoCloseable {
     public FrontendPort(Uiport backend, Consumer<Runnable> ui, Consumer<AppConfig> requestContext,boolean deferQueriesWhileBusy) {
         this.backend=Objects.requireNonNull(backend);this.ui=ui;this.requestContext=requestContext;
         this.deferQueriesWhileBusy=deferQueriesWhileBusy;
-        subscription=backend.events().subscribe(event->{if(closed.get())return;
+        subscribe(backend);
+    }
+    private void subscribe(Uiport source) {
+        subscription=source.events().subscribe(event->{if(closed.get()||backend!=source)return;
             boolean wasBusy=busy();observeActivity(event);eventVersion.incrementAndGet();
             if(event instanceof PortEvent.ExtractionProgress || event instanceof PortEvent.PreparseProgress){
-                ui.accept(()->{if(!closed.get())for(var listener:listeners)listener.accept(event);});
+                ui.accept(()->{if(!closed.get()&&backend==source)for(var listener:listeners)listener.accept(event);});
                 if(wasBusy&&!busy())enqueue(this::refreshWhenIdle);
                 return;
             }
             enqueue(()->{
-            if(closed.get())return;
+            if(closed.get()||backend!=source)return;
             try { requestContext.accept(lastRuntime);
                 var state=deferQueriesWhileBusy&&(busy()||event instanceof PortEvent.WorkspaceChanged) ? activitySnapshot()
                         : eventSnapshotVersion==eventVersion.get()?eventSnapshot:refreshSnapshot(lastRuntime);
-                ui.accept(()->{if(closed.get())return;snapshot=state;running.set(state.workspace().details().running());
+                ui.accept(()->{if(closed.get()||backend!=source)return;snapshot=state;running.set(state.workspace().details().running());
                     if(event instanceof PortEvent.ExtractionTerminal end&&end.stats()!=null)stats.set(end.stats());
                     if(event instanceof PortEvent.ExtractionResult end&&end.stats()!=null)stats.set(end.stats());
                     for(var listener:listeners)listener.accept(event);});
-            } catch(Throwable error){if(!closed.get())ui.accept(()->{if(!closed.get())failure.accept(error);});}
+            } catch(Throwable error){reportFailure(error,false);}
         });});
     }
     /** Called by the runtime's startup worker, before constructing the FXML controller. */
     public void bootstrap(AppConfig context) {lastRuntime=context;requestContext.accept(context);snapshot=refreshSnapshot(context);}
+    /** A disconnected projection is UI data only; it never executes business commands locally. */
+    public void bootstrapUnavailable(PortSnapshot empty) {snapshot=Objects.requireNonNull(empty);}
+    public void onUnavailable(Predicate<Throwable> detection,Runnable action) {unavailable=detection;unavailableAction=action;}
+    private void reportFailure(Throwable error,boolean requested) {
+        reportFailure(error,requested,unavailableAction);
+    }
+    private void reportFailure(Throwable error,boolean requested,Runnable action) {
+        if(closed.get())return;
+        long version=connectionVersion.get();
+        ui.accept(()->{if(closed.get()||version!=connectionVersion.get())return;
+            if(unavailable.test(error)){if(requested)action.run();}
+            else failure.accept(error);
+        });
+    }
+    /** Keep the frontend handle and its subscribers; discard queued work from the old connection. */
+    public CompletableFuture<Void> replaceBackend(Uiport replacement) {
+        var done=new CompletableFuture<Void>();
+        connectionVersion.incrementAndGet();
+        if(closed.get()){done.completeExceptionally(new IllegalStateException("Frontend closed"));return done;}
+        enqueue(()->{
+            try {
+                if(closed.get())throw new IllegalStateException("Frontend closed");
+                subscription.close();backend=replacement;
+                importing=extracting=previewing=preparsing=false;loadingPath=null;
+                eventSnapshot=null;eventSnapshotVersion=-1;eventWorkspace=null;eventVersion.incrementAndGet();
+                subscribe(replacement);var state=refreshSnapshot(lastRuntime);
+                ui.accept(()->{if(closed.get()){done.completeExceptionally(new IllegalStateException("Frontend closed"));return;}
+                    snapshot=state;running.set(state.workspace().details().running());stats.set(null);
+                    for(var listener:listeners)listener.accept(new PortEvent.WorkspaceChanged("FRONTEND_REFRESH",state.workspace()));
+                    done.complete(null);
+                });
+            }catch(Throwable error){done.completeExceptionally(error);}
+        });
+        return done;
+    }
     public void bindRuntime(Supplier<AppConfig> runtime, Consumer<Throwable> failure) {this.runtime=runtime;this.failure=failure;}
     public Uiport implementation() {return backend;}
     public java.util.concurrent.atomic.AtomicBoolean runningView(){return running;}
@@ -68,13 +109,23 @@ public final class FrontendPort implements Uiport, AutoCloseable {
         execute(operation,finished,true);
     }
     private <T> void execute(Function<Uiport,T> operation, Consumer<T> finished, boolean notify) {
+        request(operation,finished,notify,true);
+    }
+    private <T> void request(Function<Uiport,T> operation, Consumer<T> finished, boolean notify,boolean refresh) {
+        request(operation,finished,notify,refresh,true);
+    }
+    private <T> void request(Function<Uiport,T> operation, Consumer<T> finished, boolean notify,boolean refresh,boolean requested) {
         AppConfig frozen=runtime.get();lastRuntime=frozen;
+        Runnable unavailableForRequest=unavailableAction;
+        long version=connectionVersion.get();
         enqueue(()->{
-            if(closed.get())return;
-            try {requestContext.accept(frozen);T result=operation.apply(backend);var state=refreshSnapshot(frozen);
-                ui.accept(()->{if(closed.get())return;snapshot=state;running.set(state.workspace().details().running());
-                    if(notify)for(var listener:listeners)listener.accept(new PortEvent.WorkspaceChanged("FRONTEND_REFRESH",state.workspace()));finished.accept(result);});
-            }catch(Throwable error){if(!closed.get())ui.accept(()->{if(!closed.get())failure.accept(error);});}
+            if(closed.get()||version!=connectionVersion.get())return;
+            try {requestContext.accept(frozen);T result=operation.apply(backend);var state=refresh?refreshSnapshot(frozen):null;
+                ui.accept(()->{if(closed.get()||version!=connectionVersion.get())return;
+                    if(state!=null){snapshot=state;running.set(state.workspace().details().running());
+                        if(notify)for(var listener:listeners)listener.accept(new PortEvent.WorkspaceChanged("FRONTEND_REFRESH",state.workspace()));}
+                    finished.accept(result);});
+            }catch(Throwable error){if(version==connectionVersion.get())reportFailure(error,requested,unavailableForRequest);}
         });
     }
     private void enqueue(Runnable task) {
@@ -83,9 +134,11 @@ public final class FrontendPort implements Uiport, AutoCloseable {
     }
     private void command(Consumer<WorkspaceCommands> operation) {execute(p->{operation.accept(p.commands());return null;},ignored->{});}
     private void activity(Consumer<WorkspaceCommands> operation) {
-        AppConfig frozen=runtime.get();lastRuntime=frozen;
-        enqueue(()->{try{requestContext.accept(frozen);operation.accept(backend.commands());}
-            catch(Throwable error){if(!closed.get())ui.accept(()->{if(!closed.get())failure.accept(error);});}});
+        request(p->{operation.accept(p.commands());return null;},ignored->{},false,false);
+    }
+    /** Selection highlight is local UI; its ordered cleanup must not open a backend decision card. */
+    public void cancelPreviewForSelection() {
+        request(p->{p.commands().cancelPreviewLoad();return null;},ignored->{},false,false,false);
     }
 
     private boolean busy(){return importing||extracting||previewing||preparsing;}
@@ -113,7 +166,7 @@ public final class FrontendPort implements Uiport, AutoCloseable {
         if(closed.get()||busy())return;
         try{var state=refreshSnapshot(lastRuntime);ui.accept(()->{if(closed.get())return;snapshot=state;
             for(var listener:listeners)listener.accept(new PortEvent.WorkspaceChanged("FRONTEND_REFRESH",state.workspace()));});}
-        catch(Throwable error){if(!closed.get())ui.accept(()->{if(!closed.get())failure.accept(error);});}
+        catch(Throwable error){reportFailure(error,false);}
     }
 
     private PortSnapshot refreshSnapshot(AppConfig runtime) {
@@ -139,9 +192,11 @@ public final class FrontendPort implements Uiport, AutoCloseable {
 
     private void cancelExtractionNow() {
         if(closed.get())return;
+        long version=connectionVersion.get();var source=backend;
+        Runnable unavailableForRequest=unavailableAction;
         Thread.ofPlatform().daemon().name("frontend-stop").start(()->{
-            try{backend.commands().cancelExtraction();}
-            catch(Throwable error){if(!closed.get())ui.accept(()->{if(!closed.get())failure.accept(error);});}
+            try{if(version==connectionVersion.get())source.commands().cancelExtraction();}
+            catch(Throwable error){if(version==connectionVersion.get())reportFailure(error,true,unavailableForRequest);}
         });
     }
 
