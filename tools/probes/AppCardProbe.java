@@ -35,7 +35,7 @@ public class AppCardProbe {
             try {
                 Application.setUserAgentStylesheet(new NordLight().getUserAgentStylesheet());
                 FXMLLoader loader = new FXMLLoader(AppCardProbe.class.getResource("/com/mhtextractor/gui/view/MainView.fxml"));
-                loader.setControllerFactory(_ -> new MainController(loader));
+                loader.setControllerFactory(_ -> ProbeRuntime.controller(loader));
                 loader.setResources(I18n.bundle());
                 Parent root = loader.load();
                 StackPane overlay = SidePanelHost.install(root);

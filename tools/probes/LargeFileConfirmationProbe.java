@@ -188,7 +188,17 @@ public class LargeFileConfirmationProbe extends Application implements PreviewLo
             System.exit(failures == 0 ? 0 : 1);
         }, "large-probe-cleanup"); cleanup.setDaemon(true); cleanup.start();
     }
-    public Object currentSelection() { return current; }
+    private final java.util.Map<String, com.mhtextractor.uicore.PreviewRow> displayRows = new java.util.HashMap<>();
+    private com.mhtextractor.uicore.PreviewRow display(PreviewItem domain) {
+        var row = displayRows.computeIfAbsent(domain.path, path -> new com.mhtextractor.uicore.PreviewRow(
+                new com.mhtextractor.uiport.ItemVm(path, domain.name, domain.selected, domain.removed, 0,
+                        com.mhtextractor.uiport.UpdateKind.NONE, domain.sourceFolder), ignored -> { }));
+        row.cachedThumbs = domain.cachedThumbs;
+        row.cachedMeta = domain.cachedMeta == null ? null : new com.mhtextractor.uiport.PresentationVm(
+                domain.path, domain.name, false, true, "READY", "", "", null, List.of());
+        return row;
+    }
+    public Object currentSelection() { return display(current); }
     public PreviewRenderer renderer() { return renderer; }
     public ProgressBar progressBar() { return progress; }
     public Label statusLabel() { return status; }
@@ -205,6 +215,5 @@ public class LargeFileConfirmationProbe extends Application implements PreviewLo
     public AppConfig effectiveParams(Object item) { return params; }
     public int visibleCount() { return 2; }
     public int unitIndex(Object item) { return 0; }
-    public PreviewSession session() { return session; }
     public static void main(String[] args) { launch(args); }
 }

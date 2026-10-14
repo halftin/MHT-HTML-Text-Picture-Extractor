@@ -30,6 +30,14 @@ import com.mhtextractor.model.ParamScope;
  * 这样 {@code ParamFormPane} 只需转发 target，不必自己知道条目类型。</p>
  */
 public final class ParamTargetText {
+    public static String forViewTarget(com.mhtextractor.uicore.ParamScope.Target target, String name, boolean mixed) {
+        String base=switch(target){
+            case com.mhtextractor.uicore.ParamScope.GroupTarget g -> I18n.get("paramTarget.group","name",paren(g.group().getName()));
+            case com.mhtextractor.uicore.ParamScope.ItemTarget<?> i -> I18n.get("paramTarget.item","name",paren(name!=null?name:i.item() instanceof ParamTargetView view?view.getName():""));
+            case null, default -> I18n.get("paramTarget.global");
+        };
+        return mixed?base+" "+I18n.get("paramTarget.groupMixed"):base;
+    }
 
     /** 无状态服务（{@link EffectiveParamsService} 不持有可变状态，可安全共享）。 */
     private static final EffectiveParamsService EFFECTIVE = new EffectiveParamsService();

@@ -152,7 +152,17 @@ public class PreviewLoadingProbe extends Application implements PreviewLoader.Ho
         System.exit(failures == 0 ? 0 : 1);
     }
 
-    public Object currentSelection() { return item; }
+    private final java.util.Map<String, com.mhtextractor.uicore.PreviewRow> displayRows = new java.util.HashMap<>();
+    private com.mhtextractor.uicore.PreviewRow display(PreviewItem domain) {
+        var row = displayRows.computeIfAbsent(domain.path, path -> new com.mhtextractor.uicore.PreviewRow(
+                new com.mhtextractor.uiport.ItemVm(path, domain.name, domain.selected, domain.removed, 0,
+                        com.mhtextractor.uiport.UpdateKind.NONE, domain.sourceFolder), ignored -> { }));
+        row.cachedThumbs = domain.cachedThumbs;
+        row.cachedMeta = domain.cachedMeta == null ? null : new com.mhtextractor.uiport.PresentationVm(
+                domain.path, domain.name, false, true, "READY", "", "", null, List.of());
+        return row;
+    }
+    public Object currentSelection() { return display(item); }
     public PreviewRenderer renderer() { return renderer; }
     public ProgressBar progressBar() { return progress; }
     public Label statusLabel() { return status; }
@@ -163,8 +173,8 @@ public class PreviewLoadingProbe extends Application implements PreviewLoader.Ho
     public void updateProgressStatus(long token) { }
     public void refreshList() { }
     public void updateContentArea(Object selection) {
-        if (item.cachedThumbs != null) renderer.renderThumbnails(item);
-        else if (loading.isLoading(item)) hint.setText(Texts.get("preview.imageLoading"));
+        if (item.cachedThumbs != null) renderer.renderThumbnails(display(item));
+        else if (loading.isLoading(display(item))) hint.setText(Texts.get("preview.imageLoading"));
         else renderer.resetImageArea(null, true);
     }
     public TextArea textPreviewArea() { return text; }
@@ -173,6 +183,5 @@ public class PreviewLoadingProbe extends Application implements PreviewLoader.Ho
     public AppConfig effectiveParams(Object selection) { return params; }
     public int visibleCount() { return 1; }
     public int unitIndex(Object selection) { return 0; }
-    public PreviewSession session() { return session; }
     public static void main(String[] args) { launch(args); }
 }

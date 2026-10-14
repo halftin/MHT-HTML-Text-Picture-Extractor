@@ -44,21 +44,28 @@ public final class BackendConnectionProbe extends Application {
         root = Files.createTempDirectory(Path.of("H:/TEST/mht"), "p4-17-gui-");
         System.setProperty("mht.backend.executable", root.resolve("missing.exe").toString());
         I18n.setLocale(I18n.parseLocale(System.getProperty("probe.locale", "en_US")));
-        // 选项 B（2026-10-10 用户拍板）：P5 接线前 GUI 不启动随包后端 ——
-        // production launcher 必须保持窗口可用，且**不显示**后端状态、**不弹**后端不可用噪音。
+        System.setProperty("mht.uiport", "ipc");
+        System.setProperty("mht.backend.transport", "jvm");
+        // 生产 App 接线使用真实 JVM IPC；不可用连接仍由下方 BackendSession 场景覆盖。
         new App().start(stage);
         Platform.setImplicitExit(false);
         Thread.ofPlatform().name("backend-gui-probe").daemon(true).start(() -> {
             try {
-                await(() -> !((Label) stage.getScene().lookup("#backendStatusLabel")).isVisible(), 15);
+                await(() -> stage.getScene() != null && stage.isShowing()
+                        && !((Label) stage.getScene().lookup("#backendStatusLabel")).isVisible(), 45);
                 fx(() -> {
-                    check("production-missing-backend-state", stage.isShowing());
-                    check("production-local-feature-ready", !stage.getScene().lookup("#textModeToggle").isDisabled());
+                    check("production-ipc-window-ready", stage.isShowing());
+                    check("production-feature-ready", !stage.getScene().lookup("#textModeToggle").isDisabled());
                     check("production-backend-label-hidden",
                             !((Label) stage.getScene().lookup("#backendStatusLabel")).isVisible());
                     check("production-no-backend-toast",
                             stage.getScene().getRoot().lookupAll(".notification").isEmpty());
-                    stage.hide();
+                    javafx.event.Event.fireEvent(stage, new javafx.stage.WindowEvent(stage,
+                            javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST));
+                });
+                await(() -> !stage.isShowing(), 30);
+                fx(() -> {
+                    stage.setOnCloseRequest(null);
                     status = new Label();
                     shell = new StackPane(new VBox(status));
                     Scene scene = new Scene(shell, 850, 550);

@@ -4,11 +4,11 @@ import com.mhtextractor.app.ExtractResultService;
 import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.app.OutputNameService;
 import com.mhtextractor.app.Texts;
-import com.mhtextractor.app.WorkspaceStructure;
+import com.mhtextractor.uicore.WorkspaceView;
 import com.mhtextractor.model.AppConfig;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.model.ExtractOutcome;
-import com.mhtextractor.model.GroupItem;
+import com.mhtextractor.uicore.GroupRow;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
@@ -23,7 +23,7 @@ import java.util.List;
  * 组条目编辑框接线（经 {@link Host#attachGroupNameEditor} 与 {@link Host#clearNameEditingGroup}）全部保持不变。
  *
  * <p>宿主能力经 {@link Host} 收窄为具名方法：本类不持有 {@code MainController} / {@code MainViewRefs} /
- * FXML namespace，也不得在数据序上直写（结果回写只改 {@link PreviewItem} 的
+ * FXML namespace，也不得在数据序上直写（结果回写只改 {@link PreviewRow} 的
  * {@code extractOutcome / extractDetail} 字段）。</p>
  *
  * <p>本类含 JavaFX，属 {@code gui} 层。</p>
@@ -48,13 +48,13 @@ public final class WorkspaceInfoPresenter {
         AppConfig effectiveParams(Object item);          // = effectiveForObject(item)
         AppConfig currentParamsOrDefaults();             // = currentParamsOrDefaults()
         boolean isTextMode();                            // = isTextMode()
-        List<PreviewItem> allVisibleItems();             // = allVisibleItems()
-        List<PreviewItem> allPreviewItems();             // = allPreviewItems()
+        List<PreviewRow> allVisibleItems();             // = allVisibleItems()
+        List<PreviewRow> allPreviewItems();             // = allPreviewItems()
         Object currentSelection();                       // = refs.fileListView().getSelectionModel().getSelectedItem()
         void refreshList();                              // = refs.fileListView().refresh()
-        void attachGroupNameEditor(GroupItem<PreviewItem> group); // = attachGroupNameEditor(group)
+        void attachGroupNameEditor(GroupRow<PreviewRow> group); // = attachGroupNameEditor(group)
         void clearNameEditingGroup();                    // = nameEditingGroup = null
-        void attachTitleEditor(PreviewItem item);        // = attachTitleEditor(item)
+        void attachTitleEditor(PreviewRow item);        // = attachTitleEditor(item)
         void clearTitleEditingItem();                    // = titleEditingItem = null
     }
 
@@ -67,7 +67,7 @@ public final class WorkspaceInfoPresenter {
     void updateInfoArea(Object item) {
         updateExtractBanner(item);
         // 组条目：第二行（原"输出文件："位置）变为"输出组文件名："+ 可编辑输入框（F5 6.3）
-        if (item instanceof GroupItem<?> g) {
+        if (item instanceof GroupRow<?> g) {
             host.titleInfoLabel().setVisible(false);
             host.titleInfoLabel().setManaged(false);
             host.titleEditBox().setVisible(false);
@@ -77,7 +77,7 @@ public final class WorkspaceInfoPresenter {
             host.outputNameLabel().setManaged(false);
             host.groupNameBox().setVisible(true);
             host.groupNameBox().setManaged(true);
-            host.attachGroupNameEditor(WorkspaceStructure.asPreviewGroup(g));
+            host.attachGroupNameEditor(WorkspaceView.asPreviewGroup(g));
             return;
         }
         AppConfig params = host.effectiveParams(item);
@@ -93,7 +93,7 @@ public final class WorkspaceInfoPresenter {
                 && params.getTitleStartMarker() != null && !params.getTitleStartMarker().isEmpty();
         // 需求（提取标题可编辑）：showTitle 且条目已就绪（READY）时，把只读标题行换成可编辑文本框；
         // 解析中 / 无标题 / 非条目等其余情况保持原只读展示。
-        PreviewItem readyItem = item instanceof PreviewItem pi && pi.status == PreviewItem.Status.READY
+        PreviewRow readyItem = item instanceof PreviewRow pi && pi.status == PreviewRow.Status.READY
                 ? pi : null;
         boolean editableTitle = showTitle && readyItem != null;
         host.titleEditBox().setVisible(editableTitle);
@@ -103,7 +103,7 @@ public final class WorkspaceInfoPresenter {
         if (!editableTitle) {
             host.clearTitleEditingItem();
         }
-        if (!(item instanceof PreviewItem it) || !confirmed) {
+        if (!(item instanceof PreviewRow it) || !confirmed) {
             host.outputNameLabel().setVisible(false);
             host.outputNameLabel().setManaged(false);
             return;
@@ -122,7 +122,7 @@ public final class WorkspaceInfoPresenter {
         host.outputNameLabel().setVisible(true);
         host.outputNameLabel().setManaged(true);
         if (host.isTextMode()) {
-            String outputName = OutputNameService.textOutputName(it, params, host.inputFolderField().getText());
+            String outputName = it.displayName == null ? Texts.get("preview.parsing") : it.displayName;
             if (params.isSeparateFiles()) {
                 host.outputNameLabel().setText(Texts.get("preview.outputFilePrefix") + outputName);
             } else {
@@ -130,9 +130,7 @@ public final class WorkspaceInfoPresenter {
                         + Texts.get("preview.outputFileTxtSuffix"));
             }
         } else {
-            OutputNameService.Name name = OutputNameService.imageOutputName(it, params,
-                    host.allVisibleItems().stream().findFirst().orElse(null), host.inputFolderField().getText());
-            String dirName = name.parsing() ? Texts.get("preview.parsing") : name.value();
+            String dirName = it.displayName == null ? Texts.get("preview.parsing") : it.displayName;
             if (params.isSingleOutputMode()) {
                 host.outputNameLabel().setText(Texts.get("preview.outputDirPrefix") + dirName
                         + Texts.get("preview.outputDirMergedNote"));
@@ -161,7 +159,7 @@ public final class WorkspaceInfoPresenter {
 
     /** 任一有效项目的生效参数开启章节序号（组参数可独立开启，列头按需显示） */
     private boolean anyVisibleItemHasChapterNumbers() {
-        for (PreviewItem it : host.allVisibleItems()) {
+        for (PreviewRow it : host.allVisibleItems()) {
             AppConfig eff = host.effectiveParams(it);
             if (eff != null && eff.isAddChapterNumber()) {
                 return true;
@@ -173,16 +171,15 @@ public final class WorkspaceInfoPresenter {
     /** 提取结果一次性回写（拍板：提取结束/取消后统一回写，非逐文件实时更新）：
      *  按路径匹配条目写入结果字段（下沉 {@code app.ExtractResultService}），列表一次刷新，选中条目 banner 同步 */
     void applyExtractResults(ExtractionStats stats) {
-        int matched = ExtractResultService.apply(stats, host.allPreviewItems(),
-                Texts::render, Texts.get("list.itemSeparator"));
+        long matched = host.allPreviewItems().stream().filter(item -> item.extractOutcome != ExtractOutcome.NONE).count();
         host.refreshList();
         updateExtractBanner(host.currentSelection());
         log.info(Texts.msg("log.maincontroller.29", matched));
     }
 
     /** 提取结果色清除（拍板）：重新确认参数后旧结果失效，回到参数色/解析状态色 */
-    void clearExtractOutcomes(List<PreviewItem> targets) {
-        for (PreviewItem it : targets) {
+    void clearExtractOutcomes(List<PreviewRow> targets) {
+        for (PreviewRow it : targets) {
             it.extractOutcome = ExtractOutcome.NONE;
             it.extractDetail = null;
         }
@@ -191,7 +188,7 @@ public final class WorkspaceInfoPresenter {
     /** 预览区顶部 banner（拍板）：选中条目结果含红（失败/跳过/成功+警告）时显示具体情况；
      *  无提取结果时，解析失败（黄色）条目显示解析失败原因 */
     void updateExtractBanner(Object sel) {
-        if (sel instanceof PreviewItem it && it.extractOutcome != ExtractOutcome.NONE
+        if (sel instanceof PreviewRow it && it.extractOutcome != ExtractOutcome.NONE
                 && it.extractDetail != null && !it.extractDetail.isEmpty()) {
             String prefix = switch (it.extractOutcome) {
                 case FAILED -> Texts.get("extract.statusFailed");
@@ -206,7 +203,7 @@ public final class WorkspaceInfoPresenter {
                 return;
             }
         }
-        if (sel instanceof PreviewItem it && it.status == PreviewItem.Status.FAILED) {
+        if (sel instanceof PreviewRow it && it.status == PreviewRow.Status.FAILED) {
             host.extractResultBanner().setText(Texts.get("extract.parseFailed") + it.errorMsg);
             host.extractResultBanner().setVisible(true);
             host.extractResultBanner().setManaged(true);

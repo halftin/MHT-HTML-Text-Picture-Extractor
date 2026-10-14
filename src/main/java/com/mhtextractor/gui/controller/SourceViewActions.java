@@ -4,7 +4,7 @@ import com.mhtextractor.app.SourceViewService;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.HtmlSourceViewer;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.platform.BrowserLauncher;
 import javafx.application.Platform;
 import javafx.scene.Node;
@@ -50,25 +50,25 @@ public final class SourceViewActions {
 
     /** 在浏览器中查看（浏览器查看HTML需求）：导出 MHT 内嵌 HTML 后用系统默认浏览器打开渲染视图 */
     public void openInBrowser(Object target) {
-        if (target instanceof PreviewItem it && !it.removed) {
+        if (target instanceof PreviewRow it && !it.removed) {
             openHtmlInBrowser(it, false);
         }
     }
 
     /** 在浏览器中查看源码（浏览器查看HTML需求）：用 view-source: 打开导出页面的源码视图 */
     public void viewSource(Object target) {
-        if (target instanceof PreviewItem it && !it.removed) {
+        if (target instanceof PreviewRow it && !it.removed) {
             openHtmlInBrowser(it, true);
         }
     }
 
     /** 查看HTML源码按钮（浏览器查看HTML需求）：对列表当前选中条目打开源码视图 */
-    public void viewSource(PreviewItem it) {
+    public void viewSource(PreviewRow it) {
         openHtmlInBrowser(it, true);
     }
 
     /** 在系统默认浏览器中查看该 MHT 内嵌 HTML（sourceMode=true 走 view-source 源码视图） */
-    private void openHtmlInBrowser(PreviewItem it, boolean sourceMode) {
+    private void openHtmlInBrowser(PreviewRow it, boolean sourceMode) {
         File f = new File(it.path);
         if (!f.exists()) {
             log.warn(Texts.msg("log.maincontroller.22", it.path));

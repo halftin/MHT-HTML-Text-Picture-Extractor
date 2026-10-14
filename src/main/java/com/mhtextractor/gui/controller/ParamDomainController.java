@@ -1,14 +1,11 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.GlobalParameterCache;
-import com.mhtextractor.app.ParamTargets;
 import com.mhtextractor.app.Texts;
-import com.mhtextractor.app.UndoManager;
-import com.mhtextractor.app.WorkspaceStructure;
+import com.mhtextractor.uicore.WorkspaceView;
 import com.mhtextractor.model.AppConfig;
-import com.mhtextractor.model.GroupItem;
-import com.mhtextractor.model.ParamScope;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.GroupRow;
+import com.mhtextractor.uicore.ParamScope;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.uiport.PortEvent;
 import com.mhtextractor.uiport.PortEvent.ParamChangeKind;
 import com.mhtextractor.uiport.TargetId;
@@ -36,7 +33,7 @@ import java.util.Set;
  * {@link #globalCache()} 读写同一实例）；② 应用入口的薄转发（含 {@code log.maincontroller.15/17/18/27}
  * 四条日志，键与实参不变）；③ 按 {@link PortEvent.ParamStateChanged} 事件执行列表刷新与参数色刷新链
  * （{@link #handleParamState} —— 原各应用方法的 UI 派生刷新段逐字保留，仅触发方式改为事件驱动）。
- * 参数类撤销（{@link #applyParamUndo}）与 {@code log.maincontroller.53/54/55} 保持不变。</p>
+ * 参数类撤销（端口 C19）与 {@code log.maincontroller.53/54/55} 保持不变。</p>
  *
  * <p>两套全局参数缓存（{@code textParamsCache} / {@code imageParamsCache}）由本类独占持有
  * （P1-1：值下沉 app 层 {@link GlobalParameterCache}，本类只留包级同名委托方法；测试源集
@@ -60,21 +57,21 @@ public final class ParamDomainController {
         // 查询（只读）
         Object currentSelection();
         List<Object> dataOrder();
-        List<PreviewItem> allVisibleItems();
-        List<PreviewItem> allPreviewItems();
+        List<PreviewRow> allVisibleItems();
+        List<PreviewRow> allPreviewItems();
         AppConfig effectiveForObject(Object item);
         boolean currentModeConfirmed();
         long visibleCount();
         boolean isImporting();
         // 缓存失效收口（经 WorkspaceParamService；本类不得出现规则方法名，见 ArchitectureTest 不变式）
         /** 单条目（对应服务单条目重载 —— 与批量重载语义不同，勿合并） */
-        void paramsChanged(boolean imageMode, PreviewItem item);
+
         /** 条目集合（对应服务批量重载） */
-        void paramsChanged(boolean imageMode, Iterable<PreviewItem> items);
-        // 逐条目 UI 内存态复位（原 clearPreviewCache(PreviewItem)）
-        void clearPreviewCache(PreviewItem item);
+
+        // 逐条目 UI 内存态复位（原 clearPreviewCache(PreviewRow)）
+        void clearPreviewCache(PreviewRow item);
         // 提取结果色 / 信息区 / 按钮的派生刷新
-        void clearExtractOutcomes(List<PreviewItem> items);
+        void clearExtractOutcomes(List<PreviewRow> items);
         void updateBadgeHeader();
         void updateOutputModeLabel(Object sel);
         void updateRenameNote(Object sel);
@@ -85,7 +82,7 @@ public final class ParamDomainController {
         void updateListButtons();
         void recomputeBadges();
         void cancelWorkspaceActivity();
-        void startPreParseFor(List<PreviewItem> items);
+        void startPreParseFor(List<PreviewRow> items);
         void startPreParse();
         void updateProgressStatus();
     }
@@ -96,7 +93,7 @@ public final class ParamDomainController {
     private final Uiport port;
 
     /** 两套已确认提取参数缓存（P1-1 下沉）：值在 app 层 {@link GlobalParameterCache}；null 表示该模式尚未确认过参数 */
-    private final GlobalParameterCache globalParams = new GlobalParameterCache();
+
 
     public ParamDomainController(Host host, Uiport port) {
         this.host = host;
@@ -105,34 +102,24 @@ public final class ParamDomainController {
     }
 
     /** 两套已确认参数缓存实例（B4：app 层参数命令经此读写同一实例；值仍由本类独占持有） */
-    GlobalParameterCache globalCache() {
-        return globalParams;
-    }
+
 
     /** 文本模式已确认参数缓存（包级委托方法，原包级字段；供 MainController / AcceptanceDriver 继续按原名读取） */
-    AppConfig textParamsCache() {
-        return globalParams.text();
-    }
+    AppConfig textParamsCache() {return port.queries().parameterState(false,List.of(),com.mhtextractor.uiport.TargetResolution.EXPLICIT).textGlobal();}
 
-    void textParamsCache(AppConfig v) {
-        globalParams.set(false, v);
-    }
+    void textParamsCache(AppConfig value) {port.commands().setGlobalParams(false,value);}
 
     /** 图片模式已确认参数缓存（包级委托方法，原包级字段；理由同 {@link #textParamsCache()}） */
-    AppConfig imageParamsCache() {
-        return globalParams.image();
-    }
+    AppConfig imageParamsCache() {return port.queries().parameterState(true,List.of(),com.mhtextractor.uiport.TargetResolution.EXPLICIT).imageGlobal();}
 
-    void imageParamsCache(AppConfig v) {
-        globalParams.set(true, v);
-    }
+    void imageParamsCache(AppConfig value) {port.commands().setGlobalParams(true,value);}
 
     /** 选择对象 → 参数作用域目标（R7.4 复用点）："设置参数"按钮与"应用到所选"共用这一份路由 */
     ParamScope.Target paramScopeTarget(Object sel) {
         return switch (sel) {
-            case GroupItem<?> g -> new ParamScope.GroupTarget(g);
-            case PreviewItem it when it.parentGroup != null -> new ParamScope.GroupTarget(it.parentGroup);
-            case PreviewItem it -> new ParamScope.ItemTarget<>(it, it.textItemParams, it.imageItemParams);
+            case GroupRow<?> g -> new ParamScope.GroupTarget(g);
+            case PreviewRow it when it.parentGroup != null -> new ParamScope.GroupTarget(it.parentGroup);
+            case PreviewRow it -> new ParamScope.ItemTarget<>(it, it.getTextParamsCache(), it.getImageParamsCache());
             case null, default -> ParamScope.GLOBAL;
         };
     }
@@ -141,8 +128,8 @@ public final class ParamDomainController {
      *  B4 起为薄转发：写入 / 撤销 / 缓存失效在 app 层（端口命令），UI 刷新按 ParamStateChanged 事件做。 */
     void applyTargetParams(ParamScope.Target target, boolean imageMode, AppConfig params) {
         switch (target) {
-            case ParamScope.GroupTarget(GroupItem<?> g) -> applyGroupParams(WorkspaceStructure.asPreviewGroup(g), imageMode, params);
-            case ParamScope.ItemTarget<?> it -> applyItemParams((PreviewItem) it.item(), imageMode, params);
+            case ParamScope.GroupTarget(GroupRow<?> g) -> applyGroupParams(WorkspaceView.asPreviewGroup(g), imageMode, params);
+            case ParamScope.ItemTarget<?> it -> applyItemParams((PreviewRow) it.item(), imageMode, params);
             default -> {
                 applyConfirmedParams(imageMode, params);
                 log.info(Texts.msg("log.maincontroller.15", modeWord(imageMode)));
@@ -156,11 +143,11 @@ public final class ParamDomainController {
         try {
             // Q6a：非模态覆盖式侧边栏取代模态窗口。面板按窗口缓存（ParamSidePanel.of），
             // 复用同一个 ParamFormPane 实例 ⇒ "收起再展开同一目标"保留草稿（R1.5）。
-            ParamSidePanel panel = ParamSidePanel.of(host.anchor());
+            ParamSidePanel panel = ParamSidePanel.of(host.anchor(),port);
             // Q6b/R1.7：草稿变了（改字段 / 提交 / 切目标丢弃）就重算开始按钮 —— 判定仍只有
             // ParamFormPane.isDirty() 一处，这里只接线（每次 show 都重设，幂等）。
             panel.setDirtyListener(this::updateStartButtonState);
-            panel.show(target, imageMode, globalParams.text(), globalParams.image(),
+            panel.show(target, imageMode, textParamsCache(), imageParamsCache(),
                     params -> applyTargetParams(target, imageMode, params));
             updateStartButtonState();   // 本次 show 可能什么都没变（同目标重开 / 取消切换）⇒ 兜底重算
         } catch (Exception e) {
@@ -170,7 +157,7 @@ public final class ParamDomainController {
     }
 
     /** 写入某条目的条目级独立参数（B4 起薄转发：写入/撤销/缓存失效在 app 层；日志键与实参不变） */
-    void applyItemParams(PreviewItem item, boolean imageMode, AppConfig params) {
+    void applyItemParams(PreviewRow item, boolean imageMode, AppConfig params) {
         port.commands().setItemParams(item.path, imageMode, params);
         log.info(Texts.msg("log.maincontroller.17", item.name, modeWord(imageMode)));
     }
@@ -181,7 +168,7 @@ public final class ParamDomainController {
     }
 
     /** 写入某组的已确认参数缓存（B4 起薄转发；日志键与实参不变） */
-    void applyGroupParams(GroupItem<PreviewItem> group, boolean imageMode, AppConfig params) {
+    void applyGroupParams(GroupRow<PreviewRow> group, boolean imageMode, AppConfig params) {
         log.info(Texts.msg("log.maincontroller.18", group.getName(), modeWord(imageMode)));
         port.commands().setGroupParams(group.getGroupNo(), imageMode, params);
     }
@@ -201,7 +188,11 @@ public final class ParamDomainController {
     /** 勾选集合优先 → 回退对象（与"移除"的勾选优先拍板一致）；复制/应用与清除参数共用同一"所选"口径。
      *  解析实现在 app 层 {@link ParamTargets}（B4 下沉；后端清除参数命令内部也用同一份）。 */
     List<Object> resolveParamTargets(Object fallback) {
-        return ParamTargets.resolve(host.allVisibleItems(), fallback);
+        var ids=port.queries().parameterState(host.imageMode(),targetIds(fallback)).targets();
+        var rows=new java.util.HashMap<TargetId,Object>();
+        for(var item:host.allPreviewItems())rows.put(TargetId.ofItem(item.path),item);
+        for(var row:host.dataOrder())if(row instanceof GroupRow<?> group)rows.put(TargetId.ofGroup(group.getGroupNo()),group);
+        return ids.stream().map(rows::get).filter(java.util.Objects::nonNull).toList();
     }
 
     /** 清除参数（B4 起薄转发）：勾选优先解析由端口命令在 app 层执行（{@link ParamTargets#resolve}），
@@ -220,17 +211,17 @@ public final class ParamDomainController {
      */
     public static TargetCounts countTargets(List<Object> targets) {
         int topLevel = 0;
-        Set<GroupItem<PreviewItem>> groups = new LinkedHashSet<>();
+        Set<GroupRow<PreviewRow>> groups = new LinkedHashSet<>();
         if (targets != null) {
             for (Object o : targets) {
-                if (o instanceof PreviewItem it) {
+                if (o instanceof PreviewRow it) {
                     if (it.parentGroup != null) {
                         groups.add(it.parentGroup);
                     } else if (!it.removed) {
                         topLevel++;
                     }
-                } else if (o instanceof GroupItem<?> g) {
-                    groups.add(WorkspaceStructure.asPreviewGroup(g));
+                } else if (o instanceof GroupRow<?> g) {
+                    groups.add(WorkspaceView.asPreviewGroup(g));
                 }
             }
         }
@@ -247,7 +238,7 @@ public final class ParamDomainController {
     }
 
     /** 按事件类别执行对应的刷新链（与各原应用方法的 UI 派生刷新段逐字一致，顺序不变）。 */
-    private void handleParamState(ParamChangeKind kind, List<PreviewItem> affected) {
+    private void handleParamState(ParamChangeKind kind, List<PreviewRow> affected) {
         switch (kind) {
             case SET_GLOBAL -> {
                 // 拍板：全局参数重新确认 → 全部条目旧提取结果色失效
@@ -256,7 +247,7 @@ public final class ParamDomainController {
                 host.updateExtractBanner(host.currentSelection());
             }
             case SET_ITEM -> {
-                PreviewItem item = affected.get(0);
+                PreviewRow item = affected.get(0);
                 host.clearExtractOutcomes(List.of(item));
                 host.clearPreviewCache(item);
                 host.startPreParseFor(List.of(item));
@@ -289,14 +280,14 @@ public final class ParamDomainController {
     }
 
     /** 事件载荷（路径）→ 条目对象（按导入去重后的唯一键；全部条目含已移除）。 */
-    private List<PreviewItem> itemsByPath(List<String> paths) {
-        Map<String, PreviewItem> byPath = new HashMap<>();
-        for (PreviewItem it : host.allPreviewItems()) {
+    private List<PreviewRow> itemsByPath(List<String> paths) {
+        Map<String, PreviewRow> byPath = new HashMap<>();
+        for (PreviewRow it : host.allPreviewItems()) {
             byPath.putIfAbsent(it.path, it);
         }
-        List<PreviewItem> out = new ArrayList<>();
+        List<PreviewRow> out = new ArrayList<>();
         for (String p : paths) {
-            PreviewItem it = p == null ? null : byPath.get(p);
+            PreviewRow it = p == null ? null : byPath.get(p);
             if (it != null) {
                 out.add(it);
             }
@@ -306,10 +297,10 @@ public final class ParamDomainController {
 
     /** 列表行对象 → 端口目标寻址（条目按路径、组按组号）；null / 其他类型 → 空列表（回退为 null）。 */
     private static List<TargetId> targetIds(Object row) {
-        if (row instanceof PreviewItem it) {
+        if (row instanceof PreviewRow it) {
             return List.of(TargetId.ofItem(it.path));
         }
-        if (row instanceof GroupItem<?> g) {
+        if (row instanceof GroupRow<?> g) {
             return List.of(TargetId.ofGroup(g.getGroupNo()));
         }
         return List.of();
@@ -334,10 +325,10 @@ public final class ParamDomainController {
      * 先取消在途后台活动（活动代际 +1）作废旧代次在途解析结果；其它项目被代次打断的
      * 在途解析以同一新代次补偿续跑（只补仍处等待中的项，不重新解析已完成项，不误伤其它项目）。
      */
-    private void refreshAfterTargetedParamsChange(List<PreviewItem> affected) {
+    private void refreshAfterTargetedParamsChange(List<PreviewRow> affected) {
         host.cancelWorkspaceActivity();
-        for (PreviewItem m : affected) {
-            // E1.2：清预览态的唯一实现是 PreviewItem.resetPreviewState()（此前的内联清单漏清 cachedMeta）
+        for (PreviewRow m : affected) {
+            // E1.2：清预览态的唯一实现是 PreviewRow.resetPreviewState()（此前的内联清单漏清 cachedMeta）
             m.resetPreviewState();
         }
         Object sel = host.currentSelection();
@@ -353,8 +344,8 @@ public final class ParamDomainController {
         if (!affected.isEmpty()) {
             host.startPreParseFor(affected);
         }
-        List<PreviewItem> interrupted = host.allVisibleItems().stream()
-                .filter(i -> i.status == PreviewItem.Status.WAITING && !affected.contains(i)).toList();
+        List<PreviewRow> interrupted = host.allVisibleItems().stream()
+                .filter(i -> i.status == PreviewRow.Status.WAITING && !affected.contains(i)).toList();
         if (!interrupted.isEmpty()) {
             host.startPreParseFor(interrupted);
         }
@@ -373,151 +364,10 @@ public final class ParamDomainController {
      *  APPLY_GLOBAL 三个 case 体逐字搬入（含对 restoreParamSnapshots / refreshAfterParamsChanged /
      *  clearExtractOutcomes / paramsChanged / startPreParseFor / 两参数缓存 /
      *  updateInfoArea / updateExtractBanner / updateListButtons / modeWord 的调用）。 */
-    void applyParamUndo(UndoManager.Record<PreviewItem> record) {
-        switch (record.type()) {
-            case PARAM_SET -> {
-                // 条目独立参数需求拍板：设置参数类操作（条目/组/全局）可撤销，恢复设置前的参数
-                boolean im = record.paramImageMode();
-                if (!record.clearItemParamsBefore().isEmpty() || !record.clearGroupParamsBefore().isEmpty()) {
-                    // Q10/R7.5 批量「应用到所选」：一条记录携带全部目标的 before 快照，
-                    // 恢复与 CLEAR_PARAMS 撤销共用同一份实现（不另写一套）
-                    restoreParamSnapshots(im, record.clearItemParamsBefore(), record.clearGroupParamsBefore());
-                } else if (record.paramTargetPath() != null) {
-                    for (PreviewItem it : host.allPreviewItems()) {
-                        if (it.path.equals(record.paramTargetPath())) {
-                            if (im) {
-                                it.imageItemParams = record.paramBefore();
-                            } else {
-                                it.textItemParams = record.paramBefore();
-                            }
-                            host.clearExtractOutcomes(List.of(it));
-                            host.clearPreviewCache(it);
-                            // 规则 (a)：撤销恢复旧参数 = 生效参数变化 → 删该项目缓存目录
-                            host.paramsChanged(im, it);
-                            host.startPreParseFor(List.of(it));
-                            break;
-                        }
-                    }
-                } else if (record.paramTargetGroupNo() != null) {
-                    for (Object o : host.dataOrder()) {
-                        if (o instanceof GroupItem<?> g
-                                && g.getGroupNo() == record.paramTargetGroupNo()) {
-                            GroupItem<PreviewItem> grp = WorkspaceStructure.asPreviewGroup(g);
-                            if (im) {
-                                grp.setImageParamsCache(record.paramBefore());
-                            } else {
-                                grp.setTextParamsCache(record.paramBefore());
-                            }
-                            List<PreviewItem> members = grp.getMembers().stream()
-                                    .filter(m -> !m.removed).toList();
-                            host.clearExtractOutcomes(members);
-                            for (PreviewItem m : members) {
-                                host.clearPreviewCache(m);
-                            }
-                            // 规则 (a)：撤销恢复组参数 → 成员生效参数变化 → 删其缓存目录
-                            host.paramsChanged(im, members);
-                            host.startPreParseFor(members);
-                            break;
-                        }
-                    }
-                } else {
-                    if (im) {
-                        globalParams.set(true, record.paramBefore());
-                    } else {
-                        globalParams.set(false, record.paramBefore());
-                    }
-                    host.clearExtractOutcomes(host.allPreviewItems());
-                    // 规则 (a)：撤销恢复全局参数 → 全部条目生效参数可能变化 → 保守全删
-                    host.paramsChanged(im, host.allPreviewItems());
-                    refreshAfterParamsChanged();
-                }
-                host.fileListView().refresh();
-                host.updateInfoArea(host.currentSelection());
-                host.updateExtractBanner(host.currentSelection());
-                host.updateListButtons();
-                log.info(Texts.msg("log.maincontroller.53", modeWord(im)));
-            }
-            case CLEAR_PARAMS -> {
-                // 清除参数拍板 Q4：按 before 快照一次恢复全部被清除的条目/组参数，并重走联动刷新
-                boolean im = record.clearImageMode();
-                Map<Integer, AppConfig> groupBefore = record.clearGroupParamsBefore();
-                int restoredItems = restoreParamSnapshots(im, record.clearItemParamsBefore(), groupBefore);
-                log.info(Texts.msg("log.maincontroller.54", modeWord(im), restoredItems, groupBefore.size()));
-            }
-            case APPLY_GLOBAL -> {
-                // 条目独立参数需求拍板：恢复应用前的全局参数与全部独立参数快照
-                boolean im = record.applyGlobalImageMode();
-                if (im) {
-                    globalParams.set(true, record.applyGlobalBefore());
-                } else {
-                    globalParams.set(false, record.applyGlobalBefore());
-                }
-                Map<String, AppConfig> itemBefore = record.applyGlobalItemParamsBefore();
-                for (PreviewItem it : host.allPreviewItems()) {
-                    if (itemBefore.containsKey(it.path)) {
-                        AppConfig p = itemBefore.get(it.path);
-                        if (im) {
-                            it.imageItemParams = p;
-                        } else {
-                            it.textItemParams = p;
-                        }
-                    }
-                }
-                Map<Integer, AppConfig> groupBefore = record.applyGlobalGroupParamsBefore();
-                for (Object o : host.dataOrder()) {
-                    if (o instanceof GroupItem<?> g) {
-                        if (groupBefore.containsKey(g.getGroupNo())) {
-                            AppConfig p = groupBefore.get(g.getGroupNo());
-                            if (im) {
-                                g.setImageParamsCache(p);
-                            } else {
-                                g.setTextParamsCache(p);
-                            }
-                        }
-                    }
-                }
-                host.clearExtractOutcomes(host.allPreviewItems());
-                // 规则 (a)：撤销应用到全局 → 全部条目生效参数可能变化 → 保守全删
-                host.paramsChanged(im, host.allPreviewItems());
-                refreshAfterParamsChanged();
-                host.updateListButtons();
-                host.updateExtractBanner(host.currentSelection());
-                log.info(Texts.msg("log.maincontroller.55", modeWord(im)));
-            }
-        }
-    }
+
 
     /** 按 (path | groupNo → AppConfig) 快照恢复参数并重走联动刷新与缓存失效（清除参数 / 批量应用共用） */
-    private int restoreParamSnapshots(boolean im, Map<String, AppConfig> itemBefore,
-                                      Map<Integer, AppConfig> groupBefore) {
-        List<PreviewItem> restoredItems = new ArrayList<>();
-        for (PreviewItem it : host.allPreviewItems()) {
-            if (itemBefore.containsKey(it.path)) {
-                if (im) it.imageItemParams = itemBefore.get(it.path);
-                else it.textItemParams = itemBefore.get(it.path);
-                restoredItems.add(it);
-            }
-        }
-        List<PreviewItem> affected = new ArrayList<>(restoredItems);
-        for (Object o : host.dataOrder()) {
-            if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> grp = WorkspaceStructure.asPreviewGroup(g);
-                if (groupBefore.containsKey(grp.getGroupNo())) {
-                    if (im) grp.setImageParamsCache(groupBefore.get(grp.getGroupNo()));
-                    else grp.setTextParamsCache(groupBefore.get(grp.getGroupNo()));
-                    affected.addAll(grp.getMembers().stream()
-                            .filter(m -> !m.removed).toList());
-                }
-            }
-        }
-        host.clearExtractOutcomes(affected);
-        // 规则 (a)：撤销恢复旧参数 = 生效参数变化 → 删受影响条目缓存目录（经 WorkspaceParamService 收口）
-        host.paramsChanged(im, affected);
-        refreshAfterTargetedParamsChange(affected);
-        host.updateListButtons();
-        host.updateExtractBanner(host.currentSelection());
-        return restoredItems.size();
-    }
+
 
     /** 日志文案里的模式词（图片/文本 → Image/Text），供 log.* 模板的 {0} 占位符使用 */
     private static String modeWord(boolean imageMode) {

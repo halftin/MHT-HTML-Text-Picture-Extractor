@@ -385,12 +385,14 @@ public final class WorkspaceParamCommandService {
         if (path == null) {
             return null;
         }
+        PreviewItem hidden=null;
         for (PreviewItem it : context.allItems()) {
             if (path.equals(it.path)) {
-                return it;
+                if(!it.removed)return it;
+                if(hidden==null)hidden=it;
             }
         }
-        return null;
+        return hidden;
     }
 
     private GroupItem<PreviewItem> groupByNo(long groupNo) {

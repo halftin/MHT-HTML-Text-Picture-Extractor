@@ -24,7 +24,6 @@ direct	com.mhtextractor.gui.controller.MainController	listInteraction	同包直�
 direct	com.mhtextractor.gui.controller.MainController	onInputFolderChanged	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	paramDomain	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	preparseController	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
-direct	com.mhtextractor.gui.controller.MainController	previewCacheLifecycle	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	previewLoader	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	rebuildDisplay	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	refreshAfterListChange	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver

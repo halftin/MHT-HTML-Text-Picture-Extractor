@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.MhtImportPlanner;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.config.GuiState;
 import com.mhtextractor.config.GuiStateManager;
@@ -10,9 +10,9 @@ import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.model.ChangeListener;
 import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.model.ExtractOutcome;
-import com.mhtextractor.model.GroupItem;
+import com.mhtextractor.uicore.GroupRow;
 import com.mhtextractor.util.OutputUnitPlanner;
-import com.mhtextractor.model.ParamScope;
+import com.mhtextractor.uicore.ParamScope;
 import javafx.application.Platform;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContextMenu;
@@ -81,10 +81,75 @@ import java.util.Set;
 @lombok.extern.slf4j.Slf4j
 public final class FeatureExercise extends FeatureExerciseSupport {
 
+    private com.mhtextractor.uicore.FrontendPort frontend;
+
     public FeatureExercise(MainController mc) {
         super(mc);
     }
 
+    public FeatureExercise(MainController mc, com.mhtextractor.uicore.FrontendPort frontend) {
+        super(mc,frontend);
+        this.frontend=frontend;
+    }
+
+
+    /** Uses real backend totals with controlled UI frames, instead of mutating backend status through a row. */
+    private final class ProgressFrame {
+        boolean running;
+        java.util.function.Consumer<com.mhtextractor.uiport.PortEvent> delivery;
+        ProgressFrame(){
+            var port = new com.mhtextractor.uiport.Uiport(){
+                public com.mhtextractor.uiport.Confirmer confirmer(){return frontend.confirmer();}
+                public com.mhtextractor.uiport.WorkspaceCommands commands(){return frontend.commands();}
+                public com.mhtextractor.uiport.WorkspaceQueries queries(){return frontend.queries();}
+                public com.mhtextractor.uiport.PortEvents events(){return listener->{delivery=listener;return ()->{};};}
+            };
+            new PreparseController(new PreparseController.Host(){
+                public boolean extractionRunning(){return running;}
+                public boolean isPreviewLoading(){return false;}
+                public boolean isDragActive(){return false;}
+                public boolean isAnimating(){return false;}
+                public List<PreviewRow> allItems(){return view.allPreviewItems();}
+                public javafx.scene.control.ProgressBar progressBar(){return FeatureExercise.this.progressBar();}
+                public Label statusLabel(){return FeatureExercise.this.statusLabel();}
+                public Object currentSelection(){return listView().getSelectionModel().getSelectedItem();}
+                public void refreshList(){listView().refresh();}
+                public void recomputeBadges(){}
+                public void updateInfoArea(Object item){}
+                public void updateContentArea(Object item){}
+                public void setProgressBarActivity(String style){
+                    progressBar().getStyleClass().removeIf(value->value.startsWith("progress-"));
+                    if(style!=null)progressBar().getStyleClass().add(style);
+                }
+            },port);
+        }
+        void show(int done,int total){delivery.accept(new com.mhtextractor.uiport.PortEvent.PreparseProgress(
+                frontend.queries().activityGeneration(),done,total));}
+    }
+
+    private void startExtractionObserved(java.io.PrintWriter out) {
+        startExtractionObserved(out,true);
+    }
+    private void startExtractionObserved(java.io.PrintWriter out,boolean settle) {
+        var state=new java.util.concurrent.CompletableFuture<com.mhtextractor.uiport.PreStartStateVm>();
+        var runtime=view.buildRuntimeConfig();
+        boolean checked=((atlantafx.base.controls.ToggleSwitch)node("extractCheckedOnlyCheck")).isSelected();
+        frontend.execute(port->port.queries().preStartState(runtime,checked),state::complete);
+        FxDelay.pause(1);
+        out.println("[EVIDENCE] Start disabled="+startButton().isDisabled()+" dirty="+ParamSidePanel.isDirty(statusLabel())
+                +" input="+runtime.getInputFolder()+" output="+runtime.getOutputFolder()+" preStart="+state.getNow(null));
+        startButton().fire();
+        if(settle)FxDelay.pause(1);
+    }
+
+    private void clearParamsObserved(java.io.PrintWriter out) {
+        view.finishExpandAnim();
+        out.println("[EVIDENCE] Clear imageMode="+imageModeToggle().isSelected()+" selected="+
+                frontend.queries().parameterState(imageModeToggle().isSelected(),List.of()).states());
+        clearParamsButton().fire(); FxDelay.pause(300);
+        out.println("[EVIDENCE] After clear="+frontend.queries().parameterState(false,
+                view.allVisibleItems().stream().map(PreviewRow::id).toList(),com.mhtextractor.uiport.TargetResolution.EXPLICIT).states());
+    }
 
 // ==================== A2 配额卡场景的观察/驱动辅助（与 tools/probes/NotificationAcceptance 同口径） ====================
 
@@ -94,7 +159,7 @@ private void waitForConfirmCard() throws InterruptedException {
     while (!com.mhtextractor.gui.component.NotificationHost.hasPendingDecision(statusLabel())
             && System.currentTimeMillis() < deadline) {
         pumpFxEvents();
-        Thread.sleep(20);
+        FxDelay.pause(20);
     }
 }
 
@@ -155,22 +220,24 @@ public boolean runAutomatedTests() {
     }
     System.err.println("[test-mode] runAutomatedTests starting; results -> " + resultsFile.getAbsolutePath());
     int p = 0, f = 0;
-    try (java.io.PrintWriter out = new java.io.PrintWriter(new java.io.FileWriter(resultsFile))) {
+    try (java.io.PrintWriter out = new java.io.PrintWriter(new java.io.FileWriter(resultsFile), true)) {
         log.info("=== Starting automated tests ===");
         out.println("=== MHT Extractor Automated Test Results ===");
         out.println("Time: " + java.time.LocalDateTime.now()); out.println();
 
         // 清场：移除启动时 GUI 状态恢复导入的既有文件并重置撤销栈（保证断言可预测）
         if (!this.view.dataOrderIsEmpty()) {
-            this.view.clearDataOrder();
             this.view.clearUndoStack();
+            this.view.clearDataOrder();
+            FxDelay.pause(300);
             this.view.refreshAfterListChange();
         }
         // 统一导入为异步：等待启动时可能在途的导入收尾，再二次清场（防 applyImportPlan 回填列表）
         waitForImportDone();
         if (!this.view.dataOrderIsEmpty()) {
-            this.view.clearDataOrder();
             this.view.clearUndoStack();
+            this.view.clearDataOrder();
+            FxDelay.pause(300);
             this.view.refreshAfterListChange();
         }
 
@@ -187,47 +254,121 @@ public boolean runAutomatedTests() {
         createSampleMht(imageDir, "i01.mht");
         createSampleMht(imageDir, "i02.mht");
 
-        try { textModeToggle().setSelected(true); Thread.sleep(300); out.println("[PASS] Text mode toggle"); p++;
+        try { textModeToggle().setSelected(true); FxDelay.pause(300); out.println("[PASS] Text mode toggle"); p++;
         } catch (Exception e) { out.println("[FAIL] Text mode: " + e.getMessage()); f++; }
 
-        try { imageModeToggle().setSelected(true); Thread.sleep(300); out.println("[PASS] Image mode toggle"); p++;
+        try { imageModeToggle().setSelected(true); FxDelay.pause(300); out.println("[PASS] Image mode toggle"); p++;
         } catch (Exception e) { out.println("[FAIL] Image mode: " + e.getMessage()); f++; }
 
+        // 进度条口径（修复：独立参数场景无参数条目导致进度条卡中间）——只统计有生效参数条目
+        try {
+            textModeToggle().setSelected(true); FxDelay.pause(100);
+            this.view.importByPaths(List.of(textDir.toString()), I18n.get("test.autoReimport"), false);
+            FxDelay.pause(100); waitForImportDone();
+            var facts = new java.util.ArrayList<com.mhtextractor.uiport.PortEvent.PreparseProgress>();
+            var observation = frontend.events().subscribe(event -> {
+                if(event instanceof com.mhtextractor.uiport.PortEvent.PreparseProgress progress)facts.add(progress);
+            });
+            var frame = new ProgressFrame();
+            List<PreviewRow> vis = this.view.allVisibleItems();
+            if (vis.size() < 2) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
+            textModeToggle().setSelected(true); FxDelay.pause(300);
+            this.view.cancelWorkspaceActivity();   // 作废在途解析代次，保证断言确定性
+            AppConfig savedGlobal = this.view.textParamsCache();
+            for (PreviewRow it : this.view.allPreviewItems()) {
+                this.view.applyItemParams(it, false, null);
+
+            }
+            PreviewRow p0 = vis.stream().filter(item -> item.parentGroup == null).findFirst().orElseThrow();
+            if(savedGlobal!=null)throw new IllegalStateException("进度夹具必须在首次全局确认之前运行");
+            this.view.applyItemParams(p0, false, new AppConfig()); FxDelay.pause(100);  // 仅该条目有独立参数
+            frontend.commands().startPreparseFor(List.of(p0.path)); FxDelay.pause(100);
+            this.view.updateProgressStatus(this.view.parseToken()); FxDelay.pause(100);
+            var ids=vis.stream().map(PreviewRow::id).toList();
+            int effectiveTotal=(int)frontend.queries().parameterState(false,ids,
+                    com.mhtextractor.uiport.TargetResolution.EXPLICIT).states().stream().filter(state->state.effective()).count();
+            if(effectiveTotal!=1)throw new IllegalStateException("后端参数事实必须只含 1 个有参数条目: "+effectiveTotal);
+            out.println("[EVIDENCE] Effective parameter targets="+effectiveTotal+"; frozen IPC progress="+facts);
+            frame.show(0,effectiveTotal);
+            if (!progressBar().isVisible() || Math.abs(progressBar().getProgress()) > 0.001) {
+                throw new IllegalStateException("无参数条目不应参与进度（期望可见且 0/1）");
+            }
+            if (!progressBar().getStyleClass().contains("progress-preparse")) {
+                throw new IllegalStateException("预解析进度条应为浅蓝样式");
+            }
+            frame.show(1,effectiveTotal);
+            if (progressBar().isVisible()) {
+                throw new IllegalStateException("有参数条目全部完成后进度条应隐藏");
+            }
+            if (progressBar().getStyleClass().contains("progress-preparse")) {
+                throw new IllegalStateException("预解析完成后应移除浅蓝样式");
+            }
+            this.view.applyItemParams(p0, false, null); FxDelay.pause(100);
+            this.view.updateProgressStatus(this.view.parseToken()); FxDelay.pause(100);
+            effectiveTotal=(int)frontend.queries().parameterState(false,ids,
+                    com.mhtextractor.uiport.TargetResolution.EXPLICIT).states().stream().filter(state->state.effective()).count();
+            if(effectiveTotal!=0)throw new IllegalStateException("无参数时后端参数事实总数必须为 0");
+            frame.show(0,effectiveTotal);
+            if (progressBar().isVisible()) {
+                throw new IllegalStateException("全部无参数时进度条应隐藏");
+            }
+            // 相邻修复：提取运行期间进度条/状态栏归提取任务独占，解析回调不得覆盖
+            frame.running=true;
+            progressBar().setVisible(true);
+            progressBar().setProgress(0.5);
+            String labelBefore = statusLabel().getText();
+            frame.show(0,1);
+            if (Math.abs(progressBar().getProgress() - 0.5) > 0.001
+                    || !statusLabel().getText().equals(labelBefore)) {
+                frame.running=false;
+                throw new IllegalStateException("提取期间解析回调不应覆盖进度条/状态栏");
+            }
+            frame.running=false;
+            observation.close();
+            this.view.clearUndoStack(); this.view.clearDataOrder(); FxDelay.pause(100);
+            // 恢复全局参数并重解析
+            if(savedGlobal!=null)this.view.textParamsCache(savedGlobal);
+            this.view.refreshAfterParamsChanged();
+            FxDelay.pause(500);
+            out.println("[PASS] Progress bar counts only effective-param items"); p++;
+        } catch (Exception e) { out.println("[FAIL] Progress bar param-scope: " + e.getMessage()); f++; }
+        finally { this.view.clearUndoStack(); this.view.clearDataOrder(); FxDelay.pause(100); }
+
         // 文本参数弹窗：开关联动 + 确定生效
-        try { textModeToggle().setSelected(true); Thread.sleep(200);
+        try { textModeToggle().setSelected(true); FxDelay.pause(200);
             ParamFormPane textDialog = openSidePanel(false, ParamScope.GLOBAL);
-            Thread.sleep(300);
-            textDialog.enableLimitCheck.setSelected(true); textDialog.useRegexCheck.setSelected(true);
-            textDialog.separateFilesCheck.setSelected(true); textDialog.autoFixEncodingCheck.setSelected(true);
-            textDialog.addChapterNumberCheck.setSelected(true); textDialog.enableTitleExtractCheck.setSelected(true);
-            textDialog.confirmButton.fire(); Thread.sleep(200);
+            FxDelay.pause(300);
+            textDialog.enableLimitCheck.setSelected(true); FxDelay.pause(1); textDialog.useRegexCheck.setSelected(true); FxDelay.pause(1);
+            textDialog.separateFilesCheck.setSelected(true); FxDelay.pause(1); textDialog.autoFixEncodingCheck.setSelected(true); FxDelay.pause(1);
+            textDialog.addChapterNumberCheck.setSelected(true); FxDelay.pause(1); textDialog.enableTitleExtractCheck.setSelected(true); FxDelay.pause(1);
+            textDialog.confirmButton.fire(); FxDelay.pause(200);
             if (lastPanelCommit == null) { throw new IllegalStateException("参数窗口未确认"); }
             this.view.applyConfirmedParams(false, lastPanelCommit);
             out.println("[PASS] Text param dialog"); p++;
         } catch (Exception e) { out.println("[FAIL] Text param dialog: " + e.getMessage()); f++; }
 
         // 图片参数弹窗
-        try { imageModeToggle().setSelected(true); Thread.sleep(200);
+        try { imageModeToggle().setSelected(true); FxDelay.pause(200);
             ParamFormPane imageDialog = openSidePanel(true, ParamScope.GLOBAL);
-            Thread.sleep(300);
-            imageDialog.imageNameExtractCheck.setSelected(true);
-            imageDialog.imageRegionExtractCheck.setSelected(true);
-            imageDialog.imageRenameCheck.setSelected(true);
-            imageDialog.imageZipCheck.setSelected(true);
-            imageDialog.singleOutputCheck.setSelected(true);
-            imageDialog.confirmButton.fire(); Thread.sleep(200);
+            FxDelay.pause(300);
+            imageDialog.imageNameExtractCheck.setSelected(true); FxDelay.pause(1);
+            imageDialog.imageRegionExtractCheck.setSelected(true); FxDelay.pause(1);
+            imageDialog.imageRenameCheck.setSelected(true); FxDelay.pause(1);
+            imageDialog.imageZipCheck.setSelected(true); FxDelay.pause(1);
+            imageDialog.singleOutputCheck.setSelected(true); FxDelay.pause(1);
+            imageDialog.confirmButton.fire(); FxDelay.pause(200);
             if (lastPanelCommit == null) { throw new IllegalStateException("参数窗口未确认"); }
             this.view.applyConfirmedParams(true, lastPanelCommit);
             out.println("[PASS] Image param dialog"); p++;
         } catch (Exception e) { out.println("[FAIL] Image param dialog: " + e.getMessage()); f++; }
 
         // 增量导入：先导入 2 个，追加 1 个后再次导入 → 仅新增 1 个
-        try { textModeToggle().setSelected(true); Thread.sleep(200);
-            inputFolderField().setText(textDir.toString()); Thread.sleep(1200);
+        try { textModeToggle().setSelected(true); FxDelay.pause(200);
+            inputFolderField().setText(textDir.toString()); FxDelay.pause(1200);
             waitForImportDone();
             long before = this.view.visibleCount();
             createSampleMht(textDir, "t03.mht");
-            this.view.importFromFolder(textDir.toString()); Thread.sleep(500);
+            this.view.importFromFolder(textDir.toString()); FxDelay.pause(500);
             waitForImportDone();
             if (this.view.visibleCount() != before + 1) {
                 throw new IllegalStateException("增量导入数量不符：" + before + " -> " + this.view.visibleCount());
@@ -237,11 +378,11 @@ public boolean runAutomatedTests() {
 
         // 撤销导入后同目录可重新导入（回归：撤销导入曾清空列表且无法重新导入）
         try { long before = this.view.visibleCount();
-            undoButton().fire(); Thread.sleep(400);
+            undoButton().fire(); FxDelay.pause(400);
             if (this.view.visibleCount() != before - 1) {
                 throw new IllegalStateException("撤销导入数量不符：" + before + " -> " + this.view.visibleCount());
             }
-            this.view.importFromFolder(textDir.toString()); Thread.sleep(500);
+            this.view.importFromFolder(textDir.toString()); FxDelay.pause(500);
             waitForImportDone();
             if (this.view.visibleCount() != before) {
                 throw new IllegalStateException("撤销导入后重新导入失败：" + this.view.visibleCount());
@@ -279,7 +420,7 @@ public boolean runAutomatedTests() {
                     MhtImportPlanner.DEFAULT_MAX_GROUPS, MhtImportPlanner.DEFAULT_MAX_FILES).nextRound();
 
             // 应用（与生产同一实现）
-            this.view.applyImportPlan(plan); Thread.sleep(600);
+            this.view.applyImportPlan(plan); FxDelay.pause(600);
             if (this.view.visibleCount() != before + 6) throw new IllegalStateException("导入总数不符：" + this.view.visibleCount()); // 2 根 + 4 组内
             if (this.view.topLevelGroups().size() != groupsBefore + 4) throw new IllegalStateException("组数不符");
             boolean noMhtGroup = this.view.topLevelGroups().stream().anyMatch(g -> "noMhtHere".equals(g.getName()));
@@ -294,7 +435,7 @@ public boolean runAutomatedTests() {
         try {
             int itemsBefore = (int) this.view.visibleCount();
             int groupsBefore = this.view.topLevelGroups().size();
-            undoButton().fire(); Thread.sleep(600);
+            undoButton().fire(); FxDelay.pause(600);
             if (this.view.visibleCount() != itemsBefore - 6) throw new IllegalStateException("整批撤销项目数不符：" + this.view.visibleCount());
             if (this.view.topLevelGroups().size() != groupsBefore - 4) throw new IllegalStateException("整批撤销未带走自动创建的组");
             out.println("[PASS] Unified import: single undo removes whole batch (items + groups)"); p++;
@@ -308,28 +449,32 @@ public boolean runAutomatedTests() {
             createSampleMht(sub1, "s1.mht");
             int itemsBefore = (int) this.view.visibleCount();
             int groupsBefore = this.view.topLevelGroups().size();
-            this.view.importByPaths(List.of(root.toString()), I18n.get("test.autoReimport"), false); Thread.sleep(800);
+            this.view.importByPaths(List.of(root.toString()), I18n.get("test.autoReimport"), false); FxDelay.pause(800);
             waitForImportDone();
             if (this.view.visibleCount() != itemsBefore + 2 || this.view.topLevelGroups().size() != groupsBefore + 1) {
                 throw new IllegalStateException("首次导入目录失败");
             }
             // 为导入条目设置条目级参数 → 重复导入不得清空（RISK-1 拍板）
-            PreviewItem r1 = this.view.allPreviewItems().stream()
+            PreviewRow r1 = this.view.allPreviewItems().stream()
                     .filter(i -> i.path.endsWith("r1.mht")).findFirst().orElse(null);
             if (r1 == null) {
                 throw new IllegalStateException("未找到导入条目");
             }
-            r1.textItemParams = new AppConfig();
-            this.view.importByPaths(List.of(root.toString()), I18n.get("test.autoReimport"), false); Thread.sleep(800);
+            this.view.applyItemParams(r1, false, new AppConfig()); FxDelay.pause(100);
+            this.view.importByPaths(List.of(root.toString()), I18n.get("test.autoReimport"), false); FxDelay.pause(800);
             waitForImportDone();
             if (this.view.visibleCount() != itemsBefore + 2 || this.view.topLevelGroups().size() != groupsBefore + 1) {
                 throw new IllegalStateException("重复导入不应改变列表");
             }
-            if (r1.textItemParams == null) {
+            if (r1.getTextParamsCache() == null) {
                 throw new IllegalStateException("重复导入清空了既有条目级参数");
             }
-            // 清场：撤销本次导入（后续测试段假设列表为 3 个顶层项目、无组）
-            undoButton().fire(); Thread.sleep(600);
+            // 参数命令也写后端撤销栈：先撤参数，再撤导入，保留后续三个顶层项的前置条件。
+            undoButton().fire(); FxDelay.pause(100);
+            if(r1.getTextParamsCache()!=null)throw new IllegalStateException("清场撤销条目参数失败");
+            undoButton().fire(); FxDelay.pause(600);
+            if(this.view.visibleCount()!=itemsBefore||this.view.topLevelGroups().size()!=groupsBefore)
+                throw new IllegalStateException("清场撤销导入未恢复模型计数");
             out.println("[PASS] Unified import: re-import is a no-op"); p++;
         } catch (Exception e) { out.println("[FAIL] Unified import re-import: " + e.getMessage()); f++; }
 
@@ -358,36 +503,36 @@ public boolean runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Drag-drop highlight: " + e.getMessage()); f++; }
 
         // 复选框列头全选/全不选（三态联动）
-        try { selectAllCheck().fire(); Thread.sleep(200);
+        try { selectAllCheck().fire(); FxDelay.pause(200);
             long sel = this.view.allVisibleItems().stream().filter(i -> i.selected).count();
             if (sel != this.view.visibleCount()) { throw new IllegalStateException("全选未生效: " + sel); }
-            selectAllCheck().fire(); Thread.sleep(200);
+            selectAllCheck().fire(); FxDelay.pause(200);
             sel = this.view.allVisibleItems().stream().filter(i -> i.selected).count();
             if (sel != 0) { throw new IllegalStateException("全不选未生效: " + sel); }
             out.println("[PASS] Select-all checkbox tri-state"); p++;
         } catch (Exception e) { out.println("[FAIL] Select-all checkbox: " + e.getMessage()); f++; }
 
         // 移除 + 撤销（部分勾选不弹确认框）
-        try { List<PreviewItem> vis = this.view.allVisibleItems();
-            vis.get(0).setSelected(true); Thread.sleep(200);
-            removeButton().fire(); Thread.sleep(300);
+        try { List<PreviewRow> vis = this.view.allVisibleItems();
+            vis.get(0).setSelected(true); FxDelay.pause(1); FxDelay.pause(200);
+            removeButton().fire(); FxDelay.pause(300);
             if (vis.get(0).removed != true) { throw new IllegalStateException("移除未生效"); }
-            undoButton().fire(); Thread.sleep(300);
+            undoButton().fire(); FxDelay.pause(300);
             if (vis.get(0).removed) { throw new IllegalStateException("撤销移除未生效"); }
             out.println("[PASS] Remove + undo"); p++;
         } catch (Exception e) { out.println("[FAIL] Remove + undo: " + e.getMessage()); f++; }
 
         // 合并为组 + 组名编辑 + 组参数 + 拆分组 + 撤销
-        try { List<PreviewItem> vis = this.view.allVisibleItems();
-            this.view.allVisibleItems().forEach(i -> i.setSelected(false));
-            vis.get(0).setSelected(true); vis.get(1).setSelected(true);
-            groupButton().fire(); Thread.sleep(400);
-            List<GroupItem<PreviewItem>> groups = this.view.topLevelGroups();
+        try { List<PreviewRow> vis = this.view.allVisibleItems();
+            this.view.allVisibleItems().forEach(i -> i.setSelected(false)); FxDelay.pause(1);
+            vis.get(0).setSelected(true); FxDelay.pause(1); vis.get(1).setSelected(true); FxDelay.pause(1);
+            groupButton().fire(); FxDelay.pause(400);
+            List<GroupRow<PreviewRow>> groups = this.view.topLevelGroups();
             if (groups.size() != 1) { throw new IllegalStateException("建组失败: " + groups.size()); }
-            GroupItem<PreviewItem> g = groups.get(0);
-            listView().getSelectionModel().select(g); Thread.sleep(300);
+            GroupRow<PreviewRow> g = groups.get(0);
+            listView().getSelectionModel().select(g); FxDelay.pause(300);
             String autoGroup = I18n.get("test.autoGroup");
-            groupNameField().setText(autoGroup); Thread.sleep(300);
+            groupNameField().setText(autoGroup); FxDelay.pause(300);
             if (!autoGroup.equals(g.getName())) { throw new IllegalStateException("组名编辑失败"); }
             // 折叠/展开动画（触发后立即快进验证终态；FX 线程 sleep 会阻塞 pulse 动画无法推进）
             this.view.toggleGroupExpanded(g);
@@ -396,22 +541,22 @@ public boolean runAutomatedTests() {
             this.view.toggleGroupExpanded(g);
             this.view.finishExpandAnim();
             if (!g.isExpanded()) { throw new IllegalStateException("展开动画未生效"); }
-            Thread.sleep(300);
+            FxDelay.pause(300);
             ParamFormPane groupDialog = openSidePanel(false, new ParamScope.GroupTarget(g));
-            Thread.sleep(300);
-            groupDialog.enableTitleExtractCheck.setSelected(true);
-            groupDialog.confirmButton.fire(); Thread.sleep(300);
+            FxDelay.pause(300);
+            groupDialog.enableTitleExtractCheck.setSelected(true); FxDelay.pause(1);
+            groupDialog.confirmButton.fire(); FxDelay.pause(300);
             if (lastPanelCommit == null) { throw new IllegalStateException("组参数窗口未确认"); }
-            this.view.applyGroupParams(g, false, lastPanelCommit); Thread.sleep(300);
+            this.view.applyGroupParams(g, false, lastPanelCommit); FxDelay.pause(300);
             if (g.getTextParamsCache() == null) { throw new IllegalStateException("组参数未写入"); }
-            listView().getSelectionModel().select(g); Thread.sleep(200);
-            ungroupButton().fire(); Thread.sleep(300);
+            listView().getSelectionModel().select(g); FxDelay.pause(200);
+            ungroupButton().fire(); FxDelay.pause(300);
             if (this.view.topLevelGroups().size() != 0) { throw new IllegalStateException("拆分组失败"); }
-            undoButton().fire(); Thread.sleep(300);
+            undoButton().fire(); FxDelay.pause(300);
             if (this.view.topLevelGroups().size() != 1 || !autoGroup.equals(this.view.topLevelGroups().get(0).getName())) {
                 throw new IllegalStateException("撤销拆分失败（组名/参数未恢复）");
             }
-            undoButton().fire(); Thread.sleep(300);   // 撤销组参数（PARAM_SET）
+            undoButton().fire(); FxDelay.pause(300);   // 撤销组参数（PARAM_SET）
             if (g.getTextParamsCache() != null) {
                 throw new IllegalStateException("撤销组参数失败");
             }
@@ -419,62 +564,62 @@ public boolean runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Group ops: " + e.getMessage()); f++; }
 
         // 拖拽（performDrop 程序化驱动）+ 撤销；第二组用单项目建组（R9）
-        try { undoButton().fire(); Thread.sleep(300);   // 撤销上一段建组，成员回顶层
-            List<PreviewItem> vis = this.view.allVisibleItems();
+        try { undoButton().fire(); FxDelay.pause(300);   // 撤销上一段建组，成员回顶层
+            List<PreviewRow> vis = this.view.allVisibleItems();
             if (vis.size() < 3) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
-            this.view.allVisibleItems().forEach(i -> i.setSelected(false));
-            vis.get(0).setSelected(true); vis.get(1).setSelected(true);
-            groupButton().fire(); Thread.sleep(400);
-            this.view.allVisibleItems().forEach(i -> i.setSelected(false));
-            List<PreviewItem> tops = this.view.allVisibleItems().stream()
+            this.view.allVisibleItems().forEach(i -> i.setSelected(false)); FxDelay.pause(1);
+            vis.get(0).setSelected(true); FxDelay.pause(1); vis.get(1).setSelected(true); FxDelay.pause(1);
+            groupButton().fire(); FxDelay.pause(400);
+            this.view.allVisibleItems().forEach(i -> i.setSelected(false)); FxDelay.pause(1);
+            List<PreviewRow> tops = this.view.allVisibleItems().stream()
                     .filter(i -> i.parentGroup == null).toList();
-            tops.get(0).setSelected(true);
-            groupButton().fire(); Thread.sleep(400);
-            List<GroupItem<PreviewItem>> groups = this.view.topLevelGroups();
+            tops.get(0).setSelected(true); FxDelay.pause(1);
+            groupButton().fire(); FxDelay.pause(400);
+            List<GroupRow<PreviewRow>> groups = this.view.topLevelGroups();
             if (groups.size() != 2) { throw new IllegalStateException("建第二组失败: " + groups.size()); }
-            GroupItem<PreviewItem> g1 = groups.get(0); GroupItem<PreviewItem> g2 = groups.get(1);
+            GroupRow<PreviewRow> g1 = groups.get(0); GroupRow<PreviewRow> g2 = groups.get(1);
             this.view.performDrop(this.view.visibleMembersOf(g1).get(1), this.view.visibleMembersOf(g1).get(0),
-                    DropResolver.Zone.TOP); this.view.rebuildDisplay(); Thread.sleep(200);
+                    DropResolver.Zone.TOP); this.view.rebuildDisplay(); FxDelay.pause(200);
             this.view.performDrop(this.view.visibleMembersOf(g1).get(0), g2, DropResolver.Zone.INTO);
-            this.view.rebuildDisplay(); Thread.sleep(200);
+            this.view.rebuildDisplay(); FxDelay.pause(200);
             this.view.performDrop(g2, g1, DropResolver.Zone.INTO);
-            this.view.rebuildDisplay(); Thread.sleep(200);
+            this.view.rebuildDisplay(); FxDelay.pause(200);
             if (this.view.topLevelGroups().size() != 1) { throw new IllegalStateException("两组合并失败"); }
-            undoButton().fire(); Thread.sleep(300);   // 撤销组合并
-            undoButton().fire(); Thread.sleep(300);   // 撤销入组
-            undoButton().fire(); Thread.sleep(300);   // 撤销组内排序
+            undoButton().fire(); FxDelay.pause(300);   // 撤销组合并
+            undoButton().fire(); FxDelay.pause(300);   // 撤销入组
+            undoButton().fire(); FxDelay.pause(300);   // 撤销组内排序
             if (this.view.topLevelGroups().size() != 2) { throw new IllegalStateException("撤销拖拽失败"); }
             out.println("[PASS] Drag-drop (reorder/cross-group/merge) + undo"); p++;
         } catch (Exception e) { out.println("[FAIL] Drag-drop: " + e.getMessage()); f++; }
 
         // 条目独立参数 + 应用到全局 + 撤销链（条目独立参数需求）
         try {
-            undoButton().fire(); Thread.sleep(300);   // 撤销建组（第二组）
-            undoButton().fire(); Thread.sleep(300);   // 撤销建组（第一组）
-            List<PreviewItem> vis = this.view.allVisibleItems();
+            undoButton().fire(); FxDelay.pause(300);   // 撤销建组（第二组）
+            undoButton().fire(); FxDelay.pause(300);   // 撤销建组（第一组）
+            List<PreviewRow> vis = this.view.allVisibleItems();
             if (vis.size() < 2) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
-            PreviewItem target = vis.get(0);
+            PreviewRow target = vis.get(0);
             ParamFormPane itemDialog = openSidePanel(false,
-                    new ParamScope.ItemTarget<>(target, target.textItemParams, target.imageItemParams));
-            itemDialog.enableTitleExtractCheck.setSelected(true);
-            itemDialog.confirmButton.fire(); Thread.sleep(300);
+                    new ParamScope.ItemTarget<>(target, target.getTextParamsCache(), target.getImageParamsCache()));
+            itemDialog.enableTitleExtractCheck.setSelected(true); FxDelay.pause(1);
+            itemDialog.confirmButton.fire(); FxDelay.pause(300);
             if (lastPanelCommit == null) { throw new IllegalStateException("条目参数窗口未确认"); }
             this.view.applyItemParams(target, false, lastPanelCommit);
-            if (target.textItemParams == null) { throw new IllegalStateException("条目参数未写入"); }
-            listView().getSelectionModel().select(target); Thread.sleep(200);
+            if (target.getTextParamsCache() == null) { throw new IllegalStateException("条目参数未写入"); }
+            listView().getSelectionModel().select(target); FxDelay.pause(200);
             if (applyGlobalButton().isDisabled()) { throw new IllegalStateException("应用到全局按钮未启用"); }
             AppConfig globalBeforeApply = this.view.textParamsCache();
-            applyGlobalButton().fire(); Thread.sleep(300);
-            if (target.textItemParams != null
-                    || this.view.allVisibleItems().stream().anyMatch(i -> i.textItemParams != null)) {
+            applyGlobalButton().fire(); FxDelay.pause(300);
+            if (target.getTextParamsCache() != null
+                    || this.view.allVisibleItems().stream().anyMatch(i -> i.getTextParamsCache() != null)) {
                 throw new IllegalStateException("应用到全局未清空独立参数");
             }
-            undoButton().fire(); Thread.sleep(300);   // 撤销应用到全局
-            if (target.textItemParams == null || this.view.textParamsCache() != globalBeforeApply) {
+            undoButton().fire(); FxDelay.pause(300);   // 撤销应用到全局
+            if (target.getTextParamsCache() == null || !java.util.Objects.equals(this.view.textParamsCache(), globalBeforeApply)) {
                 throw new IllegalStateException("撤销应用到全局未恢复");
             }
-            undoButton().fire(); Thread.sleep(300);   // 撤销条目参数
-            if (target.textItemParams != null) {
+            undoButton().fire(); FxDelay.pause(300);   // 撤销条目参数
+            if (target.getTextParamsCache() != null) {
                 throw new IllegalStateException("撤销条目参数未恢复");
             }
             out.println("[PASS] Item params + apply-global + undo chain"); p++;
@@ -482,32 +627,32 @@ public boolean runAutomatedTests() {
 
         // 清除参数（清除参数功能）：按钮/菜单禁用态 + 条目清除 + 撤销恢复（拍板 Q1-Q3）
         try {
-            List<PreviewItem> vis = this.view.allVisibleItems();
+            List<PreviewRow> vis = this.view.allVisibleItems();
             if (vis.size() < 3) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
-            textModeToggle().setSelected(true); Thread.sleep(300);
-            this.view.allVisibleItems().forEach(i -> i.setSelected(false));
+            textModeToggle().setSelected(true); FxDelay.pause(300);
+            this.view.allVisibleItems().forEach(i -> i.setSelected(false)); FxDelay.pause(1);
             this.view.updateListButtons();
-            PreviewItem a = vis.get(0), b = vis.get(1);
+            PreviewRow a = vis.get(0), b = vis.get(1);
             if (!clearParamsButton().isDisabled()) { throw new IllegalStateException("无独立参数时按钮应禁用"); }
             ParamFormPane itemDlg = openSidePanel(false,
-                    new ParamScope.ItemTarget<>(a, a.textItemParams, a.imageItemParams));
-            itemDlg.enableTitleExtractCheck.setSelected(true);
-            itemDlg.confirmButton.fire(); Thread.sleep(300);
+                    new ParamScope.ItemTarget<>(a, a.getTextParamsCache(), a.getImageParamsCache()));
+            itemDlg.enableTitleExtractCheck.setSelected(true); FxDelay.pause(1);
+            itemDlg.confirmButton.fire(); FxDelay.pause(300);
             if (lastPanelCommit == null) { throw new IllegalStateException("条目参数窗口未确认"); }
             this.view.applyItemParams(a, false, lastPanelCommit);
-            if (a.textItemParams == null) { throw new IllegalStateException("条目参数未写入"); }
-            listView().getSelectionModel().select(a); Thread.sleep(200);
+            if (a.getTextParamsCache() == null) { throw new IllegalStateException("条目参数未写入"); }
+            listView().getSelectionModel().select(a); FxDelay.pause(200);
             if (clearParamsButton().isDisabled()) { throw new IllegalStateException("选中带参数条目时按钮应启用"); }
             listView().getSelectionModel().select(b); this.view.updateListButtons();
             if (!clearParamsButton().isDisabled()) { throw new IllegalStateException("选中无参数条目时按钮应禁用"); }
-            a.setSelected(true); b.setSelected(true); this.view.updateListButtons();
+            a.setSelected(true); FxDelay.pause(1); b.setSelected(true); FxDelay.pause(1); this.view.updateListButtons();
             if (clearParamsButton().isDisabled()) { throw new IllegalStateException("勾选集合含参数目标时按钮应启用"); }
-            clearParamsButton().fire(); Thread.sleep(300);
-            if (a.textItemParams != null) { throw new IllegalStateException("清除条目参数未生效"); }
+            clearParamsObserved(out);
+            if (a.getTextParamsCache() != null) { throw new IllegalStateException("清除条目参数未生效"); }
             if (!clearParamsButton().isDisabled()) { throw new IllegalStateException("清除后按钮应禁用"); }
-            this.view.allVisibleItems().forEach(i -> i.setSelected(false)); this.view.updateListButtons();
-            undoButton().fire(); Thread.sleep(300);
-            if (a.textItemParams == null) { throw new IllegalStateException("撤销清除参数未恢复"); }
+            this.view.allVisibleItems().forEach(i -> i.setSelected(false)); FxDelay.pause(1); this.view.updateListButtons();
+            undoButton().fire(); FxDelay.pause(300);
+            if (a.getTextParamsCache() == null) { throw new IllegalStateException("撤销清除参数未恢复"); }
             // 菜单启用态：空白/无参数禁用、带参数启用（启用看右键目标）
             this.view.updateContextMenuState(null);
             if (!this.view.ctxClearParams().isDisable()) { throw new IllegalStateException("空白区清除参数应禁用"); }
@@ -520,98 +665,45 @@ public boolean runAutomatedTests() {
 
         // 清除参数组语义：组内成员/组条目 → 清整组；混合多选（组内+组外）→ 都清；一次撤销全部恢复
         try {
-            List<PreviewItem> vis = this.view.allVisibleItems();
+            List<PreviewRow> vis = this.view.allVisibleItems();
             if (vis.size() < 3) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
-            this.view.allVisibleItems().forEach(i -> i.setSelected(false));
-            PreviewItem a = vis.get(0), b = vis.get(1), c = vis.get(2);
-            b.setSelected(true); c.setSelected(true);
-            groupButton().fire(); Thread.sleep(400);
-            List<GroupItem<PreviewItem>> groups = this.view.topLevelGroups();
+            this.view.allVisibleItems().forEach(i -> i.setSelected(false)); FxDelay.pause(1);
+            PreviewRow a = vis.get(0), b = vis.get(1), c = vis.get(2);
+            b.setSelected(true); FxDelay.pause(1); c.setSelected(true); FxDelay.pause(1);
+            groupButton().fire(); FxDelay.pause(400);
+            List<GroupRow<PreviewRow>> groups = this.view.topLevelGroups();
             if (groups.size() != 1) { throw new IllegalStateException("建组失败: " + groups.size()); }
-            GroupItem<PreviewItem> g = groups.get(0);
+            GroupRow<PreviewRow> g = groups.get(0);
             ParamFormPane groupDlg = openSidePanel(false, new ParamScope.GroupTarget(g));
-            groupDlg.enableTitleExtractCheck.setSelected(true);
-            groupDlg.confirmButton.fire(); Thread.sleep(300);
+            groupDlg.enableTitleExtractCheck.setSelected(true); FxDelay.pause(1);
+            groupDlg.confirmButton.fire(); FxDelay.pause(300);
             if (lastPanelCommit == null) { throw new IllegalStateException("组参数窗口未确认"); }
             this.view.applyGroupParams(g, false, lastPanelCommit);
             if (g.getTextParamsCache() == null) { throw new IllegalStateException("组参数未写入"); }
             // a（组外带参数）+ b（组内成员）混合多选 → 清 a 条目参数 + 清整组 g 参数（同组去重）
-            a.setSelected(true); b.setSelected(true); this.view.updateListButtons();
+            a.setSelected(true); FxDelay.pause(1); b.setSelected(true); FxDelay.pause(1); this.view.updateListButtons();
             if (clearParamsButton().isDisabled()) { throw new IllegalStateException("混合多选按钮应启用"); }
-            clearParamsButton().fire(); Thread.sleep(300);
-            if (a.textItemParams != null) { throw new IllegalStateException("组外条目参数未清除"); }
+            clearParamsObserved(out);
+            if (a.getTextParamsCache() != null) { throw new IllegalStateException("组外条目参数未清除"); }
             if (g.getTextParamsCache() != null) { throw new IllegalStateException("组参数未清除"); }
-            undoButton().fire(); Thread.sleep(300);
-            if (a.textItemParams == null || g.getTextParamsCache() == null) {
+            undoButton().fire(); FxDelay.pause(300);
+            if (a.getTextParamsCache() == null || g.getTextParamsCache() == null) {
                 throw new IllegalStateException("撤销混合清除未全部恢复");
             }
             // 清场恢复：撤销组参数、建组、条目参数，回到本段前状态
-            undoButton().fire(); Thread.sleep(300);
-            undoButton().fire(); Thread.sleep(300);
-            undoButton().fire(); Thread.sleep(300);
-            if (this.view.topLevelGroups().size() != 0 || a.textItemParams != null) {
+            undoButton().fire(); FxDelay.pause(300);
+            undoButton().fire(); FxDelay.pause(300);
+            undoButton().fire(); FxDelay.pause(300);
+            if (this.view.topLevelGroups().size() != 0 || a.getTextParamsCache() != null) {
                 throw new IllegalStateException("清除参数测试段清场失败");
             }
             out.println("[PASS] Clear params (group + mixed multi-select + single undo)"); p++;
         } catch (Exception e) { out.println("[FAIL] Clear params group: " + e.getMessage()); f++; }
 
-        // 进度条口径（修复：独立参数场景无参数条目导致进度条卡中间）——只统计有生效参数条目
-        try {
-            List<PreviewItem> vis = this.view.allVisibleItems();
-            if (vis.size() < 2) { throw new IllegalStateException("顶层项目不足: " + vis.size()); }
-            textModeToggle().setSelected(true); Thread.sleep(300);
-            this.view.cancelWorkspaceActivity();   // 作废在途解析代次，保证断言确定性
-            AppConfig savedGlobal = this.view.textParamsCache();
-            for (PreviewItem it : this.view.allPreviewItems()) {
-                it.textItemParams = null;
-                it.status = PreviewItem.Status.WAITING;
-            }
-            PreviewItem p0 = vis.get(0);
-            this.view.textParamsCache(null);               // 全局未确认
-            p0.textItemParams = new AppConfig();  // 仅该条目有独立参数
-            this.view.updateProgressStatus(this.view.parseToken());
-            if (!progressBar().isVisible() || Math.abs(progressBar().getProgress()) > 0.001) {
-                throw new IllegalStateException("无参数条目不应参与进度（期望可见且 0/1）");
-            }
-            if (!progressBar().getStyleClass().contains("progress-preparse")) {
-                throw new IllegalStateException("预解析进度条应为浅蓝样式");
-            }
-            p0.status = PreviewItem.Status.READY;
-            this.view.updateProgressStatus(this.view.parseToken());
-            if (progressBar().isVisible()) {
-                throw new IllegalStateException("有参数条目全部完成后进度条应隐藏");
-            }
-            if (progressBar().getStyleClass().contains("progress-preparse")) {
-                throw new IllegalStateException("预解析完成后应移除浅蓝样式");
-            }
-            p0.textItemParams = null;
-            this.view.updateProgressStatus(this.view.parseToken());
-            if (progressBar().isVisible()) {
-                throw new IllegalStateException("全部无参数时进度条应隐藏");
-            }
-            // 相邻修复：提取运行期间进度条/状态栏归提取任务独占，解析回调不得覆盖
-            this.view.running().set(true);
-            progressBar().setVisible(true);
-            progressBar().setProgress(0.5);
-            String labelBefore = statusLabel().getText();
-            this.view.updateProgressStatus(this.view.parseToken());
-            if (Math.abs(progressBar().getProgress() - 0.5) > 0.001
-                    || !statusLabel().getText().equals(labelBefore)) {
-                this.view.running().set(false);
-                throw new IllegalStateException("提取期间解析回调不应覆盖进度条/状态栏");
-            }
-            this.view.running().set(false);
-            // 恢复全局参数并重解析
-            this.view.textParamsCache(savedGlobal);
-            this.view.refreshAfterParamsChanged();
-            Thread.sleep(500);
-            out.println("[PASS] Progress bar counts only effective-param items"); p++;
-        } catch (Exception e) { out.println("[FAIL] Progress bar param-scope: " + e.getMessage()); f++; }
-
         // 双击 toggle 勾选（回归：CLICKED 事件按键判定须用 getButton，isPrimaryButtonDown 恒为 false）
         try {
-            List<PreviewItem> vis = this.view.allVisibleItems();
-            PreviewItem dt = vis.get(0);
+            List<PreviewRow> vis = this.view.allVisibleItems();
+            PreviewRow dt = vis.get(0);
             boolean before = dt.selected;
             javafx.scene.Node targetCell = this.view.findCellNode(dt);
             if (targetCell == null) { throw new IllegalStateException("未找到条目 cell"); }
@@ -620,26 +712,30 @@ public boolean runAutomatedTests() {
                     100, 10, 0, 0, javafx.scene.input.MouseButton.PRIMARY, 2,
                     false, false, false, false, false, false, false,
                     false, false, false, null);
-            targetCell.fireEvent(click2); Thread.sleep(300);
+            targetCell.fireEvent(click2); FxDelay.pause(300);
             if (dt.selected == before) {
                 throw new IllegalStateException("双击未切换勾选状态");
             }
             // 快速连续双击：第二次手势的 click 序列为 3、4（多击窗口内递增）→ 奇数跳过、偶数 toggle
+            targetCell=this.view.findCellNode(dt);
+            if(targetCell==null)throw new IllegalStateException("第三次点击前条目 cell 不可见");
             javafx.scene.input.MouseEvent click3 = new javafx.scene.input.MouseEvent(
                     javafx.scene.input.MouseEvent.MOUSE_CLICKED,
                     100, 10, 0, 0, javafx.scene.input.MouseButton.PRIMARY, 3,
                     false, false, false, false, false, false, false,
                     false, false, false, null);
-            targetCell.fireEvent(click3); Thread.sleep(200);
+            targetCell.fireEvent(click3); FxDelay.pause(200);
             if (dt.selected == before) {
                 throw new IllegalStateException("奇数次 click 不应 toggle");
             }
+            targetCell=this.view.findCellNode(dt);
+            if(targetCell==null)throw new IllegalStateException("第四次点击前条目 cell 不可见");
             javafx.scene.input.MouseEvent click4 = new javafx.scene.input.MouseEvent(
                     javafx.scene.input.MouseEvent.MOUSE_CLICKED,
                     100, 10, 0, 0, javafx.scene.input.MouseButton.PRIMARY, 4,
                     false, false, false, false, false, false, false,
                     false, false, false, null);
-            targetCell.fireEvent(click4); Thread.sleep(300);
+            targetCell.fireEvent(click4); FxDelay.pause(300);
             if (dt.selected != before) {
                 throw new IllegalStateException("偶数次 click 应 toggle");
             }
@@ -649,12 +745,12 @@ public boolean runAutomatedTests() {
         // 输出单元拆分：组 + 未分组（撤销链后状态已变化，此处自行建组构造确定状态）
         try { String sessionDir = new File(System.getProperty("java.io.tmpdir"),
                     "mht-auto-session").getPath();
-            List<PreviewItem> vis = this.view.allVisibleItems();
+            List<PreviewRow> vis = this.view.allVisibleItems();
             if (vis.size() >= 3) {
-                this.view.allVisibleItems().forEach(i -> i.setSelected(false));
-                vis.get(0).setSelected(true);
-                vis.get(1).setSelected(true);
-                groupButton().fire(); Thread.sleep(400);
+                this.view.allVisibleItems().forEach(i -> i.setSelected(false)); FxDelay.pause(1);
+                vis.get(0).setSelected(true); FxDelay.pause(1);
+                vis.get(1).setSelected(true); FxDelay.pause(1);
+                groupButton().fire(); FxDelay.pause(400);
             }
             var units = this.view.outputUnitPlan(false);
             if (units.size() < 2) { throw new IllegalStateException("输出单元数异常: " + units.size()); }
@@ -664,17 +760,17 @@ public boolean runAutomatedTests() {
         // 功能一（步骤 3）：未命名组门 —— 上一块留下的手工组（默认名）触发确认卡：
         // ① 卡片列出具体组名；② 取消 → 不提取；③ 确定 → 以默认名提取；④ 用户改名 → 不再提醒
         try { waitForImportDone();
-            List<GroupItem<PreviewItem>> unnamed = this.view.topLevelGroups().stream()
+            List<GroupRow<PreviewRow>> unnamed = this.view.topLevelGroups().stream()
                     .filter(g -> g.isDefaultNamed()).toList();
             if (unnamed.size() != 1) {
                 throw new IllegalStateException("前置：应恰有 1 个未命名组，实际 " + unnamed.size());
             }
             String unnamedName = unnamed.get(0).getName();
             outputFolderField().setText(new File(System.getProperty("java.io.tmpdir"),
-                    "mht-auto-output-gate").getPath()); Thread.sleep(200);
+                    "mht-auto-output-gate").getPath()); FxDelay.pause(200);
             // ② 卡片出现且列出组名 → 取消 → 不提取
             this.view.extractStats().set(null);
-            startButton().fire();
+            startExtractionObserved(out);
             waitForConfirmCard();
             String card = modalMessage();
             if (!card.equals(I18n.get("group.unnamedConfirm", "names", unnamedName))
@@ -682,13 +778,13 @@ public boolean runAutomatedTests() {
                 throw new IllegalStateException("未命名组卡文案不符：" + card);
             }
             firePrimary(1);   // 取消
-            Thread.sleep(400); pumpFxEvents();
+            FxDelay.pause(400); pumpFxEvents();
             if (this.view.extractStats().get() != null || this.view.running().get()) {
                 throw new IllegalStateException("取消后不应启动提取");
             }
             // ③ 确定 → 以默认名提取（完成判据 = 新一轮 stats 落地；步骤 7 起完成路径会重新启用开始按钮，
             //    既有提取用例的等待循环因此提前退出，此处仍不把按钮状态当判据）
-            startButton().fire();
+            startExtractionObserved(out);
             waitForConfirmCard();
             firePrimary(0);   // 确定
             long deadline = System.currentTimeMillis() + 20000;
@@ -699,14 +795,14 @@ public boolean runAutomatedTests() {
                 throw new IllegalStateException("确定后提取未在时限内完成");
             }
             // ④ 用户改名 → 标记清除、卡片不再出现
-            listView().getSelectionModel().select(unnamed.get(0)); Thread.sleep(300);
-            groupNameField().setText(I18n.get("test.autoGroup")); Thread.sleep(300);
+            listView().getSelectionModel().select(unnamed.get(0)); FxDelay.pause(300);
+            groupNameField().setText(I18n.get("test.autoGroup")); FxDelay.pause(300);
             if (unnamed.get(0).isDefaultNamed()) { throw new IllegalStateException("用户改名后标记未清除"); }
             ExtractionStats before = this.view.extractStats().get();
             // ③ 的提取禁用过开始按钮，完成路径已会重新启用（步骤 7 终态落地）；此处重算同一派生函数仅作兜底
             this.view.updateStartButtonState();
-            startButton().fire();
-            Thread.sleep(400); pumpFxEvents();
+            startExtractionObserved(out);
+            FxDelay.pause(400); pumpFxEvents();
             if (com.mhtextractor.gui.component.NotificationHost.hasPendingDecision(statusLabel())) {
                 throw new IllegalStateException("已改名组不应再弹确认卡");
             }
@@ -720,44 +816,45 @@ public boolean runAutomatedTests() {
             out.println("[PASS] Unnamed group gate (cancel / confirm / renamed)"); p++;
         } catch (Exception e) { out.println("[FAIL] Unnamed group gate: " + e.getMessage()); f++; }
 
-        try { inputFolderField().setText(textDir.toString()); Thread.sleep(200);
+        try { inputFolderField().setText(textDir.toString()); FxDelay.pause(200);
             out.println("[PASS] Set input folder"); p++;
         } catch (Exception e) { out.println("[FAIL] Input folder: " + e.getMessage()); f++; }
 
         try { outputFolderField().setText(new File(System.getProperty("java.io.tmpdir"),
-                    "mht-auto-output").getPath()); Thread.sleep(200);
+                    "mht-auto-output").getPath()); FxDelay.pause(200);
             out.println("[PASS] Set output folder"); p++;
         } catch (Exception e) { out.println("[FAIL] Output folder: " + e.getMessage()); f++; }
 
         try { ParamFormPane comboDialog = openSidePanel(false, ParamScope.GLOBAL);
-            Thread.sleep(200);
+            FxDelay.pause(200);
             comboDialog.configComboBox.setValue("auto_test");
             comboDialog.configComboBox.getEditor().setText("auto_test");
-            Thread.sleep(200);
-            comboDialog.cancelButton.fire(); Thread.sleep(100);
+            FxDelay.pause(200);
+            comboDialog.cancelButton.fire(); FxDelay.pause(100);
             out.println("[PASS] Config combo"); p++;
         } catch (Exception e) { out.println("[FAIL] Config combo: " + e.getMessage()); f++; }
 
         // 文本预览工作区（主窗口）：列表 + 章节勾选
-        try { textModeToggle().setSelected(true); Thread.sleep(500);
+        try { textModeToggle().setSelected(true); FxDelay.pause(500);
             if (listView().getItems().isEmpty()) { throw new IllegalStateException("文件列表为空"); }
-            listView().getSelectionModel().selectFirst(); Thread.sleep(500);
-            adjustCheck().setSelected(false); Thread.sleep(200);
-            adjustCheck().setSelected(true); Thread.sleep(200);
+            listView().getSelectionModel().selectFirst(); FxDelay.pause(500);
+            adjustCheck().setSelected(false); FxDelay.pause(200);
+            adjustCheck().setSelected(true); FxDelay.pause(200);
             out.println("[PASS] Text preview workspace"); p++;
         } catch (Exception e) { out.println("[FAIL] Text preview workspace: " + e.getMessage()); f++; }
 
         // 文本提取（参数已确认 → 不弹提示；断言单元合并后 fileResults 完整，供回写背景色）
-        try { textModeToggle().setSelected(true); Thread.sleep(300);
+        try { textModeToggle().setSelected(true); FxDelay.pause(300);
             inputFolderField().setText(textDir.toString());
             waitForImportDone();   // 统一导入为异步：先排空（本例为全量已导入 no-op），避免收尾回调在提取期间重算按钮状态
             outputFolderField().setText(new File(System.getProperty("java.io.tmpdir"),
                     "mht-auto-output-text").getPath());
-            startButton().fire();
+            ExtractionStats previousStats=this.view.extractStats().get();
+            startExtractionObserved(out);
             // 提取回调（onSucceeded 等）在 FX 线程事件队列中，须嵌套泵排空后再断言
             long deadline = System.currentTimeMillis() + 20000;
             while (System.currentTimeMillis() < deadline
-                    && (this.view.extractStats().get() == null || startButton().isDisabled())) {
+                    && (this.view.extractStats().get() == null || this.view.extractStats().get()==previousStats || startButton().isDisabled())) {
                 pumpFxEvents();
             }
             ExtractionStats merged = this.view.extractStats().get();
@@ -783,43 +880,46 @@ public boolean runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Text extraction: " + e.getMessage()); f++; }
 
         // 图片预览工作区：查看预览效果（懒加载；C1 落盘断言已外迁至 cache/app 的 JUnit，本块保留 C2 内存契约）
-        try { imageModeToggle().setSelected(true); Thread.sleep(500);
-            PreviewItem pvTarget = this.view.allVisibleItems().stream()
+        try { imageModeToggle().setSelected(true); FxDelay.pause(500);
+            PreviewRow pvTarget = this.view.allVisibleItems().stream()
                     .filter(i -> "t01.mht".equals(i.name)).findFirst()
                     .orElseThrow(() -> new IllegalStateException("找不到 t01.mht"));
-            listView().getSelectionModel().select(pvTarget); Thread.sleep(300);
+            listView().getSelectionModel().select(pvTarget); FxDelay.pause(300);
             previewEffectButton().fire();
             long previewDeadline = System.currentTimeMillis() + 20000;
             while (System.currentTimeMillis() < previewDeadline && this.view.imageLoadActive()) {
                 pumpFxEvents();
             }
-            Thread.sleep(200); pumpFxEvents();
+            FxDelay.pause(200); pumpFxEvents();
             Object selObj = listView().getSelectionModel().getSelectedItem();
-            if (!(selObj instanceof PreviewItem pi) || pi.cachedThumbs == null
+            if (!(selObj instanceof PreviewRow pi) || pi.cachedThumbs == null
                     || pi.cachedThumbs.isEmpty()) {
                 throw new IllegalStateException("预览后应有缩略图（来自磁盘图片解码）");
             }
             // 步骤 6：原「C1 缓存目录三件套 + key 命中」白盒断言已外迁（cache.PreviewCacheKeyTest /
             // cache.PreviewCacheStoreTest / app.PreviewServiceTest 覆盖），本块保留可观察面 C2：
             // 内存只留 meta + 缩略图。
-            if (pi.cachedMeta == null || pi.cachedImages != null) {
-                throw new IllegalStateException("内存应只留 meta + 缩略图（cachedMeta 非空、cachedImages 为空）");
+            if (pi.cachedMeta == null || pi.cachedImages == null
+                    || pi.cachedImages.stream().anyMatch(image -> !java.nio.file.Files.isRegularFile(
+                            java.nio.file.Path.of(image.path())))) {
+                throw new IllegalStateException("内存应只留 manifest 路径 + 缩略图，原图应由后端缓存持有");
             }
             out.println("[PASS] Image preview workspace (C2)"); p++;
         } catch (Exception e) { out.println("[FAIL] Image preview workspace: " + e.getMessage()); f++; }
 
         // 图片提取（含损坏文件 → 满格条应转为浅红，进度条配色拍板）
-        try { imageModeToggle().setSelected(true); Thread.sleep(300);
+        try { imageModeToggle().setSelected(true); FxDelay.pause(300);
             java.nio.file.Files.write(imageDir.resolve("bad.mht"),
                     "garbage-not-a-mht".getBytes(java.nio.charset.StandardCharsets.UTF_8));
             inputFolderField().setText(imageDir.toString());
             waitForImportDone();   // 统一导入为异步：bad.mht 须完成导入后才开始提取，否则无失败条目
             outputFolderField().setText(new File(System.getProperty("java.io.tmpdir"),
                     "mht-auto-output-image").getPath());
-            startButton().fire();
+            ExtractionStats previousStats=this.view.extractStats().get();
+            startExtractionObserved(out);
             long deadline = System.currentTimeMillis() + 20000;
             while (System.currentTimeMillis() < deadline
-                    && (this.view.extractStats().get() == null || startButton().isDisabled())) {
+                    && (this.view.extractStats().get() == null || this.view.extractStats().get()==previousStats || startButton().isDisabled())) {
                 pumpFxEvents();
             }
             if (this.view.extractStats().get() == null) {
@@ -840,68 +940,67 @@ public boolean runAutomatedTests() {
         } catch (Exception e) { out.println("[FAIL] Image extraction: " + e.getMessage()); f++; }
 
         // 预览缓存生命周期（需求 2 会话 9）：参数失效 C3 / 移除清理 C7 / 退出清理 C8
-        try { imageModeToggle().setSelected(true); Thread.sleep(300);
-            PreviewItem target = this.view.allVisibleItems().stream()
+        try { imageModeToggle().setSelected(true); FxDelay.pause(300);
+            PreviewRow target = this.view.allVisibleItems().stream()
                     .filter(i -> "i01.mht".equals(i.name)).findFirst()
                     .orElseThrow(() -> new IllegalStateException("找不到 i01.mht"));
             // C3：全局参数变化 → 全部缓存目录删除（含此前图片预览块落盘的目录）
             AppConfig modified = new AppConfig();
             modified.setImageNameStartMarker("__auto_test_changed__");
-            this.view.applyConfirmedParams(true, modified); Thread.sleep(300);
+            this.view.applyConfirmedParams(true, modified); FxDelay.pause(300);
             if (!this.view.previewCacheLifecycle().store().listKeys().isEmpty()) {
                 throw new IllegalStateException("参数变化后缓存应全部删除（C3）");
             }
             // 预览 i01 → 落盘恰 1 个目录
-            listView().getSelectionModel().select(target); Thread.sleep(200);
+            listView().getSelectionModel().select(target); FxDelay.pause(200);
             previewEffectButton().fire();
             long lcDeadline = System.currentTimeMillis() + 20000;
             while (System.currentTimeMillis() < lcDeadline && this.view.imageLoadActive()) {
                 pumpFxEvents();
             }
-            Thread.sleep(200); pumpFxEvents();
+            FxDelay.pause(200); pumpFxEvents();
             if (this.view.previewCacheLifecycle().store().listKeys().size() != 1) {
                 throw new IllegalStateException("预览后应恰有 1 个缓存目录，实际 "
                         + this.view.previewCacheLifecycle().store().listKeys().size());
             }
             // C7：移除项目 → 其缓存目录删除
-            this.view.removeItems(List.of(target)); Thread.sleep(200);
+            this.view.removeItems(List.of(target)); FxDelay.pause(200);
             if (!this.view.previewCacheLifecycle().store().listKeys().isEmpty()) {
                 throw new IllegalStateException("移除项目后其缓存应被删除（C7）");
             }
-            // C8：退出清空（test.mode 跳过弹窗只清空，关窗处理器同样逻辑）
-            this.view.previewCacheLifecycle().onShutdown(() -> { });
-            java.nio.file.Path cacheRoot = this.view.previewCacheLifecycle().store().root();
-            if (java.nio.file.Files.isDirectory(cacheRoot)) {
-                try (var entries = java.nio.file.Files.list(cacheRoot)) {
-                    if (entries.findAny().isPresent()) {
-                        throw new IllegalStateException("退出清空后缓存根目录应为空（C8）");
-                    }
-                }
-            }
-            out.println("[PASS] Preview cache lifecycle (C3/C7/C8)"); p++;
+            out.println("[EVIDENCE] Preview cache lifecycle C3/C7 passed; C8 follows at session shutdown");
         } catch (Exception e) { out.println("[FAIL] Preview cache lifecycle: " + e.getMessage()); f++; }
-        // 兜底清场（无论成败）：自动化测试经 System.exit 退出不走关窗处理器，避免缓存残留跨会话
-        try { this.view.previewCacheLifecycle().onShutdown(() -> { }); } catch (Exception ignored) { }
 
         // 步骤 7：取消路径的终态落地 —— 中途取消一次提取后开始按钮重新启用、停止按钮禁用、
         // 运行标记复位；worker 完成后 partial 统计仍照常回写（extractStats 非 null 且含已完成文件）。
-        try { textModeToggle().setSelected(true); Thread.sleep(300);
+        try { textModeToggle().setSelected(true); FxDelay.pause(300);
+            AppConfig cancelParams=this.view.textParamsCache();
             if (!this.view.dataOrderIsEmpty()) {
-                this.view.clearDataOrder();
                 this.view.clearUndoStack();
+                this.view.clearDataOrder();
+                FxDelay.pause(300);
                 this.view.refreshAfterListChange();
             }
+            if(cancelParams==null)throw new IllegalStateException("取消场景必须有已确认的文本参数");
+            this.view.applyConfirmedParams(false,cancelParams); FxDelay.pause(100);
             waitForImportDone();
             java.nio.file.Path cancelDir = java.nio.file.Files.createTempDirectory("mht-auto-cancel");
+            String attachment=java.util.Base64.getMimeEncoder().encodeToString(new byte[1024*1024]);
             for (int i = 1; i <= 40; i++) {
-                createSampleMht(cancelDir, String.format("c%02d.mht", i));
+                var sample=createSampleMht(cancelDir, String.format("c%02d.mht", i)).toPath();
+                String mime=java.nio.file.Files.readString(sample);
+                int end=mime.lastIndexOf("------=_preview_agent_boundary--");
+                if(end<0)throw new IllegalStateException("Cancellation fixture MIME boundary missing");
+                java.nio.file.Files.writeString(sample,mime.substring(0,end)
+                        +"------=_preview_agent_boundary\r\nContent-Type: application/octet-stream\r\n"
+                        +"Content-Transfer-Encoding: base64\r\n\r\n"+attachment+"\r\n"+mime.substring(end));
             }
             inputFolderField().setText(cancelDir.toString());
             waitForImportDone();   // 40 个文件统一导入为异步：先排空，避免收尾回调在提取期间重算按钮状态
             outputFolderField().setText(new File(System.getProperty("java.io.tmpdir"),
                     "mht-auto-output-cancel").getPath());
             this.view.extractStats().set(null);
-            startButton().fire();
+            startExtractionObserved(out,false);
             // 等第一个文件完成（40 文件 → 首个完成的聚合进度 = 0.05，文件完成时 fireProgress 的
             // subProgress = 1.0）再停：保证取消落在提取中途、partial 非空
             long deadline = System.currentTimeMillis() + 20000;
@@ -962,23 +1061,23 @@ public boolean runAutomatedTests() {
             createSampleMht(root, "k2.mht");
             int itemsBefore = (int) this.view.visibleCount();
             this.view.importByPaths(List.of(root.toString()), I18n.get("test.autoReimport"), false);
-            Thread.sleep(800);
+            FxDelay.pause(800);
             waitForImportDone();
             if (this.view.visibleCount() != itemsBefore + 2) {
                 throw new IllegalStateException("首次导入目录失败，可见数=" + this.view.visibleCount());
             }
-            List<PreviewItem> imported = new ArrayList<>(this.view.allVisibleItems().stream()
+            List<PreviewRow> imported = new ArrayList<>(this.view.allVisibleItems().stream()
                     .filter(i -> i.path.contains("mht-reimport-after-remove")).toList());
             if (imported.size() != 2) {
                 throw new IllegalStateException("未找到本次导入的 2 个条目，实际 " + imported.size());
             }
             this.view.removeItems(imported);
-            Thread.sleep(300);
+            FxDelay.pause(300);
             if (this.view.visibleCount() != itemsBefore) {
                 throw new IllegalStateException("移除后可见数不符，可见数=" + this.view.visibleCount());
             }
             this.view.importByPaths(List.of(root.toString()), I18n.get("test.autoReimport"), false);
-            Thread.sleep(800);
+            FxDelay.pause(800);
             waitForImportDone();
             if (this.view.visibleCount() != itemsBefore + 2) {
                 throw new IllegalStateException("被移除的项目无法通过同目录再加回来，可见数="
@@ -987,58 +1086,55 @@ public boolean runAutomatedTests() {
             out.println("[PASS] Re-import after remove restores items"); p++;
         } catch (Exception e) { out.println("[FAIL] Re-import after remove: " + e.getMessage()); f++; }
 
-        // A2（台账 1.3；决策 F）：GUI 配额确认卡场景 —— 真实 WorkspaceImportCoordinator（配额 =
-        // 2 组 / 3 文件，不必造 200 个组的夹具）+ 真实 GuiConfirmer（配额卡经 NotificationHost
-        // 渲染，锚点 = 状态标签），在真实 FX 线程上驱动。与无头 WorkspaceImportCoordinatorTest 的
-        // 分工：无头测试用延迟派发器确定性复现"卡在 apply 落地前构造"的竞态（桩 Confirmer 收卡）；
-        // 本场景补上"真实卡片渲染 + 真实按钮回答 + 计数含触发轮 + 关窗守卫无残留"这条 GUI 可观察面。
-        try { textModeToggle().setSelected(true); Thread.sleep(200);
+        // A2：经主窗口端口使用生产默认配额，覆盖 IPC 确认往返、轮次计数与停止。
+        try { textModeToggle().setSelected(true); FxDelay.pause(200);
             if (com.mhtextractor.gui.component.NotificationHost.hasPendingDecision(statusLabel())) {
                 throw new IllegalStateException("场景前置失败：存在未答的提醒卡");
             }
             if (!this.view.dataOrderIsEmpty()) {
-                this.view.clearDataOrder();
                 this.view.clearUndoStack();
+                this.view.clearDataOrder();
+                FxDelay.pause(300);
                 this.view.refreshAfterListChange();
             }
             waitForImportDone();
             java.nio.file.Path qRoot = java.nio.file.Files.createTempDirectory("mht-auto-quota");
             createSampleMht(qRoot, "top1.mht");
             createSampleMht(qRoot, "top2.mht");
-            for (String s : List.of("d1", "d2", "d3", "d4")) {
-                createSampleMht(java.nio.file.Files.createDirectories(qRoot.resolve(s)), "in.mht");
+            int maxGroups = com.mhtextractor.app.MhtImportPlanner.DEFAULT_MAX_GROUPS;
+            // IpcSession 的冻结服务端配额是 200 组 / 20000 文件；进程内根沿用 planner 默认值。
+            int maxFiles = "inprocess".equals(System.getProperty("mht.uiport"))
+                    ? com.mhtextractor.app.MhtImportPlanner.DEFAULT_MAX_FILES : 20000;
+            for (int index = 1; index <= maxGroups * 2 + 1; index++) {
+                createSampleMht(java.nio.file.Files.createDirectories(qRoot.resolve("d" + index)), "in.mht");
             }
-            com.mhtextractor.app.WorkspaceImportCoordinator quotaSessions =
-                    new com.mhtextractor.app.WorkspaceImportCoordinator(this.view.model(),
-                            new com.mhtextractor.gui.component.GuiConfirmer(() -> statusLabel()),
-                            Platform::runLater, 2, 3);
-            quotaSessions.importPaths(List.of(qRoot.toString()), I18n.get("test.autoReimport"), false);
-            // 卡 1 = 轮 1（顶层 2 文件 + d1）= 3 文件 / 1 组（文件配额打满）；计数必须含触发卡的那一轮
+            this.view.importByPaths(List.of(qRoot.toString()), I18n.get("test.autoReimport"), false);
+            // 两个顶层文件 + 第一轮 200 个组；计数含触发卡的那一轮。
             waitForQuotaCard();
             if (!com.mhtextractor.gui.component.NotificationHost.hasPendingDecision(statusLabel())) {
                 throw new IllegalStateException("① 配额卡未出现（NotificationHost 不可观察）");
             }
-            if (!modalMessage().equals(quotaCardText(2, 3, 3, 1))) {
+            if (!modalMessage().equals(quotaCardText(maxGroups, maxFiles, maxGroups + 2, maxGroups))) {
                 throw new IllegalStateException("② 卡 1 文案不符：\"" + modalMessage() + "\"");
             }
-            if (this.view.visibleCount() != 3 || this.view.topLevelGroups().size() != 1) {
-                throw new IllegalStateException("卡 1 弹出时模型应为 3 文件/1 组，实际 "
+            if (this.view.visibleCount() != maxGroups + 2 || this.view.topLevelGroups().size() != maxGroups) {
+                throw new IllegalStateException("卡 1 弹出时模型计数不符，实际 "
                         + this.view.visibleCount() + "/" + this.view.topLevelGroups().size());
             }
             firePrimary(0);   // 「继续」= true：放行扫描线程扫下一轮
-            // 卡 2 = 轮 2 = 5 文件 / 3 组（组配额打满）
+            // 继续后第二轮再增加 200 个组。
             waitForQuotaCard();
-            if (!modalMessage().equals(quotaCardText(2, 3, 5, 3))) {
+            if (!modalMessage().equals(quotaCardText(maxGroups, maxFiles, maxGroups * 2 + 2, maxGroups * 2))) {
                 throw new IllegalStateException("② 卡 2 文案不符：\"" + modalMessage() + "\"");
             }
-            if (this.view.visibleCount() != 5 || this.view.topLevelGroups().size() != 3) {
-                throw new IllegalStateException("继续后只扫下一轮：模型应为 5 文件/3 组，实际 "
+            if (this.view.visibleCount() != maxGroups * 2 + 2 || this.view.topLevelGroups().size() != maxGroups * 2) {
+                throw new IllegalStateException("继续后第二轮模型计数不符，实际 "
                         + this.view.visibleCount() + "/" + this.view.topLevelGroups().size());
             }
             firePrimary(1);   // 「停止」= false：中止导入，轮 3 永不落地
             waitForImportDone();
-            if (this.view.visibleCount() != 5 || this.view.topLevelGroups().size() != 3) {
-                throw new IllegalStateException("③ 停止后应保留已导入两轮（5 文件/3 组），实际 "
+            if (this.view.visibleCount() != maxGroups * 2 + 2 || this.view.topLevelGroups().size() != maxGroups * 2) {
+                throw new IllegalStateException("③ 停止后应保留已导入两轮，实际 "
                         + this.view.visibleCount() + "/" + this.view.topLevelGroups().size());
             }
             if (com.mhtextractor.gui.component.NotificationHost.hasPendingDecision(statusLabel())) {
@@ -1046,6 +1142,39 @@ public boolean runAutomatedTests() {
             }
             out.println("[PASS] Import quota confirm card (A2)"); p++;
         } catch (Exception e) { out.println("[FAIL] Import quota card: " + e.getMessage()); f++; }
+
+        // C8 在最后执行：种入真实缓存，再发产品关窗事件；证据对象始终只读。
+        try {
+            imageModeToggle().setSelected(true); FxDelay.pause(300);
+            this.view.applyConfirmedParams(true, new AppConfig()); FxDelay.pause(300);
+            this.view.importByPaths(List.of(imageDir.resolve("i01.mht").toString()),
+                    I18n.get("test.autoReimport"), false);
+            waitForImportDone();
+            PreviewRow target = this.view.allVisibleItems().stream()
+                    .filter(item -> "i01.mht".equals(item.name)).findFirst().orElseThrow();
+            listView().getSelectionModel().select(target); FxDelay.pause(200);
+            previewEffectButton().fire();
+            long deadline = System.currentTimeMillis() + 20000;
+            while (System.currentTimeMillis() < deadline && this.view.imageLoadActive()) pumpFxEvents();
+            FxDelay.pause(200);
+            CacheEvidence cache = this.view.previewCacheLifecycle();
+            if (cache.listKeys().isEmpty()) throw new IllegalStateException("C8 前置必须有后端缓存");
+            javafx.stage.Stage stage = (javafx.stage.Stage) listView().getScene().getWindow();
+            Platform.setImplicitExit(false);
+            javafx.event.Event.fireEvent(stage, new javafx.stage.WindowEvent(stage,
+                    javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST));
+            deadline = System.currentTimeMillis() + 30000;
+            while (stage.isShowing() && System.currentTimeMillis() < deadline) pumpFxEvents();
+            if (stage.isShowing()) throw new IllegalStateException("C8 关窗收尾超时");
+            // IPC 会话 close 发起 EOF 收尾；等待真实后端完成磁盘清理。
+            while (!cache.listKeys().isEmpty() && System.currentTimeMillis() < deadline) pumpFxEvents();
+            if (java.nio.file.Files.isDirectory(cache.root())) {
+                try (var entries = java.nio.file.Files.list(cache.root())) {
+                    if (entries.findAny().isPresent()) throw new IllegalStateException("退出后后端缓存根应为空（C8）");
+                }
+            }
+            out.println("[PASS] Preview cache lifecycle (C3/C7/C8)"); p++;
+        } catch (Exception e) { out.println("[FAIL] Preview cache shutdown C8: " + e.getMessage()); f++; }
 
         out.println(); out.println("=== RESULTS: " + p + " passed, " + f + " failed ===");
         out.flush();

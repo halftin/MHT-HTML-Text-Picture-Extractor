@@ -7,6 +7,7 @@ import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
 import com.mhtextractor.i18n.I18n;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -45,6 +46,16 @@ public class App extends Application {
             }
         }
 
+        var confirmer = new com.mhtextractor.gui.component.GuiConfirmer(() ->
+                primaryStage.getScene() == null ? null : (javafx.scene.control.Label) primaryStage.getScene().lookup("#statusLabel"));
+        com.mhtextractor.app.UiportRuntime.start(I18n.currentLocale().toLanguageTag(), confirmer, Platform::runLater,
+                runtime -> {
+                    try { finishStart(primaryStage, runtime); }
+                    catch (Exception error) { error.printStackTrace(); Platform.exit(); }
+                }, error -> { error.printStackTrace(); Platform.exit(); });
+    }
+
+    private void finishStart(Stage primaryStage, com.mhtextractor.app.UiportRuntime runtime) throws Exception {
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/mhtextractor/gui/view/MainView.fxml"));
         // P6-B：控制器要拿"FXML 命名空间"（fx:id → MainViewRefs）来取代 42 个 @FXML 节点字段，
         // 而 namespace 只有 loader 有 —— controller factory 是把它交给控制器的入口（缺这根线就是
@@ -52,7 +63,7 @@ public class App extends Application {
         // 但"注入 @FXML 成员 → 反射调用 initialize()"的时机与默认路径逐字相同
         // （javafx.fxml.FXMLLoader 源码 926-931 与 2555-2664 行），故 initialize() 里 namespace 已完整。
         // TestMain 里同一行是逐行等价的镜像（改一处必须改另一处）。
-        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader));
+        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader, runtime.port(), runtime::closeAsync));
         loader.setResources(I18n.bundle());
         // 会话 19：场景根外包一层 StackPane，供 NotificationHost 挂"右上角 toast + 居中提醒"两层
         //（取代模态 Alert；两条图层的 z 序与鼠标穿透见 NotificationHost 的类说明）
@@ -85,6 +96,7 @@ public class App extends Application {
 
         primaryStage.setTitle(I18n.get("app.title"));
         primaryStage.setScene(scene);
+        com.mhtextractor.gui.controller.ParamSidePanel.of((javafx.scene.Node)scene.lookup("#statusLabel"), runtime.port());
         primaryStage.setWidth(winWidth);
         primaryStage.setHeight(winHeight);
         primaryStage.setMinWidth(900);

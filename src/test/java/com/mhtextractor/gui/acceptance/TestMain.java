@@ -77,10 +77,20 @@ public final class TestMain extends Application {
             }
         }
 
+        var confirmer = new com.mhtextractor.gui.component.GuiConfirmer(() ->
+                primaryStage.getScene() == null ? null : (javafx.scene.control.Label) primaryStage.getScene().lookup("#statusLabel"));
+        com.mhtextractor.app.UiportRuntime.start(I18n.currentLocale().toLanguageTag(), confirmer, Platform::runLater,
+                runtime -> {
+                    try { finishStart(primaryStage, runtime); }
+                    catch (Exception error) { error.printStackTrace(); Platform.exit(); }
+                }, error -> { error.printStackTrace(); Platform.exit(); });
+    }
+
+    private void finishStart(Stage primaryStage, com.mhtextractor.app.UiportRuntime runtime) throws Exception {
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/mhtextractor/gui/view/MainView.fxml"));
         // P6-B：与 App.start() 同一行（逐行等价 —— 改一处必须改另一处，见类 javadoc）。
         // 控制器由此拿到 loader，从而能在 initialize() 里用 getNamespace() 构造 MainViewRefs。
-        loader.setControllerFactory(_ -> new MainController(loader));
+        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader, runtime.port(), runtime::closeAsync));
         loader.setResources(I18n.bundle());
         Parent root = loader.load();
         StackPane overlay = SidePanelHost.install(root);
@@ -96,14 +106,13 @@ public final class TestMain extends Application {
         Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
         primaryStage.setTitle(I18n.get("app.title"));
         primaryStage.setScene(scene);
+        com.mhtextractor.gui.controller.ParamSidePanel.of((javafx.scene.Node)scene.lookup("#statusLabel"), runtime.port());
         primaryStage.setWidth(screenBounds.getWidth() * 0.80);
         primaryStage.setHeight(screenBounds.getHeight() * 0.85);
         primaryStage.setMinWidth(900);
         primaryStage.setMinHeight(650);
         primaryStage.centerOnScreen();
         primaryStage.show();
-        BackendConnectionPresenter.install(primaryStage,
-                (javafx.scene.control.Label) scene.lookup("#backendStatusLabel"), shell);
 
         String agentDelay = System.getProperty("agent.exit.delay");
         if (agentDelay != null) {
@@ -146,9 +155,11 @@ public final class TestMain extends Application {
             public void run() {
                 // 自动化测试直接操作 JavaFX 控件，必须回到 FX 线程执行
                 Platform.runLater(() -> {
-                    boolean success = new FeatureExercise(controller).runAutomatedTests();
-                    Platform.exit();
-                    System.exit(success ? 0 : 1);
+                    boolean success = new FeatureExercise(controller, runtime.port()).runAutomatedTests();
+                    runtime.closeAsync(() -> {
+                        Platform.exit();
+                        System.exit(success ? 0 : 1);
+                    });
                 });
             }
         }, AUTOMATION_DELAY_MS);

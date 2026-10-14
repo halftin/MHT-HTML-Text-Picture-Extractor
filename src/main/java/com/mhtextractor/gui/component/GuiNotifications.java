@@ -190,6 +190,21 @@ public final class GuiNotifications {
         }
     }
 
+    public static void preconditionDenied(Node anchor, com.mhtextractor.uiport.PreStartStateVm.Denial denial) {
+        Object[] params = denial.namedParams().entrySet().stream()
+                .flatMap(entry -> java.util.stream.Stream.of(entry.getKey(), entry.getValue())).toArray();
+        String message = Texts.get(denial.key(), params);
+        if ("ERROR".equals(denial.level())) {
+            NotificationHost.error(anchor, message, FontAwesomeSolid.EXCLAMATION_CIRCLE);
+        } else {
+            NotificationHost.toastWarning(anchor, message, FontAwesomeSolid.EXCLAMATION_TRIANGLE);
+        }
+    }
+
+    public static void backendRequestFailed(Node anchor, String detail) {
+        NotificationHost.error(anchor, detail, FontAwesomeSolid.EXCLAMATION_TRIANGLE);
+    }
+
     // ==================== 列表 / 移除 ====================
 
     /** 递归深度超限：居中确认卡片（等待方是提取后台线程，回答经回调回传）。 */

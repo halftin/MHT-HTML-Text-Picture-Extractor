@@ -13,12 +13,12 @@ import com.mhtextractor.gui.controller.ParamFormPane;
 import com.mhtextractor.gui.controller.ParamSidePanel;
 import com.mhtextractor.gui.controller.PreviewRenderer;
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.model.AppConfig;
-import com.mhtextractor.model.GroupItem;
+import com.mhtextractor.uicore.GroupRow;
 import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.model.ThumbnailData;
-import com.mhtextractor.model.ParamScope;
+import com.mhtextractor.uicore.ParamScope;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
@@ -146,7 +146,7 @@ public class SidePanelProbe extends Application {
         FXMLLoader loader = new FXMLLoader(App.class.getResource("/com/mhtextractor/gui/view/MainView.fxml"));
         // P6-B：控制器要拿 FXML 命名空间（fx:id -> MainViewRefs），而 namespace 只有 loader 有 ——
         // 与 App.start() / TestMain 同一根线（controller factory 覆盖 fx:controller，时机逐字相同）。
-        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader));
+        loader.setControllerFactory(_ -> ProbeRuntime.controller(loader));
         loader.setResources(I18n.bundle());
         mainRoot = loader.load();
         controller = loader.getController();
@@ -946,12 +946,12 @@ public class SidePanelProbe extends Application {
      */
     private void makeGroupsAndDirtyForGateOrder() {
         // 与 FeatureExercise 的驱动方式同：勾选两个顶层条目 → updateListButtons → fire #groupButton
-        List<com.mhtextractor.model.PreviewItem> items = allVisibleItems().stream()
+        List<com.mhtextractor.uicore.PreviewRow> items = allVisibleItems().stream()
                 .filter(i -> i.parentGroup == null && !i.removed).toList();
         check("step 4 gate-order pre: at least two top-level items to merge (items=" + items.size() + ")",
                 items.size() >= 2);
         if (items.size() >= 2) {
-            for (com.mhtextractor.model.PreviewItem i : allVisibleItems()) {
+            for (com.mhtextractor.uicore.PreviewRow i : allVisibleItems()) {
                 i.setSelected(false);
             }
             items.get(0).setSelected(true);
@@ -997,7 +997,7 @@ public class SidePanelProbe extends Application {
     /** 默认名（未命名）组的名字；没有 → null。 */
     private String manualGroupName() {
         for (Object g : topLevelGroups()) {
-            if (g instanceof GroupItem<?> group && group.isDefaultNamed()) {
+            if (g instanceof GroupRow<?> group && group.isDefaultNamed()) {
                 return group.getName();
             }
         }
@@ -1005,9 +1005,9 @@ public class SidePanelProbe extends Application {
     }
 
     @SuppressWarnings("unchecked")
-    private List<com.mhtextractor.model.PreviewItem> allVisibleItems() {
+    private List<com.mhtextractor.uicore.PreviewRow> allVisibleItems() {
         Object r = invoke(controller, "allVisibleItems", new Class<?>[]{});
-        return r instanceof List<?> l ? (List<com.mhtextractor.model.PreviewItem>) l : List.of();
+        return r instanceof List<?> l ? (List<com.mhtextractor.uicore.PreviewRow>) l : List.of();
     }
 
     // ---------- R1.6：切换目标确认卡 ----------
@@ -1182,13 +1182,13 @@ public class SidePanelProbe extends Application {
         }
         Object item = null;
         for (Object row : fileListView.getItems()) {
-            if (row instanceof PreviewItem p && !p.removed) {
+            if (row instanceof PreviewRow p && !p.removed) {
                 item = p;
                 break;
             }
         }
         if (item == null) {
-            check("E1.2 (a): a visible PreviewItem exists in #fileListView", false);
+            check("E1.2 (a): a visible PreviewRow exists in #fileListView", false);
             return;
         }
         selectRow(item);
@@ -1206,13 +1206,13 @@ public class SidePanelProbe extends Application {
         // (b) meta == null → openCachedImage 安全返回。invoke helper 吞异常并打印
         // "(reflect ... failed"：捕获 System.out 断言无该标记；再以"未启动 open-cached-image
         // 线程"作第二个可观测信号（成功路径会在检查后同步 spawn 该线程）。
-        ((PreviewItem) item).cachedMeta = null;
+        ((PreviewRow) item).cachedMeta = null;
         int threadsBefore = countThreads("open-cached-image");
         java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
         java.io.PrintStream originalOut = System.out;
         System.setOut(new java.io.PrintStream(captured, true));
         try {
-            invoke(renderer, "openCachedImage", new Class<?>[]{PreviewItem.class, int.class}, item, 0);
+            invoke(renderer, "openCachedImage", new Class<?>[]{PreviewRow.class, int.class}, item, 0);
         } finally {
             System.setOut(originalOut);
         }
@@ -1224,11 +1224,9 @@ public class SidePanelProbe extends Application {
                 countThreads("open-cached-image") == threadsBefore);
 
         // 播种"有 meta + 可点击缩略图"的已渲染状态（生产渲染入口 appendThumb；meta 为 public 字段直接赋值）
-        ((PreviewItem) item).cachedMeta = new PreviewCacheMeta(PreviewCacheMeta.FORMAT_VERSION,
-                new PreviewCacheMeta.Source(((PreviewItem) item).path, 1L, 2L, ""), "probe-fp", true,
-                List.of(new PreviewCacheMeta.ImageEntry("images/0001.png", "cid:x", "0001.png", "png", List.of())),
-                List.of());
-        ((PreviewRenderer) renderer).appendThumb((PreviewItem) item,
+        ((PreviewRow) item).cachedMeta = new com.mhtextractor.uiport.PresentationVm(
+                ((PreviewRow) item).path, "probe", false, true, "READY", "", "", null, List.of());
+        ((PreviewRenderer) renderer).appendThumb((PreviewRow) item,
                 new ThumbnailData("0001.png", 2, 2,
                         new int[]{0xFF0000FF, 0xFF00FF00, 0xFFFF0000, 0xFFFFFFFF}), 0);
         long clickableBefore = countClickableThumbs(pn);
@@ -1239,7 +1237,7 @@ public class SidePanelProbe extends Application {
         Object paramDomain = field(controller, "paramDomain");
         invoke(paramDomain, "refreshAfterTargetedParamsChange", new Class<?>[]{List.class}, List.of(item));
 
-        boolean metaCleared = ((PreviewItem) item).cachedMeta == null;
+        boolean metaCleared = ((PreviewRow) item).cachedMeta == null;
         long clickableAfter = countClickableThumbs(pn);
         check("E1.2 (c): production clearing path nulls cachedMeta (the previously leaked field)",
                 metaCleared);
@@ -1308,7 +1306,7 @@ public class SidePanelProbe extends Application {
      * 选中第 i 个顶层组（i<0 = 清空选择 ⇒ 条目路由成全局目标）。
      *
      * <p>🚩 每次都<b>重新取</b> {@code topLevelGroups()}：适配器在预解析收尾时会把模型<b>重新投影</b>，
-     * {@code GroupItem} 实例会被换掉（实测同一逻辑组在两步之间换了对象），
+     * {@code GroupRow} 实例会被换掉（实测同一逻辑组在两步之间换了对象），
      * 缓存下来的列表引用会失效，导致"选中了旧实例、路由到旧目标"。</p>
      */
     private void selectGroup(int i) {
@@ -1404,7 +1402,7 @@ public class SidePanelProbe extends Application {
 
     /** 目标标签：全局 = "GLOBAL"，组 = "group:<组名>"，条目 = "item:<路径>"，未载入 = "null"。 */
     private String targetTag() {
-        Object loaded = ParamSidePanel.of(anchor).loadedTarget();
+        Object loaded = ParamSidePanel.of(anchor, null).loadedTarget();
         if (loaded == null) {
             return "null";
         }
@@ -1415,7 +1413,7 @@ public class SidePanelProbe extends Application {
             return "group:" + gt.group().getName();
         }
         if (loaded instanceof ParamScope.ItemTarget<?> it
-                && it.item() instanceof com.mhtextractor.model.PreviewItem pi) {
+                && it.item() instanceof com.mhtextractor.uicore.PreviewRow pi) {
             return "item:" + pi.path;
         }
         return loaded.getClass().getSimpleName();
@@ -1424,7 +1422,7 @@ public class SidePanelProbe extends Application {
     /**
      * R1.6 断言用的目标标签。
      *
-     * <p>按<b>名字</b>而不是实例身份比较：适配器重新投影会换掉 {@code GroupItem} 实例，
+     * <p>按<b>名字</b>而不是实例身份比较：适配器重新投影会换掉 {@code GroupRow} 实例，
      * 探针手里缓存的引用会失效（"同一个组、不同对象"）。产品里的目标同一性口径是实例身份
      * （{@code ParamSidePanel.sameTarget}，见其 javadoc），那是"同一个目标"的语义，
      * 与探针"目标有没有换"的观测不是一回事。</p>
@@ -1435,7 +1433,7 @@ public class SidePanelProbe extends Application {
     }
 
     private static String groupName(Object group) {
-        return ((GroupItem<?>) group).getName();
+        return ((GroupRow<?>) group).getName();
     }
 
     /** 当前居中卡片是否为 {@code Notification}（= 确认卡 / 错误卡，而不是等待卡片 Message）。 */

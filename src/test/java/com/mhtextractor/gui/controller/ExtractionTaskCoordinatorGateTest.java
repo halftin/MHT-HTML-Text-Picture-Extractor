@@ -8,7 +8,7 @@ import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.model.AppConfig;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.uiport.PortEvent;
 import javafx.application.Platform;
 import javafx.scene.control.Button;
@@ -93,7 +93,7 @@ class ExtractionTaskCoordinatorGateTest {
         @Override public boolean otherModeConfirmed() { return false; }
         @Override public AppConfig currentModeParamsOrDefaults() { return new AppConfig(); }
         @Override public List<Object> dataOrder() { return List.of(); }
-        @Override public List<PreviewItem> allVisibleItems() { return List.of(); }
+        @Override public List<PreviewRow> allVisibleItems() { return List.of(); }
         @Override public void cancelWorkspaceActivity() { cancelActivityCalls++; events.add("cancelActivity"); }
         @Override public Label statusLabel() { return statusLabel; }
         @Override public void setStatusText(String text) { events.add("status:" + text); }
@@ -151,8 +151,16 @@ class ExtractionTaskCoordinatorGateTest {
         WorkspaceExtractionCoordinator backend = new WorkspaceExtractionCoordinator(
                 new WorkspaceExtractionService(new PreviewCacheLifecycle(new PreviewCacheStore(dir.resolve("cache")))),
                 checkedOnly -> emptyRequest(dir), Platform::runLater);
+        var root = new com.mhtextractor.app.BackendWorkspace(request -> {
+            throw new AssertionError("Unexpected confirmation");
+        }, AppConfig::new, Runnable::run);
+        roots.add(root);
+        root.port().commands().setGlobalParams(false, new AppConfig());
+        root.port().commands().applyImportPlan(new com.mhtextractor.uiport.ImportPlanVm(
+                List.of(new com.mhtextractor.uiport.ImportPlanVm.ImportBatchVm(host.input, null,
+                        false, List.of(dir.resolve("wire.mht").toString()))), 0, 0, 0, 0, 0, false, false));
         ExtractionTaskCoordinator c = new ExtractionTaskCoordinator(host, derivedCalls::incrementAndGet,
-                new WorkspaceModel());
+                root.port());
         c.bindStartExtraction(backend::startExtraction);
         backend.subscribe(event -> {
             if (event instanceof PortEvent.ExtractionChannelEvent channelEvent) {
@@ -161,6 +169,10 @@ class ExtractionTaskCoordinatorGateTest {
         });
         return new Wire(c, backend);
     }
+
+    private final List<com.mhtextractor.app.BackendWorkspace> roots = new ArrayList<>();
+
+    @org.junit.jupiter.api.AfterEach void closeRoots() { roots.forEach(com.mhtextractor.app.BackendWorkspace::close); }
 
     /** 与 {@link WorkspaceExtractionCoordinatorCancelRaceTest} 同口径的 toolkit 前置。 */
     private static void requireToolkit() {

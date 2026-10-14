@@ -5,8 +5,8 @@ import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.model.AppConfig;
-import com.mhtextractor.model.GroupItem;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.GroupRow;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.util.OutputUnitPlanner;
 import javafx.scene.Node;
@@ -69,9 +69,15 @@ public final class AcceptanceDriver {
     public static final class View {
 
         private final MainController mc;
+        private final com.mhtextractor.uicore.FrontendPort frontend;
 
         public View(MainController mc) {
+            this(mc,null);
+        }
+
+        public View(MainController mc, com.mhtextractor.uicore.FrontendPort frontend) {
             this.mc = mc;
+            this.frontend = frontend;
         }
 
         /** 被测控制器本体（需要传给仍接受 {@code MainController} 的生产协作类时用）。 */
@@ -82,9 +88,7 @@ public final class AcceptanceDriver {
         // ==================== A：同包 package-private 生产 API，直接访问（零生产改动） ====================
 
         /** 工作区模型（= 生产字段 {@code MainController.ws}，包级）。 */
-        public WorkspaceModel model() {
-            return mc.ws;
-        }
+        public com.mhtextractor.uicore.WorkspaceView model() { return mc.ws; }
 
         /** 数据序只读投影（= 原 {@code mc.items}）。 */
         public List<Object> dataOrder() {
@@ -103,7 +107,11 @@ public final class AcceptanceDriver {
 
         /** 清撤销栈（= 原 {@code mc.ws.clearUndoStack()}）。 */
         public void clearUndoStack() {
-            mc.ws.clearUndoStack();
+            for (int n=0; mc.ws.canUndo() && n<1000; n++) {
+                mc.refs.undoButton().fire();
+                FxDelay.pause(40);
+            }
+            if (mc.ws.canUndo()) throw new IllegalStateException("Backend undo stack did not drain");
         }
 
         /** FXML 节点引用集合（生产字段 {@code MainController.refs}，包级）。 */
@@ -152,9 +160,7 @@ public final class AcceptanceDriver {
         }
 
         /** 预览缓存生命周期（生产字段 {@code MainController.previewCacheLifecycle}，包级；P3-3b-16 起字段类型为门面，经 {@code lifecycle()} 取出底层）。 */
-        public PreviewCacheLifecycle previewCacheLifecycle() {
-            return mc.previewCacheLifecycle.lifecycle();
-        }
+        public CacheEvidence previewCacheLifecycle() { return new CacheEvidence(mc.ws.snapshot().cache().root()); }
 
         /** 双击 / 单元格交互用：返回条目对应的 {@link PreviewListCell}（包级类型，同包直接引用）。 */
         public Node findCellNode(Object item) {
@@ -173,25 +179,25 @@ public final class AcceptanceDriver {
         // MainController 自身 javadoc 也写明"按数据序遍历，否则全选/提取名单/进度统计漏掉折叠组成员"。
 
         /** 数据模型中的所有项目（含组内成员与已移除项）。 */
-        public List<PreviewItem> allPreviewItems() {
+        public List<PreviewRow> allPreviewItems() {
             return mc.ws.allItems();
         }
 
         /** 全部有效项目（removed == false，含组内成员），按数据序。 */
-        public List<PreviewItem> allVisibleItems() {
+        public List<PreviewRow> allVisibleItems() {
             return mc.ws.allItems().stream().filter(i -> !i.removed).toList();
         }
 
         /** 顶层组列表（按数据序）。 */
-        public List<GroupItem<PreviewItem>> topLevelGroups() {
+        public List<GroupRow<PreviewRow>> topLevelGroups() {
             return mc.ws.groups();
         }
 
         /** 组内有效成员（removed == false）。 */
-        public List<PreviewItem> visibleMembersOf(GroupItem<?> g) {
-            List<PreviewItem> out = new ArrayList<>();
+        public List<PreviewRow> visibleMembersOf(GroupRow<?> g) {
+            List<PreviewRow> out = new ArrayList<>();
             for (Object m : g.getMembers()) {
-                if (m instanceof PreviewItem p && !p.removed) {
+                if (m instanceof PreviewRow p && !p.removed) {
                     out.add(p);
                 }
             }
@@ -269,13 +275,24 @@ public final class AcceptanceDriver {
         }
 
         /** 写入某组的已确认参数缓存（包级；理由同 {@link #applyConfirmedParams}，组作用域手势更重）。 */
-        public void applyGroupParams(GroupItem<PreviewItem> group, boolean imageMode, AppConfig params) {
+        public void applyGroupParams(GroupRow<PreviewRow> group, boolean imageMode, AppConfig params) {
             mc.paramDomain.applyGroupParams(group, imageMode, params);
+            FxDelay.pause(1);
         }
 
         /** 写入某条目的条目级独立参数（包级；理由同 {@link #applyConfirmedParams}）。 */
-        public void applyItemParams(PreviewItem item, boolean imageMode, AppConfig params) {
-            mc.paramDomain.applyItemParams(item, imageMode, params);
+        public void applyItemParams(PreviewRow item, boolean imageMode, AppConfig params) {
+            if(params!=null)mc.paramDomain.applyItemParams(item, imageMode, params);
+            else {
+                if(frontend==null)throw new IllegalStateException("Clearing fixture parameters requires the injected port");
+                var paths=allVisibleItems().stream().map(row->row.path).toList();
+                frontend.execute(port->{
+                    port.commands().setChecked(paths,false);
+                    port.commands().clearParams(List.of(item.id()),imageMode);
+                    return null;
+                },ignored->{});
+            }
+            FxDelay.pause(1);
         }
 
         /** 运行时提取配置构建（步骤 2 起本体在 {@code ExtractionTaskCoordinator}，
@@ -291,9 +308,10 @@ public final class AcceptanceDriver {
          * 全生产路径。仅服务"部分移除"语义（目标数 &lt; 可见数，不弹确认卡）；
          * FeatureExercise 的两处调用（单条目 / 两个条目）都满足该前提。
          */
-        public void removeItems(List<PreviewItem> targets) {
+        public void removeItems(List<PreviewRow> targets) {
             mc.listInteraction.setCheckedSilently(allVisibleItems(), false);
             mc.listInteraction.setCheckedSilently(targets, true);
+            FxDelay.pause(1);
             mc.refs.removeButton().fire();
         }
 
@@ -344,8 +362,9 @@ public final class AcceptanceDriver {
 
         /** 折叠/展开（{@code GroupCommandController.toggleGroupExpanded} 包级方法 +
          *  {@code MainController.groupCommand} 字段经 DSH 裁决授权 b 放宽为包级）。 */
-        public void toggleGroupExpanded(GroupItem<PreviewItem> g) {
+        public void toggleGroupExpanded(GroupRow<PreviewRow> g) {
             mc.groupCommand.toggleGroupExpanded(g);
+            FxDelay.pause(1);
         }
 
         /** 折叠/展开动画收尾（同上）。 */

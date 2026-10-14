@@ -11,8 +11,8 @@ import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.controller.FileListContextMenu;
 import com.mhtextractor.gui.controller.MainController;
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.model.GroupItem;
+import com.mhtextractor.uicore.PreviewRow;
+import com.mhtextractor.uicore.GroupRow;
 import com.mhtextractor.uicore.FileMenuModel;
 
 import atlantafx.base.controls.ToggleSwitch;
@@ -90,7 +90,8 @@ public class ContextMenuProbe extends Application {
         FXMLLoader loader = new FXMLLoader(App.class.getResource("/com/mhtextractor/gui/view/MainView.fxml"));
         // P6-B：控制器要拿 FXML 命名空间（fx:id -> MainViewRefs），而 namespace 只有 loader 有 ——
         // 与 App.start() / TestMain 同一根线（controller factory 覆盖 fx:controller，时机逐字相同）。
-        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader));
+        frontend = ProbeRuntime.port();
+        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader, frontend, finished -> ProbeRuntime.close(frontend, finished)));
         loader.setResources(I18n.bundle());
         Node mainRoot = loader.load();
         this.controller = loader.getController();
@@ -222,11 +223,10 @@ public class ContextMenuProbe extends Application {
         check("LAYOUT + TEXT_KEYS 派生出的序列 == 硬编码期望", fromLayout.equals(EXPECTED_ORDER));
 
         // ---- 3. 四种目标的真实禁用矩阵（走宿主 targetType + hasIndependentParams + apply） ----
-        PreviewItem topItem = new PreviewItem("C:/probe/top.mht", "top.mht", LocalDateTime.now(), "C:/probe");
-        GroupItem<PreviewItem> group = new GroupItem<>(1, "probe-group");
-        PreviewItem member = new PreviewItem("C:/probe/member.mht", "member.mht", LocalDateTime.now(), "C:/probe");
+        PreviewRow topItem = detached("top");
+        GroupRow<PreviewRow> group = new GroupRow<>(new com.mhtextractor.uiport.GroupVm(1, "probe-group", true, false, List.of()));
+        PreviewRow member = detached("member");
         member.parentGroup = group;
-        group.getMembers().add(member);
 
         checkMatrix("空白区域", null, false, false, true, false, false, false, false);
         checkMatrix("顶层条目", topItem, true, true, false, true, false, true, false);
@@ -234,10 +234,10 @@ public class ContextMenuProbe extends Application {
         checkMatrix("组条目", group, true, false, false, false, true, false, true);
 
         // ---- 4. 已移除行不算目标（宿主 isLiveTarget；搬前 pickItemAt 的 it.removed 分支） ----
-        PreviewItem removed = new PreviewItem("C:/probe/removed.mht", "removed.mht", LocalDateTime.now(), "C:/probe");
+        PreviewRow removed = detached("removed");
         removed.removed = true;
         check("isLiveTarget(未移除条目) == true", actions.isLiveTarget(topItem));
-        check("isLiveTarget(GroupItem) == true", actions.isLiveTarget(group));
+        check("isLiveTarget(GroupRow) == true", actions.isLiveTarget(group));
         check("isLiveTarget(已移除条目) == false", !actions.isLiveTarget(removed));
 
         // ---- 5. pickItemAt 的节点遍历：滚动条 / 普通节点 / null ----
@@ -298,36 +298,36 @@ public class ContextMenuProbe extends Application {
      */
     private void applyTextChecks() {
         try {
-            PreviewItem a = newPreview("apply-a");
-            PreviewItem b = newPreview("apply-b");
-            PreviewItem m = newPreview("apply-m");
+            PreviewRow a = newPreview("apply-a");
+            PreviewRow b = newPreview("apply-b");
+            PreviewRow m = newPreview("apply-m");
             workspace().appendItems(new ArrayList<>(List.of(a, b, m)));
-            GroupItem<PreviewItem> g = workspace().group(new ArrayList<>(List.of(m)), "probe-apply");
+            GroupRow<PreviewRow> g = workspace().group(new ArrayList<>(List.of(m)), "probe-apply");
 
             List<String> rendered = APPLY_KEYS.stream().map(I18n::get).toList();
             check("功能二：5 档文案渲染后两两不同", rendered.stream().distinct().count() == 5);
 
-            a.selected = true;
-            b.selected = false;
-            m.selected = false;
+            setChecked(a, true);
+            setChecked(b, false);
+            setChecked(m, false);
             applyText("只有组外项 1 个", a, FileMenuModel.KEY_APPLY_THIS);
 
-            b.selected = true;
+            setChecked(b, true);
             applyText("只有组外项 ≥2", a, FileMenuModel.KEY_APPLY_MANY);
 
-            a.selected = false;
-            b.selected = false;
-            m.selected = true;
+            setChecked(a, false);
+            setChecked(b, false);
+            setChecked(m, true);
             applyText("只有组相关", m, FileMenuModel.KEY_APPLY_GROUP);
 
-            a.selected = true;
+            setChecked(a, true);
             applyText("组外 1 + 组", a, FileMenuModel.KEY_APPLY_GROUP_AND_THIS);
 
-            b.selected = true;
+            setChecked(b, true);
             applyText("组外 ≥2 + 组", a, FileMenuModel.KEY_APPLY_GROUP_AND_MANY);
 
             // 勾选优先于右键目标：右键未勾选的 c，实际集合 = 勾选集合（a/b/m）
-            PreviewItem c = newPreview("apply-c");
+            PreviewRow c = newPreview("apply-c");
             workspace().appendItems(new ArrayList<>(List.of(c)));
             applyText("勾选优先于右键目标", c, FileMenuModel.KEY_APPLY_GROUP_AND_MANY);
 
@@ -361,9 +361,9 @@ public class ContextMenuProbe extends Application {
             boolean im = ((javafx.scene.control.ToggleButton) node("imageModeToggle")).isSelected();
             System.out.println("      (info) R7 端到端：当前模式 imageMode=" + im);
 
-            PreviewItem a = newPreview("r7-a");
-            PreviewItem b = newPreview("r7-b");
-            PreviewItem bare = newPreview("r7-bare");
+            PreviewRow a = newPreview("r7-a");
+            PreviewRow b = newPreview("r7-b");
+            PreviewRow bare = newPreview("r7-bare");
             AppConfig source = params("Q10-SRC");
             source.setSeparateFiles(true);
             source.setInputFolder("C:/probe/runtime-in");
@@ -386,14 +386,14 @@ public class ContextMenuProbe extends Application {
             check("R7.3：未复制过 ⇒「应用到所选」禁用", dis(FileMenuModel.Entry.APPLY_TO_SELECTION));
 
             // ---- R7.2 理由二：两个勾选项生效参数不同 ⇒ 禁用 + "参数不统一"版文案 ----
-            a.selected = true;
-            b.selected = true;
+            setChecked(a, true);
+            setChecked(b, true);
             updateState(a);
             check("R7.2：多选参数不统一 ⇒「复制参数」禁用", dis(FileMenuModel.Entry.COPY_PARAMS));
             check("R7.2：禁用理由是'参数不统一'版文案",
                     I18n.get(FileMenuModel.KEY_COPY_MIXED_PARAMS).equals(text(FileMenuModel.Entry.COPY_PARAMS)));
-            a.selected = false;
-            b.selected = false;
+            setChecked(a, false);
+            setChecked(b, false);
 
             // ---- R7.1/R7.2 可用态：右键有参数条目 ⇒ 复制参数启用、文案 = "复制参数" ----
             updateState(a);
@@ -431,6 +431,7 @@ public class ContextMenuProbe extends Application {
 
             // ---- R7.5：撤销那一条记录必须完整恢复到 before 快照 ----
             ((javafx.scene.control.Button) node("undoButton")).fire();
+            awaitCommands();
             check("R7.5：撤销后 b 的生效参数回到应用前（一条记录携带了 before 快照）",
                     itemParamsOf(b, im) != null
                             && effectiveSignature(itemParamsOf(b, im)).equals(effectiveSignature(params("BEFORE-B"))));
@@ -441,8 +442,34 @@ public class ContextMenuProbe extends Application {
         }
     }
 
-    private PreviewItem newPreview(String name) {
-        return new PreviewItem("C:/probe/" + name + ".mht", name + ".mht", LocalDateTime.now(), "C:/probe");
+    private com.mhtextractor.uicore.FrontendPort frontend;
+    private PreviewRow detached(String name) {
+        return new PreviewRow(new com.mhtextractor.uiport.ItemVm("H:/TEST/mht/probe/" + name + ".mht",
+                name + ".mht", false, false, 0, com.mhtextractor.uiport.UpdateKind.NONE), ignored -> {});
+    }
+    private PreviewRow newPreview(String name) throws Exception {
+        var item = detached(name); workspace().appendItems(List.of(item));
+        return view().allItems().stream().filter(row -> row.path.equals(item.path)).findFirst().orElseThrow();
+    }
+    private com.mhtextractor.uicore.WorkspaceView view() throws Exception {
+        return (com.mhtextractor.uicore.WorkspaceView) fieldOf(controller, "ws");
+    }
+    private void sync() throws Exception {
+        frontend.bootstrap(new AppConfig()); view().update(frontend.snapshot());
+    }
+    private void setChecked(PreviewRow row, boolean value) throws Exception {
+        frontend.implementation().commands().setChecked(List.of(row.path), value); sync();
+    }
+    private void awaitCommands() throws Exception {
+        var done = new java.util.concurrent.CompletableFuture<Void>();
+        frontend.execute(port -> null, ignored -> done.complete(null));
+        Object key = new Object();
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
+        var timer = new javafx.animation.Timeline(new javafx.animation.KeyFrame(javafx.util.Duration.millis(10), ignored -> {
+            if (done.isDone() || System.nanoTime() >= deadline) Platform.exitNestedEventLoop(key, null);
+        }));
+        timer.setCycleCount(javafx.animation.Animation.INDEFINITE); timer.play();
+        Platform.enterNestedEventLoop(key); timer.stop(); done.get(1, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     private static AppConfig params(String marker) {
@@ -451,16 +478,11 @@ public class ContextMenuProbe extends Application {
         return c;
     }
 
-    private static void setItemParams(PreviewItem item, boolean imageMode, AppConfig p) {
-        if (imageMode) {
-            item.imageItemParams = p;
-        } else {
-            item.textItemParams = p;
-        }
+    private void setItemParams(PreviewRow item, boolean imageMode, AppConfig params) throws Exception {
+        frontend.implementation().commands().setItemParams(item.path, imageMode, params); sync();
     }
-
-    private static AppConfig itemParamsOf(PreviewItem item, boolean imageMode) {
-        return imageMode ? item.imageItemParams : item.textItemParams;
+    private static AppConfig itemParamsOf(PreviewRow item, boolean imageMode) {
+        return imageMode ? item.getImageParamsCache() : item.getTextParamsCache();
     }
 
     /** 提取参数的内容签名（与生产同一实现，不用 equals：AppConfig 是可变对象） */
@@ -483,6 +505,7 @@ public class ContextMenuProbe extends Application {
         Event.fireEvent(cell, requestedAt(cell));
         if (menu.target() != target) throw new IllegalStateException("真实右键未路由到目标");
         menu.item(entry).fire();
+        awaitCommands();
         menu.menu().hide();
     }
 
@@ -511,8 +534,23 @@ public class ContextMenuProbe extends Application {
         return java.util.Objects.requireNonNull(scene.lookup("#" + fxId), "缺失节点：" + fxId);
     }
 
-    private com.mhtextractor.app.WorkspaceModel workspace() throws Exception {
-        return (com.mhtextractor.app.WorkspaceModel) fieldOf(controller, "ws");
+    private ProbeWorkspace workspace() { return new ProbeWorkspace(); }
+    private final class ProbeWorkspace {
+        void appendItems(List<PreviewRow> rows) throws Exception {
+            frontend.implementation().commands().applyImportPlan(new com.mhtextractor.uiport.ImportPlanVm(
+                    List.of(new com.mhtextractor.uiport.ImportPlanVm.ImportBatchVm("H:/TEST/mht/probe", null,
+                            false, rows.stream().map(row -> row.path).toList())), 0, 0, 0, 0, 0, false, false)); sync();
+        }
+        GroupRow<PreviewRow> group(List<PreviewRow> rows, String name) throws Exception {
+            frontend.implementation().commands().group(rows.stream().map(row -> row.path).toList(), name); sync();
+            return view().groups().stream().filter(group -> group.getName().equals(name)).findFirst().orElseThrow();
+        }
+        void removeItems(List<PreviewRow> rows) throws Exception {
+            frontend.implementation().commands().removeItems(rows.stream().map(row -> row.path).toList()); sync();
+        }
+        void removeGroup(GroupRow<?> group) throws Exception {frontend.implementation().commands().removeGroup(group.getGroupNo()); sync();}
+        int undoDepth() {return frontend.queries().workspace().undoDepth();}
+        List<Object> displayOrder() throws Exception {return view().displayOrder();}
     }
 
     // ==================== t=1200ms 起：点击菜单外即关闭（A/B 对照，同一菜单） ====================

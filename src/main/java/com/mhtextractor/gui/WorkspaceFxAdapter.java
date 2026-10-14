@@ -1,7 +1,7 @@
 package com.mhtextractor.gui;
 
 import com.mhtextractor.app.WorkspaceChange;
-import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.uicore.WorkspaceView;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -18,12 +18,12 @@ import java.util.function.Consumer;
  * <ol>
  *   <li>{@link #displayItems()} —— <b>显示序</b>（{@code ListView} 直接绑定的那张展平表）。
  *       它是本类<b>唯一维护</b>的可变列表：{@link #project()} 用
- *       {@link WorkspaceModel#displayOrder()} 一次性 {@code setAll}（第一阶段只做全量投影，
+ *       {@link WorkspaceView#displayOrder()} 一次性 {@code setAll}（第一阶段只做全量投影，
  *       增量 diff 要等"测量证明 setAll 有性能问题"才做 —— 指南明令）；</li>
  *   <li>{@link #dataOrder()} —— <b>数据序只读投影</b>：读直达模型内部存储
- *       （{@link WorkspaceModel#topLevelView()}，零拷贝实时视图），任何写操作抛
+ *       （{@link WorkspaceView#topLevelView()}，零拷贝实时视图），任何写操作抛
  *       {@code UnsupportedOperationException}，<b>唯一例外</b>是 {@code clear()} ——
- *       它转发为模型命令 {@link WorkspaceModel#clearItems()}（"清场只清列表"的既有语义）。
+ *       它转发为模型命令 {@link WorkspaceView#clearItems()}（"清场只清列表"的既有语义）。
  *       保留这个入口是为了让 {@code FeatureExercise}（P7 才改造）继续以 {@code mc.items} 驱动演练，
  *       同时不给 GUI 留下任何"绕过模型写数据序"的路。</li>
  * </ol>
@@ -83,7 +83,7 @@ public final class WorkspaceFxAdapter {
         };
     }
 
-    private final WorkspaceModel model;
+    private final WorkspaceView model;
 
     /** 显示序（ListView 直接绑定）—— 本类独占维护 */
     private final ObservableList<Object> displayItems = FXCollections.observableArrayList();
@@ -99,6 +99,7 @@ public final class WorkspaceFxAdapter {
 
     /** 自上次投影以来模型是否发布过变更（订阅的可观察产物；P4 打开自动投影后用它做合并刷新） */
     private boolean stale = false;
+    private long projectedVersion;
 
     /** bindListView 之后 project()/refresh() 的 FX 线程守卫开关（只有投产接线点置 true；未接线不守卫，无头投影测试不必起 toolkit） */
     private boolean fxThreadGuarded = false;
@@ -106,7 +107,7 @@ public final class WorkspaceFxAdapter {
     /**
      * @param model 被投影的模型（非 null）
      */
-    public WorkspaceFxAdapter(WorkspaceModel model) {
+    public WorkspaceFxAdapter(WorkspaceView model) {
         this(model, SelectionHost.NONE);
     }
 
@@ -114,7 +115,7 @@ public final class WorkspaceFxAdapter {
      * @param model 被投影的模型（非 null）
      * @param host  选择宿主（null 视为 {@link SelectionHost#NONE}）
      */
-    public WorkspaceFxAdapter(WorkspaceModel model, SelectionHost host) {
+    public WorkspaceFxAdapter(WorkspaceView model, SelectionHost host) {
         this.model = model;
         this.host = host == null ? SelectionHost.NONE : host;
         // 数据序只读投影：AbstractList 只要求 get/size；add/remove/set 由基类抛 UnsupportedOperationException
@@ -134,11 +135,11 @@ public final class WorkspaceFxAdapter {
                 model.clearItems();
             }
         };
-        model.addListener(listener);
+
     }
 
     /** 被投影的模型 */
-    public WorkspaceModel model() {
+    public WorkspaceView model() {
         return model;
     }
 
@@ -154,7 +155,7 @@ public final class WorkspaceFxAdapter {
 
     /** 自上次投影以来模型是否发布过变更（订阅证据，也是 P4 自动投影的合并依据） */
     public boolean isStale() {
-        return stale;
+        return projectedVersion != model.version();
     }
 
     /** 绑定选择宿主（生产：{@code ListView} 的选择模型） */
@@ -190,11 +191,11 @@ public final class WorkspaceFxAdapter {
 
     /** 退订（宿主窗口销毁时用；未订阅是 no-op） */
     public void dispose() {
-        model.removeListener(listener);
+        model.dispose();
     }
 
     /**
-     * <b>全量投影</b>：把显示序一次性对齐到 {@link WorkspaceModel#displayOrder()}，
+     * <b>全量投影</b>：把显示序一次性对齐到 {@link WorkspaceView#displayOrder()}，
      * <b>不</b>碰选中（对应迁移前的 {@code MainController.rebuildDisplay()} 的那一行 {@code setAll}）。
      *
      * <p>动画路径（提起/松手/展开折叠）用它自己那一套：它们需要"什么时候重建"由动画掌握，
@@ -203,6 +204,7 @@ public final class WorkspaceFxAdapter {
     public void project() {
         assertFxThread("project");
         displayItems.setAll(model.displayOrder());
+        projectedVersion=model.version();
         stale = false;
     }
 

@@ -116,7 +116,7 @@ New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 Write-Output "[javac] $Probe"
 & $javac --module-path $modulePath --add-modules javafx.controls,javafx.fxml `
-    -cp "$repo\target\classes;$deps" -d $classDir $src
+    -cp "$repo\target\classes;$deps" -d $classDir $src (Join-Path $probeDir 'support\ProbeRuntime.java')
 if ($LASTEXITCODE -ne 0) { Write-Output "[ERROR] compile failed, exit=$LASTEXITCODE"; exit $LASTEXITCODE }
 
 $parts = $Locale.Split('_')

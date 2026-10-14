@@ -4,13 +4,13 @@ import com.mhtextractor.app.SelectionRules;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.util.DragGeometry;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.model.ChangeListener;
 import com.mhtextractor.app.DropResolver;
 import com.mhtextractor.model.ExtractOutcome;
-import com.mhtextractor.model.GroupItem;
-import com.mhtextractor.model.ParamScope;
+import com.mhtextractor.uicore.GroupRow;
+import com.mhtextractor.uicore.ParamScope;
 import javafx.event.Event;
 import lombok.extern.slf4j.Slf4j;
 import javafx.geometry.Insets;
@@ -63,12 +63,12 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
     private final Region intoOverlay = new Region();
     private final FontIcon arrowIcon = new FontIcon();
     private final FontIcon statusIcon = new FontIcon();
-    private PreviewItem boundItem;
+    private PreviewRow boundItem;
     /**
      * 当前单元格与条目勾选状态的联动监听器（会话 18 · E1.3a）。
      *
      * <p>替换原 {@code bindBidirectional} 的"可解绑"能力：单元格复用时用
-     * {@link PreviewItem#removeSelectedChangeListener(ChangeListener)} 解挂，
+     * {@link PreviewRow#removeSelectedChangeListener(ChangeListener)} 解挂，
      * 再为新的条目建立新联动 —— 等价于原先的 {@code unbindBidirectional} → {@code bindBidirectional}。</p>
      */
     private ChangeListener selectedMirror;
@@ -188,11 +188,11 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             setManaged(false);
             return;
         }
-        if (item instanceof GroupItem<?> g) {
-            renderGroupRow((GroupItem<PreviewItem>) g);
+        if (item instanceof GroupRow<?> g) {
+            renderGroupRow((GroupRow<PreviewRow>) g);
             // 折叠点击走 cell 级 pressed 判定（箭头槽位 cell x 22-46）：released 会被
             // checkbox 吞掉（间歇丢失），pressed 到达更可靠；判定由 actions.onCellPressed 统一处理
-        } else if (item instanceof PreviewItem it) {
+        } else if (item instanceof PreviewRow it) {
             if (it.removed) {
                 setGraphic(null);
                 setTooltip(null);
@@ -210,7 +210,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
     }
 
     /** 组条目行：组复选框（三态随成员联动）+ 折叠箭头 + 组名（项目数）；深蓝底、行高比文字稍高、不随参数变化 */
-    private void renderGroupRow(GroupItem<PreviewItem> g) {
+    private void renderGroupRow(GroupRow<PreviewRow> g) {
         setVisible(true);
         setManaged(true);
         box.setPadding(GROUP_ROW_PAD);
@@ -259,7 +259,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
     }
 
     /** 项目条目行（顶层与组内成员共用；组内成员文件名缩进显示） */
-    private void renderItemRow(PreviewItem it) {
+    private void renderItemRow(PreviewRow it) {
         setVisible(true);
         setManaged(true);
         boolean inGroup = it.parentGroup != null;
@@ -322,19 +322,19 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
                     : ExtractOutcomeStyles.listPaint(it.extractOutcome)));
             setTooltip(it.extractDetail == null || it.extractDetail.isEmpty()
                     ? null : new Tooltip(it.extractDetail));
-        } else if (it.status == PreviewItem.Status.FAILED) {
+        } else if (it.status == PreviewRow.Status.FAILED) {
             setStyle(isSelected ? FAILED_SELECTED_ROW_STYLE : FAILED_ROW_STYLE);
             setTooltip(new Tooltip(it.errorMsg));
         } else {
             setStyle(itemParamStyle(it, isSelected));
-            setTooltip(it.status == PreviewItem.Status.EMPTY
+            setTooltip(it.status == PreviewRow.Status.EMPTY
                     ? new Tooltip(Texts.get("preview.emptyContent")) : null);
         }
         // 深色底需白字（-fx-text-background-color 不跨节点继承，直接设 label 填充色）：
         // 全局参数深蓝底、提取失败/跳过/警告行（Windows 错误红 #E81123 及红绿分割行）
         boolean whiteText = ExtractOutcomeStyles.usesDarkBackdrop(it.extractOutcome)
                 || (it.extractOutcome == ExtractOutcome.NONE
-                        && it.status != PreviewItem.Status.FAILED
+                        && it.status != PreviewRow.Status.FAILED
                         && actions.effectiveStatus(it) == ParamScope.Status.GLOBAL);
         nameLabel.setStyle((inGroup ? "-fx-font-size: 12px; -fx-font-weight: bold;" : "")
                 + (whiteText ? " -fx-text-fill: #ffffff;" : ""));
@@ -345,7 +345,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
     /** 8.5 条目背景色（拍板 2026-09-22 选中态切换，组行同机制）：无生效参数 = 现状色（选中用主题默认高亮）；
      *  全局参数 = 深蓝；组/条目级独立参数 = 浅蓝；选中时切换到混合灰的变体色。
      *  来源三态判定经 {@code actions.effectiveStatus} → {@code app.EffectiveParamsService}（唯一实现点，R8-①） */
-    private String itemParamStyle(PreviewItem it, boolean selected) {
+    private String itemParamStyle(PreviewRow it, boolean selected) {
         String paint = switch (actions.effectiveStatus(it)) {
             case GLOBAL -> selected ? GLOBAL_PARAM_SELECTED_PAINT : GLOBAL_PARAM_PAINT;
             case GROUP -> selected ? GROUP_PARAM_SELECTED_PAINT : GROUP_PARAM_PAINT;
@@ -360,7 +360,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             // 折叠动画期间禁止拖拽；Ctrl/Shift 修饰键按下不启动拖拽（多选手势）
             if (actions.isListAnimating() || e.isControlDown() || e.isShiftDown()
                     || isEmpty() || getItem() == null
-                    || (getItem() instanceof PreviewItem it && it.removed)) {
+                    || (getItem() instanceof PreviewRow it && it.removed)) {
                 return;
             }
             // 拖拽影像：带投影快照（临时挂投影后截图，随即撤掉）
@@ -389,7 +389,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             // 本应用拖拽会话以 actions.draggedObject() 为准；自身落点由 resolve（dragged == target）拦截。
             if (e.getDragboard().hasString() && actions.draggedObject() != null) {
                 Object t = getItem();
-                if (t != null && !(t instanceof PreviewItem it && it.removed)) {
+                if (t != null && !(t instanceof PreviewRow it && it.removed)) {
                     DropResolver.Zone zone = DropResolver.zoneFor(t, e.getY(), getHeight(), GROUP_ROW_EDGE_ZONE);
                     // 合法落点判定与落点解析共用同一规则（resolve 返回 null = 非法组合）
                     if (DropResolver.resolve(actions.dataOrder(), actions.draggedObject(), t, zone) != null) {
@@ -455,7 +455,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
      */
     private void handleDrop(javafx.scene.input.DragEvent e) {
         Object t = getItem();
-        if (t == null || (t instanceof PreviewItem it && it.removed)) {
+        if (t == null || (t instanceof PreviewRow it && it.removed)) {
             return;
         }
         DropResolver.Zone zone = DropResolver.zoneFor(t, e.getY(), getHeight(), GROUP_ROW_EDGE_ZONE);

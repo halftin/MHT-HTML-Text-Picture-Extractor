@@ -1,20 +1,14 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.ExtractionPlanService;
-import com.mhtextractor.app.InProcessUiport;
-import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.uiport.PortEvent;
 import com.mhtextractor.uiport.WorkspaceQueries;
-import com.mhtextractor.app.ExtractionPreconditions;
 import com.mhtextractor.app.PreStartGate;
-import com.mhtextractor.app.PreStartGateContext;
-import com.mhtextractor.app.PreStartGates;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.model.ExtractionStats;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -64,7 +58,7 @@ public final class ExtractionTaskCoordinator {
      * {@code buildRuntimeConfig} / {@code startExtractionTask} / {@code extractionUi} /
      * 三终态回调里对主窗口状态的一处读取或回写。
      */
-    public interface Host extends ExtractionPlanService.Context {
+    public interface Host {
         /** 列表动画进行中（原 {@code groupCommand.isAnimating()} 入口守卫）。 */
         boolean isAnimating();
 
@@ -105,7 +99,7 @@ public final class ExtractionTaskCoordinator {
         List<Object> dataOrder();
 
         /** 全部有效项目（原 {@code allVisibleItems()}，逐文件覆盖构造用）。 */
-        List<PreviewItem> allVisibleItems();
+        List<PreviewRow> allVisibleItems();
 
         /** 取消工作区后台活动（原 {@code cancelWorkspaceActivity()}，启动提取前调用）。 */
         void cancelWorkspaceActivity();
@@ -144,7 +138,7 @@ public final class ExtractionTaskCoordinator {
         }
 
         /** 清空指定条目的提取结果色（不参与本次提取的可见项，避免误读 ✓/✗）。默认无操作。 */
-        default void clearExtractOutcomes(List<PreviewItem> items) {
+        default void clearExtractOutcomes(List<PreviewRow> items) {
         }
 
         /** 提取运行中锁定/恢复列表勾选框与"只提取选中"开关（禁用 + 刷新单元格）。默认无操作。 */
@@ -153,8 +147,9 @@ public final class ExtractionTaskCoordinator {
     }
 
     private final Host host;
-    private final ExtractionPlanService plans;
     private final WorkspaceQueries queries;
+    private final com.mhtextractor.uiport.Uiport port;
+    private com.mhtextractor.uiport.PreStartStateVm preStart;
     /**
      * 启动前顺序门（决策 C 的落位）：{@code begin()} 里按插入顺序串行询问。
      * 生产链 = {@link PreStartGates#productionChain(PreStartGateContext)}（草稿门 → 未命名组门 → 合并名门，
@@ -175,50 +170,31 @@ public final class ExtractionTaskCoordinator {
      * {@link #applyExtractionEvent}）。宿主非 null 时注册顺序门（P1-5：门规则已下沉
      * {@link PreStartGates#productionChain(PreStartGateContext)}，本类只做上下文转发与卡片渲染）。
      */
-    public ExtractionTaskCoordinator(Host host, WorkspaceModel model) {
-        this(host, null, model);
+    public ExtractionTaskCoordinator(Host host, com.mhtextractor.uiport.Uiport port) {
+        this(host, null, port);
     }
 
-    public ExtractionTaskCoordinator(Host host, Runnable updateStartButtonState, WorkspaceModel model) {
+    public ExtractionTaskCoordinator(Host host, Runnable updateStartButtonState, com.mhtextractor.uiport.Uiport port) {
         this.host = host;
-        this.plans = host == null ? null : new ExtractionPlanService(host);
-        this.queries = host == null ? null : new InProcessUiport(model, request -> {
-            throw new UnsupportedOperationException("Confirmation is handled by the extraction host");
-        }, plans).queries();
+        this.port = java.util.Objects.requireNonNull(port);
+        this.queries = port.queries();
         this.updateStartButtonState = updateStartButtonState;
         if (host != null) {
-            // 查询全部转发 host；三个展示回调 = 搬迁前私有门类里的 GuiNotifications + Texts.get 文案渲染（逐字）
-            PreStartGateContext ctx = new PreStartGateContext() {
-                @Override public List<Object> dataOrder() { return host.dataOrder(); }
-                @Override public boolean imageMode() { return host.imageMode(); }
-                @Override public AppConfig textParamsCache() { return host.textParamsCache(); }
-                @Override public AppConfig imageParamsCache() { return host.imageParamsCache(); }
-                @Override public String outputFolder() { return host.outputFolder(); }
-                @Override public boolean extractCheckedOnly() { return host.extractCheckedOnly(); }
-                @Override public int visibleCheckedCount() { return host.visibleCheckedCount(); }
-                @Override public long visibleCount() { return host.visibleCount(); }
-                @Override public boolean draftDirty() { return ParamSidePanel.isDirty(host.statusLabel()); }
-
-                @Override
-                public void confirmUnnamedGroups(List<String> names, Consumer<Boolean> proceed) {
-                    GuiNotifications.unnamedGroupConfirm(host.statusLabel(),
-                            Texts.get("group.unnamedConfirm", "names",
-                                    String.join(Texts.get("list.nameSeparator"), names)),
-                            proceed);
-                }
-
-                @Override
-                public void confirmSubsetMergedName(Consumer<Boolean> proceed) {
-                    GuiNotifications.subsetMergedNameConfirm(host.statusLabel(),
-                            Texts.get("extract.subsetMergedNameConfirm"), proceed);
-                }
-
-                @Override
-                public void draftBlocksStart() {
-                    GuiNotifications.draftBlocksStart(host.statusLabel());
-                }
-            };
-            preStartGates.addAll(PreStartGates.productionChain(ctx)); // 决策 C：草稿门 → 未命名组门 → 合并名门
+            preStartGates.add(proceed -> {
+                if (!ParamSidePanel.isDirty(host.statusLabel())) proceed.accept(true);
+                else { GuiNotifications.draftBlocksStart(host.statusLabel()); proceed.accept(false); }
+            });
+            preStartGates.add(proceed -> {
+                var names = preStart.defaultNamedGroups();
+                if (names.isEmpty()) proceed.accept(true);
+                else GuiNotifications.unnamedGroupConfirm(host.statusLabel(),
+                        Texts.get("group.unnamedConfirm", "names", String.join(Texts.get("list.nameSeparator"), names)), proceed);
+            });
+            preStartGates.add(proceed -> {
+                if (!preStart.subsetMergedName() || host.visibleCheckedCount() >= host.visibleCount()) proceed.accept(true);
+                else GuiNotifications.subsetMergedNameConfirm(host.statusLabel(),
+                        Texts.get("extract.subsetMergedNameConfirm"), proceed);
+            });
         }
     }
 
@@ -228,9 +204,6 @@ public final class ExtractionTaskCoordinator {
     }
 
     public WorkspaceQueries queries() { return queries; }
-
-    /** 提取计划服务（P3-B6：供组合根把它装配进端口 —— 请求构建与任务通道在 app 层用同一份计划）。 */
-    public ExtractionPlanService plans() { return plans; }
 
     /** 组合根装配（{@code MainController.initialize()}）：把「启动提取」命令绑定到端口（后端任务通道）。 */
     public void bindStartExtraction(Consumer<Boolean> start) {
@@ -270,66 +243,26 @@ public final class ExtractionTaskCoordinator {
      * </ol>
      */
     public void begin() {
-        if (host.isAnimating()) {
+        if (host.isAnimating()) return;
+        AppConfig runtime = buildRuntimeConfig();
+        if (port instanceof com.mhtextractor.uicore.FrontendPort frontend)
+            frontend.execute(backend -> backend.queries().preStartState(runtime, host.extractCheckedOnly()), this::beginWithState);
+        else beginWithState(queries.preStartState(runtime, host.extractCheckedOnly()));
+    }
+
+    private void beginWithState(com.mhtextractor.uiport.PreStartStateVm state) {
+        preStart = state;
+        if (state.denial() != null) {
+            GuiNotifications.preconditionDenied(host.statusLabel(), state.denial());
             return;
         }
-        String inputFolder = host.inputFolder();
-        String outputFolder = host.outputFolder();
-
-        // 会话 18 · E4-3：前置校验**规则**（含"该用 WARNING 还是 ERROR"）已抽到
-        // ExtractionPreconditions（零 JavaFX、有独立单测）。
-        // 逐条委托以保持原判定**顺序**；级别由规则给出，UI 只负责展示。
-        // 刻意不调用聚合形态 validate(Facts)：那会把顺序与级别压平，属行为变更。
-        var denial = ExtractionPreconditions.deny(ExtractionPreconditions.blankInput(inputFolder));
-        if (denial == null) {
-            denial = ExtractionPreconditions.deny(ExtractionPreconditions.blankOutput(outputFolder));
-        }
-        if (denial == null) {
-            denial = ExtractionPreconditions.deny(ExtractionPreconditions.inputNotDirectory(inputFolder));
-        }
-        if (denial == null) {
-            denial = ExtractionPreconditions.deny(ExtractionPreconditions.noExtractableItems(
-                    host.itemCount(), (int) host.visibleCount()));
-        }
-        if (denial == null && host.extractCheckedOnly()) {
-            // 功能一：开启"只提取选中的列表项"但一项未勾选 → ERROR 居中卡片（须确认）
-            denial = ExtractionPreconditions.deny(
-                    ExtractionPreconditions.noCheckedItems(host.visibleCheckedCount()));
-        }
-        if (denial != null) {
-            // 会话 19：ERROR 走居中错误卡片（必须确认），WARNING 走右上角 toast（非阻塞）
-            GuiNotifications.preconditionDenied(host.statusLabel(), denial);
-            return;
-        }
-
-        boolean imageMode = host.imageMode();
-
-        // 图片模式额外校验
-        if (imageMode) {
-            AppConfig params = host.currentModeParamsOrDefaults();
-            if (params.isEnableZipPackaging() || params.isEnableCbzPackaging()) {
-                File outRoot = new File(outputFolder);
-                if (!outRoot.isDirectory() && !outRoot.mkdirs() && !outRoot.isDirectory()) {
-                    log.warn(Texts.msg("log.maincontroller.30", outputFolder));
-                }
-            }
-        }
-
-        // 当前模式参数未确认 → 提醒（区分"从未设置"与"检测到模式切换"两种文案；会话 19：回调式确认）
-        boolean otherConfirmed = imageMode ? host.textParamsCache() != null : host.imageParamsCache() != null;
-        if (!host.currentModeConfirmed()) {
-            String msg = otherConfirmed
-                    ? Texts.get("extract.confirmModeSwitch")
-                    : Texts.get("extract.confirmParamsUnset");
-            GuiNotifications.paramTargetConfirm(host.statusLabel(), msg, ok -> {
-                if (ok) {
-                    runPreStartGates(0);
-                }
-            });
-            return;
-        }
-
-        runPreStartGates(0);
+        boolean confirmed = host.imageMode() ? state.imageConfirmed() : state.textConfirmed();
+        boolean otherConfirmed = host.imageMode() ? state.textConfirmed() : state.imageConfirmed();
+        if (!confirmed) {
+            GuiNotifications.paramTargetConfirm(host.statusLabel(),
+                    Texts.get(otherConfirmed ? "extract.confirmModeSwitch" : "extract.confirmParamsUnset"),
+                    ok -> { if (ok) runPreStartGates(0); });
+        } else runPreStartGates(0);
     }
 
     /** 顺序门链：从第 {@code index} 道门起串行询问；全部放行（或链为空）才启动；任一取消即整体中止。 */
@@ -347,7 +280,9 @@ public final class ExtractionTaskCoordinator {
 
     /** 以已确认参数（未确认时用默认参数）+ 主窗口 GUI 状态构建运行时提取配置（{@code AcceptanceDriver} 公开契约，签名不变；实现已下沉 {@code app.ExtractionPlanService}）。 */
     AppConfig buildRuntimeConfig() {
-        return queries.runtimeConfig();
+        AppConfig config=host.currentModeParamsOrDefaults().copyExtractionParams();
+        config.setImageModeEnabled(host.imageMode());config.setInputFolder(host.inputFolder());
+        config.setOutputFolder(host.outputFolder());config.setOpenFolderAfterComplete(host.openFolderAfterComplete());return config;
     }
 
     /**
@@ -362,7 +297,7 @@ public final class ExtractionTaskCoordinator {
 
         // 功能一：只提取选中项时，先清空"本次不参与的可见项"的旧提取结果色（避免误读 ✓/✗）
         if (host.extractCheckedOnly()) {
-            List<PreviewItem> nonParticipating = host.allVisibleItems().stream()
+            List<PreviewRow> nonParticipating = host.allVisibleItems().stream()
                     .filter(i -> !i.selected).toList();
             if (!nonParticipating.isEmpty()) {
                 host.clearExtractOutcomes(nonParticipating);

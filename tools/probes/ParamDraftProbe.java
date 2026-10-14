@@ -4,7 +4,7 @@ import com.mhtextractor.gui.controller.ParamFormPane;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.GroupItem;
-import com.mhtextractor.model.ParamScope;
+import com.mhtextractor.uicore.ParamScope;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Node;
@@ -57,7 +57,8 @@ public class ParamDraftProbe extends Application {
         boolean zh = "zh".equals(I18n.currentLocale().getLanguage());
         System.out.println("=== ParamDraftProbe locale=" + I18n.currentLocale() + " ===");
 
-        ParamFormPane pane = new ParamFormPane();
+        var frontend = ProbeRuntime.port();
+        ParamFormPane pane = new ParamFormPane(frontend);
         Scene scene = new Scene(pane, 640, 620);
         stage.setScene(scene);
         stage.setTitle("ParamDraftProbe");
@@ -107,15 +108,18 @@ public class ParamDraftProbe extends Application {
         check("confirm-commits", !pane.isDirty(), "confirm must commit (draft no longer dirty)");
 
         // ---------- 4) R1.4: group target, mixed members -> hint appended ----------
-        GroupItem<PreviewItem> group = new GroupItem<>(1, "组1");
-        PreviewItem a = new PreviewItem("C:\\src\\a.mht", "a.mht", LocalDateTime.now(), "C:\\src");
-        PreviewItem b = new PreviewItem("C:\\src\\b.mht", "b.mht", LocalDateTime.now(), "C:\\src");
-        group.getMembers().addAll(List.of(a, b));
-        a.parentGroup = group;
-        b.parentGroup = group;
-        AppConfig itemParams = new AppConfig();
-        itemParams.setStartMarker("ITEM_ONLY");
-        a.textItemParams = itemParams;   // a has item-level params, b does not -> mixed
+        var backend = frontend.implementation();
+        var paths = List.of("H:/TEST/mht/probe/a.mht", "H:/TEST/mht/probe/b.mht");
+        backend.commands().applyImportPlan(new com.mhtextractor.uiport.ImportPlanVm(
+                List.of(new com.mhtextractor.uiport.ImportPlanVm.ImportBatchVm("H:/TEST/mht/probe", null,
+                        false, paths)), 0, 0, 0, 0, 0, false, false));
+        backend.commands().group(paths, "组1");
+        AppConfig itemParams = new AppConfig(); itemParams.setStartMarker("ITEM_ONLY");
+        backend.commands().setItemParams(paths.getFirst(), false, itemParams);
+        frontend.bootstrap(new AppConfig());
+        var workspace = new com.mhtextractor.uicore.WorkspaceView(frontend);
+        var group = workspace.groups().getFirst();
+        var b = workspace.allItems().get(1);
 
         pane.load(null, null, false, new ParamScope.GroupTarget(group));
         check("bar-group-mixed", expectedMixed.equals(bar.currentText()),
@@ -123,7 +127,8 @@ public class ParamDraftProbe extends Application {
         check("clean-after-group-load", !pane.isDirty(), "load() must re-baseline (clean)");
 
         // ---------- 5) R1.4: once the group has its own params, members are uniform -> no hint ----------
-        group.setTextParamsCache(new AppConfig());
+        backend.commands().setGroupParams(group.getGroupNo(), false, new AppConfig());
+        frontend.bootstrap(new AppConfig()); workspace.update(frontend.snapshot());
         pane.load(null, null, false, new ParamScope.GroupTarget(group));
         check("bar-group-uniform", expectedGroup.equals(bar.currentText()),
                 "bar=\"" + bar.currentText() + "\" expected=\"" + expectedGroup + "\"");

@@ -66,6 +66,20 @@ class InProcessUiportParamTest {
     }
 
     @Test
+    void pathCommandsPreferReimportedVisibleItemOverHiddenHistory() {
+        WorkspaceModel model=new WorkspaceModel();
+        InProcessUiport port=new InProcessUiport(model,stubConfirmer());
+        PreviewItem hidden=item("again.mht"),visible=item("again.mht");
+        model.addItems(List.of(hidden));model.removeItems(List.of(hidden));model.appendItems(List.of(visible));
+        port.commands().setChecked(List.of(visible.path),true);
+        assertTrue(visible.selected,"Live imported row must receive path-based selection");
+        AppConfig config=params("visible");
+        port.commands().setItemParams(visible.path,false,config);
+        assertEquals(config,visible.textItemParams);
+        assertNull(hidden.textItemParams,"Hidden history must not receive active parameters");
+    }
+
+    @Test
     void setGlobalParamsThroughPortEmitsEventAndPushesParamSet() {
         WorkspaceModel model = new WorkspaceModel();
         InProcessUiport uiport = new InProcessUiport(model, stubConfirmer());

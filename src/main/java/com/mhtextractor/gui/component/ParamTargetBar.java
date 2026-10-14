@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.component;
 
 import com.mhtextractor.uicore.ParamTargetText;
-import com.mhtextractor.model.ParamScope;
+import com.mhtextractor.uicore.ParamScope;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
@@ -55,7 +55,7 @@ public final class ParamTargetBar extends HBox {
      * @param groupMixed      组内生效参数是否混合（{@link ParamTargetText#isGroupMixed} 的判定结果）
      */
     public void show(ParamScope.Target target, String itemDisplayName, boolean groupMixed) {
-        label.setText(ParamTargetText.forTarget(target, itemDisplayName, groupMixed));
+        label.setText(ParamTargetText.forViewTarget(target, itemDisplayName, groupMixed));
     }
 
     /**

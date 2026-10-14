@@ -3,7 +3,7 @@ package com.mhtextractor.gui.controller;
 import atlantafx.base.controls.ToggleSwitch;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.model.ParamScope;
+import com.mhtextractor.uicore.ParamScope;
 import javafx.application.Platform;
 
 import java.io.File;
@@ -35,8 +35,13 @@ class FeatureExerciseSupport {
     protected final AcceptanceDriver.View view;
 
     FeatureExerciseSupport(MainController mc) {
+        this(mc,null);
+    }
+
+    FeatureExerciseSupport(MainController mc, com.mhtextractor.uicore.FrontendPort frontend) {
         this.mc = mc;
-        this.view = new AcceptanceDriver.View(mc);
+        this.view = new AcceptanceDriver.View(mc,frontend);
+        FxDelay.bind(frontend);
     }
     // ===== D：参数编辑只有侧边栏一条路径（模态参数窗口壳已删） =====
 
@@ -54,7 +59,7 @@ class FeatureExerciseSupport {
      */
     protected ParamFormPane openSidePanel(boolean imageMode, ParamScope.Target target) {
         lastPanelCommit = null;
-        ParamSidePanel panel = ParamSidePanel.of(statusLabel());
+        ParamSidePanel panel = ParamSidePanel.of(statusLabel(), null);
         panel.show(target, imageMode, this.view.textParamsCache(), this.view.imageParamsCache(),
                 params -> lastPanelCommit = params);
         return panel.pane();
@@ -136,11 +141,15 @@ protected void pumpFxEvents() {
 
 /** 测试专用：等待在途的统一导入收尾（统一导入为后台异步，断言列表状态前必须先排空） */
 protected void waitForImportDone() throws InterruptedException {
+    FxDelay.pause(1); // Wait for the asynchronous import request to reach its initial backend snapshot.
     long deadline = System.currentTimeMillis() + 15000;
     while (this.view.isImporting() && System.currentTimeMillis() < deadline) {
         pumpFxEvents();
-        Thread.sleep(20);
+        FxDelay.pause(20);
     }
+    if(this.view.isImporting())throw new IllegalStateException("Backend import did not finish within 15 seconds");
+    FxDelay.pause(1);
+    this.view.updateStartButtonState();
 }
 /**
  * 在指定目录生成一个最小 MHT 文件（手写 MIME 结构，含 HTML 与一张内嵌 WebP），供演练与测试使用

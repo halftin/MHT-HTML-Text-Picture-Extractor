@@ -4,8 +4,6 @@ import atlantafx.base.controls.ToggleSwitch;
 import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.app.ParamDraft;
 import com.mhtextractor.app.ParamSchemaService;
-import com.mhtextractor.app.InProcessUiport;
-import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.uiport.WorkspaceQueries;
 import com.mhtextractor.uiport.ParamSchemaVm;
 import java.util.Map;
@@ -19,7 +17,7 @@ import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.ParamTargetBar;
 import com.mhtextractor.uicore.ParamTargetText;
-import com.mhtextractor.model.ParamScope;
+import com.mhtextractor.uicore.ParamScope;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -166,10 +164,8 @@ public class ParamFormPane extends BorderPane {
     private final Map<String, Control> fields = new LinkedHashMap<>();
     private final Map<String, TitledPane> groups = new LinkedHashMap<>();
 
-    public ParamFormPane() {
-        this(new InProcessUiport(new WorkspaceModel(), request -> {
-            throw new UnsupportedOperationException("Form confirmations belong to the host");
-        }).queries());
+    public ParamFormPane(com.mhtextractor.uiport.Uiport port) {
+        this(java.util.Objects.requireNonNull(port).queries());
     }
 
     public ParamFormPane(WorkspaceQueries queries) {
@@ -254,8 +250,8 @@ public class ParamFormPane extends BorderPane {
         notifyDraftStateChanged();
         // R1.4：刷新目标信息栏（组内混合提示的上下文就是本次载入用的全局参数缓存）
         targetBar.show(target, null,
-                ParamTargetText.isGroupMixed(target,
-                        new EffectiveParamsService.Context(imageMode, textCache, imageCache)));
+                target instanceof ParamScope.GroupTarget gt && gt.group() instanceof com.mhtextractor.uicore.GroupRow<?> group
+                        && !queries.parameterState(imageMode, group.getMembers().stream().map(member -> ((com.mhtextractor.uicore.PreviewRow) member).id()).toList(), com.mhtextractor.uiport.TargetResolution.EXPLICIT).uniform());
     }
 
     /**

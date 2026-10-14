@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.Texts;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.PreviewRow;
 import javafx.application.Platform;
 import javafx.geometry.HorizontalDirection;
 import javafx.geometry.Orientation;
@@ -79,16 +79,6 @@ final class MainViewInstaller {
         // 新条目自动挂勾选监听（F1）：数据序所有权移交模型后，挂接面从"列表被 add"改为"模型发布了变更"。
         // 载荷里的条目（ITEMS_ADDED / GROUPED / UNGROUPED / UNDO_APPLIED）逐个挂接；selectionListened 按身份
         // 去重，故"同一对象重复挂接"是 no-op —— 这比迁移前的 ObservableList 监听面只多不少，不产生第二份状态。
-        mc.ws.addListener(change -> {
-            for (PreviewItem it : change.affected()) {
-                if (mc.selectionListened.add(it)) {
-                    // 会话 18 · E1.3a：原 it.selected.addListener((obs2,a,b) -> ...)
-                    // 改为等价的自研 ChangeListener（同步回调；仅值变化时触发）
-                    it.addSelectedChangeListener(mc.listInteraction::onSelectionChanged);
-                }
-            }
-        });
-
         refs.fileListView().getSelectionModel().selectedItemProperty()
                 .addListener((_, _, newVal) -> mc.listInteraction.onItemSelected(newVal));
 
@@ -97,7 +87,7 @@ final class MainViewInstaller {
                 return;
             }
             Object sel = refs.fileListView().getSelectionModel().getSelectedItem();
-            if (!(sel instanceof PreviewItem it) || mc.effectiveForObject(it) == null) {
+            if (!(sel instanceof PreviewRow it) || mc.effectiveForObject(it) == null) {
                 return;
             }
             if (mc.isTextMode()) {
@@ -149,10 +139,10 @@ final class MainViewInstaller {
     void installPreviewCacheHooks() {
         // 预览会话缓存（需求 2 会话 9）：启动扫孤儿（P7 崩溃恢复）；
         //    关窗清空处理器经 scene/window 装配后挂接（initialize 阶段 scene 尚未存在，App.start 稍后装配）
-        mc.previewCacheLifecycle.startupCleanup();
+
         // 会话 12：磁盘占用提醒 hook（写盘成功且跨 10GiB 台阶时经 checkSizeAlert 触发；
         // 在预览后台线程同步回调，这里换算 GiB 文案后回 FX 线程非模态弹窗）
-        mc.previewCacheLifecycle.setSizeAlertHook(mc::onSizeAlertStep);
+
         refs.fileListView().sceneProperty().addListener((_, _, newScene) -> {
             if (newScene == null) {
                 return;

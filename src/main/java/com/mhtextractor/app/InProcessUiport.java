@@ -229,6 +229,9 @@ public final class InProcessUiport implements Uiport {
                           WorkspaceImportCoordinator imports, WorkspaceExtractionCoordinator extractions,
                           WorkspaceParamService structureCaches) {
         this.model = Objects.requireNonNull(model, "model");
+        // Port ownership replaces the former GUI repair of domain membership before event projection.
+        model.rebuildParentPointers();
+        model.addListener(_ -> model.rebuildParentPointers());
         this.confirmer = Objects.requireNonNull(confirmer, "confirmer");
         this.plans = Objects.requireNonNull(plans, "plans");
         this.activities = Objects.requireNonNull(activities, "activities");
@@ -810,14 +813,14 @@ public final class InProcessUiport implements Uiport {
         return selected == candidates.size() ? TriState.ALL : TriState.SOME;
     }
 
-    /** 按路径解析条目（保持入参顺序；未知路径静默跳过）。路径是导入去重后的唯一键。 */
+    /** 按路径解析条目；隐藏式移除后的再次导入必须优先寻址可见对象。 */
     private List<PreviewItem> resolveItems(List<String> paths) {
         if (paths == null || paths.isEmpty()) {
             return List.of();
         }
         Map<String, PreviewItem> byPath = new HashMap<>();
         for (PreviewItem it : model.allItems()) {
-            byPath.putIfAbsent(it.path, it);
+            byPath.merge(it.path, it, (previous, next) -> previous.removed && !next.removed ? next : previous);
         }
         List<PreviewItem> out = new ArrayList<>();
         for (String p : paths) {

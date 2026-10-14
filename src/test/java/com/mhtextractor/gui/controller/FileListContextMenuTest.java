@@ -328,15 +328,15 @@ class FileListContextMenuTest {
         assertEquals(List.of(top1), byFallback, "无勾选 → 回退右键目标");
         assertEquals(FileMenuModel.KEY_APPLY_THIS,
                 FileMenuModel.applyToSelectionTextKey(
-                        ParamDomainController.countTargets(byFallback).topLevelCount(),
-                        ParamDomainController.countTargets(byFallback).distinctGroupCount()));
+                        countProjectedTargets(byFallback).topLevelCount(),
+                        countProjectedTargets(byFallback).distinctGroupCount()));
 
         // 有勾选 → 勾选优先，右键目标被忽略
         top1.selected = true;
         top2.selected = true;
         List<Object> byChecked = com.mhtextractor.app.ParamTargets.resolve(List.of(top1, top2), member);
         assertEquals(List.of(top1, top2), byChecked, "抓勾选优先于右键目标");
-        var c = ParamDomainController.countTargets(byChecked);
+        var c = countProjectedTargets(byChecked);
         assertEquals(2, c.topLevelCount());
         assertEquals(0, c.distinctGroupCount());
         assertEquals(FileMenuModel.KEY_APPLY_MANY,
@@ -346,11 +346,28 @@ class FileListContextMenuTest {
         top2.selected = false;
         member.selected = true;
         List<Object> mixedSet = com.mhtextractor.app.ParamTargets.resolve(List.of(top1, member), group);
-        var mc = ParamDomainController.countTargets(mixedSet);
+        var mc = countProjectedTargets(mixedSet);
         assertEquals(1, mc.topLevelCount(), "组外项数");
         assertEquals(1, mc.distinctGroupCount(), "去重组数");
         assertEquals(FileMenuModel.KEY_APPLY_GROUP_AND_THIS,
                 FileMenuModel.applyToSelectionTextKey(mc.topLevelCount(), mc.distinctGroupCount()));
+    }
+
+    /** The backend resolver still owns targets; the GUI counter now receives their display rows. */
+    private static ParamDomainController.TargetCounts countProjectedTargets(List<Object> targets) {
+        var groups = new java.util.IdentityHashMap<GroupItem<?>, com.mhtextractor.uicore.GroupRow<com.mhtextractor.uicore.PreviewRow>>();
+        java.util.function.Function<GroupItem<?>, com.mhtextractor.uicore.GroupRow<com.mhtextractor.uicore.PreviewRow>> groupRow = group ->
+                groups.computeIfAbsent(group, g -> new com.mhtextractor.uicore.GroupRow<>(new com.mhtextractor.uiport.GroupVm(
+                        g.getGroupNo(), g.getName(), g.isExpanded(), g.isDefaultNamed(), List.of())));
+        List<Object> rows = targets.stream().map(target -> {
+            if (target instanceof GroupItem<?> group) return (Object) groupRow.apply(group);
+            PreviewItem item = (PreviewItem) target;
+            var row = new com.mhtextractor.uicore.PreviewRow(new com.mhtextractor.uiport.ItemVm(
+                    item.path, item.name, item.selected, item.removed, 0, com.mhtextractor.uiport.UpdateKind.NONE), ignored -> { });
+            if (item.parentGroup != null) row.parentGroup = groupRow.apply(item.parentGroup);
+            return (Object) row;
+        }).toList();
+        return ParamDomainController.countTargets(rows);
     }
 
     // ==================== 3d. R7.6：判定走 EffectiveParamsService ====================

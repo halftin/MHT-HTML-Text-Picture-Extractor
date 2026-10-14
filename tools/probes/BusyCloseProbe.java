@@ -53,8 +53,9 @@ public class BusyCloseProbe extends Application {
     private final AtomicReference<String> onDoneThread = new AtomicReference<>("(none)");
     private final java.util.concurrent.CountDownLatch gate = new java.util.concurrent.CountDownLatch(1);
 
-    private static final Path CACHE_ROOT = Path.of(System.getProperty("java.io.tmpdir"), "mht-extractor-preview");
-    private static final Path MARKER_DIR = CACHE_ROOT.resolve("probe-marker");
+    private Path CACHE_ROOT;
+    private Path MARKER_DIR;
+    private com.mhtextractor.uicore.FrontendPort frontend;
 
     @Override
     public void start(Stage stage) throws Exception {
@@ -65,7 +66,11 @@ public class BusyCloseProbe extends Application {
         FXMLLoader loader = new FXMLLoader(App.class.getResource("/com/mhtextractor/gui/view/MainView.fxml"));
         // P6-B：控制器要拿 FXML 命名空间（fx:id -> MainViewRefs），而 namespace 只有 loader 有 ——
         // 与 App.start() / TestMain 同一根线（controller factory 覆盖 fx:controller，时机逐字相同）。
-        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader));
+        frontend = ProbeRuntime.port();
+        CACHE_ROOT = Path.of(frontend.queries().cacheState().root());
+        MARKER_DIR = CACHE_ROOT.resolve("probe-marker");
+        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader, frontend,
+                finished -> ProbeRuntime.close(frontend, finished)));
         loader.setResources(I18n.bundle());
         root = loader.load();
 
@@ -167,6 +172,7 @@ public class BusyCloseProbe extends Application {
         try {
             Files.createDirectories(MARKER_DIR);
             Files.writeString(MARKER_DIR.resolve("keep.txt"), "probe marker");
+            frontend.bootstrap(new com.mhtextractor.model.AppConfig());
         } catch (Exception e) {
             e.printStackTrace();
             failures++;

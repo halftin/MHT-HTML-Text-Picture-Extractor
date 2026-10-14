@@ -51,7 +51,7 @@ public class UiProbe extends Application {
         FXMLLoader loader = new FXMLLoader(App.class.getResource("/com/mhtextractor/gui/view/MainView.fxml"));
         // P6-B：控制器要拿 FXML 命名空间（fx:id -> MainViewRefs），而 namespace 只有 loader 有 ——
         // 与 App.start() / TestMain 同一根线（controller factory 覆盖 fx:controller，时机逐字相同）。
-        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader));
+        loader.setControllerFactory(_ -> ProbeRuntime.controller(loader));
         loader.setResources(I18n.bundle());
         Parent root = loader.load();
 
@@ -220,8 +220,8 @@ public class UiProbe extends Application {
             // D：模态参数窗口壳已删 —— 直接构造参数表单本体（公开、自加载 ParamDialog.fxml，
             // 与侧边栏同一份 ParamFormPane），按旧模态窗口同尺寸放进临时 Stage 体检其内容节点树。
             com.mhtextractor.gui.controller.ParamFormPane pane =
-                    new com.mhtextractor.gui.controller.ParamFormPane();
-            pane.load(null, null, false, com.mhtextractor.model.ParamScope.GLOBAL);
+                    new com.mhtextractor.gui.controller.ParamFormPane(ProbeRuntime.port());
+            pane.load(null, null, false, com.mhtextractor.uicore.ParamScope.GLOBAL);
             Stage dialog = new Stage();
             dialog.initOwner(owner);
             dialog.setTitle(I18n.get("dialog.title"));

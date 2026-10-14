@@ -2,7 +2,7 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.gui.component.GuiNotifications;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.uiport.PortEvent;
 import com.mhtextractor.uiport.Uiport;
 
@@ -34,11 +34,11 @@ public final class PreviewLoader {
     public void load() { load(false); }
     public void cancel() { port.commands().cancelPreviewLoad(); }
     public boolean isActive() { return port.queries().previewLoadingPath() != null; }
-    public boolean isLoading(PreviewItem item) { return item.path.equals(port.queries().previewLoadingPath()); }
+    public boolean isLoading(PreviewRow item) { return item.path.equals(port.queries().previewLoadingPath()); }
     public void awaitInFlight(long millis) { port.commands().awaitPreviewInFlight(millis); }
 
     private void load(boolean largeFileOk) {
-        if (host.currentSelection() instanceof PreviewItem item)
+        if (host.currentSelection() instanceof PreviewRow item)
             port.commands().loadPreview(item.path, largeFileOk);
     }
 
@@ -68,7 +68,7 @@ public final class PreviewLoader {
                     host.progressBar().setVisible(true);
                     host.progressBar().setProgress(-1);
                     host.setProgressBarActivity(null);
-                    if (host.currentSelection() instanceof PreviewItem item)
+                    if (host.currentSelection() instanceof PreviewRow item)
                         host.statusLabel().setText(Texts.get("preview.loadingImage", "name", item.name));
                 }
             } else {
@@ -77,12 +77,20 @@ public final class PreviewLoader {
                 host.updateProgressStatus(port.queries().activityGeneration());
             }
         } else if (event instanceof PortEvent.PreviewThumbnail thumb) {
-            if (current(thumb.generation(), thumb.path()))
-                host.renderer().appendThumb((PreviewItem) host.currentSelection(), thumb.thumbnail(), thumb.index());
+            if (current(thumb.generation(), thumb.path())) {
+                PreviewRow item=(PreviewRow)host.currentSelection();
+                var decoded=thumb.imageFile()==null?thumb.thumbnail():host.renderer().decodeFile(thumb.imageFile());
+                if(item.cachedThumbs==null)item.cachedThumbs=new java.util.ArrayList<>();
+                else if(!(item.cachedThumbs instanceof java.util.ArrayList<?>))item.cachedThumbs=new java.util.ArrayList<>(item.cachedThumbs);
+                while(item.cachedThumbs.size()<=thumb.index())item.cachedThumbs.add(null);
+                item.cachedThumbs.set(thumb.index(),decoded);
+                host.renderer().appendThumb(item,decoded,thumb.index());
+            }
         } else if (event instanceof PortEvent.PreviewLoaded loaded) {
             if (!current(loaded.generation(), loaded.path())) return;
-            PreviewItem item = (PreviewItem) host.currentSelection();
-            if (item.status == PreviewItem.Status.EMPTY) host.refreshList();
+            PreviewRow item = (PreviewRow) host.currentSelection();
+            if(item.cachedThumbs==null)item.cachedThumbs=java.util.List.of();
+            if (item.status == PreviewRow.Status.EMPTY) host.refreshList();
             host.updateContentArea(item);
         } else if (event instanceof PortEvent.PreviewLoadFailed failed) {
             if (!current(failed.generation(), failed.path())) return;
@@ -102,6 +110,6 @@ public final class PreviewLoader {
 
     private boolean current(long generation, String path) {
         return generation == port.queries().previewGeneration()
-                && host.currentSelection() instanceof PreviewItem item && item.path.equals(path);
+                && host.currentSelection() instanceof PreviewRow item && item.path.equals(path);
     }
 }

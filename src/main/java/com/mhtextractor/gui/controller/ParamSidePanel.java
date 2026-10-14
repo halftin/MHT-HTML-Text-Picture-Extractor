@@ -6,8 +6,8 @@ import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
-import com.mhtextractor.model.GroupItem;
-import com.mhtextractor.model.ParamScope;
+import com.mhtextractor.uicore.GroupRow;
+import com.mhtextractor.uicore.ParamScope;
 import javafx.scene.Node;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 
@@ -69,7 +69,7 @@ public final class ParamSidePanel {
     private static final Map<SidePanelHost, ParamSidePanel> PANELS = new WeakHashMap<>();
 
     private final SidePanelHost host;
-    private final ParamFormPane pane = new ParamFormPane();
+    private final ParamFormPane pane;
 
     /** 当前已载入的目标 / 模式（= 面板基线与草稿归属谁）；null = 还没载入过。 */
     private ParamScope.Target loadedTarget;
@@ -101,12 +101,12 @@ public final class ParamSidePanel {
      *               宿主必须已由 {@code App.start()} 经 {@link SidePanelHost#install} 装配 ——
      *               没装就抛异常，由调用方按"打开失败"路径如实报给用户（不静默吞掉）。
      */
-    public static ParamSidePanel of(Node anchor) {
+    public static ParamSidePanel of(Node anchor, com.mhtextractor.uiport.Uiport port) {
         SidePanelHost sidePanelHost = SidePanelHost.of(anchor);
         if (sidePanelHost == null) {
             throw new IllegalStateException("SidePanelHost 未安装：见 App.start() 的 SidePanelHost.install(root)");
         }
-        return PANELS.computeIfAbsent(sidePanelHost, ParamSidePanel::new);
+        return PANELS.computeIfAbsent(sidePanelHost, host -> new ParamSidePanel(host,port));
     }
 
     /**
@@ -121,7 +121,8 @@ public final class ParamSidePanel {
         return panel != null && panel.isDirty();
     }
 
-    private ParamSidePanel(SidePanelHost host) {
+    private ParamSidePanel(SidePanelHost host, com.mhtextractor.uiport.Uiport port) {
+        this.pane = new ParamFormPane(port);
         this.host = host;
         new ParamPanelActions(pane).install();
         pane.setCloseHandler(this::onExit);
@@ -308,14 +309,14 @@ public final class ParamSidePanel {
      * 目标同一性（R1.6 的"目标是否相同"口径）：<b>全局按类型、组与条目按实例身份（{@code ==}）</b>。
      *
      * <p>为什么不直接比 record 的 {@code equals}：{@code GroupTarget}/{@code ItemTarget} 的 record 组件里
-     * 带着 {@link GroupItem} / 条目与两份 {@link AppConfig} 参数快照，值相等的两份快照不代表"同一个目标"，
+     * 带着 {@link GroupRow} / 条目与两份 {@link AppConfig} 参数快照，值相等的两份快照不代表"同一个目标"，
      * 而"同一个目标"才是本方法要回答的问题（决定要不要 {@code load()} = 要不要丢草稿）。</p>
      * <p>{@code ItemTarget.item()} 是泛型 {@code T}：主路径传的是
-     * {@link com.mhtextractor.model.PreviewItem}，它<b>没有</b>覆写 {@code equals}（身份语义），
-     * 但泛型不保证这一点，故统一用 {@code ==} 钉死身份口径 —— 与 {@code GroupItem} 同法。</p>
+     * {@link com.mhtextractor.uicore.PreviewRow}，它<b>没有</b>覆写 {@code equals}（身份语义），
+     * 但泛型不保证这一点，故统一用 {@code ==} 钉死身份口径 —— 与 {@code GroupRow} 同法。</p>
      */
     private static boolean sameTarget(ParamScope.Target a, ParamScope.Target b) {
-        if (a instanceof ParamScope.GroupTarget(GroupItem<?> ga)) {
+        if (a instanceof ParamScope.GroupTarget(GroupRow<?> ga)) {
             return b instanceof ParamScope.GroupTarget gb && gb.group() == ga;
         }
         if (a instanceof ParamScope.ItemTarget<?> ia) {

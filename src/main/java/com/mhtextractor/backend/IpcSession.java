@@ -366,7 +366,7 @@ final class IpcSession implements AutoCloseable {
     }
 
     private PreviewItem item(String path) {
-        return model.allItems().stream().filter(it -> it.path.equals(path)).findFirst()
+        return model.allItems().stream().filter(it -> !it.removed && it.path.equals(path)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Imported item required"));
     }
 

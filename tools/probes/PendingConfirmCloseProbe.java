@@ -31,7 +31,8 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class PendingConfirmCloseProbe extends Application {
 
-    private static final Path CACHE_ROOT = Path.of(System.getProperty("java.io.tmpdir"), "mht-extractor-preview");
+    private Path CACHE_ROOT;
+    private com.mhtextractor.uicore.FrontendPort frontend;
 
     private Scene scene;
     private Parent root;
@@ -49,7 +50,10 @@ public class PendingConfirmCloseProbe extends Application {
         FXMLLoader loader = new FXMLLoader(App.class.getResource("/com/mhtextractor/gui/view/MainView.fxml"));
         // P6-B：控制器要拿 FXML 命名空间（fx:id -> MainViewRefs），而 namespace 只有 loader 有 ——
         // 与 App.start() / TestMain 同一根线（controller factory 覆盖 fx:controller，时机逐字相同）。
-        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader));
+        frontend = ProbeRuntime.port();
+        CACHE_ROOT = Path.of(frontend.queries().cacheState().root());
+        loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader, frontend,
+                finished -> ProbeRuntime.close(frontend, finished)));
         loader.setResources(I18n.bundle());
         root = loader.load();
         Application.setUserAgentStylesheet(new NordLight().getUserAgentStylesheet());
@@ -122,6 +126,7 @@ public class PendingConfirmCloseProbe extends Application {
         try {
             Files.createDirectories(CACHE_ROOT.resolve("probe-marker"));
             Files.writeString(CACHE_ROOT.resolve("probe-marker").resolve("keep.txt"), "x");
+            frontend.bootstrap(new com.mhtextractor.model.AppConfig());
         } catch (Exception e) {
             e.printStackTrace();
         }

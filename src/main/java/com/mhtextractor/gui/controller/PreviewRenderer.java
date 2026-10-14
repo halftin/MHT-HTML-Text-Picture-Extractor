@@ -6,7 +6,7 @@ import com.mhtextractor.app.PreviewSession;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.util.ThumbnailFxBridge;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.model.ThumbnailData;
 import com.mhtextractor.platform.FileOpener;
 import javafx.geometry.Pos;
@@ -70,11 +70,11 @@ public final class PreviewRenderer {
         /** 可见文件数（搬迁前是 {@code visibleCount()}）。 */
         int visibleCount();
 
-        /** 条目在输出单元规划中的序号（搬迁前是 {@code unitIndex(PreviewItem)}）。 */
+        /** 条目在输出单元规划中的序号（搬迁前是 {@code unitIndex(PreviewRow)}）。 */
         int unitIndex(Object item);
 
         /** 预览会话缓存（搬迁前是 {@code previewCacheLifecycle} 字段，P3-3b-16 起经 {@code app.PreviewSession} 门面）。 */
-        PreviewSession session();
+
     }
 
     private final Host host;
@@ -83,15 +83,15 @@ public final class PreviewRenderer {
         this.host = host;
     }
 
-    public void renderTextPreview(PreviewItem item) {
+    public void renderTextPreview(PreviewRow item) {
         AppConfig params = host.effectiveParams(item);
         if (params == null) {
             params = new AppConfig();
         }
         String startTemplate = params.isEnableTemplate() ? params.getStartTemplate() : "";
         String endTemplate = params.isEnableTemplate() ? params.getEndTemplate() : "";
-        String head = PreviewNamingService.applyTemplate(startTemplate, item.name, item.modifiedTime);
-        String tail = PreviewNamingService.applyTemplate(endTemplate, item.name, item.modifiedTime);
+        String head = item.previewHead;
+        String tail = item.previewTail;
         String text = item.cachedText == null ? "" : item.cachedText;
         if (text.length() <= 10000) {
             host.textPreviewArea().setText(head + text + tail);
@@ -115,7 +115,7 @@ public final class PreviewRenderer {
         host.thumbnailPane().getChildren().clear();
     }
 
-    public void renderThumbnails(PreviewItem item) {
+    public void renderThumbnails(PreviewRow item) {
         List<ThumbnailData> thumbs = item.cachedThumbs;
         host.thumbnailPane().getChildren().clear();
         if (thumbs == null || thumbs.isEmpty()) {
@@ -137,7 +137,7 @@ public final class PreviewRenderer {
         }
     }
 
-    public void appendThumb(PreviewItem item, ThumbnailData entry, int index) {
+    public void appendThumb(PreviewRow item, ThumbnailData entry, int index) {
         host.imageHintLabel().setVisible(false);
         host.previewEffectButton().setVisible(false);
         host.imageScrollPane().setVisible(true);
@@ -145,7 +145,17 @@ public final class PreviewRenderer {
         host.thumbnailPane().getChildren().add(buildThumbBox(item, entry, index));
     }
 
-    private VBox buildThumbBox(PreviewItem item, ThumbnailData entry, int index) {
+    public ThumbnailData decodeFile(com.mhtextractor.uiport.PortEvent.ImageFile file) {
+        try {
+            ThumbnailData decoded=decodeThumb(new PreviewImageData(file.coreName(),file.path(),
+                    Files.readAllBytes(Path.of(file.path()))),file.index(),null);
+            return new ThumbnailData(file.coreName(),decoded.width(),decoded.height(),decoded.pixels());
+        } catch(java.io.IOException error) {
+            return new ThumbnailData(file.coreName(),0,0,null);
+        }
+    }
+
+    private VBox buildThumbBox(PreviewRow item, ThumbnailData entry, int index) {
         VBox box = new VBox(4);
         box.setAlignment(Pos.TOP_CENTER);
         // E1.4：模型只存像素；JavaFX Image 在此（渲染层）按需构造。构造失败等价于原 image == null
@@ -172,11 +182,11 @@ public final class PreviewRenderer {
     }
 
     /** 单击缩略图：用系统默认图片查看器打开缓存目录里对应的图片（非 AWT；启动/校验/环境兜底见 {@link FileOpener}）。 */
-    private void openCachedImage(PreviewItem item, int index) {
+    private void openCachedImage(PreviewRow item, int index) {
         // E1.2：cachedMeta 为 null（参数变更后清空 / 从未落盘）时安全返回，warn 复用既有
         // file == null 分支（同一日志键 log.maincontroller.65，不新增日志调用点）。
-        Path file = item.cachedMeta == null ? null
-                : host.session().store().imageFileFor(item.cachedMeta, index);
+        Path file = item.cachedMeta == null || index >= item.cachedMeta.images().size() ? null
+                : Path.of(item.cachedMeta.images().get(index).path());
         if (file == null || !Files.isRegularFile(file)) {
             log.warn(Texts.msg("log.maincontroller.65", item.name));
             return;
@@ -196,7 +206,7 @@ public final class PreviewRenderer {
     }
 
     /** 合并输出且不重命名时，文件名按当前列表位置重算 f%02d_ 前缀（拖拽重排后同步刷新，按条目生效参数判定） */
-    private String thumbFileName(ThumbnailData entry, PreviewItem item) {
+    private String thumbFileName(ThumbnailData entry, PreviewRow item) {
         AppConfig params = host.effectiveParams(item);
         boolean mergedNoRename = params != null && params.isSingleOutputMode()
                 && !params.isEnableBatchRenaming() && host.visibleCount() > 1;

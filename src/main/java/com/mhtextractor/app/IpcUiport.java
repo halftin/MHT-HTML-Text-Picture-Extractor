@@ -358,4 +358,5 @@ public final class IpcUiport implements Uiport, AutoCloseable {
         status = new BackendSession.Status(BackendSession.State.CLOSED,"");
         listeners.clear(); files.invalidate(); confirmer.close(); session.close(); delivery.shutdownNow(); controls.shutdownNow();
     }
+    public java.util.concurrent.CompletableFuture<Void> stopped() { return session.stopped(); }
 }

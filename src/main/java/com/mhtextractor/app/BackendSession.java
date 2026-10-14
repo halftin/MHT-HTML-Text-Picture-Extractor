@@ -50,6 +50,7 @@ public final class BackendSession implements AutoCloseable {
     private long sequence;
     private long revision = -1;
     private final CompletableFuture<Void> connected = new CompletableFuture<>();
+    private final CompletableFuture<Void> stopped = new CompletableFuture<>();
     private final List<Consumer<JsonNode>> eventListeners = new CopyOnWriteArrayList<>();
 
     /** Listeners only enqueue work: reading files or waiting here would stop response delivery. */
@@ -59,6 +60,8 @@ public final class BackendSession implements AutoCloseable {
     }
 
     public CompletableFuture<Void> connected() { return connected.copy(); }
+    /** Completes after the companion process and its streams have finished teardown. */
+    public CompletableFuture<Void> stopped() { return stopped.copy(); }
     public synchronized long revision() { return revision; }
     public synchronized String sessionId() { return connection == null ? null : connection.sessionId(); }
 
@@ -123,6 +126,7 @@ public final class BackendSession implements AutoCloseable {
                 try { launched.close(); } catch (IOException ignored) { }
             }
             writes.shutdownNow();
+            stopped.complete(null);
         }
     }
 
@@ -279,6 +283,7 @@ public final class BackendSession implements AutoCloseable {
             failRequests(new IOException("Backend session closed"));
             connected.completeExceptionally(new IOException("Backend session closed"));
             status(State.CLOSED, "");
+            if (!started) stopped.complete(null);
         }
         stopProcess();
     }

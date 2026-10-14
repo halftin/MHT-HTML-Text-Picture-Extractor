@@ -2,15 +2,14 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.SelectionRules;
 import com.mhtextractor.app.WorkspaceModel;
-import com.mhtextractor.app.WorkspaceStructure;
+import com.mhtextractor.uicore.WorkspaceView;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.app.Texts;
-import com.mhtextractor.model.GroupItem;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.GroupRow;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.app.DropResolver;
-import com.mhtextractor.model.ParamScope;
-import com.mhtextractor.app.UndoManager;
+import com.mhtextractor.uicore.ParamScope;
 import javafx.animation.ParallelTransition;
 import javafx.animation.TranslateTransition;
 import javafx.geometry.Bounds;
@@ -53,20 +52,20 @@ public final class ListInteractionController implements MainViewActions {
         List<Object> dataOrder();                                      // = MainController.items（只读投影）
         javafx.collections.ObservableList<Object> displayItems();      // = adapter.displayItems()
         void hideRow(Object item);                                     // = adapter.hideRow(item)
-        com.mhtextractor.app.WorkspaceModel.DropResult applyResolvedDrop(com.mhtextractor.app.DropResolver.Operation op);
+        void applyDrop(Object dragged, Object target, DropResolver.Zone zone, java.util.function.Consumer<com.mhtextractor.uiport.DropVm> finished);
         void rebuildDisplay();                                         // 仍由 MainController 提供（含动画快进）
-        // 勾选唯一写入口（B3-1）：= ws.setChecked(...)，本类所有勾选写入都经它，不得直写 PreviewItem.setSelected
-        void setChecked(List<PreviewItem> targets, boolean value);
+        // 勾选唯一写入口（B3-1）：= ws.setChecked(...)，本类所有勾选写入都经它，不得直写 PreviewRow.setSelected
+        void setChecked(List<PreviewRow> targets, boolean value);
         // ---- 选中读写 ----
         Object currentSelection();
         void selectRow(Object row);
         // ---- 查询 ----
-        List<com.mhtextractor.model.PreviewItem> allVisibleItems();
+        List<com.mhtextractor.uicore.PreviewRow> allVisibleItems();
         boolean isTextMode();
         AppConfig effectiveForObject(Object item);
-        com.mhtextractor.model.ParamScope.Status effectiveStatus(Object item);
-        int visibleMemberCount(GroupItem<com.mhtextractor.model.PreviewItem> group);
-        long unitIndex(com.mhtextractor.model.PreviewItem item);
+        com.mhtextractor.uicore.ParamScope.Status effectiveStatus(Object item);
+        int visibleMemberCount(GroupRow<com.mhtextractor.uicore.PreviewRow> group);
+        long unitIndex(com.mhtextractor.uicore.PreviewRow item);
         boolean isListAnimating();                                     // C3 动画锁（仍留在 MainController）
         boolean extractionRunning();                                   // 功能一：提取运行中锁定勾选框
         Object animLockedSelection();                                  // 动画锁定的选中项（可 null）
@@ -78,10 +77,10 @@ public final class ListInteractionController implements MainViewActions {
         void updateContentArea(Object sel);
         void updateAdjustCheck(Object sel);
         void updateProgressStatus();                                   // = updateProgressStatus(当前代际)
-        void renderThumbnails(com.mhtextractor.model.PreviewItem item); // = previewRenderer.renderThumbnails(item)
-        void startPreParseFor(List<com.mhtextractor.model.PreviewItem> items);
-        void clearPreviewCache(com.mhtextractor.model.PreviewItem item);
-        void toggleGroupExpanded(GroupItem<com.mhtextractor.model.PreviewItem> group);
+        void renderThumbnails(com.mhtextractor.uicore.PreviewRow item); // = previewRenderer.renderThumbnails(item)
+        void startPreParseFor(List<com.mhtextractor.uicore.PreviewRow> items);
+        void clearPreviewCache(com.mhtextractor.uicore.PreviewRow item);
+        void toggleGroupExpanded(GroupRow<com.mhtextractor.uicore.PreviewRow> group);
     }
 
     private final Host host;
@@ -95,11 +94,11 @@ public final class ListInteractionController implements MainViewActions {
     private boolean updatingSelection = false;
     private Object lastSelected = null;
     CellIndicator lastDragOverCell = null;
-    /** Shift 区间多选的锚点行（显示序元素：PreviewItem 或 GroupItem）；无锚点时 Shift 点击忽略 */
+    /** Shift 区间多选的锚点行（显示序元素：PreviewRow 或 GroupRow）；无锚点时 Shift 点击忽略 */
     private Object selectionAnchor = null;
 
     // ===== 拖拽排序状态 =====
-    /** 被拖对象（PreviewItem 或 GroupItem）：null = 无进行中的拖拽会话 */
+    /** 被拖对象（PreviewRow 或 GroupRow）：null = 无进行中的拖拽会话 */
     Object draggedObject = null;
     boolean dragActive = false;
     boolean dropHandled = false;
@@ -126,12 +125,12 @@ public final class ListInteractionController implements MainViewActions {
     }
 
     @Override
-    public int visibleMemberCount(GroupItem<PreviewItem> group) {
+    public int visibleMemberCount(GroupRow<PreviewRow> group) {
         return host.visibleMemberCount(group);
     }
 
     @Override
-    public long unitIndex(PreviewItem item) {
+    public long unitIndex(PreviewRow item) {
         return host.unitIndex(item);
     }
 
@@ -151,7 +150,7 @@ public final class ListInteractionController implements MainViewActions {
     }
 
     @Override
-    public void setChecked(List<PreviewItem> targets, boolean value) {
+    public void setChecked(List<PreviewRow> targets, boolean value) {
         host.setChecked(targets, value);
     }
 
@@ -175,8 +174,8 @@ public final class ListInteractionController implements MainViewActions {
         if (host.isListAnimating() || item == null || e.getButton() != MouseButton.PRIMARY) {
             return;
         }
-        if (item instanceof GroupItem<?> g) {
-            GroupItem<PreviewItem> group = WorkspaceStructure.asPreviewGroup(g);
+        if (item instanceof GroupRow<?> g) {
+            GroupRow<PreviewRow> group = WorkspaceView.asPreviewGroup(g);
             // 箭头槽位（cell x 22-46）：折叠/展开，优先于 Ctrl/Shift 多选手势；
             // pressed 判定比 released 可靠（released 会被 checkbox 吞掉导致间歇丢失）
             if (e.getX() >= 22 && e.getX() <= 46) {
@@ -193,7 +192,7 @@ public final class ListInteractionController implements MainViewActions {
             }
             return;
         }
-        PreviewItem it = (PreviewItem) item;
+        PreviewRow it = (PreviewRow) item;
         if (it.removed) {
             return;
         }
@@ -235,12 +234,12 @@ public final class ListInteractionController implements MainViewActions {
 
     /** 行的"完全勾选"判定：项目行 = 自身勾选；组行 = 全部有效成员已勾选 */
     private boolean isRowFullyChecked(Object o) {
-        if (o instanceof PreviewItem it) {
+        if (o instanceof PreviewRow it) {
             return it.selected;
         }
-        if (o instanceof GroupItem<?> g) {
+        if (o instanceof GroupRow<?> g) {
             for (Object m : g.getMembers()) {
-                if (!(m instanceof PreviewItem p) || (!p.removed && !p.selected)) {
+                if (!(m instanceof PreviewRow p) || (!p.removed && !p.selected)) {
                     return false;
                 }
             }
@@ -251,12 +250,12 @@ public final class ListInteractionController implements MainViewActions {
 
     /** 区间内行设置勾选值：项目行设自身；组行设全部有效成员（写入一律经勾选唯一写入口） */
     private void setRangeRow(Object o, boolean target) {
-        if (o instanceof PreviewItem it && !it.removed) {
+        if (o instanceof PreviewRow it && !it.removed) {
             host.setChecked(List.of(it), target);
-        } else if (o instanceof GroupItem<?> g) {
-            List<PreviewItem> members = new ArrayList<>();
+        } else if (o instanceof GroupRow<?> g) {
+            List<PreviewRow> members = new ArrayList<>();
             for (Object m : g.getMembers()) {
-                if (m instanceof PreviewItem p && !p.removed) {
+                if (m instanceof PreviewRow p && !p.removed) {
                     members.add(p);
                 }
             }
@@ -278,11 +277,11 @@ public final class ListInteractionController implements MainViewActions {
                 || e.getButton() != MouseButton.PRIMARY) {
             return;
         }
-        if (item instanceof GroupItem<?> g) {
+        if (item instanceof GroupRow<?> g) {
             if (e.getX() >= 46) {
-                onGroupCheckToggled(WorkspaceStructure.asPreviewGroup(g));
+                onGroupCheckToggled(WorkspaceView.asPreviewGroup(g));
             }
-        } else if (item instanceof PreviewItem it && !it.removed) {
+        } else if (item instanceof PreviewRow it && !it.removed) {
             if (e.getX() >= 50) {
                 host.setChecked(List.of(it), !it.selected);
                 selectionAnchor = it;
@@ -292,7 +291,7 @@ public final class ListInteractionController implements MainViewActions {
 
     /** 按当前列表统计三态：有效项 = removed == false 的项目（含组内成员） */
     private SelectionRules.TriState currentSelectionState() {
-        List<PreviewItem> vis = host.allVisibleItems();
+        List<PreviewRow> vis = host.allVisibleItems();
         int total = vis.size();
         int selected = (int) vis.stream().filter(i -> i.selected).count();
         return SelectionRules.computeState(selected, total);
@@ -308,7 +307,7 @@ public final class ListInteractionController implements MainViewActions {
 
     /** 组复选框点击（F1 2.5）：组内全选 → 全不选；全不选或半选 → 全选组内全部成员 */
     @Override
-    public void onGroupCheckToggled(GroupItem<PreviewItem> g) {
+    public void onGroupCheckToggled(GroupRow<PreviewRow> g) {
         if (host.isListAnimating()) {
             return;
         }
@@ -318,7 +317,7 @@ public final class ListInteractionController implements MainViewActions {
         boolean target = SelectionRules.computeToggleTarget(
                 SelectionRules.computeState(selected, total));
         updatingSelection = true;
-        for (PreviewItem m : g.getMembers()) {
+        for (PreviewRow m : g.getMembers()) {
             if (!m.removed) {
                 host.setChecked(List.of(m), target);
             }
@@ -354,7 +353,7 @@ public final class ListInteractionController implements MainViewActions {
      * <b>不</b>做刷新，刷新由调用点显式调 {@link #refreshSelectionUi()}，与搬迁前逐字一致。
      * 写入本身经 {@code Host.setChecked}（B3-1：勾选唯一写入口在后端模型）。
      */
-    void setCheckedSilently(List<PreviewItem> targets, boolean value) {
+    void setCheckedSilently(List<PreviewRow> targets, boolean value) {
         updatingSelection = true;
         try {
             host.setChecked(targets, value);
@@ -375,8 +374,8 @@ public final class ListInteractionController implements MainViewActions {
             return;
         }
         host.cancelPreviewLoad();
-        if (lastSelected instanceof PreviewItem last && last != item) {
-            // 仅当前文件的图片数据驻留内存（E1.2：只清图片数据的唯一实现是 PreviewItem.releaseImageData，
+        if (lastSelected instanceof PreviewRow last && last != item) {
+            // 仅当前文件的图片数据驻留内存（E1.2：只清图片数据的唯一实现是 PreviewRow.releaseImageData，
             // 文本/标题/meta/状态保持不动 —— 这里的语义是"慎重"的局部释放，不是整体重置）
             last.releaseImageData();
         }
@@ -397,14 +396,14 @@ public final class ListInteractionController implements MainViewActions {
     void recomputeBadges() {
         int top = 1;
         for (Object o : host.dataOrder()) {
-            if (o instanceof GroupItem<?> g) {
+            if (o instanceof GroupRow<?> g) {
                 int n = 1;
                 for (Object m : g.getMembers()) {
-                    if (m instanceof PreviewItem it) {
+                    if (m instanceof PreviewRow it) {
                         n = assignBadge(it, n);
                     }
                 }
-            } else if (o instanceof PreviewItem it) {
+            } else if (o instanceof PreviewRow it) {
                 top = assignBadge(it, top);
             }
         }
@@ -412,14 +411,14 @@ public final class ListInteractionController implements MainViewActions {
     }
 
     /** 单项徽标赋值：按该条目生效参数判定章节编号（组参数可独立开关）；章节覆盖关闭或未解析完成时不占编号 */
-    private int assignBadge(PreviewItem it, int n) {
+    private int assignBadge(PreviewRow it, int n) {
         if (it.removed) {
             it.badge = null;
             return n;
         }
         AppConfig eff = host.effectiveForObject(it);
         boolean numbering = host.isTextMode() && eff != null && eff.isAddChapterNumber();
-        if (numbering && it.status == PreviewItem.Status.READY && it.chapterEnabled) {
+        if (numbering && it.status == PreviewRow.Status.READY && it.chapterEnabled) {
             it.badge = String.valueOf(n);
             return n + 1;
         }
@@ -437,13 +436,10 @@ public final class ListInteractionController implements MainViewActions {
     @Override
     public boolean performDrop(Object dragged, Object target, DropResolver.Zone zone,
                                PreviewListCell cell) {
-        if (dragged == null || target == null || (target instanceof PreviewItem it && it.removed)) {
+        if (dragged == null || target == null || (target instanceof PreviewRow it && it.removed)) {
             return false;
         }
-        DropResolver.Operation op = DropResolver.resolve(host.dataOrder(), dragged, target, zone);
-        if (op == null) {
-            return false;
-        }
+
         // 立即结束提起动画（若仍在进行），快照按当前实际位置重新采集
         if (cell != null) {
             finishLift();
@@ -453,47 +449,17 @@ public final class ListInteractionController implements MainViewActions {
             gapTopY = DragGeometry.cellBoundsInOverlay(cell, host.dragOverlay()).getMinY()
                     + (zone == DropResolver.Zone.TOP ? 0 : cell.getHeight());
         }
-        return performResolvedDrop(dragged, op, gapTopY, cell);
+        final double gap = gapTopY;
+        host.applyDrop(dragged,target,zone,drop -> {
+            if (!drop.changed()) {cancelDrag();return;}
+            if (cell != null) animateReleaseInsert(dragged,gap);
+            else {host.rebuildDisplay();finishDragReset();}
+        });
+        return true;
     }
 
     /** 已解析操作的执行核心：快照 → apply → 撤销记录（均由模型负责）→ 动画/瞬时重建 → 父组变化重解析 */
-    private boolean performResolvedDrop(Object dragged, DropResolver.Operation op,
-                                        double gapTopY, PreviewListCell cell) {
-        // 快照、受影响条目、各自操作前的父组指针、合并载荷与撤销记录的压栈全在模型内完成 ——
-        // 采集顺序必须早于数据序修改，那个约束现在由 WorkspaceModel.applyResolvedDrop 独占保证。
-        WorkspaceModel.DropResult drop = host.applyResolvedDrop(op);
-        // 注意：DropResolver 拖拽致空组（R4）在原实现与新实现下都**只改结构、不打日志**；
-        // log.workspacemodel.01 只属于 WorkspaceModel.group(...) 与 removeItems(...) 两条路径，本步未触碰。
-        // 合并语义的打点（log.maincontroller.42）文案、实参、调用次数与位置一律保持原样。
-        if (drop.changed() && drop.type() == UndoManager.RecordType.MERGE_GROUPS) {
-            log.info(Texts.msg("log.maincontroller.42", drop.merged().getName(),
-                    drop.mergeTarget().getName(), drop.mergedMembers().size(), drop.merged().getName()));
-        }
-        if (cell != null) {
-            animateReleaseInsert(dragged, gapTopY);
-        } else {
-            // 空白吸附：瞬时重建显示序并复位拖拽状态
-            host.rebuildDisplay();
-            finishDragReset();
-        }
-        // 项目入组/出组/组合并 → 生效参数切换：受影响项目清缓存重新预解析（阶段 5 机制）
-        List<PreviewItem> reparse = new ArrayList<>();
-        for (PreviewItem it : drop.affected()) {
-            if (!it.removed && drop.affectedBefore().get(it) != it.parentGroup) {
-                // 条目独立参数生命周期拍板：入组即清除条目级参数（组内成员只认组参数）
-                if (it.parentGroup != null) {
-                    it.textItemParams = null;
-                    it.imageItemParams = null;
-                }
-                host.clearPreviewCache(it);
-                reparse.add(it);
-            }
-        }
-        if (!reparse.isEmpty() && host.isCurrentModeConfirmed()) {
-            host.startPreParseFor(reparse);
-        }
-        return true;
-    }
+
 
     // ==================== 拖拽排序动画 ====================
 
@@ -520,7 +486,7 @@ public final class ListInteractionController implements MainViewActions {
         try {
             for (javafx.scene.Node n : host.fileListView().lookupAll(".list-cell")) {
                 if (n instanceof PreviewListCell c && c != sourceCell && c.getItem() != null
-                        && !(c.getItem() instanceof PreviewItem it && it.removed)) {
+                        && !(c.getItem() instanceof PreviewRow it && it.removed)) {
                     Bounds b = DragGeometry.cellBoundsInOverlay(c, host.dragOverlay());
                     if (b.getMinY() >= dragGapTopY - 1) {
                         cells.add(c);
@@ -582,7 +548,7 @@ public final class ListInteractionController implements MainViewActions {
         try {
             for (javafx.scene.Node n : host.fileListView().lookupAll(".list-cell")) {
                 if (n instanceof PreviewListCell c && c.getItem() != null
-                        && !(c.getItem() instanceof PreviewItem it && it.removed)) {
+                        && !(c.getItem() instanceof PreviewRow it && it.removed)) {
                     Bounds b = DragGeometry.cellBoundsInOverlay(c, host.dragOverlay());
                     if (b.getMinY() >= gapTopY - 1) {
                         cells.add(c);
@@ -670,7 +636,7 @@ public final class ListInteractionController implements MainViewActions {
         host.updateProgressStatus();
         Object sel = host.currentSelection();
         host.updateInfoArea(sel);
-        if (!host.isTextMode() && sel instanceof PreviewItem it && it.cachedThumbs != null) {
+        if (!host.isTextMode() && sel instanceof PreviewRow it && it.cachedThumbs != null) {
             host.renderThumbnails(it);
         }
     }

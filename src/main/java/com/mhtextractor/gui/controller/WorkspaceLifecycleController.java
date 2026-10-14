@@ -2,12 +2,11 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.app.WorkspaceModel;
-import com.mhtextractor.app.WorkspaceStructure;
+import com.mhtextractor.uicore.WorkspaceView;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;
-import com.mhtextractor.model.GroupItem;
-import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.app.UndoManager;
+import com.mhtextractor.uicore.GroupRow;
+import com.mhtextractor.uicore.PreviewRow;
 import javafx.collections.ObservableList;
 import javafx.scene.Node;
 import javafx.scene.control.ListView;
@@ -27,7 +26,7 @@ import java.util.List;
  * （NotificationHost.hasPendingDecision）与非 daemon 线程规则全部保持不变。
  *
  * <p>参数类撤销分支（PARAM_SET / CLEAR_PARAMS / APPLY_GLOBAL）已外迁到
- * {@link ParamDomainController}（步骤 1），经 {@link Host#applyParamUndo} 整体委派。本类含 JavaFX，属 gui 层。</p>
+ * {@link ParamDomainController}（步骤 1），由端口 C19 完成后经 E19 呈现。本类含 JavaFX，属 gui 层。</p>
  */
 @Slf4j
 public final class WorkspaceLifecycleController {
@@ -44,33 +43,34 @@ public final class WorkspaceLifecycleController {
         void selectRow(Object row);
         void selectNearestVisible(int fromDisplayIndex);
         // 查询
-        List<PreviewItem> allVisibleItems();
+        List<PreviewRow> allVisibleItems();
         int visibleCount();
-        int visibleMemberCount(GroupItem<PreviewItem> group);
+        int visibleMemberCount(GroupRow<PreviewRow> group);
         boolean isAnimating();
         // 模型命令（唯一入口 WorkspaceModel）
-        void removeModelItems(List<PreviewItem> targets);
-        void removeModelGroup(GroupItem<PreviewItem> group);
+        void removeModelItems(List<PreviewRow> targets);
+        void removeModelGroup(GroupRow<PreviewRow> group);
         // 勾选唯一写入口（B3-1）：= ws.setChecked(...)，撤销恢复后的取消勾选也经它
-        void setChecked(List<PreviewItem> targets, boolean value);
+        void setChecked(List<PreviewRow> targets, boolean value);
         boolean canUndo();
-        UndoManager.Record<PreviewItem> popRecord();
-        void applyUndo(UndoManager.Record<PreviewItem> record);
-        List<PreviewItem> applyUndoAffected();
+        void undo();
+
+
+
         // 参数类撤销整体委派（分支体在 ParamDomainController）
-        void applyParamUndo(UndoManager.Record<PreviewItem> record);
+
         // 缓存规则收口（经 WorkspaceParamService；本类不得出现规则方法名，见 ArchitectureTest 不变式）
-        void cacheRulesForRemovedItems(Iterable<PreviewItem> items);
-        // 逐条目 UI 内存态复位（原 clearPreviewCache(PreviewItem)）
-        void clearItemPreviewState(PreviewItem item);
+
+        // 逐条目 UI 内存态复位（原 clearPreviewCache(PreviewRow)）
+        void clearItemPreviewState(PreviewRow item);
         // 收尾 / 刷新
         void refreshAfterListChange();
-        void startPreParseFor(List<PreviewItem> items);
+        void startPreParseFor(List<PreviewRow> items);
         boolean currentModeConfirmed();
         // 窗口生命周期
         boolean hasCachedEntries();
         void cancelWorkspaceActivity();
-        void awaitPreviewInFlight(long millis);
+        void closeBackend(Runnable finished);
         Path cacheRoot();
         void onShutdownClearCache();
     }
@@ -91,10 +91,10 @@ public final class WorkspaceLifecycleController {
         if (host.isAnimating()) {
             return;
         }
-        GroupItem<PreviewItem> group = null;
-        if (target instanceof GroupItem<?> g) {
-            group = WorkspaceStructure.asPreviewGroup(g);
-        } else if (target instanceof PreviewItem it && it.parentGroup != null) {
+        GroupRow<PreviewRow> group = null;
+        if (target instanceof GroupRow<?> g) {
+            group = WorkspaceView.asPreviewGroup(g);
+        } else if (target instanceof PreviewRow it && it.parentGroup != null) {
             group = it.parentGroup;
         }
         if (group != null) {
@@ -107,17 +107,17 @@ public final class WorkspaceLifecycleController {
             return;
         }
         // R5：有复选框勾选时按勾选集合移除（优先于当前选中项，含组内成员）
-        List<PreviewItem> targets = host.allVisibleItems().stream()
+        List<PreviewRow> targets = host.allVisibleItems().stream()
                 .filter(i -> i.selected).toList();
         Object sel = host.currentSelection();
         // D7：无勾选且选中组条目 → 整组移除（组名/参数随组对象保留在撤销记录中）
-        if (targets.isEmpty() && sel instanceof GroupItem<?> g) {
+        if (targets.isEmpty() && sel instanceof GroupRow<?> g) {
             // G2（拍板）：整组移除一律必弹确认（R6"仅列表将空时确认"的有意例外），按钮行与右键菜单共用
-            removeGroupWithConfirm(WorkspaceStructure.asPreviewGroup(g));
+            removeGroupWithConfirm(WorkspaceView.asPreviewGroup(g));
             return;
         }
         if (targets.isEmpty()) {
-            if (sel instanceof PreviewItem it && !it.removed) {
+            if (sel instanceof PreviewRow it && !it.removed) {
                 targets = List.of(it);
             } else {
                 return;
@@ -125,7 +125,7 @@ public final class WorkspaceLifecycleController {
         }
         if (targets.size() >= host.visibleCount()) {
             // R13 提醒文案：全选含折叠组成员时提示（会话 19：回调式居中确认取代 showAndWait）
-            final List<PreviewItem> pending = targets;
+            final List<PreviewRow> pending = targets;
             String msg = Texts.get("list.removeAllConfirm", "count", pending.size())
                     + collapsedGroupHint(pending);
             GuiNotifications.removeAllConfirm(host.anchor(), msg, ok -> {
@@ -139,7 +139,7 @@ public final class WorkspaceLifecycleController {
     }
 
     /** 移除收尾（原确认框之后的同步段）：执行移除 + 日志 + "列表已空"提醒 */
-    private void removeSelected(List<PreviewItem> targets) {
+    private void removeSelected(List<PreviewRow> targets) {
         removeItems(targets);
         log.info(Texts.msg("log.maincontroller.46", targets.size(), host.visibleCount()));
         if (host.visibleCount() == 0) {
@@ -148,7 +148,7 @@ public final class WorkspaceLifecycleController {
     }
 
     /** 整组移除确认 + 执行（G2 拍板：按钮行与右键菜单统一每次必弹确认；文案区分"列表将空"与折叠提示） */
-    private void removeGroupWithConfirm(GroupItem<PreviewItem> group) {
+    private void removeGroupWithConfirm(GroupRow<PreviewRow> group) {
         int memberCount = host.visibleMemberCount(group);
         String collapsedHint = group.isExpanded()
                 ? ""
@@ -169,16 +169,16 @@ public final class WorkspaceLifecycleController {
 
     /** 隐藏式移除：结构变更（removed 标记 + 空组自动销毁 D11）与撤销记录由 {@link WorkspaceModel#removeItems} 负责；
      *  本类只做缓存规则 (c) 与选择/刷新收尾 */
-    private void removeItems(List<PreviewItem> targets) {
+    private void removeItems(List<PreviewRow> targets) {
         Object sel = host.currentSelection();
         int selIndex = host.displayItems().indexOf(sel);
         host.removeModelItems(targets);                              // 结构 + 撤销记录（模型是唯一实现）
         // 规则 (c)：从列表移除 → 删该项目缓存目录
-        host.cacheRulesForRemovedItems(targets);
+
         // 被选中项若已被移除（含"所在组被销毁"）→ 选最近的可见项
         boolean selRemoved = sel != null
-                && ((sel instanceof PreviewItem it && targets.contains(it))
-                || (sel instanceof GroupItem<?> g && host.dataOrder().stream().noneMatch(o -> o == g)));
+                && ((sel instanceof PreviewRow it && targets.contains(it))
+                || (sel instanceof GroupRow<?> g && host.dataOrder().stream().noneMatch(o -> o == g)));
         if (selRemoved) {
             host.selectNearestVisible(selIndex);
         }
@@ -186,13 +186,13 @@ public final class WorkspaceLifecycleController {
     }
 
     /** 整组移除（D7）：结构变更与撤销记录由 {@link WorkspaceModel#removeGroup} 负责；本类只做缓存规则 (c) 与选择/刷新收尾 */
-    private void removeGroup(GroupItem<PreviewItem> group) {
+    private void removeGroup(GroupRow<PreviewRow> group) {
         Object sel = host.currentSelection();
         int selIndex = host.displayItems().indexOf(sel);
-        List<PreviewItem> members = new ArrayList<>(group.getMembers());
+        List<PreviewRow> members = new ArrayList<>(group.getMembers());
         host.removeModelGroup(group);                                // 结构 + 撤销记录（模型是唯一实现）
         // 规则 (c)：整组移除 → 删组内成员缓存目录
-        host.cacheRulesForRemovedItems(members);
+
         if (sel == group) {
             host.selectNearestVisible(selIndex);
         }
@@ -200,11 +200,11 @@ public final class WorkspaceLifecycleController {
     }
 
     /** R13 确认框文案：待移除项目含折叠组成员时提示（折叠组内项目不可见，避免用户误以为未被选中） */
-    private String collapsedGroupHint(List<PreviewItem> targets) {
+    private String collapsedGroupHint(List<PreviewRow> targets) {
         List<String> parts = new ArrayList<>();
         for (Object o : host.dataOrder()) {
-            if (o instanceof GroupItem<?> g) {
-                GroupItem<PreviewItem> group = WorkspaceStructure.asPreviewGroup(g);
+            if (o instanceof GroupRow<?> g) {
+                GroupRow<PreviewRow> group = WorkspaceView.asPreviewGroup(g);
                 if (!group.isExpanded()) {
                     long cnt = group.getMembers().stream()
                             .filter(m -> !m.removed && targets.contains(m)).count();
@@ -221,77 +221,8 @@ public final class WorkspaceLifecycleController {
     }
 
     void onUndoClicked() {
-        if (host.isAnimating() || !host.canUndo()) {
-            return;
-        }
-        UndoManager.Record<PreviewItem> record = host.popRecord();
-        Object selectAfter = null;
-        // 结构恢复类操作（REORDER/MERGE_GROUPS）：恢复后生效参数可能变化，受影响项目重新预解析
-        List<PreviewItem> reparseAfter = List.of();
-        if (record != null) {
-            switch (record.type()) {
-                case REMOVE, REMOVE_GROUP -> {
-                    // 结构恢复（removed 复位 + 被销毁的空组/整组按原顶层索引插回）由模型负责
-                    host.applyUndo(record);
-                    host.setChecked(record.items(), false);   // 恢复后取消勾选（勾选唯一写入口在模型，B3-1）
-                    log.info(Texts.msg("log.maincontroller.48", record.items().size(), record.destroyedGroups().size()));
-                }
-                case IMPORT -> {
-                    Object sel = host.currentSelection();
-                    int selIndex = host.displayItems().indexOf(sel);
-                    boolean selRemoved = sel != null && record.items().contains(sel);
-                    // 撤销导入 = 这批项目被移除：先做 UI 侧标记（removed 供致空组判定），
-                    // 结构摘除（从组内与顶层两处 + 致空组销毁）交由模型——原先本类手写了等价的两段
-                    for (PreviewItem it : record.items()) {
-                        it.removed = true;
-                    }
-                    host.setChecked(record.items(), false);   // 勾选唯一写入口在模型（B3-1）
-                    // 规则 (c)：撤销导入 = 从列表移除这批项目 → 删其缓存目录
-                    host.cacheRulesForRemovedItems(record.items());
-                    host.applyUndo(record);
-                    if (selRemoved) {
-                        host.selectNearestVisible(selIndex);
-                    }
-                    log.info(Texts.msg("log.maincontroller.49", record.items().size(), record.groups().size()));
-                }
-                case GROUP -> {
-                    // 撤销建组：结构恢复（组解散、成员回原位置）由模型负责
-                    host.applyUndo(record);
-                    record.items().stream()
-                            .filter(i -> !i.removed).findFirst().ifPresent(firstVisible -> host.selectRow(firstVisible));
-                    log.info(Texts.msg("log.maincontroller.50", record.group().getName()));
-                }
-                case REORDER, MERGE_GROUPS -> {
-                    // 拖拽类：结构恢复（顶层顺序 / 组位置 / 组内顺序，组对象复用）自 Q0/P0 起由模型负责；
-                    // 本类只做缓存失效与重解析收尾（缓存规则不得由 GUI 直调，见不变式）。
-                    host.applyUndo(record);
-                    reparseAfter = new ArrayList<>();
-                    for (PreviewItem it : host.applyUndoAffected()) {
-                        host.clearItemPreviewState(it);
-                        reparseAfter.add(it);
-                    }
-                    log.info(Texts.msg("log.maincontroller.51", Texts.get(record.type() == UndoManager.RecordType.REORDER
-                        ? "reorder.dragSort" : "reorder.groupMerge")));
-                }
-                case UNGROUP -> {
-                    // F6：组重建（成员回组、组按原索引插回、条目级参数清除）由模型负责
-                    host.applyUndo(record);
-                    selectAfter = record.group();
-                    log.info(Texts.msg("log.maincontroller.52", record.group().getName(), record.items().size()));
-                }
-                case PARAM_SET, CLEAR_PARAMS, APPLY_GLOBAL ->
-                    // 参数类撤销分支体在 ParamDomainController（applyParamUndo），这里整体委派
-                    host.applyParamUndo(record);
-            }
-        }
-        host.refreshAfterListChange();
-        if (selectAfter != null && host.displayItems().contains(selectAfter)) {
-            host.selectRow(selectAfter);
-        }
-        // 父组指针已在 refreshAfterListChange 重建，此时按恢复后的生效参数重解析受影响项目
-        if (!reparseAfter.isEmpty() && host.currentModeConfirmed()) {
-            host.startPreParseFor(reparseAfter);
-        }
+        if (host.isAnimating() || !host.canUndo()) return;
+        host.undo();
     }
 
     /** 规则 (d)：关窗清空（§2.2/§2.6(6)）。有缓存 → 无按钮等待卡片 → 停后台活动 → 等在途写入（≤2s）→ 清空 → 清完自动关窗；
@@ -314,6 +245,7 @@ public final class WorkspaceLifecycleController {
             return;
         }
         if (!host.hasCachedEntries()) {
+            e.consume(); shutdownInProgress=true; host.closeBackend(() -> {shutdownCacheCleared=true;((Stage)e.getSource()).close();});
             return;                                    // 无缓存 → 放行（不显示卡片）
         }
         e.consume();
@@ -327,7 +259,9 @@ public final class WorkspaceLifecycleController {
 
     /** 关窗收尾（后台线程）：等在途写入结束 → 清空缓存（cancelWorkspaceActivity 已由调用方在 FX 线程先行调用） */
     private void clearPreviewCache() {
-        host.awaitPreviewInFlight(2000);
+        var closed=new java.util.concurrent.CompletableFuture<Void>();
+        host.closeBackend(() -> closed.complete(null));
+        try {closed.get(30,java.util.concurrent.TimeUnit.SECONDS);}catch(Exception error){throw new IllegalStateException(error);}
         host.onShutdownClearCache();
         shutdownCacheCleared = true;
     }

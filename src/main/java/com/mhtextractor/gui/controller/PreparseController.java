@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.Texts;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.uiport.PortEvent;
 import com.mhtextractor.uiport.Uiport;
@@ -17,7 +17,7 @@ public final class PreparseController {
         boolean isPreviewLoading();
         boolean isDragActive();
         boolean isAnimating();
-        List<PreviewItem> allItems();
+        List<PreviewRow> allItems();
         ProgressBar progressBar();
         Label statusLabel();
         Object currentSelection();
@@ -41,7 +41,7 @@ public final class PreparseController {
 
     void startPreParse() { port.commands().startPreparse(); }
 
-    void startPreParseFor(List<PreviewItem> targets) {
+    void startPreParseFor(List<PreviewRow> targets) {
         port.commands().startPreparseFor(targets.stream().map(i -> i.path).toList());
     }
 
@@ -55,7 +55,7 @@ public final class PreparseController {
             if (finished.generation() != generation()) return;
             var result = finished.result();
             // 模型状态已由应用层交付；这里只拼接本地化文案并刷新当前投影。
-            PreviewItem item = host.allItems().stream()
+            PreviewRow item = host.allItems().stream()
                     .filter(i -> i.path.equals(result.path())).findFirst().orElse(null);
             if (item == null) return;
             item.errorMsg = result.errorKey() == null ? ""

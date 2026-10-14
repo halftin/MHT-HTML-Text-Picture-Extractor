@@ -73,6 +73,31 @@ class WorkspaceParamCommandServiceTest {
         return (PortEvent.ParamStateChanged) last;
     }
 
+    @Test
+    void groupUndoRepairsMembershipBeforeParameterClearWithoutAGui() {
+        Fixture f=fixture();
+        new InProcessUiport(f.model(),request->null);
+        PreviewItem a=item("a.mht"),b=item("b.mht");
+        f.model().addItems(List.of(a,b));
+        assertNotNull(f.model().group(List.of(a,b)));
+        f.model().addListener(change->{
+            if(change.kind()==WorkspaceChange.Kind.UNDO_APPLIED){
+                assertNull(a.parentGroup,"Undo event must expose canonical top-level membership");
+                assertNull(b.parentGroup);
+            }
+        });
+        assertTrue(f.model().undo());
+        AppConfig config=params("after-group-undo");
+        f.service().setItemParams(a.path,false,config);
+        f.model().setChecked(List.of(a),true);
+        f.service().clearParams(List.of(TargetId.ofItem(b.path)),false);
+        assertNull(a.textItemParams,"Checked top-level item must clear after undoing its old group");
+        assertEquals(ParamChangeKind.CLEAR,lastParamEvent(f).kind());
+        assertTrue(f.model().undo(f.service()));
+        assertEquals(config,a.textItemParams,"Parameter undo must restore the same top-level target");
+        assertNull(a.parentGroup);
+    }
+
     // ==================== setGlobalParams（原 applyConfirmedParams） ====================
 
     @Test

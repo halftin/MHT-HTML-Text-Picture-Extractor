@@ -1,10 +1,10 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.Texts;
-import com.mhtextractor.app.WorkspaceStructure;
+import com.mhtextractor.uicore.WorkspaceView;
 import com.mhtextractor.gui.util.DragGeometry;
-import com.mhtextractor.model.GroupItem;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.GroupRow;
+import com.mhtextractor.uicore.PreviewRow;
 import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
 import javafx.animation.TranslateTransition;
@@ -51,12 +51,12 @@ public final class GroupCommandController {
         List<Object> dataOrder();                                      // = MainController.items
         int indexInDataOrder(Object item);                             // = items.indexOf(item)
         javafx.collections.ObservableList<Object> displayItems();      // = adapter.displayItems()
-        GroupItem<PreviewItem> createGroup(List<PreviewItem> targets); // = ws.group(targets, 本地化默认名前缀 core.groupDefault)
-        List<PreviewItem> ungroupGroup(GroupItem<PreviewItem> group);  // = ws.ungroup(group)
-        void toggleGroupExpanded(GroupItem<PreviewItem> group);        // = ws.toggleGroupExpanded(group.getGroupNo())（展开状态唯一写入口，B3-2）
+        void createGroup(List<PreviewRow> targets, java.util.function.Consumer<GroupRow<PreviewRow>> finished); // = ws.group(targets, 本地化默认名前缀 core.groupDefault)
+        void ungroupGroup(GroupRow<PreviewRow> group, Runnable finished);  // = ws.ungroup(group)
+        void toggleGroupExpanded(GroupRow<PreviewRow> group, Runnable finished);        // = ws.toggleGroupExpanded(group.getGroupNo())（展开状态唯一写入口，B3-2）
 
         // ---- 查询 / 选中读写 ----
-        List<PreviewItem> allVisibleItems();                           // = allVisibleItems()
+        List<PreviewRow> allVisibleItems();                           // = allVisibleItems()
         Object currentSelection();                                     // = refs.fileListView().getSelectionModel().getSelectedItem()
         void selectRow(Object row);                                    // = refs.fileListView().getSelectionModel().select(row)
         void selectNearestVisible(int fromDisplayIndex);               // = selectNearestVisible(int)
@@ -65,8 +65,8 @@ public final class GroupCommandController {
         // ---- 派生刷新 / 收尾（实现留在 MainController）----
         void refreshAfterListChange();                                 // = refreshAfterListChange()
         void rebuildDisplay();                                         // = rebuildDisplay()
-        void registerGroupNameRefresh(GroupItem<PreviewItem> group);   // = registerGroupNameRefresh(group)
-        void setCheckedSilently(List<PreviewItem> targets, boolean value); // = listInteraction.setCheckedSilently(...)
+        void registerGroupNameRefresh(GroupRow<PreviewRow> group);   // = registerGroupNameRefresh(group)
+        void setCheckedSilently(List<PreviewRow> targets, boolean value); // = listInteraction.setCheckedSilently(...)
     }
 
     /** 折叠/展开动画时长（拍板 200ms；缓动照搬 TitledPaneSkin 的 LINEAR） */
@@ -84,7 +84,7 @@ public final class GroupCommandController {
     /** 动画全局锁：动画期间列表项目不可交互（按钮可点但无效果），快速连点折叠箭头直接忽略 */
     private boolean listAnimating = false;
     /** 正在动画的组；null = 无动画 */
-    private GroupItem<PreviewItem> animatingGroup = null;
+    private GroupRow<PreviewRow> animatingGroup = null;
     /** true = 展开动画；false = 折叠动画 */
     private boolean animExpanding = false;
     /** 动画 ParallelTransition（200ms ease-out；完成/快进后置 null） */
@@ -120,11 +120,11 @@ public final class GroupCommandController {
         if (listAnimating) {
             return;
         }
-        List<PreviewItem> targets = host.allVisibleItems().stream()
+        List<PreviewRow> targets = host.allVisibleItems().stream()
                 .filter(i -> i.selected).toList();
         Object sel = host.currentSelection();
         if (targets.isEmpty()) {
-            if (sel instanceof PreviewItem it && !it.removed) {
+            if (sel instanceof PreviewRow it && !it.removed) {
                 targets = List.of(it);
             } else {
                 return;
@@ -132,16 +132,18 @@ public final class GroupCommandController {
         }
         // 结构（落点计算 / 成员摘除 / 致空组销毁 / 条目级参数清除 / 压 GROUP 撤销记录）全部由模型负责；
         // 组名前缀由宿主传入本地化文案 —— 模型不产出面向用户的文案。
-        GroupItem<PreviewItem> group = host.createGroup(targets);
+        List<PreviewRow> requested = targets;
+        host.createGroup(requested, group -> {
         if (group == null) {
             return;
         }
         host.registerGroupNameRefresh(group);
         // 拍板：合并为组后勾选集合复位，避免勾选残留导致下一批建组误合并
-        host.setCheckedSilently(targets, false);
+
         host.selectRow(group);
         host.refreshAfterListChange();
-        log.info(Texts.msg("log.maincontroller.56", group.getName(), targets.size()));
+        log.info(Texts.msg("log.maincontroller.56", group.getName(), requested.size()));
+        });
     }
 
     /** 拆分组（F6）：选中组条目时解散该组——成员按组内顺序回顶层原组位置，组名/组参数随组对象留在撤销记录中 */
@@ -150,21 +152,23 @@ public final class GroupCommandController {
             return;
         }
         Object sel = host.currentSelection();
-        if (!(sel instanceof GroupItem<?> g)) {
+        if (!(sel instanceof GroupRow<?> g)) {
             return;
         }
-        GroupItem<PreviewItem> group = WorkspaceStructure.asPreviewGroup(g);
+        GroupRow<PreviewRow> group = WorkspaceView.asPreviewGroup(g);
         if (host.indexInDataOrder(group) < 0) {
             return;
         }
         int displayIdx = host.displayItems().indexOf(group);
         // 拆分是整组操作，与展开/折叠无关。结构变更（成员按组内顺序回顶层原位置 + 组参数下发为
         // 成员条目级参数 + 压 UNGROUP 撤销记录）全部由模型负责，本类只做刷新与选中收尾。
-        List<PreviewItem> members = host.ungroupGroup(group);
+        int memberCount = group.getMembers().size();
+        host.ungroupGroup(group, () -> {
         host.refreshAfterListChange();
         // 选中的组已解散：跳转到原组位置的最近有效行（拆分后为原组第一个成员）
         host.selectNearestVisible(displayIdx);
-        log.info(Texts.msg("log.maincontroller.57", group.getName(), members.size()));
+        log.info(Texts.msg("log.maincontroller.57", group.getName(), memberCount));
+        });
     }
 
     /**
@@ -174,18 +178,20 @@ public final class GroupCommandController {
      *
      * <p>展开标志的翻转（B3-2）先经 {@code Host.toggleGroupExpanded} 在后端模型原子完成
      * （幂等：每调用恰好翻转一次），本类只按翻转后的状态选动画方向 —— 不再直写
-     * {@code GroupItem.setExpanded}。</p>
+     * {@code GroupRow.setExpanded}。</p>
      */
-    void toggleGroupExpanded(GroupItem<PreviewItem> g) {
+    void toggleGroupExpanded(GroupRow<PreviewRow> g) {
         if (listAnimating || host.isDragActive()) {
             return;
         }
-        host.toggleGroupExpanded(g);
+        listAnimating = true;
+        host.toggleGroupExpanded(g, () -> {
         if (g.isExpanded()) {
             expandGroupAnimated(g);
         } else {
             collapseGroupAnimated(g);
         }
+        });
     }
 
     /**
@@ -193,9 +199,9 @@ public final class GroupCommandController {
      * 数据终态（显示序移除成员）在动画开始时立即生效（expanded=false 已由后端翻转）；
      * 外部重建触发快进兜底时只清理快照即可。
      */
-    private void collapseGroupAnimated(GroupItem<PreviewItem> g) {
+    private void collapseGroupAnimated(GroupRow<PreviewRow> g) {
         Object sel = host.currentSelection();
-        if (sel instanceof PreviewItem it && it.parentGroup == g) {
+        if (sel instanceof PreviewRow it && it.parentGroup == g) {
             host.selectRow(g);
         }
         listAnimating = true;
@@ -214,13 +220,13 @@ public final class GroupCommandController {
         try {
             for (javafx.scene.Node n : host.fileListView().lookupAll(".list-cell")) {
                 if (!(n instanceof PreviewListCell c) || c.getItem() == null
-                        || (c.getItem() instanceof PreviewItem it && it.removed)) {
+                        || (c.getItem() instanceof PreviewRow it && it.removed)) {
                     continue;
                 }
                 Bounds b = DragGeometry.cellBoundsInOverlay(c, host.dragOverlay());
                 if (c.getItem() == g) {
                     groupBottom = b.getMaxY();
-                } else if (c.getItem() instanceof PreviewItem it && it.parentGroup == g) {
+                } else if (c.getItem() instanceof PreviewRow it && it.parentGroup == g) {
                     Image snap = c.snapshot(DragGeometry.transparentSnapParams(), null);
                     if (snap == null) {
                         continue;   // 快照失败跳过该行，避免空白视图盖住列表
@@ -300,7 +306,7 @@ public final class GroupCommandController {
      * 展开动画（抽屉拉出）：显示序先重建到终态，成员行快照从上方滑入到位，
      * 下方行快照下滑让位。快进兜底只清理快照。
      */
-    private void expandGroupAnimated(GroupItem<PreviewItem> g) {
+    private void expandGroupAnimated(GroupRow<PreviewRow> g) {
         listAnimating = true;
         animatingGroup = g;
         animExpanding = true;
@@ -324,13 +330,13 @@ public final class GroupCommandController {
         try {
             for (javafx.scene.Node n : host.fileListView().lookupAll(".list-cell")) {
                 if (!(n instanceof PreviewListCell c) || c.getItem() == null
-                        || (c.getItem() instanceof PreviewItem it && it.removed)) {
+                        || (c.getItem() instanceof PreviewRow it && it.removed)) {
                     continue;
                 }
                 Bounds b = DragGeometry.cellBoundsInOverlay(c, host.dragOverlay());
                 if (c.getItem() == g) {
                     groupBottom = b.getMaxY();
-                } else if (c.getItem() instanceof PreviewItem it && it.parentGroup == g) {
+                } else if (c.getItem() instanceof PreviewRow it && it.parentGroup == g) {
                     Image snap = c.snapshot(DragGeometry.transparentSnapParams(), null);
                     if (snap == null) {
                         continue;   // 快照失败跳过该行，避免空白视图盖住列表

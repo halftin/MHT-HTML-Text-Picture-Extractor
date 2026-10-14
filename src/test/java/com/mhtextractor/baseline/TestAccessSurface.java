@@ -90,6 +90,8 @@ public final class TestAccessSurface {
             "com.mhtextractor.gui.component.ParamTargetTextTest",
             "com.mhtextractor.gui.controller.AcceptanceDriver",
             "com.mhtextractor.gui.controller.AgentExercise",
+            "com.mhtextractor.gui.controller.CacheEvidence",
+            "com.mhtextractor.gui.controller.FxDelay",
             "com.mhtextractor.gui.controller.ExtractionTaskCoordinatorGateTest",
             "com.mhtextractor.gui.controller.WorkspaceExtractionCoordinatorCancelRaceTest",
             "com.mhtextractor.gui.controller.FeatureExercise",

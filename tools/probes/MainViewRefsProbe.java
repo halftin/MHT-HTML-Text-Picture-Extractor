@@ -74,7 +74,11 @@ public class MainViewRefsProbe extends Application {
         MainViewRefs refsAfterSuper;
 
         public ProbeController(FXMLLoader loader) {
-            super(loader);
+            this(loader, ProbeRuntime.port());
+        }
+
+        private ProbeController(FXMLLoader loader, com.mhtextractor.uicore.FrontendPort port) {
+            super(loader, port, finished -> ProbeRuntime.close(port, finished));
             this.loader = loader;
         }
 
