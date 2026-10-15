@@ -375,10 +375,9 @@ public final class ListInteractionController implements MainViewActions {
         }
         host.cancelPreviewLoad();
         if (lastSelected instanceof PreviewRow last && last != item) {
-            // 仅当前文件的图片数据驻留内存（E1.2：只清图片数据的唯一实现是 PreviewRow.releaseImageData，
-            // 文本/标题/meta/状态保持不动 —— 这里的语义是"慎重"的局部释放，不是整体重置）
-            last.releaseImageData();
+            last.retainImageData();
         }
+        if (item instanceof PreviewRow selected) selected.retainImageData();
         lastSelected = item;
         // 组行选中/未选中背景样式随选择变化切换；拖拽动画期间暂停刷新避免打乱快照画面
         if (!dragActive) {

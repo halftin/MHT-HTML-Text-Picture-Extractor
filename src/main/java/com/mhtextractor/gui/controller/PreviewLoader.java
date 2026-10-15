@@ -85,11 +85,13 @@ public final class PreviewLoader {
                 while(item.cachedThumbs.size()<=thumb.index())item.cachedThumbs.add(null);
                 item.cachedThumbs.set(thumb.index(),decoded);
                 host.renderer().appendThumb(item,decoded,thumb.index());
+                item.retainImageData();
             }
         } else if (event instanceof PortEvent.PreviewLoaded loaded) {
             if (!current(loaded.generation(), loaded.path())) return;
             PreviewRow item = (PreviewRow) host.currentSelection();
             if(item.cachedThumbs==null)item.cachedThumbs=java.util.List.of();
+            item.retainImageData();
             if (item.status == PreviewRow.Status.EMPTY) host.refreshList();
             host.updateContentArea(item);
         } else if (event instanceof PortEvent.PreviewLoadFailed failed) {

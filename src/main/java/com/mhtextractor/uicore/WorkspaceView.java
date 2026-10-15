@@ -6,6 +6,7 @@ import java.util.*;
 /** Materializes display identities from a complete VM snapshot. No domain objects or undo stack. */
 public final class WorkspaceView {
     private final FrontendPort port;
+    private final PreviewRetention previewRetention=new PreviewRetention();
     private final Map<String,PreviewRow> items=new LinkedHashMap<>();
     private final Map<Long,GroupRow<PreviewRow>> groups=new LinkedHashMap<>();
     private List<Object> order=List.of();
@@ -42,7 +43,7 @@ public final class WorkspaceView {
         }).mapToObj(index->{var id=vm.topLevelOrder().get(index);return id.groupNo()==null?(Object)items.get(id.path()):groups.get(id.groupNo());}).toList();
         version++;
     }
-    private PreviewRow item(ItemVm vm){var row=items.computeIfAbsent(vm.id(),id->new PreviewRow(vm,value->port.commands().setChecked(List.of(id),value)));row.update(vm);return row;}
+    private PreviewRow item(ItemVm vm){var row=items.computeIfAbsent(vm.id(),id->new PreviewRow(vm,value->port.commands().setChecked(List.of(id),value),previewRetention));row.update(vm);return row;}
     public List<Object> topLevel(){return order;}
     public List<Object> topLevelView(){return order;}
     public List<PreviewRow> allItems(){return order.stream().flatMap(o->o instanceof GroupRow<?> g?g.getMembers().stream().map(PreviewRow.class::cast):java.util.stream.Stream.of((PreviewRow)o)).toList();}

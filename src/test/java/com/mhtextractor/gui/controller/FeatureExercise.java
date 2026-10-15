@@ -907,6 +907,37 @@ public boolean runAutomatedTests() {
             out.println("[PASS] Image preview workspace (C2)"); p++;
         } catch (Exception e) { out.println("[FAIL] Image preview workspace: " + e.getMessage()); f++; }
 
+        // P5b-1：A -> B -> A，回切期间不点击预览；参数变化仍经原失效链清空。
+        try {
+            PreviewRow a = (PreviewRow) listView().getSelectionModel().getSelectedItem();
+            if (a.cachedThumbs == null || a.cachedThumbs.isEmpty())
+                throw new IllegalStateException("P5b-1 前置：A 必须已有缩略图");
+            PreviewRow b = this.view.allVisibleItems().stream().filter(row -> row != a && !row.removed)
+                    .findFirst().orElseThrow(() -> new IllegalStateException("P5b-1 缺少 B"));
+            listView().getSelectionModel().select(b); FxDelay.pause(200);
+            listView().getSelectionModel().select(a); FxDelay.pause(200);
+            var pane = node("thumbnailPane", javafx.scene.layout.FlowPane.class);
+            var scroll = node("imageScrollPane", javafx.scene.control.ScrollPane.class);
+            if (a.cachedThumbs == null || a.cachedThumbs.isEmpty() || !scroll.isVisible()
+                    || pane.getChildren().isEmpty() || pane.getChildren().stream()
+                    .filter(javafx.scene.Parent.class::isInstance).map(javafx.scene.Parent.class::cast)
+                    .flatMap(box -> box.getChildrenUnmodifiable().stream())
+                    .noneMatch(n -> n instanceof javafx.scene.image.ImageView iv && iv.getImage() != null))
+                throw new IllegalStateException("P5b-1：A -> B -> A 未再次点击预览，A.cachedThumbs 应非空且界面直接显示缩略图");
+            out.println("[EVIDENCE] P5b-1：A -> B -> A 未再次点击预览，cachedThumbs 非空且界面直接显示缩略图");
+            listView().getSelectionModel().select(b); FxDelay.pause(200);
+            AppConfig changed = new AppConfig();
+            changed.setImageNameStartMarker("__p5b1_changed__");
+            this.view.applyItemParams(a, true, changed); FxDelay.pause(300);
+            listView().getSelectionModel().select(a); FxDelay.pause(200);
+            if (a.cachedThumbs != null || (a.cachedImages != null && !a.cachedImages.isEmpty()) || a.cachedMeta != null
+                    || !pane.getChildren().isEmpty() || scroll.isVisible())
+                throw new IllegalStateException("P5b-1：修改 A 的提取参数后选回 A，内存预览与界面缩略图应为空"
+                        + " thumbs=" + a.cachedThumbs + " images=" + a.cachedImages + " meta=" + a.cachedMeta
+                        + " nodes=" + pane.getChildren().size() + " visible=" + scroll.isVisible());
+            out.println("[PASS] P5b-1：回切直接显示缩略图；修改 A 的提取参数后回切预览为空"); p++;
+        } catch (Exception e) { out.println("[FAIL] P5b-1 preview retention: " + e.getMessage()); f++; }
+
         // 图片提取（含损坏文件 → 满格条应转为浅红，进度条配色拍板）
         try { imageModeToggle().setSelected(true); FxDelay.pause(300);
             java.nio.file.Files.write(imageDir.resolve("bad.mht"),

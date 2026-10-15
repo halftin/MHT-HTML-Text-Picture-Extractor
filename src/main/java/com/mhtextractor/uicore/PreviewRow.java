@@ -27,8 +27,13 @@ public final class PreviewRow implements ParamTargetView {
     public boolean previewCached;
     public String previewHead="",previewTail="",displayName;
     private final Consumer<Boolean> check;
+    private final PreviewRetention retention;
     private final List<ChangeListener> checkedListeners=new ArrayList<>();
     public PreviewRow(ItemVm vm,Consumer<Boolean> check){
+        this(vm,check,new PreviewRetention());
+    }
+    PreviewRow(ItemVm vm,Consumer<Boolean> check,PreviewRetention retention){
+        this.retention=retention;
         this.path=vm.id();name=vm.name();sourceFolder=vm.sourceFolder();
         modifiedTime=vm.modifiedTime()==null?null:LocalDateTime.parse(vm.modifiedTime());this.check=check;update(vm);
     }
@@ -37,7 +42,7 @@ public final class PreviewRow implements ParamTargetView {
         status=vm.status()==null?Status.WAITING:Status.valueOf(vm.status());errorMsg=vm.errorMsg()==null?"":vm.errorMsg();
         chapterEnabled=Boolean.TRUE.equals(vm.chapterEnabled());badge=vm.badge();cachedTitle=vm.cachedTitle();titleOverride=vm.titleOverride();
         boolean hadPreview=previewCached;previewCached=vm.previewManifest()!=null;
-        if(hadPreview&&!previewCached){cachedThumbs=null;cachedImages=null;cachedMeta=null;}
+        if(hadPreview&&!previewCached){releaseImageData();cachedMeta=null;}
         extractOutcome=vm.extractOutcome()==null?ExtractOutcome.NONE:ExtractOutcome.valueOf(vm.extractOutcome());extractDetail=vm.extractDetail();
         if(changed)for(var listener:List.copyOf(checkedListeners))listener.onValueChanged();
     }
@@ -49,6 +54,7 @@ public final class PreviewRow implements ParamTargetView {
     public void addSelectedChangeListener(ChangeListener l){checkedListeners.add(l);}
     public void removeSelectedChangeListener(ChangeListener l){checkedListeners.remove(l);}
     public void setSelected(boolean value){check.accept(value);}
-    public void releaseImageData(){cachedThumbs=null;cachedImages=null;}
-    public void resetPreviewState(){cachedThumbs=null;cachedImages=null;cachedMeta=null;cachedText=null;}
+    public void retainImageData(){retention.retain(this);}
+    public void releaseImageData(){retention.forget(this);cachedThumbs=null;cachedImages=null;}
+    public void resetPreviewState(){releaseImageData();cachedMeta=null;cachedText=null;}
 }
