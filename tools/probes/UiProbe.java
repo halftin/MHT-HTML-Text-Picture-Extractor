@@ -74,6 +74,15 @@ public class UiProbe extends Application {
         stage.setHeight(Double.parseDouble(System.getProperty("probe.h", "700")));
         stage.show();
 
+        String input = System.getProperty("probe.input");
+        if (input != null) {
+            input = java.nio.file.Path.of(input).toString();
+            ((javafx.scene.control.ToggleButton) scene.lookup("#textModeToggle")).setSelected(true);
+            ((javafx.scene.control.TextField) scene.lookup("#inputFolderField")).setText(input);
+            waitForSource(scene, input, System.currentTimeMillis() + 15000);
+            return;
+        }
+
         if (reopen) {
             runReopenCheck(scene);
         } else if (Boolean.getBoolean("probe.dialog")) {
@@ -88,6 +97,44 @@ public class UiProbe extends Application {
                 Platform.exit();
             }));
         }
+    }
+
+    private void waitForSource(Scene scene, String input, long deadline) {
+        javafx.animation.PauseTransition wait = new javafx.animation.PauseTransition(javafx.util.Duration.millis(100));
+        wait.setOnFinished(_ -> {
+            try {
+                scene.getRoot().applyCss();
+                scene.getRoot().layout();
+                var sources = scene.getRoot().lookupAll(".preview-source").stream()
+                        .filter(n -> n instanceof javafx.scene.control.Label label
+                                && input.equals(label.getText()) && effectiveVisible(n)).toList();
+                if (sources.isEmpty() && System.currentTimeMillis() < deadline) {
+                    waitForSource(scene, input, deadline);
+                    return;
+                }
+                if (sources.isEmpty()) throw new IllegalStateException("No visible source matches input " + input);
+                var header = (Labeled) scene.lookup("#sourceColumnHeader");
+                for (Node node : sources) {
+                    var label = (javafx.scene.control.Label) node;
+                    Bounds a = header.localToScene(header.getLayoutBounds());
+                    Bounds b = label.localToScene(label.getLayoutBounds());
+                    if (Math.abs(a.getMinX() - b.getMinX()) > 1 || Math.abs(a.getWidth() - b.getWidth()) > 1)
+                        throw new IllegalStateException("Source/header misaligned: " + a + " / " + b);
+                    if (label.getTooltip() == null || !input.equals(label.getTooltip().getText()))
+                        throw new IllegalStateException("Source tooltip does not preserve full input");
+                    System.out.println("SOURCE aligned x=" + b.getMinX() + " width=" + b.getWidth()
+                            + " ellipsized=" + label.isTextTruncated() + " tooltip=" + label.getTooltip().getText());
+                }
+                report(scene, System.getProperty("probe.png"));
+                Platform.exit();
+                System.exit(0);
+            } catch (Throwable error) {
+                error.printStackTrace();
+                Platform.exit();
+                System.exit(1);
+            }
+        });
+        wait.play();
     }
 
     /**
@@ -252,6 +299,7 @@ public class UiProbe extends Application {
         List<String> truncated = new ArrayList<>();
         List<String> cjk = new ArrayList<>();
         List<String> rows = new ArrayList<>();
+        List<String> ellipsized = new ArrayList<>();
 
         for (Node n : allNodes(scene.getRoot())) {
             if (n instanceof Labeled lab && lab.getText() != null && !lab.getText().isEmpty()) {
@@ -273,8 +321,15 @@ public class UiProbe extends Application {
                     }
                     double have = lab.getWidth();
                     if (have > 0 && need > have + 1.0) {
-                        truncated.add(String.format("%-40s need=%.1f have=%.1f  \"%s\"",
-                                describe(n), need, have, text));
+                        String detail = String.format("%-40s need=%.1f have=%.1f  \"%s\"", describe(n), need, have, text);
+                        // Source paths deliberately elide; only a working ellipsis + full tooltip qualifies.
+                        if (lab.getStyleClass().contains("preview-source") && lab.isTextTruncated()
+                                && lab.getTextOverrun() == javafx.scene.control.OverrunStyle.ELLIPSIS
+                                && lab.getTooltip() != null && text.equals(lab.getTooltip().getText())) {
+                            ellipsized.add(detail);
+                        } else {
+                            truncated.add(detail);
+                        }
                     }
                 }
             }
@@ -290,6 +345,8 @@ public class UiProbe extends Application {
                 + " window=" + scene.getWidth() + "x" + scene.getHeight() + " ===========");
         System.out.println("--- TRUNCATED (" + truncated.size() + ") ---");
         truncated.forEach(s -> System.out.println("  " + s));
+        System.out.println("--- INTENTIONAL SOURCE ELLIPSIS (" + ellipsized.size() + ") ---");
+        ellipsized.forEach(s -> System.out.println("  " + s));
         System.out.println("--- CJK-ON-SCREEN (" + cjk.size() + ") ---");
         cjk.forEach(s -> System.out.println("  " + s));
         rows.forEach(s -> System.out.println("  " + s));

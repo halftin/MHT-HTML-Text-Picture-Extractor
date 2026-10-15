@@ -15,13 +15,13 @@ import javafx.event.Event;
 import lombok.extern.slf4j.Slf4j;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.layout.Priority;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.Tooltip;
+import javafx.scene.control.OverrunStyle;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.TransferMode;
@@ -57,6 +57,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
     private final Label badgeLabel = new Label();
     private final Label posLabel = new Label();
     private final Label nameLabel = new Label();
+    private final Label sourceLabel = new Label();
     private final Label statusLabel = new Label();
     private final Region topLine = new Region();
     private final Region bottomLine = new Region();
@@ -108,9 +109,17 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         badgeLabel.setAlignment(Pos.CENTER);
         posLabel.setMinWidth(POS_COL_WIDTH);
         posLabel.setPrefWidth(POS_COL_WIDTH);
+        posLabel.setMaxWidth(POS_COL_WIDTH);
+        nameLabel.getStyleClass().add("preview-name");
+        sourceLabel.getStyleClass().add("preview-source");
+        sourceLabel.setTextOverrun(OverrunStyle.ELLIPSIS);
+        sourceLabel.setWrapText(false);
+        listViewProperty().addListener((_, _, list) -> {
+            if (list != null) PreviewColumns.bindCell(list, nameLabel, sourceLabel, statusLabel);
+        });
         Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        box.getChildren().addAll(checkBox, arrowLabel, badgeLabel, posLabel, nameLabel, spacer, statusLabel);
+        spacer.setManaged(false);
+        box.getChildren().addAll(checkBox, arrowLabel, badgeLabel, posLabel, nameLabel, sourceLabel, spacer, statusLabel);
 
         // 插入指示线：覆盖在内容上下边缘的 2px 静态蓝线（StackPane 覆盖层，不占布局）。
         // 必须鼠标透明：否则 drop 事件目标为线本身，e.getY() 变为 0-2 导致落点分区误判（下缘落点被当成上缘）
@@ -178,6 +187,8 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         setOnMouseReleased(null);
         setOnMousePressed(null);
         clearInsertIndicator();
+        sourceLabel.setText("");
+        sourceLabel.setTooltip(null);
         // 折叠/展开动画期间、以及提取运行中列表项目不可交互：所有可见单元格复选框禁用
         checkBox.setDisable(actions.isListAnimating() || actions.isExtractionRunning());
         if (empty || item == null) {
@@ -290,7 +301,8 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         AppConfig eff = actions.effectiveForObject(it);
         boolean showBadgeCol = actions.isTextMode() && eff != null && eff.isAddChapterNumber();
         badgeLabel.setVisible(showBadgeCol);
-        badgeLabel.setManaged(showBadgeCol);
+        // Individual chapter settings hide the badge without shifting the shared columns.
+        badgeLabel.setManaged(PreviewColumns.hasBadgeColumn(getListView()));
         // 单元格可能刚渲染过组条目，恢复顺序栏可见（组行会隐藏该列，不复原则项目名左移挤占顺序栏）
         posLabel.setVisible(true);
         posLabel.setManaged(true);
@@ -298,6 +310,9 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         posLabel.setText(pos + ".");
         nameLabel.setPadding(inGroup ? new Insets(0, 0, 0, 16) : Insets.EMPTY);
         nameLabel.setText(it.name);
+        sourceLabel.setText(it.sourceFolder == null ? "" : it.sourceFolder);
+        sourceLabel.setTooltip(it.sourceFolder == null || it.sourceFolder.isEmpty()
+                ? null : new Tooltip(it.sourceFolder));
         statusLabel.setText("");
         statusLabel.setGraphic(statusIcon);
         statusIcon.setIconLiteral(switch (it.status) {
@@ -339,6 +354,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         nameLabel.setStyle((inGroup ? "-fx-font-size: 12px; -fx-font-weight: bold;" : "")
                 + (whiteText ? " -fx-text-fill: #ffffff;" : ""));
         posLabel.setStyle(whiteText ? "-fx-text-fill: #ffffff;" : "");
+        sourceLabel.setStyle(whiteText ? "-fx-text-fill: #ffffff;" : "");
         setGraphic(wrapper);
     }
 

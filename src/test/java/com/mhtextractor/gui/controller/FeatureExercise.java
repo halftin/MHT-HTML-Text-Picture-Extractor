@@ -17,6 +17,10 @@ import javafx.application.Platform;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
+import javafx.scene.control.OverrunStyle;
+import javafx.geometry.Bounds;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.TextArea;
 import javafx.scene.image.Image;
@@ -82,6 +86,95 @@ import java.util.Set;
 public final class FeatureExercise extends FeatureExerciseSupport {
 
     private com.mhtextractor.uicore.FrontendPort frontend;
+
+    // Source-column acceptance uses public scene nodes, with no new production access.
+    private static String verifySourceColumns(ListView<?> list, String expectedSource) {
+        list.getScene().getRoot().applyCss();
+        list.getScene().getRoot().layout();
+        Label sourceHeader = (Label) list.getScene().lookup("#sourceColumnHeader");
+        Label nameHeader = (Label) list.getScene().lookup("#nameColumnHeader");
+        requireSourceColumn(sourceHeader != null && sourceHeader.isVisible()
+                && I18n.get("main.source").equals(sourceHeader.getText()), "Missing localized source header");
+        int count = 0;
+        boolean ellipsis = false;
+        String evidence = "";
+        for (var node : list.lookupAll(".list-cell")) {
+            if (!(node instanceof ListCell<?> cell) || !(cell.getItem() instanceof PreviewRow row)
+                    || !expectedSource.equals(row.sourceFolder) || cell.isEmpty() || !cell.isVisible()) continue;
+            Label source = (Label) cell.lookup(".preview-source");
+            Label name = (Label) cell.lookup(".preview-name");
+            requireSourceColumn(source != null && source.isVisible() && source.isManaged(), "Missing visible source cell");
+            requireSourceColumn(expectedSource.equals(source.getText()), "Source cell must preserve original source");
+            requireSourceColumn(source.getTooltip() != null && expectedSource.equals(source.getTooltip().getText()),
+                    "Source tooltip must preserve full source");
+            assertSourceAligned(nameHeader, name);
+            assertSourceAligned(sourceHeader, source);
+            requireSourceColumn(source.getTextOverrun() == OverrunStyle.ELLIPSIS && !source.isWrapText(), "Source must elide");
+            ellipsis |= source.isTextTruncated();
+            count++;
+            Bounds bounds = source.localToScene(source.getLayoutBounds());
+            evidence = "x=" + bounds.getMinX() + " width=" + bounds.getWidth();
+        }
+        requireSourceColumn(count > 0, "No visible source rows inspected");
+        requireSourceColumn(ellipsis, "Long source fixture must actually show an ellipsis");
+        return "rows=" + count + " " + evidence + " ellipsis=true tooltip=" + expectedSource;
+    }
+
+    private static void assertSourceAligned(Label header, Label cell) {
+        Bounds a = header.localToScene(header.getLayoutBounds());
+        Bounds b = cell.localToScene(cell.getLayoutBounds());
+        requireSourceColumn(Math.abs(a.getMinX() - b.getMinX()) <= 1 && Math.abs(a.getWidth() - b.getWidth()) <= 1,
+                "Header/cell columns differ: " + a + " / " + b);
+    }
+
+    /** Swap only the rendered projection to exercise nullable protocol values and cell reuse. */
+    private static void verifyBlankSources(ListView<Object> list, PreviewRow original) {
+        var saved = list.getItems();
+        try {
+            var rows = javafx.collections.FXCollections.<Object>observableArrayList();
+            for (String source : new String[]{null, ""}) {
+                rows.add(new PreviewRow(new com.mhtextractor.uiport.ItemVm(original.path, original.name,
+                        false, false, 0, com.mhtextractor.uiport.UpdateKind.NONE, source), _ -> {}));
+            }
+            list.setItems(rows);
+            list.refresh();
+            list.applyCss();
+            list.layout();
+            int count = 0;
+            for (var node : list.lookupAll(".list-cell")) {
+                if (!(node instanceof ListCell<?> cell) || cell.isEmpty()
+                        || !(cell.getItem() instanceof PreviewRow)) continue;
+                Label label = (Label) cell.lookup(".preview-source");
+                requireSourceColumn(label != null && "".equals(label.getText()) && label.getTooltip() == null,
+                        "Null/empty sources must render blank and clear the previous tooltip");
+                count++;
+            }
+            requireSourceColumn(count == 2, "Both null and empty source rows must be inspected");
+        } finally {
+            list.setItems(saved);
+            list.refresh();
+        }
+    }
+
+    private static void verifySourceBadgeModes(ListView<?> list, String source) {
+        Label badge = (Label) list.getScene().lookup("#badgeHeaderLabel");
+        boolean managed = badge.isManaged();
+        try {
+            for (boolean reserve : new boolean[]{true, false}) {
+                badge.setManaged(reserve);
+                list.refresh();
+                verifySourceColumns(list, source);
+            }
+        } finally {
+            badge.setManaged(managed);
+            list.refresh();
+        }
+    }
+
+    private static void requireSourceColumn(boolean condition, String message) {
+        if (!condition) throw new IllegalStateException(message);
+    }
+
 
     public FeatureExercise(MainController mc) {
         super(mc);
@@ -333,6 +426,26 @@ public boolean runAutomatedTests() {
             out.println("[PASS] Progress bar counts only effective-param items"); p++;
         } catch (Exception e) { out.println("[FAIL] Progress bar param-scope: " + e.getMessage()); f++; }
         finally { this.view.clearUndoStack(); this.view.clearDataOrder(); FxDelay.pause(100); }
+
+        try {
+            Path sourceDir = Files.createTempDirectory("mht-source-column").resolve(
+                    (I18n.get("main.source") + "-Source-Column-").repeat(8));
+            Files.createDirectories(sourceDir);
+            createSampleMht(sourceDir, "source.mht");
+            inputFolderField().setText(sourceDir.toString());
+            FxDelay.pause(100); waitForImportDone(); FxDelay.pause(300);
+            out.println("[EVIDENCE] P5b-2 " + verifySourceColumns(
+                    listView(), sourceDir.toString()));
+            verifySourceBadgeModes(listView(), sourceDir.toString());
+            verifyBlankSources(
+                    listView(), this.view.allVisibleItems().getFirst());
+            out.println("[EVIDENCE] P5b-2 null/empty sources render blank; reused tooltips cleared");
+            out.println("[PASS] P5b-2 source column alignment, ellipsis and tooltip"); p++;
+        } catch (Exception e) { out.println("[FAIL] P5b-2 source column: " + e.getMessage()); f++; }
+        finally {
+            inputFolderField().setText("");
+            this.view.clearUndoStack(); this.view.clearDataOrder(); FxDelay.pause(100);
+        }
 
         // 文本参数弹窗：开关联动 + 确定生效
         try { textModeToggle().setSelected(true); FxDelay.pause(200);

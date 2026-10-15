@@ -85,8 +85,8 @@
                 <Insets top="0" right="8" bottom="8" left="16"/>
             </padding>
             <VBox HBox.hgrow="ALWAYS" spacing="4" prefWidth="640">
-                <!-- 列头：全选 / 章号 / 顺序 / 文件名 / 状态 -->
-                <HBox spacing="6" alignment="CENTER_LEFT">
+                <!-- 列头：全选 / 章号 / 顺序 / 文件名 / 来源 / 状态 -->
+                <HBox id="previewColumnHeader" spacing="6" alignment="CENTER_LEFT">
                     <padding>
                         <Insets top="2" right="10" bottom="2" left="10"/>
                     </padding>
@@ -97,10 +97,10 @@
                         </tooltip>
                     </CheckBox>
                     <Label fx:id="badgeHeaderLabel" text="%main.chapterNo" prefWidth="40" styleClass="text-muted"/>
-                    <Label text="%main.order" prefWidth="40" styleClass="text-muted"/>
-                    <Label text="%main.fileName" styleClass="text-muted"/>
-                    <Region HBox.hgrow="ALWAYS"/>
-                    <Label text="%main.status" styleClass="text-muted"/>
+                    <Label id="orderColumnHeader" text="%main.order" prefWidth="40" styleClass="text-muted"/>
+                    <Label id="nameColumnHeader" text="%main.fileName" styleClass="text-muted"/>
+                    <Label id="sourceColumnHeader" text="%main.source" styleClass="text-muted"/>
+                    <Label id="statusColumnHeader" text="%main.status" styleClass="text-muted"/>
                 </HBox>
                 <StackPane VBox.vgrow="ALWAYS">
                     <ListView fx:id="fileListView"/>

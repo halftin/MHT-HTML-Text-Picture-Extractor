@@ -53,6 +53,7 @@ final class MainViewInstaller {
 
     /** 2. 列表：单元格工厂、投影绑定、外部导入 DnD、右键菜单、勾选/组名/选择/拖拽动画联动。 */
     void installFileList() {
+        PreviewColumns.install(refs.fileListView());
         refs.fileListView().setCellFactory(_ -> mc.createPreviewCell());
         mc.adapter.bindListView(refs.fileListView());
         mc.setupExternalImportDnD();
