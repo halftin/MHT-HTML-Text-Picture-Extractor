@@ -169,6 +169,8 @@ class BackendEventsTest {
         // An actual invalid owner root makes tree deletion fail; closing still returns.
         var session = new IpcSession(json);
         Path root = session.files().root;
+        // Deliberately corrupt the owner root, including its new lifetime lock file.
+        Files.delete(root.resolve(".session.lock"));
         Files.delete(root); Files.writeString(root, "replaced-root");
         Files.setAttribute(root, "dos:readonly", true);
         assertDoesNotThrow(session::close);

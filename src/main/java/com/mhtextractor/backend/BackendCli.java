@@ -61,6 +61,13 @@ public final class BackendCli {
         if (guard != 0) {
             return guard;
         }
+        if (opts.mode() == CliArgs.Mode.ONCE) {
+            try { IpcFiles.recoverOrphans(); }
+            catch (java.io.IOException failure) {
+                System.err.println("error: session recovery failed: " + failure.getMessage());
+                return EXIT_FAILURE;
+            }
+        }
         return switch (opts.mode()) {
             case ONCE -> new OnceRunner().run(opts);
             case SERVE -> new ServeRunner().run(opts);

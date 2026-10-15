@@ -40,6 +40,8 @@ class BackendIpcBulkTest {
             assertFalse(Files.exists(sessionRoot), "Session cleanup must use the configured Unicode root");
         } finally {
             System.setProperty("java.io.tmpdir", original);
+            // All sessions using this private test root have closed; remove its persistent gate.
+            Files.deleteIfExists(configured.resolve(".mht-ipc-startup.lock"));
             Files.delete(configured);
             Files.delete(configured.getParent());
             Files.delete(parent);
@@ -76,6 +78,7 @@ class BackendIpcBulkTest {
         } finally {
             System.setProperty("java.io.tmpdir", original);
             Files.delete(link); // Remove only the junction, never its target.
+            Files.deleteIfExists(target.resolve(".mht-ipc-startup.lock"));
             Files.delete(target);
             Files.delete(parent);
         }
