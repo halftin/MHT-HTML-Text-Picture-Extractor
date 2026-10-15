@@ -936,6 +936,14 @@ public boolean runAutomatedTests() {
             if (!stopButton().isDisabled()) {
                 throw new IllegalStateException("图片提取完成后停止按钮应禁用（终态落地）");
             }
+            // 规则 b「提取完成即清缓存」在串行 IPC 宿主线程上可能晚于终态事件到达；
+            // 有界等它落地再进入下一块，避免与下一块的「预览后应恰有 1 个缓存目录」断言竞态
+            // （2026-10-15 定位的 zh GUI 约 1/5 间歇失败的根因；不放宽任何断言）。
+            long clearDeadline = System.currentTimeMillis() + 20000;
+            while (System.currentTimeMillis() < clearDeadline
+                    && !this.view.previewCacheLifecycle().store().listKeys().isEmpty()) {
+                pumpFxEvents();
+            }
             out.println("[PASS] Image extraction started"); p++;
         } catch (Exception e) { out.println("[FAIL] Image extraction: " + e.getMessage()); f++; }
 
