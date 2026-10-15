@@ -112,7 +112,14 @@ public class UiProbe extends Application {
                     waitForSource(scene, input, deadline);
                     return;
                 }
-                if (sources.isEmpty()) throw new IllegalStateException("No visible source matches input " + input);
+                if (sources.isEmpty()) {
+                    writeSnapshot(scene, System.getProperty("probe.png"));
+                    for (String id : List.of("previewHorizontalScroll", "fileListView", "previewColumnHeader")) {
+                        Node node = scene.lookup("#" + id);
+                        System.out.println("COLUMN_GEOMETRY " + id + " " + node.getLayoutBounds());
+                    }
+                    throw new IllegalStateException("No visible source matches input " + input);
+                }
                 var header = (Labeled) scene.lookup("#sourceColumnHeader");
                 for (Node node : sources) {
                     var label = (javafx.scene.control.Label) node;
@@ -126,6 +133,10 @@ public class UiProbe extends Application {
                             + " ellipsized=" + label.isTextTruncated() + " tooltip=" + label.getTooltip().getText());
                 }
                 report(scene, System.getProperty("probe.png"));
+                if (Boolean.getBoolean("probe.resize")) {
+                    checkResize(scene);
+                    return;
+                }
                 Platform.exit();
                 System.exit(0);
             } catch (Throwable error) {
@@ -295,7 +306,144 @@ public class UiProbe extends Application {
         }));
     }
 
+    private static void requireColumn(boolean ok, String message) {
+        if (!ok) throw new AssertionError(message);
+    }
+
+    private static void checkDefaultColumns(Scene scene) {
+        var saved = com.mhtextractor.uicore.GuiStateManager.load();
+        var name = (Labeled) scene.lookup("#nameColumnHeader");
+        var source = (Labeled) scene.lookup("#sourceColumnHeader");
+        if (saved != null && saved.getNameColumnWidth() != null) {
+            requireColumn(Math.abs(name.getWidth() - saved.getNameColumnWidth()) <= 1
+                    && Math.abs(source.getWidth() - saved.getSourceColumnWidth()) <= 1,
+                    "Restored column widths differ from JSON");
+            System.out.println("COLUMN_RESTORED name=" + name.getWidth() + " source=" + source.getWidth());
+            return;
+        }
+        requireColumn(name.getWidth() > 0 && Math.abs(name.getWidth() - source.getWidth()) <= 1,
+                "Default columns must split available space 50/50: " + name.getWidth() + "/" + source.getWidth());
+        var header = (javafx.scene.layout.HBox) scene.lookup("#previewColumnHeader");
+        var scroll = (javafx.scene.control.ScrollPane) scene.lookup("#previewHorizontalScroll");
+        double fixed = header.getPadding().getLeft() + header.getPadding().getRight();
+        int managed = 0;
+        for (Node child : header.getChildren()) {
+            if (!child.isManaged()) continue;
+            managed++;
+            if (child != name.getParent() && child != source.getParent()) fixed += child.getLayoutBounds().getWidth();
+        }
+        double available = scroll.getViewportBounds().getWidth() - fixed - header.getSpacing() * (managed - 1);
+        requireColumn(Math.abs(name.getWidth() - available * 0.5) <= 1
+                && Math.abs(source.getWidth() - available * 0.5) <= 1,
+                "Default columns must each occupy half the viewport's draggable area: " + available);
+        System.out.println("COLUMN_DEFAULT name=" + name.getWidth() + " source=" + source.getWidth()
+                + " available=" + available + " nameShare=" + name.getWidth() / available);
+    }
+
+    private static void columnLayout(Scene scene) {
+        scene.getRoot().applyCss();
+        scene.getRoot().layout();
+    }
+
+    private static void checkAligned(Scene scene) {
+        var list = (javafx.scene.control.ListView<?>) scene.lookup("#fileListView");
+        int count = 0;
+        for (Node node : list.lookupAll(".list-cell")) {
+            if (!(node instanceof javafx.scene.control.ListCell<?> cell) || cell.isEmpty() || !cell.isVisible()) continue;
+            for (String column : List.of("name", "source")) {
+                var header = scene.lookup("#" + column + "ColumnHeader");
+                var label = cell.lookup(".preview-" + column);
+                requireColumn(label != null, "Missing column " + column);
+                Bounds a = header.localToScene(header.getLayoutBounds());
+                Bounds b = label.localToScene(label.getLayoutBounds());
+                requireColumn(Math.abs(a.getMinX() - b.getMinX()) <= 1 && Math.abs(a.getWidth() - b.getWidth()) <= 1,
+                        "Column alignment " + column + ": " + a + " / " + b);
+            }
+            count++;
+        }
+        requireColumn(count > 0, "No virtualized cells inspected");
+        System.out.println("COLUMN_ALIGNMENT rows=" + count);
+    }
+
+    private static void mouse(Node node, javafx.event.EventType<javafx.scene.input.MouseEvent> type, double x) {
+        javafx.event.Event.fireEvent(node, new javafx.scene.input.MouseEvent(type,
+                2, 2, x, 100, javafx.scene.input.MouseButton.PRIMARY, 1,
+                false, false, false, false, true, false, false, false, false, true,
+                new javafx.scene.input.PickResult(node, 2, 2)));
+    }
+
+    private static void checkResize(Scene scene) {
+        var scroll = (javafx.scene.control.ScrollPane) scene.lookup("#previewHorizontalScroll");
+        var name = (Labeled) scene.lookup("#nameColumnHeader");
+        var source = (Labeled) scene.lookup("#sourceColumnHeader");
+        double initialName = name.getWidth(), initialSource = source.getWidth();
+        var order = (Labeled) scene.lookup("#orderColumnHeader");
+        var status = (Labeled) scene.lookup("#statusColumnHeader");
+        double orderWidth = order.getWidth(), statusWidth = status.getWidth();
+        for (String id : List.of("nameColumnResize", "sourceColumnResize")) {
+            Node grip = scene.lookup("#" + id);
+            requireColumn(grip.getCursor() == javafx.scene.Cursor.H_RESIZE, "Resize cursor " + id);
+            mouse(grip, javafx.scene.input.MouseEvent.MOUSE_PRESSED, 100);
+            mouse(grip, javafx.scene.input.MouseEvent.MOUSE_DRAGGED, 700);
+            mouse(grip, javafx.scene.input.MouseEvent.MOUSE_RELEASED, 700);
+            columnLayout(scene);
+        }
+        requireColumn(Math.abs(name.getWidth() - initialName - 600) <= 1, "Name drag did not resize");
+        requireColumn(Math.abs(source.getWidth() - initialSource - 600) <= 1, "Source drag did not resize");
+        requireColumn(order.getWidth() == orderWidth && status.getWidth() == statusWidth,
+                "Fixed columns changed width during drag");
+        checkAligned(scene);
+        boolean horizontal = scroll.lookupAll(".scroll-bar").stream().anyMatch(n ->
+                n instanceof javafx.scene.control.ScrollBar bar && bar.getOrientation() == javafx.geometry.Orientation.HORIZONTAL
+                        && bar.isVisible() && bar.getMax() > bar.getMin());
+        requireColumn(horizontal, "Overflow must show horizontal scrollbar");
+        double x = name.localToScene(name.getLayoutBounds()).getMinX();
+        scroll.setHvalue(0.65);
+        columnLayout(scene);
+        double shifted = name.localToScene(name.getLayoutBounds()).getMinX();
+        double expected = (scroll.getContent().getLayoutBounds().getWidth() - scroll.getViewportBounds().getWidth()) * 0.65;
+        requireColumn(expected > 0 && Math.abs((x - shifted) - expected) <= 1, "Header scroll offset mismatch");
+        checkAligned(scene);
+        var list = (javafx.scene.control.ListView<?>) scene.lookup("#fileListView");
+        requireColumn(list.getItems().size() >= 50, "Resize probe requires at least 50 rows for virtualization");
+        list.scrollTo(list.getItems().size() - 1);
+        list.lookupAll(".scroll-bar").stream().filter(n -> n instanceof javafx.scene.control.ScrollBar bar
+                && bar.getOrientation() == javafx.geometry.Orientation.VERTICAL)
+                .map(n -> (javafx.scene.control.ScrollBar) n).forEach(bar -> bar.setValue(bar.getMax()));
+        // VirtualFlow processes scrollTo on the next pulse; inspect the recycled cells afterwards.
+        var pulse = new javafx.animation.PauseTransition(javafx.util.Duration.millis(150));
+        pulse.setOnFinished(_ -> {
+            try {
+                columnLayout(scene);
+                requireColumn(list.lookupAll(".list-cell").stream().anyMatch(n ->
+                        n instanceof javafx.scene.control.ListCell<?> c && !c.isEmpty()
+                                && c.getIndex() == list.getItems().size() - 1), "Last row was not virtualized into view: "
+                        + list.lookupAll(".list-cell").stream().map(n -> {
+                            var c = (javafx.scene.control.ListCell<?>) n;
+                            return c.getIndex() + "/empty=" + c.isEmpty() + "/visible=" + c.isVisible();
+                        }).toList());
+                checkAligned(scene);
+                ((javafx.scene.control.TextField) scene.lookup("#outputFolderField"))
+                        .setText("H:/TEST/mht/p5b3/output");
+                var saved = com.mhtextractor.uicore.GuiStateManager.load();
+                requireColumn(saved != null && Math.abs(saved.getNameColumnWidth() - name.getWidth()) <= 1
+                        && Math.abs(saved.getSourceColumnWidth() - source.getWidth()) <= 1, "Persisted columns differ from dragged widths");
+                System.out.println("COLUMN_RESIZE name=" + name.getWidth() + " source=" + source.getWidth()
+                        + " hvalue=" + scroll.getHvalue() + " headerDelta=" + (x - shifted) + " expectedDelta=" + expected
+                        + " scrollbar=true persistence=true virtualReuse=true lastIndex=" + (list.getItems().size() - 1));
+                Platform.exit();
+                System.exit(0);
+            } catch (Throwable error) {
+                error.printStackTrace();
+                Platform.exit();
+                System.exit(1);
+            }
+        });
+        pulse.play();
+    }
+
     private void report(Scene scene, String png) {
+        checkDefaultColumns(scene);
         List<String> truncated = new ArrayList<>();
         List<String> cjk = new ArrayList<>();
         List<String> rows = new ArrayList<>();

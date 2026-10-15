@@ -55,7 +55,8 @@ public final class SessionStateService {
      * extractCheckedOnly → locale），最后 {@link GuiStateManager#save(GuiState)}。
      */
     public static void save(Session session) {
-        GuiState state = new GuiState();
+        GuiState state = GuiStateManager.load();
+        if (state == null) state = new GuiState();
         state.setImageModeEnabled(session.imageModeEnabled());
         state.setInputFolder(session.inputFolder());
         state.setOutputFolder(session.outputFolder());

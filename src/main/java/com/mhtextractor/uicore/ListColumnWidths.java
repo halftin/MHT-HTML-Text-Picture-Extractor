@@ -1,6 +1,6 @@
 package com.mhtextractor.uicore;
 
-/** Relative shares of the list's available file-name/source space. */
+/** File-name/source widths: DEFAULT holds relative shares, resized instances hold pixels. */
 public record ListColumnWidths(double fileName, double source) {
     public static final ListColumnWidths DEFAULT = new ListColumnWidths(1, 1);
 

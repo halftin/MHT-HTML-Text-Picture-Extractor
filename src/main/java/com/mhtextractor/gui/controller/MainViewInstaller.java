@@ -148,6 +148,10 @@ final class MainViewInstaller {
             if (newScene == null) {
                 return;
             }
+            // ScrollPane content enters the scene when its skin is created; the window may already exist.
+            if (newScene.getWindow() instanceof Stage stage) {
+                stage.setOnCloseRequest(mc::onWindowCloseRequest);
+            }
             newScene.windowProperty().addListener((_, _, newW) -> {
                 if (newW instanceof Stage stage) {
                     stage.setOnCloseRequest(mc::onWindowCloseRequest);

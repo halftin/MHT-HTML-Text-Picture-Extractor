@@ -25,4 +25,10 @@ public class GuiState {
      * 持久化契约与语言无关：该字段只是"选择哪种语言"的偏好值，切换语言不改变 JSON 结构。
      */
     private String locale;
+
+    /** Null keeps older state files byte-for-byte compatible until a column is resized. */
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    private Double nameColumnWidth;
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    private Double sourceColumnWidth;
 }

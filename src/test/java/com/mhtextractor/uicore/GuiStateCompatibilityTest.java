@@ -14,6 +14,24 @@ class GuiStateCompatibilityTest {
     @TempDir Path dir;
 
     @Test
+    void resizedColumnsRoundTrip() throws Exception {
+        try (var in = getClass().getResourceAsStream("/gui-state-existing.json")) {
+            Files.write(dir.resolve("gui-state.json"), in.readAllBytes());
+        }
+        GuiState state = GuiStateManager.load(dir.toFile());
+        assertNull(state.getNameColumnWidth());
+        assertNull(state.getSourceColumnWidth());
+        state.setNameColumnWidth(720.0);
+        state.setSourceColumnWidth(540.0);
+        GuiStateManager.save(state, dir.toFile());
+        assertEquals(state, GuiStateManager.load(dir.toFile()));
+        var json = new ObjectMapper().readTree(Files.readAllBytes(dir.resolve("gui-state.json")));
+        assertEquals(720.0, json.get("nameColumnWidth").asDouble());
+        assertEquals(540.0, json.get("sourceColumnWidth").asDouble());
+        System.out.println("COLUMN_STATE_ROUNDTRIP name=720.0 source=540.0");
+    }
+
+    @Test
     void existingDiskStateReadsAndWritesByteForByte() throws Exception {
         byte[] original;
         try (var in = getClass().getResourceAsStream("/gui-state-existing.json")) {

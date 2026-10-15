@@ -172,6 +172,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
     @Override
     protected void updateItem(Object item, boolean empty) {
         super.updateItem(item, empty);
+        if (getListView() != null) PreviewColumns.bindCell(getListView(), nameLabel, sourceLabel, statusLabel);
         if (boundItem != null) {
             // 会话 18 · E1.3a：原 checkBox.selectedProperty().unbindBidirectional(boundItem.selected)
             // 现改为解挂自研监听器（等价：切断复选框与该条目的联动，避免单元格复用时串值）

@@ -1,6 +1,8 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.uicore.ListColumnWidths;
+import com.mhtextractor.uicore.GuiState;
+import com.mhtextractor.uicore.GuiStateManager;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.DoubleBinding;
 import javafx.beans.property.ObjectProperty;
@@ -18,7 +20,7 @@ final class PreviewColumns {
     // Reserve space for the vertical scroll bar even when the list is short.
     private static final double SCROLL_GUTTER = 18;
     private final ObjectProperty<ListColumnWidths> widths =
-            new SimpleObjectProperty<>(ListColumnWidths.DEFAULT);
+            new SimpleObjectProperty<>();
     private final DoubleBinding name;
     private final DoubleBinding source;
     private final Label badgeHeader;
@@ -32,19 +34,34 @@ final class PreviewColumns {
         fixed(badge, 40);
         fixed((Region) header.lookup("#orderColumnHeader"), 40);
         fixed(status, STATUS_WIDTH);
+        GuiState saved = GuiStateManager.load();
+        if (saved != null && valid(saved.getNameColumnWidth()) && valid(saved.getSourceColumnWidth())) {
+            widths.set(new ListColumnWidths(saved.getNameColumnWidth(), saved.getSourceColumnWidth()));
+        }
         header.paddingProperty().bind(Bindings.createObjectBinding(() -> new Insets(2,
                 10 + SCROLL_GUTTER + list.getInsets().getRight(), 2,
                 10 + list.getInsets().getLeft()), list.insetsProperty()));
+        ColumnWidthController controller = new ColumnWidthController(list, header);
+        DoubleBinding fixedWidth = Bindings.createDoubleBinding(() ->
+                header.getPadding().getLeft() + header.getPadding().getRight()
+                + 40 + 40 + (badge.isManaged() ? 40 : 0) + STATUS_WIDTH
+                + header.getSpacing() * (badge.isManaged() ? 5 : 4),
+                header.paddingProperty(), badge.managedProperty(), header.spacingProperty());
         DoubleBinding available = Bindings.createDoubleBinding(() -> Math.max(0,
-                header.getWidth() - header.getPadding().getLeft() - header.getPadding().getRight()
+                controller.viewportWidth() - header.getPadding().getLeft() - header.getPadding().getRight()
                 - 40 - 40 - (badge.isManaged() ? 40 : 0) - STATUS_WIDTH
                 - header.getSpacing() * (badge.isManaged() ? 5 : 4)),
-                header.widthProperty(), header.paddingProperty(), badge.managedProperty(), header.spacingProperty());
-        name = Bindings.createDoubleBinding(() -> available.get() * widths.get().fileName()
-                / (widths.get().fileName() + widths.get().source()), available, widths);
-        source = Bindings.createDoubleBinding(() -> available.get() - name.get(), available, name);
+                controller.viewportBoundsProperty(), header.paddingProperty(), badge.managedProperty(), header.spacingProperty());
+        name = Bindings.createDoubleBinding(() -> widths.get() == null
+                ? available.get() * ListColumnWidths.DEFAULT.fileName()
+                    / (ListColumnWidths.DEFAULT.fileName() + ListColumnWidths.DEFAULT.source())
+                : widths.get().fileName(), available, widths);
+        source = Bindings.createDoubleBinding(() -> widths.get() == null
+                ? available.get() - name.get() : widths.get().source(), available, name, widths);
         bind(nameHeader, name);
         bind(sourceHeader, source);
+        controller.install(nameHeader, sourceHeader, fixedWidth, name, source,
+                (n, s) -> widths.set(new ListColumnWidths(n, s)), this::save);
     }
 
     static void install(ListView<?> list) {
@@ -61,6 +78,19 @@ final class PreviewColumns {
 
     static boolean hasBadgeColumn(ListView<?> list) {
         return ((PreviewColumns) list.getProperties().get(KEY)).badgeHeader.isManaged();
+    }
+
+    private static boolean valid(Double width) {
+        return width != null && Double.isFinite(width) && width >= ColumnWidthController.MIN_WIDTH;
+    }
+
+    private void save() {
+        if (widths.get() == null) return;
+        GuiState state = GuiStateManager.load();
+        if (state == null) state = new GuiState();
+        state.setNameColumnWidth(widths.get().fileName());
+        state.setSourceColumnWidth(widths.get().source());
+        GuiStateManager.save(state);
     }
 
     private static void bind(Region region, DoubleBinding width) {
