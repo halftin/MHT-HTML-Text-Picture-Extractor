@@ -3,6 +3,8 @@ package com.mhtextractor;
 import atlantafx.base.theme.NordLight;
 import com.mhtextractor.uicore.GuiState;
 import com.mhtextractor.uicore.GuiStateManager;
+import com.mhtextractor.uicore.SingleInstanceLock;
+import com.mhtextractor.gui.component.SingleInstanceNotice;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
 import com.mhtextractor.i18n.I18n;
@@ -30,6 +32,11 @@ public class App extends Application {
 
     @Override
     public void start(Stage primaryStage) throws IOException {
+        if (!SingleInstanceLock.tryAcquire()) {
+            SingleInstanceNotice.show(primaryStage);
+            return;
+        }
+
         // 全局未捕获异常处理器 — 将异常输出到控制台和日志
         Thread.currentThread().setUncaughtExceptionHandler((t, e) -> {
             log.error(I18n.msg("log.app.01", t.getName(), e.getMessage()), e);
@@ -104,6 +111,7 @@ public class App extends Application {
         primaryStage.setMinHeight(650);
         primaryStage.centerOnScreen();
         primaryStage.show();
+        log.info(I18n.msg("log.app.ready"));
         // 后端请求无响应时由 D1 通知流程处理，旧连接状态标签继续隐藏。
         var backendStatus = (javafx.scene.control.Label) scene.lookup("#backendStatusLabel");
         if (backendStatus != null) {
