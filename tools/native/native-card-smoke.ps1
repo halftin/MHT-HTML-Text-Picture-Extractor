@@ -93,7 +93,7 @@ if ([string]::IsNullOrWhiteSpace($mp)) { Say "[smoke] [ERROR] no javafx-*-win.ja
 $cp = $probeOut + ';' + (Join-Path $Repo 'target\classes') + ';' + $libJars
 
 Say "[smoke] compiling AppCardProbe ..."
-& (Join-Path $JavaHome 'bin\javac.exe') -nowarn --module-path $mp --add-modules javafx.controls,javafx.fxml -cp $cp -d $probeOut $probeSrc
+& (Join-Path $JavaHome 'bin\javac.exe') -nowarn --module-path $mp --add-modules javafx.controls,javafx.fxml -cp $cp -d $probeOut $probeSrc (Join-Path $Repo 'tools\probes\support\ProbeRuntime.java')
 if ($LASTEXITCODE -ne 0) { Say "[smoke] [ERROR] javac failed (exit=$LASTEXITCODE)"; exit 1 }
 
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Force | Out-Null }
