@@ -1236,13 +1236,13 @@
   "allDeclaredConstructors": true
  },
  {
-  "name": "com.mhtextractor.config.GuiState",
+  "name": "com.mhtextractor.uicore.GuiState",
   "allDeclaredFields": true,
   "allDeclaredMethods": true,
   "allDeclaredConstructors": true
  },
  {
-  "name": "com.mhtextractor.config.GuiStateManager",
+  "name": "com.mhtextractor.uicore.GuiStateManager",
   "allDeclaredFields": true,
   "allDeclaredMethods": true,
   "allDeclaredConstructors": true
