@@ -1,0 +1,223 @@
+import atlantafx.base.theme.NordLight;
+import com.mhtextractor.App;
+import com.mhtextractor.app.IpcUiport;
+import com.mhtextractor.gui.component.BackendEventPresenter;
+import com.mhtextractor.gui.component.GuiConfirmer;
+import com.mhtextractor.gui.component.NotificationHost;
+import com.mhtextractor.gui.component.SidePanelHost;
+import com.mhtextractor.gui.controller.MainController;
+import com.mhtextractor.gui.controller.ParamSidePanel;
+import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.model.AppConfig;
+import com.mhtextractor.uicore.FrontendPort;
+import com.mhtextractor.uicore.GuiStateManager;
+import com.mhtextractor.uicore.PreviewRow;
+import com.mhtextractor.uiport.PortEvent;
+import javafx.animation.PauseTransition;
+import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.event.Event;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.StackPane;
+import javafx.stage.Stage;
+import javafx.stage.WindowEvent;
+import javafx.util.Duration;
+import java.nio.file.*;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
+
+/** Production FXML/controller, IPC, presenters and close lifecycle; public APIs only.
+ * No System.exit on success: the runner must observe natural process termination.
+ * The same compiled source is used for JVM and native acquisition.
+ */
+public final class GuiE2eProbe {
+    private final AtomicReference<AppConfig> context = new AtomicReference<>(new AppConfig());
+    private IpcUiport ipc;
+    private FrontendPort frontend;
+    private Stage stage;
+    private Scene scene;
+    private TextArea forwarded;
+    private Path work;
+    private int backendLogs;
+    private boolean ending;
+    private final String mode = System.getProperty("probe.scenario", "e2e");
+
+    public void start(Stage stage) throws Exception {
+        this.stage = stage;
+        work = Path.of("").toAbsolutePath();
+        var saved = GuiStateManager.load();
+        require(saved != null && saved.getLocale() != null, "seeded GUI locale exists");
+        I18n.setLocale(I18n.parseLocale(saved.getLocale()));
+        System.out.println("LOCALE=" + I18n.currentLocale() + " SCENARIO=" + mode);
+        ipc = new IpcUiport(new GuiConfirmer(() -> scene == null ? null : (Label)scene.lookup("#statusLabel")),
+                () -> { var c = context.get(); return new IpcUiport.RuntimeContext(
+                        c.isImageModeEnabled(), pathOrNull(c.getInputFolder()), pathOrNull(c.getOutputFolder()), false); });
+        frontend = new FrontendPort(ipc, Platform::runLater, context::set, true);
+        Thread.ofPlatform().daemon().name("probe-startup").start(() -> {
+            try {
+                String exe = System.getProperty("probe.backend");
+                var command = new ProcessBuilder(exe, "-Djava.io.tmpdir=" + System.getProperty("java.io.tmpdir"),
+                        "-Dmht.logs.root=" + work.resolve("logs"), "--serve", "--locale", saved.getLocale())
+                        .directory(work.toFile()).redirectError(work.resolve("backend.stderr.log").toFile());
+                System.out.println("BACKEND_COMMAND=" + command.command());
+                ipc.start(() -> command, java.time.Duration.ofSeconds(20));
+                frontend.bootstrap(context.get());
+                Platform.runLater(() -> safely(this::show));
+            } catch (Throwable error) { Platform.runLater(() -> fail(error)); }
+        });
+    }
+
+    private void show() throws Exception {
+        var loader = new FXMLLoader(App.class.getResource("/com/mhtextractor/gui/view/MainView.fxml"));
+        loader.setResources(I18n.bundle());
+        loader.setControllerFactory(_ -> new MainController(loader, frontend, this::closeBackend));
+        Parent root = loader.load();
+        Application.setUserAgentStylesheet(new NordLight().getUserAgentStylesheet());
+        var shell = new StackPane(SidePanelHost.install(root));
+        scene = new Scene(shell, 1100, 720);
+        scene.getStylesheets().add(App.class.getResource("/custom.css").toExternalForm());
+        NotificationHost.install(scene, shell);
+        ParamSidePanel.of(scene.lookup("#statusLabel"), frontend);
+        forwarded = new TextArea();
+        frontend.events().subscribe(event -> {
+            if (event.getClass().getSimpleName().startsWith("Preview"))
+                System.out.println("PREVIEW_EVENT=" + event.getClass().getSimpleName());
+            if (event instanceof PortEvent.PreviewLoadFailed failed) fail(new AssertionError("preview failed: " + failed.detail()));
+            if (event instanceof PortEvent.BackendLog entry) safely(() -> {
+                backendLogs++;
+                Files.writeString(work.resolve("backend-events.txt"), entry.toString() + "\n",
+                        StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                BackendEventPresenter.accept(entry, scene.lookup("#statusLabel"), forwarded);
+                Files.writeString(work.resolve("forwarded-backend.log"), forwarded.getText());
+                System.out.println("BACKEND_LOG_EVENT level=" + entry.level() + " key=" + entry.key());
+            });
+        });
+        stage.setScene(scene);
+        stage.setTitle("GUI parity probe");
+        stage.setResizable(false);
+        stage.show();
+        stage.setOnHidden(_ -> {
+            System.out.println("[PASS] production close hid window");
+            System.out.println("PROBE_COMPLETE scenario=" + mode + " backendLogs=" + backendLogs);
+        });
+        after(700, () -> {
+            scene.getRoot().applyCss(); scene.getRoot().layout();
+            require(stage.isShowing() && scene.lookup("#statusLabel").isVisible()
+                    && scene.lookup("#fileListView").isVisible(), "main window status and list visible");
+            var name = (Label)scene.lookup("#nameColumnHeader");
+            var source = (Label)scene.lookup("#sourceColumnHeader");
+            System.out.println("COLUMN_WIDTH name=" + name.getPrefWidth() + " source=" + source.getPrefWidth());
+            require(name.getPrefWidth() > 0 && Math.abs(name.getPrefWidth() - source.getPrefWidth()) < 0.01,
+                    "default file name/source widths 50/50");
+            if (mode.equals("screenshot")) {
+                ProbePng.write(scene.snapshot(null), Path.of(System.getProperty("probe.png")));
+                System.out.println("SCREENSHOT=" + System.getProperty("probe.png") + " size="
+                        + scene.getWidth() + "x" + scene.getHeight() + " scale=" + stage.getOutputScaleX());
+                closeWindow();
+            } else importFixture();
+        });
+    }
+
+    private void importFixture() {
+        ((ToggleButton)scene.lookup("#imageModeToggle")).fire();
+        String input = System.getProperty("probe.fixture");
+        ((TextField)scene.lookup("#inputFolderField")).setText(input);
+        await("fixture directory imported into real list", () -> !list().getItems().isEmpty()
+                && !frontend.queries().workspace().details().importing(), () -> {
+            scene.getRoot().applyCss(); scene.getRoot().layout();
+            var sources = scene.getRoot().lookupAll(".preview-source").stream()
+                    .filter(n -> n instanceof Label).map(n -> (Label)n).toList();
+            String expected = Boolean.getBoolean("probe.wrongSource") ? input + "-does-not-exist" : input;
+            System.out.println("SOURCE expected=" + expected + " actual=" + sources.stream().map(Label::getText).toList());
+            require(sources.stream().anyMatch(n -> n.isVisible() && expected.equals(n.getText())),
+                    "source column text equals fixture directory");
+            Object item = list().getItems().stream().filter(n -> n instanceof PreviewRow).findFirst().orElseThrow();
+            list().getSelectionModel().select(item);
+            var params = new AppConfig();
+            params.setEnableRegionExtraction(mode.equals("purity"));
+            if (mode.equals("purity")) {
+                params.setImageRegionStartMarker("MISSING_START");
+                params.setImageRegionEndMarker("MISSING_END");
+            }
+            frontend.commands().setGlobalParams(true, params);
+            await("preview button enabled after real parameters", () -> frontend.queries().workspace().details().imageConfirmed()
+                    && !((Button)scene.lookup("#previewEffectButton")).isDisabled(), () -> {
+                // Parameter refresh rebuilds the list projection. Select its current row,
+                // rather than retaining an object from the previous projection.
+                Object current = list().getItems().stream().filter(n -> n instanceof PreviewRow).findFirst().orElseThrow();
+                list().getSelectionModel().select(current);
+                require(list().getSelectionModel().getSelectedItem() instanceof PreviewRow, "preview file selected in current projection");
+                System.out.println("PREVIEW_TRIGGER imageMode=" + ((ToggleButton)scene.lookup("#imageModeToggle")).isSelected()
+                        + " runtimeMode=" + context.get().isImageModeEnabled() + " buttonDisabled="
+                        + ((Button)scene.lookup("#previewEffectButton")).isDisabled() + " hint="
+                        + ((Label)scene.lookup("#imageHintLabel")).getText());
+                ((Button)scene.lookup("#previewEffectButton")).fire();
+                await("preview contains decoded nonempty thumbnail", () -> scene.getRoot().lookupAll("#thumbnailPane ImageView").stream()
+                        .anyMatch(n -> n instanceof ImageView view && view.getImage() != null
+                                && !view.getImage().isError() && view.getImage().getWidth() > 0), () -> {
+                    if (mode.equals("purity")) await("real WARN/ERROR backendLog received and rendered",
+                            () -> backendLogs > 0 && !forwarded.getText().isBlank(), this::closeWindow);
+                    else closeWindow();
+                });
+            });
+        });
+    }
+
+    @SuppressWarnings("unchecked") private ListView<Object> list() { return (ListView<Object>)scene.lookup("#fileListView"); }
+    private static String pathOrNull(String value) { return value == null || value.isBlank() ? null : value; }
+    private void closeWindow() {
+        System.out.println("CLOSE_REQUEST production WindowEvent.WINDOW_CLOSE_REQUEST");
+        Event.fireEvent(stage, new WindowEvent(stage, WindowEvent.WINDOW_CLOSE_REQUEST));
+    }
+    private void closeBackend(Runnable done) {
+        Thread.ofPlatform().daemon().name("probe-close").start(() -> {
+            try {
+                frontend.close(); ipc.close(); ipc.stopped().get(30, TimeUnit.SECONDS);
+                System.out.println("[PASS] backend stopped after production close callback");
+                Platform.runLater(done);
+            } catch (Throwable error) { fail(error); }
+        });
+    }
+    private void after(int millis, Checked action) {
+        var pause = new PauseTransition(Duration.millis(millis));
+        pause.setOnFinished(_ -> safely(action)); pause.play();
+    }
+    private void await(String name, BooleanSupplier condition, Checked next) {
+        poll(name, condition, next, System.nanoTime() + TimeUnit.SECONDS.toNanos(30));
+    }
+    private void poll(String name, BooleanSupplier condition, Checked next, long deadline) {
+        if (condition.getAsBoolean()) { require(true, name); safely(next); }
+        else if (System.nanoTime() >= deadline) fail(new AssertionError(name + " timed out"));
+        else after(80, () -> poll(name, condition, next, deadline));
+    }
+    private static void require(boolean ok, String name) {
+        if (!ok) throw new AssertionError(name);
+        System.out.println("[PASS] " + name);
+    }
+    private interface Checked { void run() throws Exception; }
+    private void safely(Checked action) { try { action.run(); } catch (Throwable error) { fail(error); } }
+    private synchronized void fail(Throwable error) {
+        if (ending) return;
+        ending = true;
+        System.out.println("[FAIL] " + error.getMessage()); error.printStackTrace();
+        Thread.ofPlatform().daemon(false).start(() -> {
+            try { if (frontend != null) frontend.close(); if (ipc != null) { ipc.close(); ipc.stopped().get(30, TimeUnit.SECONDS); } }
+            catch (Throwable cleanup) { cleanup.printStackTrace(); }
+            System.exit(1);
+        });
+    }
+    public static void main(String[] arguments) {
+        // Application.launch(String...) discovers its caller by reflection. A probe must
+        // not require extra production metadata; use the same public startup as AppCardProbe.
+        Platform.startup(() -> {
+            var probe = new GuiE2eProbe();
+            try { probe.start(new Stage()); } catch (Throwable error) { probe.fail(error); }
+        });
+    }
+}
