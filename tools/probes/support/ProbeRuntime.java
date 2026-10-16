@@ -38,8 +38,14 @@ final class ProbeRuntime {
         });
     }
 
+    /** 最近一次 {@link #controller(FXMLLoader)} 装配所用的端口（供探针用**同源**端口做查询）。 */
+    private static volatile FrontendPort controllerPort;
+
+    static FrontendPort controllerPort() { return controllerPort; }
+
     static MainController controller(FXMLLoader loader) {
         FrontendPort port = port();
+        controllerPort = port;
         return new MainController(loader, port, finished -> close(port, finished));
     }
 }

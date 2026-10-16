@@ -12,7 +12,6 @@ direct	com.mhtextractor.gui.controller.MainController	applyImportPlan	同包直�
 direct	com.mhtextractor.gui.controller.MainController	cancelWorkspaceActivity	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	clearImportDropHighlight	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	ctxClearParams	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
-direct	com.mhtextractor.gui.controller.MainController	effectiveForObject	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	extractStats	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	extractionCoordinator	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
 direct	com.mhtextractor.gui.controller.MainController	groupCommand	同包直访（驱动类字节码常量池引用）；驱动: AcceptanceDriver
@@ -86,5 +85,4 @@ reflect-dynamic	tools/probes/ContextMenuProbe.java	fieldOf	tools/probes/ContextM
 reflect-dynamic	tools/probes/HtmlViewerProbe.java	invoke	tools/probes/HtmlViewerProbe.java:553 getDeclaredMethod(变量)
 reflect-dynamic	tools/probes/HtmlViewerProbe.java	invokeStatic	tools/probes/HtmlViewerProbe.java:572 getDeclaredMethod(变量)
 reflect-dynamic	tools/probes/SidePanelProbe.java	field	tools/probes/SidePanelProbe.java:1582 getDeclaredField(变量)
-reflect-dynamic	tools/probes/SidePanelProbe.java	fieldDeep	tools/probes/SidePanelProbe.java:1601 getDeclaredField(变量)
 reflect-dynamic	tools/probes/SidePanelProbe.java	invoke	tools/probes/SidePanelProbe.java:1495 getDeclaredMethod(变量)

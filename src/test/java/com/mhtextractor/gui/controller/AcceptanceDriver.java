@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * <ul>
  *   <li><b>A —— 同包 package-private 生产 API 直接访问</b>：{@code ws} / {@code refs} /
  *       {@code ITEM_VIEW} / {@code previewCacheLifecycle} / {@code listInteraction} /
- *       {@code effectiveForObject} / {@code updateListButtons} / {@code saveGuiState} /
+ *       {@code updateListButtons} / {@code saveGuiState} /
  *       {@code ctxClearParams}，以及 {@code listInteraction.findCell} / {@code performDrop}。</li>
  *   <li><b>B —— 由模型可读投影派生</b>：{@code allPreviewItems} / {@code allVisibleItems} /
  *       {@code topLevelGroups} / {@code visibleMembersOf} / {@code visibleCount} 全部委托
@@ -137,11 +137,6 @@ public final class AcceptanceDriver {
         /** 经生产端口查询输出单元。 */
         public java.util.List<com.mhtextractor.uiport.OutputUnitVm> outputUnitPlan(boolean checkedOnly) {
             return mc.extractionCoordinator.queries().outputUnitPlan(checkedOnly);
-        }
-
-        /** 当前模式下某条目的生效参数（生产方法 {@code MainController.effectiveForObject}，包级）。 */
-        public AppConfig effectiveForObject(Object o) {
-            return mc.effectiveForObject(o);
         }
 
         /** 列表操作按钮可用性刷新（生产方法，包级）。 */

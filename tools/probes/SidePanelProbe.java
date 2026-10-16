@@ -618,9 +618,13 @@ public class SidePanelProbe extends Application {
     private void checkCommitted() {
         check("R1.9 confirming collapses the panel", !panel.isVisible() && !host.isRightShowing());
         check("R1.9 confirming clears the dirty flag (commitDraft ran)", !ParamSidePanel.isDirty(anchor));
-        AppConfig params = (AppConfig) fieldDeep(controller, "paramDomain", "textParamsCache");
+        // 经与控制器**同源**的端口查询「文本模式全局参数」（不再反射读包级缓存字段）。
+        java.util.List<com.mhtextractor.uiport.TargetId> noFallback = java.util.List.of();
+        AppConfig params = ProbeRuntime.controllerPort().queries()
+                .parameterState(false, noFallback, com.mhtextractor.uiport.TargetResolution.EXPLICIT)
+                .textGlobal();
         boolean separate = params != null && params.isSeparateFiles();
-        check("R1.9 the confirmed draft reached MainController.textParamsCache "
+        check("R1.9 the confirmed draft reached the workspace text params "
                         + "(isSeparateFiles=" + separate + ", expected=" + draftToggleWas + ")",
                 params != null && separate == draftToggleWas);
     }
@@ -1582,31 +1586,6 @@ public class SidePanelProbe extends Application {
             return f.get(target);
         } catch (Exception e) {
             System.out.println("      (reflect " + name + " failed: " + e + ")");
-            return null;
-        }
-    }
-
-    /**
-     * 反射读主控制器参数域协作者里的包级成员（步骤 1：两套参数缓存搬进 ParamDomainController；
-     * P1-1b：缓存值下沉 app 层后，协作者只留包级同名委托方法）。两种形态都支持：先按字段读，
-     * 找不到字段（{@link NoSuchFieldException}）就按同名无参方法读。
-     */
-    private static Object fieldDeep(Object target, String owner, String name) {
-        try {
-            Object ownerObj = field(target, owner);
-            if (ownerObj == null) return null;
-            try {
-                Field f = ownerObj.getClass().getDeclaredField(name);
-                f.setAccessible(true);
-                return f.get(ownerObj);
-            } catch (NoSuchFieldException e) {
-                // 字段已下沉（GlobalParameterCache），协作者上的同名无参方法仍是包级 —— 直接调用。
-                java.lang.reflect.Method m = ownerObj.getClass().getDeclaredMethod(name);
-                m.setAccessible(true);
-                return m.invoke(ownerObj);
-            }
-        } catch (Exception e) {
-            System.out.println("      (reflect " + owner + "." + name + " failed: " + e + ")");
             return null;
         }
     }
