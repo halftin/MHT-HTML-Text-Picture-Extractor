@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { under, utf8 } from './path-assertions.mjs';
 
-const roots = ['C:/Users/Admin/AppData/Local/Temp', 'C:/Windows/Temp'];
+const roots = [(process.env.LOCALAPPDATA || '') + '/Temp', 'C:/Windows/Temp'];
 const projectRoot = roots[0];
 
 export function snapshot() {
@@ -68,7 +68,7 @@ export function compare(before, after) {
   return { before: before.capturedAt, after: after.capturedAt, counts, modifiedCounts, added, modified,
     unreadable, projectUnreadable,
     projectStatus: counts.project ? 'FAIL' : projectUnreadable.length ? 'UNVERIFIED' : 'PASS',
-    scope: 'C:/Users/Admin/AppData/Local/Temp/mht-extractor-* and descendants',
+    scope: '%LOCALAPPDATA%/Temp/mht-extractor-* and descendants',
     classificationScope: after.inventoryScope,
     unverified: ['Entire C drive', 'Files created and deleted between snapshots',
       ...(unreadable.length ? ['Unreadable entries listed in unreadable'] : [])] };
