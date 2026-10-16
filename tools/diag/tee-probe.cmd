@@ -1,7 +1,7 @@
 @echo off
 REM 最小复现：完全照抄 build-native.cmd 的 :tee 调用方式，看它到底跑了什么
 setlocal enabledelayedexpansion
-set "REPO=D:\JAVA\mht-resource-extractor"
+for %%I in ("%~dp0..\..") do set "REPO=%%~fI"
 set "TMPCMD=%TEMP%\tee-probe-step.cmd"
 set "LOG=%TEMP%\tee-probe.log"
 echo [probe] TMPCMD=!TMPCMD!

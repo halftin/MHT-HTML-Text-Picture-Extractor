@@ -4,7 +4,7 @@
  *
  * 这是**权威实现**（随仓库分发给打包机/后续会话）。本机驱动路径曾写死为
  * %APPDATA%\npm\...\claude.exe，而实际安装位置是 %USERPROFILE%\.local\bin\claude.exe
- * （2026-10-03 实测：APPDATA 路径 MISSING，where claude -> C:\Users\Admin\.local\bin\claude.exe）。
+ * （2026-10-03 实测：APPDATA 路径 MISSING，where claude -> <用户主目录>\.local\bin\claude.exe）。
  * 因此这里做**多候选解析**：CLAUDE_EXE 环境变量 → %USERPROFILE%\.local\bin → APPDATA npm → where.exe。
  *
  * 用法:
@@ -41,7 +41,7 @@ function resolveClaudeExe() {
   const candidates = [
     process.env.CLAUDE_EXE,
     path.join(os.homedir(), '.local', 'bin', 'claude.exe'),
-    'C:\\Users\\Admin\\.local\\bin\\claude.exe',
+    (process.env.USERPROFILE || '') + '\\.local\\bin\\claude.exe',
     path.join(os.homedir(), 'AppData', 'Roaming', 'npm',
       'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'),
   ];

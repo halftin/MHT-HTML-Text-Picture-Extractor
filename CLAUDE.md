@@ -37,8 +37,8 @@ JavaFX 25 桌面 GUI：把 `.mht` / `.mhtml` / `.html` / `.htm`（含 HTML 侧�
 > ⚠️ 本机 **`mvn` 不在 PATH**：用仓库自带的 **`mvnw.cmd`**，并显式指定 JDK（Liberica NIK 25）。
 
 ```bash
-export JAVA_HOME='D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3'
-MVN='/c/Users/Admin/.m2/wrapper/dists/apache-maven-3.9.16-bin/5grr65jo27hi51sujmtcldfovl/apache-maven-3.9.16/bin/mvn.cmd'
+export JAVA_HOME='<盘>:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3'
+MVN='$HOME/.m2/wrapper/dists/apache-maven-3.9.16-bin/5grr65jo27hi51sujmtcldfovl/apache-maven-3.9.16/bin/mvn.cmd'
 
 "$MVN" -q -DskipTests package      # 出 jar
 "$MVN" test                        # 全量单测（**不要加 -q**，会吞掉 surefire 摘要）
@@ -229,7 +229,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 - **`logs/gui-state.json` 的 `locale` 覆盖 `-Duser.language`**；**`logs/test-results.txt` 必须核对 mtime**。
 - 🚨 **本机 UAC 关闭（`EnableLUA=0`）**：会话全为高完整性 ⇒ Windows **静默阻断 UWP 的"文件激活"**
   （进程起来但无窗口、**退出码仍 0**，资源管理器里双击图片也打不开）。凡"用系统默认程序打开文件"一律走 `platform.FileOpener`。
-- 🚨 **运行时/测试产物一律放 H 盘（2026-10-05 起）**：本项目产物放 `H:\TEST\mht\`、临时放 `H:\TEST\temp\`；跑 GUI / native / 探针 / 黑盒前设 **`-Djava.io.tmpdir=H:\TEST\temp`**（否则预览缓存 `mht-extractor-preview`、浏览器查看页 `mht-extractor-view` 会写进 `C:\Users\Admin\AppData\Local\Temp`）。**不要再把生成数据塞到 C 盘**，验收时断言 C 盘无新增生成数据。宿主目录 `.dsh` / `.agents-anywhere` / `.m2` / `.openjfx` 已是指向 `H:\TEST\*` 的 **junction**（旧 C 路径仍可用，新脚本请用 H 路径）；详见 `H:\TEST\MIGRATION-BRIEF.md`。
+- 🚨 **运行时/测试产物一律放 H 盘（2026-10-05 起）**：本项目产物放 `<盘>:\TEST\mht\`、临时放 `<盘>:\TEST\temp\`；跑 GUI / native / 探针 / 黑盒前设 **`-Djava.io.tmpdir=<盘>:\TEST\temp`**（否则预览缓存 `mht-extractor-preview`、浏览器查看页 `mht-extractor-view` 会写进 `%LOCALAPPDATA%\Temp`）。**不要再把生成数据塞到 C 盘**，验收时断言 C 盘无新增生成数据。宿主目录 `.dsh` / `.agents-anywhere` / `.m2` / `.openjfx` 已是指向 `<盘>:\TEST\*` 的 **junction**（旧 C 路径仍可用，新脚本请用 H 路径）；详见 `<盘>:\TEST\MIGRATION-BRIEF.md`。
 - **任何 `mvn clean` 不得与 GUI 自动化 / native 构建并发**（会互删 `target/`）。
 - **不要整文件读取 `MainController.java`**（1612 行）：`grep -n` 定位 + 区间读。
   **文档里的行号会漂移**，引用前先复核。
@@ -263,13 +263,13 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 
 ③ **真根因（P4-9 `c67159a`，已修并由 harness 复验）**：`build-native.cmd:236` 执行 `set "PATH=%BUILD_JAVA_HOME%\bin;%PATH%"`，而 **NIK JDK 的 `bin` 里含全部 7 个 JavaFX 原生 DLL**（`glass`/`prism_common`/`prism_d3d`/`prism_sw`/`decora_sse`/`javafx_font`/`javafx_iio`）→ **static 镜像运行时从 PATH 命中它们** → 与静态链接的 JavaFX 冲突 → `WinApplication._init` **段错误 `0xC0000005`** → `[smoke] FAILED` → static 集成构建 `exit 1`。**控制组**：只给 standalone 命令前置同一行 PATH，即**从 PASS 变 FAIL**。**修法**：static 配方的冒烟**子进程**重建 PATH 并剔除 `BUILD_JAVA_HOME\bin`/`GRAALVM_HOME\bin`（**dynamic 原样保留**，它本来就依赖这些 DLL）；顺带把误导性的 `Usual cause: missing JavaFX effect-peer reflection metadata` 改成指向 `smoke-output.log/.err`。**harness 复验**：集成 static 带冒烟 → `exit 0` + `[STEP SMOKE] END exit=0` + `[smoke] RESULTS: 5 passed, 0 failed`；集成 dynamic → `exit 0`、dist 22 文件/71.8 MB。
 
-另：`NativeBaselineProbe` 的工作根必须用**仓库内相对路径**（绝对 `H:\...` 会 `AccessDeniedException`）；且**两个配方共用同一 dist 目录**——`NATIVE_RECIPE` 漏设或 dist 未清空都会让产物计数被污染。
+另：`NativeBaselineProbe` 的工作根必须用**仓库内相对路径**（绝对 `<盘>:\...` 会 `AccessDeniedException`）；且**两个配方共用同一 dist 目录**——`NATIVE_RECIPE` 漏设或 dist 未清空都会让产物计数被污染。
 
 **2026-10-08 收口轮（P4-10/11/12，提交 `074477f`）——四条口径与两条重要事实**
 
 1. 🚨 **`testAccessSurfaceIsFrozen` 的扫描范围包含 `tools/probes/*.java`**：在**探针**里加反射（如 `getDeclaredField`/`setAccessible`）同样会算成**清单外新增访问点**而变红（P4-12 实测：ESC 观测曾因此把第 13 条打红）。→ **探针里尽量只用公开 API**；真需要动态访问就必须进冻结清单（且清单**只减不增**，得先去掉别的条）。
 2. 🚨 **宿主命令行码页边界（cp936）**：路径里含**非 ANSI 码页字符**（韩文 `한글`、非 BMP emoji `😀`）时，**「命令行 → JVM argv」会把它们压成 `?`** → `java.nio.file.InvalidPathException: Illegal char <?>`（`CliArgs.parse` / `IpcFiles` 处崩）。**日文假名/汉字/全角/中文都在 cp936 内，故正常**。**控制组**：**绕过 node**、直接用 PowerShell 数组参数调 `BackendCli` **同样复现** → 是**宿主限制**，不是产品缺陷、也不是 node 的锅；但**所有 CLI 用户都会遇到**（GUI 走文件对话框不经 argv，不受影响）。矩阵把它归类为 **`LIMITATION(expected) reason=HOST_CP936_ARGV`**，不再当作 PASS/FAIL。缓解方向（未实现）：让 `--config` 这类 **UTF-8 文件**也能携带输入/输出路径，或支持 `@argfile`。
-3. **C 盘「零新增」的正确口径 = 项目产物**：`C:\Users\Admin\AppData\Local\Temp` 下 **`mht-extractor-*` 新增 = 0**（`tools/ipc/project-temp-audit.mjs`，三态 PASS/FAIL/UNVERIFIED）。**整盘零新增在活主机上不可达**（DSH 会话快照 `dsh-workspace-changes-*`、VS 后台日志 `dd_BackgroundDownload_*` 都会写 C 盘）——脚本已改成分别计数并**显式列出未验证范围**。
+3. **C 盘「零新增」的正确口径 = 项目产物**：`%LOCALAPPDATA%\Temp` 下 **`mht-extractor-*` 新增 = 0**（`tools/ipc/project-temp-audit.mjs`，三态 PASS/FAIL/UNVERIFIED）。**整盘零新增在活主机上不可达**（DSH 会话快照 `dsh-workspace-changes-*`、VS 后台日志 `dd_BackgroundDownload_*` 都会写 C 盘）——脚本已改成分别计数并**显式列出未验证范围**。
 4. **ESC 观测（`NotificationAcceptance`）**：默认改为 **`scroll-pane` 公开事件路由**（`Event.fireEvent(ModalPane 的直接 ScrollPane 子节点, KeyEvent)`），**零反射**；zh_CN / en_US 均 **`failures=0 unverified=0`**（非持久 `consumed=true` 关闭卡片 / 持久 `consumed=false` 保持打开，同一 skin 实例对照保留）。
 
 **收口轮实测（harness 亲手）**：矩阵 16 格 = **8 PASS + 8 LIMITATION(expected)**、CG-3 **RED=FAIL GREEN=PASS**（红日志含 `TEXT_EXACT_GUARD`）；内存文本守门 字面=PASS/注入`?`=FAIL/撤销=PASS；C 盘 `projectStatus=PASS`；**en_US 全 14 探针 exit=0**；**无头 exe 重建后 native 42/42**；**无头 native IPC（`--serve`）CLIENT_EXIT=0 + TEXT_EXACT_MATCH + stderr 0 字节**；**static 构建 exit 0 + `[STEP SMOKE] exit=0` + 15 文件/99.4 MB + 0 个 JavaFX DLL**，**静态版 `BaselineProbeStatic`：`NATIVE-BASELINE: 42 passed, 0 failed`**（⚠️ 该次运行发生时基线总数为 **42**；**2026-10-09 P4-16 后已按 44 重跑并全绿**：`NATIVE-BASELINE: 44 passed, 0 failed`，见台账 §11）；**P4-7 超时杀树：`taskkill` SUCCESS + 无残留进程**。
@@ -284,7 +284,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 
 **P4-15（2026-10-09）：预览"永久加载态"根因与修复（harness 独立复现 + 控制组）**
 - **根因**：加载态结束后 **`imageHintLabel` 无人复位**。`PreviewLoader` 在 `PreviewLoadStateChanged(active=false)` 时只调 `updateProgressStatus(...)`，而该实现（`PreparseController`）**只刷新预解析进度、不碰图片提示**；同时 app 层有两条"结束却不发终态事件"的路径（取消竞态 / `stale`）。
-- **实测控制组**（自建 `PreviewHangProbe`，`.claude-work/verify/`）：修复前 **B（取消）/D（stale）`terminalEvent=false`**；修复后 **A–E 全部 `true`**、`loadingPath` 全为 null。证据：`H:\TEST\mht\p4-15-prefix-control.txt` 与 `p4-15-postfix-probe.txt`。
+- **实测控制组**（自建 `PreviewHangProbe`，`.claude-work/verify/`）：修复前 **B（取消）/D（stale）`terminalEvent=false`**；修复后 **A–E 全部 `true`**、`loadingPath` 全为 null。证据：`<盘>:\TEST\mht\p4-15-prefix-control.txt` 与 `p4-15-postfix-probe.txt`。
 - **修复（双保险）**：GUI 在 `active=false` **与** `PreviewLoaded` 都调 `updateContentArea(...)`（标签必然复位）；app 层补齐终态事件（结构性）。
 
 **P4-15：区域限定放宽口径（用户拍板 D1–D5，预览与提取一致）**
@@ -299,22 +299,22 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 - **缓存容错（P4-16）**：`PreviewCacheStore.listKeys()` 对"缺 `meta.json`/JSON 非法/目录名与 meta 不匹配"的目录 **warn 跳过**（键 `log.previewcachestore.04`），可识别的旧格式仍列出；**根目录不存在时返回空**（非抛异常）。规则版本升级后旧缓存残留不再让清理路径炸掉。
 
 **P4-17（A-4，2026-10-09）：GUI 拉起后端 + GUI 应答确认（方案 §14 决策 10/11 的前端接线）**
-- **交付**：`app.BackendExecutable`（按"GUI exe 同目录 → jar 同目录 → cwd"定位随包后端，支持 `-Dmht.backend.executable`）+ `app.BackendSession`（异步启动 `--serve`、握手校验、`UNAVAILABLE` 降级）+ `gui.component.BackendConnectionPresenter`（连接状态呈现 + 确认应答桥）；`GuiConfirmer`/`NotificationHost` 承接"后端发起的确认"；`build-native.cmd` 把 `MhtExtractorBackend.exe` 复制进 dist（`BACKEND_DIST_DIR`，默认 `H:\TEST\mht\p4-3-headless-dist`；缺失只警告不失败）。
+- **交付**：`app.BackendExecutable`（按"GUI exe 同目录 → jar 同目录 → cwd"定位随包后端，支持 `-Dmht.backend.executable`）+ `app.BackendSession`（异步启动 `--serve`、握手校验、`UNAVAILABLE` 降级）+ `gui.component.BackendConnectionPresenter`（连接状态呈现 + 确认应答桥）；`GuiConfirmer`/`NotificationHost` 承接"后端发起的确认"；`build-native.cmd` 把 `MhtExtractorBackend.exe` 复制进 dist（`BACKEND_DIST_DIR`，默认 `<盘>:\TEST\mht\p4-3-headless-dist`；缺失只警告不失败）。
 - **握手**：复用 `BackendLauncher`/`BackendIdentity`，校验协议版本 + 版本号 + **buildId** + **五项能力集**（workspace / setChecked / workspacePage / bulkFiles / confirmationRoundTrip）+ 确认标志；任一不符 → `UNAVAILABLE` 并提示（实测原文含 `buildId mismatch`、`Protocol version mismatch`、`handshake timed out after PT1S`、`welcome lacks required capabilities`）。
 - **降级（关键）**：**后端缺失/失败时 GUI 照常可用**（列表/预览/提取仍走进程内 `app`），只是显示"后端不可用"——真实 `App.start` 缺后端与真实 native 缺后端两种情形都验过。
 - **确认与超时**：后端经 IPC 发确认请求 → 应用内确认卡（键 + 具名参数）→ 回送 `confirmAnswer`；**卡片被顶替按"取消"交付**，旧句柄关不掉新卡；**断开即取消**、后端 30 s 到期（实测 `server-30s-timeout elapsedMs=29935`）与前端本地期限 +250 ms 兜底都会**复位状态**且不晾住 GUI。
 - **本批不做**：GUI 业务**未**改走 IPC（仍走进程内 `app`），这是 P5/后续的范围。
-- ⛔ **2026-10-10 起按选项 B 停用（P4-20）**：P5 接线前 GUI **不再启动随包后端**（`App` 不再调用 `BackendConnectionPresenter.install`，后端状态标签隐藏）。原因：后端仍带开发期约束（`IpcFiles` 要求 `java.io.tmpdir` 在 `H:/TEST/temp` 下、输入/输出白名单 `H:/TEST/mht`），真实环境必然失败并产生"后端不可用"噪音。相关类/探针/脚本保留供 P5 生产化接线。
+- ⛔ **2026-10-10 起按选项 B 停用（P4-20）**：P5 接线前 GUI **不再启动随包后端**（`App` 不再调用 `BackendConnectionPresenter.install`，后端状态标签隐藏）。原因：后端仍带开发期约束（`IpcFiles` 要求 `java.io.tmpdir` 在 `<盘>:/TEST/temp` 下、输入/输出白名单 `<盘>:/TEST/mht`），真实环境必然失败并产生"后端不可用"噪音。相关类/探针/脚本保留供 P5 生产化接线。
 - **harness 独立验收**：全量 **964/0/0 + headless 73/0**（`MVN_EXIT=0`）、`ArchitectureTest` 17/0、**GUI zh/en 34/0**、**16/16 探针 exit=0**；native：JavaFX dynamic `exit 0` + dist **23 文件/107.5 MB（含后端 exe）** + 卡片冒烟 `exit 0` + `状态 OK`、headless `exit 0`、**无头 native 44/44**、**NIK static 基线条 `NATIVE-BASELINE: 44 passed, 0 failed`**；i18n **571/571（差异 0）**、`log.*` **243**。
 - 🚨 **教训（P4-16 的延伸）**：`build-native.cmd` 内部会跑 `mvn clean`，**它会删掉 `target/cp.txt`** → 因此必须在**紧接** `build-baseline-native.cmd` **之前**重建 `cp.txt`，否则基线条镜像缺依赖 → `NoClassDefFoundError: org.slf4j.LoggerFactory`（**第二次踩到**，仍是假红）。
-- 🔧 **harness 紧急修正（已披露）**：本批把 `tools/native/native-card-smoke.ps1` 的默认 `-OutDir` 与 `build-native.cmd` 的 `NATIVE_SMOKE_DIR` **硬编码成 `H:\TEST\mht\native-card-smoke`** → ① 违反打包手册"任何 Windows 设备可打包"的承诺；② 破坏 `§6②`（P4-8）记录的"集成调用固定用持久目录 `.claude-work\native-card-smoke`"不变量。**修法**：恢复"**环境变量优先、否则仓库内 `.claude-work\native-card-smoke`**"；保留该批的两处好改动（探针 classes 落到 `-OutDir\probe-classes`、冒烟子进程用 `-WindowStyle Hidden`），并重建验证（`exit 0` + `[STEP SMOKE] END exit=0`）。
+- 🔧 **harness 紧急修正（已披露）**：本批把 `tools/native/native-card-smoke.ps1` 的默认 `-OutDir` 与 `build-native.cmd` 的 `NATIVE_SMOKE_DIR` **硬编码成 `<盘>:\TEST\mht\native-card-smoke`** → ① 违反打包手册"任何 Windows 设备可打包"的承诺；② 破坏 `§6②`（P4-8）记录的"集成调用固定用持久目录 `.claude-work\native-card-smoke`"不变量。**修法**：恢复"**环境变量优先、否则仓库内 `.claude-work\native-card-smoke`**"；保留该批的两处好改动（探针 classes 落到 `-OutDir\probe-classes`、冒烟子进程用 `-WindowStyle Hidden`），并重建验证（`exit 0` + `[STEP SMOKE] END exit=0`）。
 
 **P4-18 / V1（2026-10-09 会话）：三项便宜未验证项已补 + 可见性回收阶段二首批**
 - **日志级语言纯净度（已补，此前只验过"屏上中文=0"）**：en 运行的应用日志 `logs/mht-extractor.log` **CJK=0**（43886 B），zh 控制组 **4278**（57729 B）。**只统计应用日志**；`logs/test-results*.txt` 的中文断言消息按 §4 不计入。统计口径与注入控制组（clean=0 / injected=2 / CLI red exit=1）见 `.claude-work/p4-18-report.md`；可复跑入口 `node .claude-work/p4-18.mjs count <log>`。
 - **点击遮挡层不关确认卡（已补）**：`NotificationAcceptance` 用公开 `Event.fireEvent` 向 AtlantaFX `ModalPane` 的**唯一直接 `ScrollPane` 遮罩**派发真实 `MouseEvent`（零反射），zh/en 各连跑 3 次 **`failures=0 unverified=0`**；含"投递未到达"与"持久性改 false"两组红控制。与 ESC（P4-12）同一套公开事件路由。
 - **`>50MB` 大文件确认分支（已补）**：新增 `tools/probes/LargeFileConfirmationProbe`（真实 `PreviewLoader → InProcessUiport → WorkspaceActivityService → PreviewService → NotificationHost` 卡片），**20 条断言 × zh/en 全绿**，含恰好 50 MiB **不**确认 / +1 需确认、取消不加载不缓存、确认后真实 PNG 解码；两组红控制。**仍未覆盖**：从完整 `MainView` 手工导入该夹具、巨大图片自身的内存压力。
 - 🚨 **`NonDaemonExitProbe` 是「判据 ≠ 通过」的探针**：它故意起一个睡 **600 s** 的非 daemon 线程，源码判据是"JVM 应 **60 s 内**自退"；而 `run-probe.ps1` **不设**该超时，于是它必然等约 600 s 才自然 `exit=0`。**`exit=0` 不能当作"关窗后无残留风险"通过**；生产关窗生命周期仍以 `BusyCloseProbe` / `PendingConfirmCloseProbe` 为准。（会话内限时杀树 `taskkill /T /F` 被宿主拒绝，无法用超时终止来测量。）这是本批发现的**判据/运行器不匹配**，非产品回归。
-- 🔧 **harness 修正（已披露）**：批次运行器原在 `tools/probes/p4-18.mjs`，但它**硬断言**证据根必须落在 `h:\test\mht\` 下（机器专有）→ 违反 `tools/` 的分发/可移植承诺，已移入 **`.claude-work/`**（本地草稿区，与 `run-matrix.ps1` 同类）。`LargeFileConfirmationProbe` 默认夹具路径仍为本机 `H:\TEST\mht\p4-18\fixtures`（可用 `-Dprobe.fixtures` 覆盖），与既有探针一致。
+- 🔧 **harness 修正（已披露）**：批次运行器原在 `tools/probes/p4-18.mjs`，但它**硬断言**证据根必须落在 `<盘>:\test\mht\` 下（机器专有）→ 违反 `tools/` 的分发/可移植承诺，已移入 **`.claude-work/`**（本地草稿区，与 `run-matrix.ps1` 同类）。`LargeFileConfirmationProbe` 默认夹具路径仍为本机 `<盘>:\TEST\mht\p4-18\fixtures`（可用 `-Dprobe.fixtures` 覆盖），与既有探针一致。
 - **V1（可见性回收阶段二首批）**：探针/测试反射归零，测试访问面 **108 → 88**（迁移 20/29）；新增 `baseline.AppConfigFieldContract` 以**字节码字段表**保住"AppConfig 新增字段必须同步签名/深拷贝"守护（零反射）。剩余 **9 条**无等价公开观察路径（`SidePanelProbe.field/fieldDeep/invoke`、`HtmlViewerProbe.invoke/invokeStatic`、`ContextMenuProbe.fieldOf`、`MainController.contextMenu/refs`、`FileListContextMenu.actions`）——**保留原断言与清单登记，未扩生产 API、未改可见性**。详见 `.claude-work/v1-report.md`。
 
 **P4-19（2026-10-10）：native 元数据缺口 `PreviewCacheMeta$ImageEntry[]`（用户 native 实测预览失败）**
@@ -322,16 +322,16 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 - **根因**：触发在**写缓存** `PreviewCacheStore.write` 的 `MAPPER.writeValue`；Jackson 为 record 集合属性建 serializer 时经 `PotentialCreator.introspectParamNames` 反射实例化该**数组类**，镜像未注册。**只在 `images` 为空时触发**（用户那条正好"没有找到图片资源"）。这也解释了"**没弹卡片**"：失败在 `rebuild` 写盘阶段，`completePreview`→`PreviewNotices` 从未执行；通用解析失败按 `PreviewLoader` 语义本就只内联显示（**不是**弹卡片）。
 - **修复**：`reachability-metadata.json` 纯增量注册 `PreviewCacheMeta$ImageEntry[]`（agent 差集确认的唯一真实缺失项）+ 一条 agent 采集的 resource glob；对账丢失数 0。
 - **红/绿控制组（真 native）**：新增 `tools/native/NativePreviewCacheProbe.java` + `tools/native/native-preview-cache-smoke.ps1`（把探针**编成 native 镜像**再跑；`-MetadataDir` 切修复前快照做红组）。**红** = 报错逐字一致、栈顶 `PreviewCacheStore.write`；**绿** = `2 passed, 0 failed`（含 `write/load round-trip`）。🚨 **只调 `load` 的探针在修复前也通过**——该缺口只由**序列化**触发，控制组必须含 `write`。
-- **验证**：`build-native.cmd` exit 0 + report `status=OK` + 卡片冒烟 exit 0，dist 更新 `D:\JAVA\mht-resource-extractor-dist`；`audit-native-metadata.ps1` `STALE = 0 / 590`；全量 `mvnw clean test` **964/0 + 73/0**。
+- **验证**：`build-native.cmd` exit 0 + report `status=OK` + 卡片冒烟 exit 0，dist 更新 `<盘>:\JAVA\mht-resource-extractor-dist`；`audit-native-metadata.ps1` `STALE = 0 / 590`；全量 `mvnw clean test` **964/0 + 73/0**。
 - 🔧 **harness 修正（已披露）**：冒烟补 `-H:+JNI` 与 `-H:NativeLinkerOption=prism_common.lib`（NIK 静态库配方必需，否则 LNK2001）、`-o x.exe` → `-H:Path/-H:Name`（避免 `.exe.exe`）；native-only 探针从 `tools/probes/` 移入 `tools/native/`（不进 JVM 探针集）。
 - **未验证**：用户那次真实 GUI 点击未在 native 下自动复现（用等价探针覆盖同一 `write` 路径与同一数组类），请以新 dist 重测。
 
 **P4-20（2026-10-10，harness 亲自实施）：失败也提醒 + 状态图标去 emoji + 后端按选项 B 停用**
 - **1) 预览失败也提醒**：`PreviewLoader` 的 `PreviewLoadFailed(fileInfo=false)` 分支在原有内联提示之外，**追加右上角 toast**（`NotificationHost.toastWarning`，文案沿用 `preview.parseFailed` + 详情）。控制组（`.claude-work/verify/FailureToastProbe.java`，JVM 真 FX）：坏缓存根触发写盘失败 → `parseFailToast=true`；好缓存根（对照）→ `parseFailToast=false`（只有 r2/noImages 两条区域 toast）。
 - **2) 状态列 emoji → Ikonli**：`PreviewListCell` 原用 emoji `⏳/✅/⚠️/❌`；`⚠️` 的变体选择符 `U+FE0F` 在 native 字体下渲染成方框（⚠️→三角+方框）。改为 `FontIcon`：`fas-hourglass-half` / `fas-check-circle` / `fas-exclamation-triangle` / `fas-times-circle`（与折叠箭头弃用 ▾/▸ 同因）。
-- **3) 后端按选项 B 停用**：`App` 不再调用 `BackendConnectionPresenter.install`（不启动随包后端），并隐藏 `#backendStatusLabel`；不再有"后端不可用"噪音 toast。**原因**（实测）：随包后端 `IpcFiles` 要求 `java.io.tmpdir` 在 `H:/TEST/temp` 下（否则 exit 1、零 stdout），且输入/输出白名单为 `H:/TEST/mht`；GUI 双击时传系统 temp（C 盘）→ 必然失败。P4-17 验证脚本当时强制 `-Djava.io.tmpdir=H:\TEST\temp` 才没暴露。相关类/探针/脚本保留，P5 做生产化（放开 tmpdir + 以 GUI 实际选择的根做白名单）。
+- **3) 后端按选项 B 停用**：`App` 不再调用 `BackendConnectionPresenter.install`（不启动随包后端），并隐藏 `#backendStatusLabel`；不再有"后端不可用"噪音 toast。**原因**（实测）：随包后端 `IpcFiles` 要求 `java.io.tmpdir` 在 `<盘>:/TEST/temp` 下（否则 exit 1、零 stdout），且输入/输出白名单为 `<盘>:/TEST/mht`；GUI 双击时传系统 temp（C 盘）→ 必然失败。P4-17 验证脚本当时强制 `-Djava.io.tmpdir=<盘>:\TEST\temp` 才没暴露。相关类/探针/脚本保留，P5 做生产化（放开 tmpdir + 以 GUI 实际选择的根做白名单）。
 - **连带修正（已披露）**：`BackendConnectionProbe` 的 production 断言按 B 改写（`production-backend-label-hidden` + `production-no-backend-toast`，替换原"期待 unavailable + 有 toast"）；其余 `BackendSession` 确认/断开/超时用例不变。`tools/ipc/verify-gui-backend.ps1` 的 Gui 模式随 B 失效，待 P5。
-- **验证**：全量 `mvnw clean test` **964/0 + 73/0**；GUI **zh/en 34/0**；探针全绿（`BackendConnectionProbe` **76/0**，需 `JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=H:\TEST\temp`）；native 重建 dist。
+- **验证**：全量 `mvnw clean test` **964/0 + 73/0**；GUI **zh/en 34/0**；探针全绿（`BackendConnectionProbe` **76/0**，需 `JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=<盘>:\TEST\temp`）；native 重建 dist。
 
 **P4-21（2026-10-10，harness 亲自实施）：前端/后端打包分离（后端移入 `Backend\`）**
 - **布局**：发行目录根 = 前端 `MhtExtractor.exe` + JavaFX/VC++/JDK shim DLL + `启动.cmd`/`Launch.cmd`；后端在根下的 **`Backend\MhtExtractorBackend.exe`**（后端自包含、零 DLL）。理由：为 P5 多前端共享同一后端预留干净边界；前端 dynamic 配方**必须** DLL 与 exe 同级，故前端保持扁平。
@@ -350,7 +350,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 1. 🚨 **控制组"还原后仍然红"先查 mtime**：用 `Copy-Item` 还原源文件会把**旧 mtime** 一起带回来 → Maven 增量编译判定
    "源不比 class 新" → **不重编译** → 你跑的还是注入版编译出的 class，**假红**。**正确姿势**：还原后先比 **SHA256**，
    再 **touch 源文件（或 `clean`）** 才复跑。（P5a-1a / 1b 各踩一次）
-2. 🚨 **native 类脚本必须显式设 `JAVA_HOME`**：本会话环境里 `JAVA_HOME` 可能是占位坏值（实测 `D:\install\New Folder`），
+2. 🚨 **native 类脚本必须显式设 `JAVA_HOME`**：本会话环境里 `JAVA_HOME` 可能是占位坏值（实测 `<盘>:\install\New Folder`），
    `build-native.cmd` 的卡片冒烟会拿它去 `javac` → `javac failed (exit=1)`（**假红**，与产品无关）。
 3. 🚨 **`native-card-smoke.ps1` 必须像 `run-probe.ps1` 那样显式带上 `support/ProbeRuntime.java`**：该 support 类在 `tools/probes/support/` 下但**是默认包**，
    `-sourcepath` 对「默认包 + 子目录」无效；要在 `-d ... $probeSrc` 之后再给一个 support 源文件实参。

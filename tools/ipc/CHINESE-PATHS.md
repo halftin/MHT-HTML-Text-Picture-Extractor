@@ -169,7 +169,7 @@ node tools/ipc/project-temp-audit.mjs --root H:/TEST/mht/p4-10-c-audit --before
 node tools/ipc/project-temp-audit.mjs --root H:/TEST/mht/p4-10-c-audit --after
 ```
 
-项目断言只覆盖 `C:/Users/Admin/AppData/Local/Temp/mht-extractor-*` 及其子项的新增。
+项目断言只覆盖 `%LOCALAPPDATA%/Temp/mht-extractor-*` 及其子项的新增。
 `c-before.json` / `c-after.json` 保留原始快照，`c-audit.json` 分别计数项目、
 `dsh-workspace-changes-*`、`dd_BackgroundDownload_*`、其它应用的新增和修改。
 非项目类别只清点两个 Temp 根的直接子项，项目目录递归；不声称清点整盘或 DSH 快照内部。

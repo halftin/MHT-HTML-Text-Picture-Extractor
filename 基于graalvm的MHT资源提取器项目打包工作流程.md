@@ -12,7 +12,7 @@
 >
 > | 项 | 状态 |
 > |---|---|
-> | **MSVC 工具链** | ✅ **已装好并实测打通（2026-10-02）**：VS 2026 Community 装在 `E:\msvc\community`（含 VC.Tools.x86.x64），`vswhere.exe` 在 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\`，Windows SDK 10.0.26100 在 `E:\Windows Kits\10\`（注册表 `KitsRoot10` 指向它）。`check-env.cmd` → **exit=0「全部就绪」**，native EXE 已成功产出并逐字节验证。**下面「仍是唯一卡点」的说法已作废，详情见 §十** |
+> | **MSVC 工具链** | ✅ **已装好并实测打通（2026-10-02）**：VS 2026 Community 装在 `<盘>:\msvc\community`（含 VC.Tools.x86.x64），`vswhere.exe` 在 `<盘>:\Program Files (x86)\Microsoft Visual Studio\Installer\`，Windows SDK 10.0.26100 在 `<盘>:\Windows Kits\10\`（注册表 `KitsRoot10` 指向它）。`check-env.cmd` → **exit=0「全部就绪」**，native EXE 已成功产出并逐字节验证。**下面「仍是唯一卡点」的说法已作废，详情见 §十** |
 > | **独立 GraalVM** | ✅ **不再需要**。NIK 25.0.3 **自带 `native-image 25.0.3`**，脚本已把它作为 native-image 来源 |
 > | ~~`build-native.cmd` 的 4 处 `X:\` 硬编码~~ | ✅ **已全部修掉（2026-09-27）**：脚本改为**自动探测** JDK / native-image / Maven / 输出目录，且四者均可用环境变量覆盖（`BUILD_JAVA_HOME` / `GRAALVM_HOME` / `MAVEN_CMD` / `OUTPUT_DIR`）。**§5.1 与 §六 里"手工改 4 处路径"的说明已作废** |
 > | ~~`-J-Xmx8G`~~ | ✅ 已改为可配置的 `NATIVE_XMX`，**默认 4G**（本机总内存约 15 GB） |
@@ -26,8 +26,8 @@
 >
 > **（历史记录）如何解除 MSVC 缺失** —— 本机 2026-10-02 已完成，不再需要执行：
 > 装 Visual Studio **任意版本**的「使用 C++ 的桌面开发」工作负载即可（本机装的是 VS 2026 Community）。
-> 关键点是 `vswhere.exe` 必须出现在 `C:\Program Files (x86)\Microsoft Visual Studio\Installer\` ——
-> 它由 VS Installer 放在那里，**与 VS 本体装在哪块盘无关**（本机 VS 在 `E:\msvc\community` 也能被找到）。
+> 关键点是 `vswhere.exe` 必须出现在 `<盘>:\Program Files (x86)\Microsoft Visual Studio\Installer\` ——
+> 它由 VS Installer 放在那里，**与 VS 本体装在哪块盘无关**（本机 VS 在 `<盘>:\msvc\community` 也能被找到）。
 > 装完先跑 `check-env.cmd` 确认退出码为 0。
 >
 > **另需知**：项目已完成架构重构（新增零 JavaFX 的 `app` 应用层）与全量国际化（**547 键 × 2 locale** + 22 错误码）。
@@ -123,7 +123,7 @@ Native Image 只包含静态分析可达的代码。任何通过 `Class.forName(
 
 **为什么需要**: Native Image 在 Windows 上使用 MSVC 编译器/链接器生成最终的 .exe 文件。这是硬性依赖。
 
-> **警告**: Git for Windows 会在 `C:\Program Files\Git\usr\bin\` 中携带一个名为 `link.exe` 的工具，它与 MSVC 的 `link.exe` 冲突。VS 的 `vcvars64.bat` 脚本会将 MSVC 路径放在 PATH 最前面来解决此冲突，因此**必须在运行 native-image 的同一个终端中先执行 `vcvars64.bat`**。
+> **警告**: Git for Windows 会在 `<盘>:\Program Files\Git\usr\bin\` 中携带一个名为 `link.exe` 的工具，它与 MSVC 的 `link.exe` 冲突。VS 的 `vcvars64.bat` 脚本会将 MSVC 路径放在 PATH 最前面来解决此冲突，因此**必须在运行 native-image 的同一个终端中先执行 `vcvars64.bat`**。
 
 **如果未安装**: 下载 [Visual Studio 2022 Community](https://visualstudio.microsoft.com/downloads/)（免费），安装时勾选 "Desktop development with C++" 工作负载。
 
@@ -1314,10 +1314,10 @@ PROJECT_DIR=<项目根目录>
 #   本机实测（仅供参考，脚本会自己找到）：
 #     BUILD_JAVA_HOME = 取 JAVA_HOME —— 本机那是**纯 JDK 25（无 native-image）**，
 #                       所以脚本把编译 JDK 与 native-image JDK **分开解析**，后者取 NIK
-#     GRAALVM_HOME    = D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3（NIK 自带 native-image）
+#     GRAALVM_HOME    = <盘>:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3（NIK 自带 native-image）
 #     MAVEN_CMD       = 自动到 %USERPROFILE%\.m2\wrapper\dists 下递归找 mvn.cmd
 #     OUTPUT_DIR      = <仓库同级>\<仓库名>-dist（**2026-10-02 起的新默认**，
-#                       例：D:\JAVA\mht-resource-extractor-dist）
+#                       例：<盘>:\JAVA\mht-resource-extractor-dist）
 #                       🚨 旧默认是 <仓库>\dist，已改掉：本机实测**项目树内**的 native EXE 会让
 #                          JavaFX 的 Font.loadFont(...) 返回 null，全部 Ikonli 图标变空心方框；
 #                          输出到树外即正常。脚本现在会在输出目录位于树内时明确告警。详见 §十。
@@ -1325,11 +1325,11 @@ PROJECT_DIR=<项目根目录>
 #     NATIVE_RECIPE   = dynamic（**默认**，≈70 MB，随包 7 个 JavaFX DLL）
 #                       static（≈98 MB，JavaFX 静态链接进 EXE，dist 不含 JavaFX DLL）
 #                       脚本会挑"配方匹配"的 native-image JDK；两种都装时靠它区分。
-#   ✅ MSVC 已于 2026-10-02 装好（E:\msvc\community），native-image 能自己用 vswhere 找到它。
+#   ✅ MSVC 已于 2026-10-02 装好（<盘>:\msvc\community），native-image 能自己用 vswhere 找到它。
 
 # ========== Step 1: 初始化 MSVC 环境（必须最先执行） ==========
 # 找到 vcvars64.bat 的位置（通常在 VS 安装目录下）
-# 示例路径: "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+# 示例路径: "<盘>:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 call "<VS安装目录>\VC\Auxiliary\Build\vcvars64.bat"
 
 # ========== Step 2: 编译（JDK 25） ==========
@@ -1734,10 +1734,10 @@ echo 发行版: %RELEASE_NAME%.zip
 
 | 测试场景 | 路径示例 | 结果 |
 |----------|----------|------|
-| ASCII 文件夹 + 中文 EXE 名 | `Y:/java-env/test-dll/中文名.exe` | OK |
-| 中文文件夹 + 英文 EXE 名 | `Y:/java-env/中文文件夹/test.exe` | 失败 |
-| 中文父目录 | `Y:/java环境/test-dll/test.exe` | 失败 |
-| ASCII 全路径 | `Y:/instll/java/target/dist/MhtExtractor.exe` | OK |
+| ASCII 文件夹 + 中文 EXE 名 | `<盘>:/java-env/test-dll/中文名.exe` | OK |
+| 中文文件夹 + 英文 EXE 名 | `<盘>:/java-env/中文文件夹/test.exe` | 失败 |
+| 中文父目录 | `<盘>:/java环境/test-dll/test.exe` | 失败 |
+| ASCII 全路径 | `<盘>:/instll/java/target/dist/MhtExtractor.exe` | OK |
 
 **结论**: 从盘符到 EXE 所在文件夹的每一级目录名都必须纯 ASCII。EXE 文件名和 ZIP 文件名可以包含中文。
 
@@ -1832,7 +1832,7 @@ target/dist/
 
 **根因**: GraalVM 安装路径（任一级目录）包含中文字符。模块解析器无法处理非 ASCII 路径。
 
-**解决**: 将 GraalVM 移动到纯英文路径，例如 `Y:\graalvm-sdk\`。同时确保项目路径、输出路径也避免中文。
+**解决**: 将 GraalVM 移动到纯英文路径，例如 `<盘>:\graalvm-sdk\`。同时确保项目路径、输出路径也避免中文。
 
 ---
 
@@ -1848,7 +1848,7 @@ target/dist/
 
 **错误**: `Failed to automatically set up Windows build environment`，cl.exe 无法找到。
 
-**根因**: MSYS2/Git Bash 环境中，`cmd.exe //c` 无法访问 `C:\Program Files\Microsoft Visual Studio\` 目录（文件系统虚拟化/路径编码问题）。
+**根因**: MSYS2/Git Bash 环境中，`cmd.exe //c` 无法访问 `<盘>:\Program Files\Microsoft Visual Studio\` 目录（文件系统虚拟化/路径编码问题）。
 
 **解决**: 
 - 不通过 bash 启动 cmd.exe，直接在 Windows 原生 cmd.exe 或 PowerShell 中运行构建脚本。
@@ -1879,8 +1879,8 @@ target/dist/
 （**不支持 MinGW/GCC**），且 `--no-fallback` 要求走完 C 编译+链接。
 
 **解决**: 装 Visual Studio（任意版本）+「使用 C++ 的桌面开发」工作负载即可；VS 本体可以装在
-**非 C 盘**（本机在 `E:\msvc\community`），只要 `vswhere.exe` 出现在
-`C:\Program Files (x86)\Microsoft Visual Studio\Installer\`。装完 `check-env.cmd` 应报 exit=0。
+**非 C 盘**（本机在 `<盘>:\msvc\community`），只要 `vswhere.exe` 出现在
+`<盘>:\Program Files (x86)\Microsoft Visual Studio\Installer\`。装完 `check-env.cmd` 应报 exit=0。
 > 历史记录：本机曾实测"连 HelloWorld 都 exit=20"，那是装 VS 之前的状态，现已不再适用。
 
 ---
@@ -1986,12 +1986,12 @@ Claude Code CLI 可以通过以下步骤在新设备上自动完成全部打包�
 
 | 组件 | 实际位置 | 说明 |
 |------|----------|------|
-| MSVC | `E:\msvc\community` | VS **2026** Community 18.10.3，含 `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`。`cl.exe` 在 `VC\Tools\MSVC\{14.44.35207, 14.51.36231}\bin\Hostx64\x64\` |
-| vswhere | `C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe` | native-image 靠它定位 VS；**VS 本体可以装在非 C 盘**，关键是它在标准位置 |
-| Windows SDK | `E:\Windows Kits\10\Lib\10.0.26100.0` | 注册表 `HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots` 的 `KitsRoot10 = E:\Windows Kits\10\` |
-| 编译 JDK | `D:\install\New Folder`（javac 25.0.2） | **纯 JDK**（无 JavaFX 模块）；JavaFX 类由 Maven 依赖提供；Lombok 正常 |
-| native-image JDK（**默认，dynamic**） | `D:\JAVA\graalvm-jdk-25_windows-x64_bin\graalvm-jdk-25.0.2+10.1` | Oracle GraalVM 25.0.2：**无** JavaFX 静态库 → JavaFX 走随包 DLL，≈70 MB。⚠️ 它是 zip 解压的**两层**结构，脚本已会多探一层 |
-| native-image JDK（可选，**static**） | `D:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3`（NIK Full 25.0.3） | 自带 `lib\static\windows-amd64\*.lib` → JavaFX 静态链接进 EXE，≈98 MB，dist 不含 JavaFX DLL。`set NATIVE_RECIPE=static` 即切换 |
+| MSVC | `<盘>:\msvc\community` | VS **2026** Community 18.10.3，含 `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`。`cl.exe` 在 `VC\Tools\MSVC\{14.44.35207, 14.51.36231}\bin\Hostx64\x64\` |
+| vswhere | `<盘>:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe` | native-image 靠它定位 VS；**VS 本体可以装在非 C 盘**，关键是它在标准位置 |
+| Windows SDK | `<盘>:\Windows Kits\10\Lib\10.0.26100.0` | 注册表 `HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots` 的 `KitsRoot10 = <盘>:\Windows Kits\10\` |
+| 编译 JDK | `<盘>:\install\New Folder`（javac 25.0.2） | **纯 JDK**（无 JavaFX 模块）；JavaFX 类由 Maven 依赖提供；Lombok 正常 |
+| native-image JDK（**默认，dynamic**） | `<盘>:\JAVA\graalvm-jdk-25_windows-x64_bin\graalvm-jdk-25.0.2+10.1` | Oracle GraalVM 25.0.2：**无** JavaFX 静态库 → JavaFX 走随包 DLL，≈70 MB。⚠️ 它是 zip 解压的**两层**结构，脚本已会多探一层 |
+| native-image JDK（可选，**static**） | `<盘>:\install\bellsoft-liberica-vm-full-openjdk25-25.0.3`（NIK Full 25.0.3） | 自带 `lib\static\windows-amd64\*.lib` → JavaFX 静态链接进 EXE，≈98 MB，dist 不含 JavaFX DLL。`set NATIVE_RECIPE=static` 即切换 |
 | Maven | 仓库自带 `mvnw.cmd` | 不必预装；脚本会自动找 wrapper 分发或 PATH 上的 `mvn.cmd` |
 
 `check-env.cmd` → **exit=0「全部就绪」**。
@@ -2004,8 +2004,8 @@ check-env.cmd
 
 :: 1) 直接跑，什么都不用设（脚本自动探测 JDK / native-image / Maven / MSVC）
 build-native.cmd
-::   默认输出到 <仓库同级>\<仓库名>-dist，例：D:\JAVA\mht-resource-extractor-dist
-::   想放别处（推荐树外）：set OUTPUT_DIR=D:\JAVA\newmht
+::   默认输出到 <仓库同级>\<仓库名>-dist，例：<盘>:\JAVA\mht-resource-extractor-dist
+::   想放别处（推荐树外）：set OUTPUT_DIR=<盘>:\JAVA\newmht
 
 :: 其他开关
 build-native.cmd --prepare-only     :: 只做 JVM 侧准备（mvn package + 抽 DLL），不调 native-image
@@ -2124,7 +2124,7 @@ static 配方对路径无要求，直接双击 exe 即可。
 
 ```powershell
 # 拷到项目树外，从无关的工作目录启动（关键：不要从项目树内运行，见 §10.7.1）
-$p = Start-Process 'D:\JAVA\newmht\MhtExtractor.exe' -WorkingDirectory 'C:\Windows' -PassThru
+$p = Start-Process '<盘>:\JAVA\newmht\MhtExtractor.exe' -WorkingDirectory '<盘>:\Windows' -PassThru
 Start-Sleep 12; $p.Refresh()
 $p.MainWindowTitle          # 期望 "MHT 资源提取器"
 $p.CloseMainWindow()        # 期望 ~2 秒内 HasExited=True 且 ExitCode=0（无残留进程）
@@ -2320,14 +2320,14 @@ native 侧的全量 GUI 自动化仍以 JVM 侧这份为准。
 
   | EXE 所在位置 | 图标 |
   |---|---|
-  | `D:\JAVA\mht-resource-extractor\dist\`（**旧默认输出目录**） | ❌ 全部空心方框 |
-  | `D:\JAVA\mht-resource-extractor\xcheck-plain\` | ❌ |
-  | `D:\JAVA\mht-resource-extractor\.claude-work\...` | ❌ |
-  | `D:\JAVA\newmht\`、`C:\mht-probe-abs\`、`C:\xcheck.dotted\`、75 字符长路径 | ✅ 正常 |
+  | `<盘>:\JAVA\mht-resource-extractor\dist\`（**旧默认输出目录**） | ❌ 全部空心方框 |
+  | `<盘>:\JAVA\mht-resource-extractor\xcheck-plain\` | ❌ |
+  | `<盘>:\JAVA\mht-resource-extractor\.claude-work\...` | ❌ |
+  | `<盘>:\JAVA\newmht\`、`<盘>:\mht-probe-abs\`、`<盘>:\xcheck.dotted\`、75 字符长路径 | ✅ 正常 |
 
 - **已排除**：`-jar` vs `-cp`、`-H:Name`、路径长度、点目录、祖先 `target\` 目录、`-Djava.library.path`、
   `target\jfx-dlls`、EXE 旁边的 DLL 集合、ServiceLoader 提供者数量、字体资源是否嵌入、加载的原生模块集合、
-  以及**构建配方**（NIK 静态 JavaFX 与 `D:\JAVA\MhtExtractorV2.2` 那种动态 JavaFX 的旧构建，
+  以及**构建配方**（NIK 静态 JavaFX 与 `<盘>:\JAVA\MhtExtractorV2.2` 那种动态 JavaFX 的旧构建，
   放进项目树内**一样中招**）。
 - **钉到的机制层面**：`Font.loadFont(InputStream, double)` 在树内返回 `null`、树外返回真字体；
   而 TTF 资源本身两处都可读（202,744 字节）。本机装有文件系统虚拟化过滤栈
@@ -2374,7 +2374,7 @@ native 侧的全量 GUI 自动化仍以 JVM 侧这份为准。
 
 ### 10.8 🚨 非 ASCII（中文）路径：dynamic 配方会**启动失败** —— 已随包启动器
 
-> **2026-10-05 实测复验**：把 dynamic 产物复制到 `D:\中文目录实验\提取器\` 直接运行 → 进程立即退出，stderr 为
+> **2026-10-05 实测复验**：把 dynamic 产物复制到 `<盘>:\中文目录实验\提取器\` 直接运行 → 进程立即退出，stderr 为
 > `Exception in thread "main" java.lang.RuntimeException: No toolkit found`（`com.sun.javafx.tk.Toolkit.getToolkit` → `PlatformImpl.startup`）。
 > 与本节根因**完全一致**（JavaFX 原生库 `glass/prism_*.dll` 从非 ASCII 的 EXE 目录加载失败），故该限制**只与 JavaFX 有关**。
 
@@ -2384,17 +2384,17 @@ native 侧的全量 GUI 自动化仍以 JVM 侧这份为准。
 Graphics Device initialization failed for :  d3d, sw
 Error initializing QuantumRenderer: no suitable pipeline found
 java.lang.UnsatisfiedLinkError: Can't load library: prism_d3d
-   | java.library.path = [C:\中文测试-目录\提取器 V3, C:\windows\system32, ...]
+   | java.library.path = [<盘>:\中文测试-目录\提取器 V3, <盘>:\windows\system32, ...]
 ```
 
 **四格对照实验（同一份 EXE 字节，只改放置位置）** —— 这是定位的关键：
 
 | EXE 位置 | 工作目录 | 结果 |
 |---|---|---|
-| `C:\中文测试-目录\提取器 V3`（含中文**和**空格） | 中文 | ❌ 失败 |
-| `C:\中文测试无空格\提取器V3`（含中文，**无空格**） | ASCII | ❌ 失败 |
-| `C:\mht space test\app`（**纯 ASCII + 空格**） | ASCII | ✅ 正常 |
-| `D:\JAVA\newmht`（纯 ASCII） | 任意 | ✅ 正常 |
+| `<盘>:\中文测试-目录\提取器 V3`（含中文**和**空格） | 中文 | ❌ 失败 |
+| `<盘>:\中文测试无空格\提取器V3`（含中文，**无空格**） | ASCII | ❌ 失败 |
+| `<盘>:\mht space test\app`（**纯 ASCII + 空格**） | ASCII | ✅ 正常 |
+| `<盘>:\JAVA\newmht`（纯 ASCII） | 任意 | ✅ 正常 |
 
 ⇒ **只看 EXE 自己的路径里有没有非 ASCII；空格无害；工作目录、输入/输出目录是中文都无所谓。**
 
@@ -2410,13 +2410,13 @@ Prism 两条流水线全挂 → 启动即退。**static 配方把 JavaFX 静态�
 |---|---|---|
 | **① 随包启动器（已内置）** | 双击 **`启动.cmd`**（而不是 exe）。它把 DLL 复制到纯 ASCII 目录 `%ProgramData%\MhtExtractor\native-dlls`（失败则退到 `%PUBLIC%`），再用 `-Djava.library.path=<该目录>` 启动 | dist 多 2 个 2 KB 文件；首次运行向 `%ProgramData%` 写约 4.5 MB（之后 `xcopy /D` 只补新增/变更） |
 | **② 换 static 配方** | `set NATIVE_RECIPE=static` → 98 MB，双击 exe 即可，**对路径无任何要求** | +28 MB |
-| **③ 放进纯 ASCII 路径** | 例如 `D:\MhtExtractor`；不改配方不加文件 | 用户得记住这条规矩 |
+| **③ 放进纯 ASCII 路径** | 例如 `<盘>:\MhtExtractor`；不改配方不加文件 | 用户得记住这条规矩 |
 
 **已排除的死路（别再试）**：
 
-- **8.3 短路径**：`%~sI` 对中文目录给出的是 `C:\中文测~1\提取器~1`，**仍然是非 ASCII**。
+- **8.3 短路径**：`%~sI` 对中文目录给出的是 `<盘>:\中文测~1\提取器~1`，**仍然是非 ASCII**。
 - **`-Djava.library.path=.`**：会被规范化回**中文绝对路径**，一样失败。
-- **`subst M: <中文目录>` 再跑 `M:\MhtExtractor.exe`**：实测仍然 EXITED。
+- **`subst M: <中文目录>` 再跑 `<盘>:\MhtExtractor.exe`**：实测仍然 EXITED。
 - **`JAVA_TOOL_OPTIONS`**：native image 不认这个变量。
 - **路径含空格**：不是问题（见上表第三行），别在这上面浪费时间。
 
@@ -2487,7 +2487,7 @@ JavaFX 类型，不能通过无头产物的零 JavaFX 断言。
 
 JavaFX dist 步骤从 `BACKEND_DIST_DIR` 复制后端 exe 到 **`dist\Backend\`**（P4-21 前后端分包：
 前端 `MhtExtractor.exe` 与 JavaFX/VC++ DLL 留在发行目录根，后端独立放在 `Backend\` 子目录）。
-该变量默认 `H:\TEST\mht\p4-3-headless-dist`；发布时应显式指向本次、同一构建标识的无头产物目录。
+该变量默认 `<盘>:\TEST\mht\p4-3-headless-dist`；发布时应显式指向本次、同一构建标识的无头产物目录。
 缺少后端时构建会给出警告，`Backend\` 缺失，GUI 启动后显示后端不可用并保留进程内功能。
 构建末尾用 `tools/native/assert-dist-layout.ps1` 断言该布局（根目录不得出现后端 exe；
 dynamic 配方另要求 5 个 JavaFX DLL 在根）。后端的 metadata/reports 是验收旁证，不必复制进发行目录。
@@ -2495,11 +2495,11 @@ dynamic 配方另要求 5 个 JavaFX DLL 在根）。后端的 metadata/reports 
 `启动.cmd` / `Launch.cmd` 先进入发行目录再启动 GUI；启动脚本不另起脱管后端。
 ⚠️ **P4-20 起（选项 B）**：P5 接线前 GUI **不启动**后端（`App` 不调用 `BackendConnectionPresenter.install`），
 `Backend\` 目前只是交付形态的一部分、运行时不加载；`BackendSession`/`BackendConnectionPresenter`/
-`tools/ipc/verify-gui-backend.ps1` 保留供 P5 生产化（届时需放开 `IpcFiles` 的 `H:/TEST/temp` 与
-`H:/TEST/mht` 开发期约束）。P4-20 前 GUI 自行拉起后端、独占 stdio 管道并完成握手。
+`tools/ipc/verify-gui-backend.ps1` 保留供 P5 生产化（届时需放开 `IpcFiles` 的 `<盘>:/TEST/temp` 与
+`<盘>:/TEST/mht` 开发期约束）。P4-20 前 GUI 自行拉起后端、独占 stdio 管道并完成握手。
 `-Dmht.backend.executable=<path>` 可覆盖后端 exe 路径。
 协议与确认生命周期见 `src/main/java/com/mhtextractor/backend/IPC.md`。
 
-native 卡片冒烟产物目录由 `NATIVE_SMOKE_DIR` 覆盖，默认 `H:\TEST\mht\native-card-smoke`。
-本机验证时显式设置 `JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=H:\TEST\temp`，并将 `TEMP` / `TMP`、
+native 卡片冒烟产物目录由 `NATIVE_SMOKE_DIR` 覆盖，默认 `<盘>:\TEST\mht\native-card-smoke`。
+本机验证时显式设置 `JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=<盘>:\TEST\temp`，并将 `TEMP` / `TMP`、
 `OUTPUT_DIR`、`LOG_DIR` 和 `NATIVE_SMOKE_DIR` 指向 H 盘。
