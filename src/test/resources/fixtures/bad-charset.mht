@@ -1,0 +1,13 @@
+From: <fixture@example.com>
+To: <receiver@example.com>
+Subject: 坏charset
+Date: Thu, 01 Jan 2026 00:00:00 +0800
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="----=_fixture_boundary_0001"
+
+------=_fixture_boundary_0001
+Content-Type: text/html; charset="x-nonexistent-charset"
+Content-Transfer-Encoding: 8bit
+
+<html><body><p>ASCII-only body: no CJK, so the multi-charset fallback never accepts a decode, and the final declared-charset fallback throws.</p></body></html>
+------=_fixture_boundary_0001--

@@ -3,16 +3,16 @@
   "locale": "zh",
   "imageMode": false,
   "mergedOutput": true,
-  "fixtures": ["deep-nesting.mht", "garbage.mht", "no-cte.mht"],
-  "note": "跳过/递归截断 + 缺 CTE 兜底成功（garbage 不可解析跳过、no-cte 缺 CTE 自 2026-10-16 起按 RFC 2045 默认 7bit 成功、deep 超 100 层截断）",
-  "knownIssues": [],
+  "fixtures": ["bad-charset.mht", "deep-nesting.mht", "garbage.mht", "no-cte.mht"],
+  "note": "跳过/递归截断/缺 CTE 兜底成功/异常失败四条边界路径（garbage 不可解析跳过、no-cte 缺 CTE 自 2026-10-16 起按 RFC 2045 默认 7bit 成功、deep 超 100 层截断、bad-charset 声明不存在的 charset 使最终兜底抛异常 → FAILED）",
+  "knownIssues": ["bad-charset.mht：MimeParser 的多编码降级只接受「含中文且无乱码」的候选，纯 ASCII 正文全都落选，最后的 declared-charset 兜底因 charset 名不存在抛 UnsupportedEncodingException → 该文件 FAILED（有意的失败锚点，用于保住「异常 → FAILED → CLI exit 1」的基线覆盖；未计划修复）"],
   "stats": {
-    "total": 3,
+    "total": 4,
     "success": 1,
-    "fail": 0,
+    "fail": 1,
     "skip": 2,
     "warn": 0,
-    "outcomes": ["deep-nesting.mht=SKIPPED", "garbage.mht=SKIPPED", "no-cte.mht=SUCCESS"]
+    "outcomes": ["bad-charset.mht=FAILED", "deep-nesting.mht=SKIPPED", "garbage.mht=SKIPPED", "no-cte.mht=SUCCESS"]
   },
   "products": [
     {"path": "merged.txt", "sha256": "5eacc97f669d7af135004c8a6875dcad1418c75d841e030d55413d1a21d7e66f"}

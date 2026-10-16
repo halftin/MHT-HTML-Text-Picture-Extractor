@@ -109,10 +109,10 @@ public final class BaselineCases {
                 t5, false, true, "自定义模板变量 {filename}/{date}/{time}/\\n（契约见耦合点 #23）", List.of()));
 
         AppConfig t6 = new AppConfig();
-        out.add(new Case("text-boundary", List.of("garbage.mht", "no-cte.mht", "deep-nesting.mht"),
+        out.add(new Case("text-boundary", List.of("garbage.mht", "no-cte.mht", "deep-nesting.mht", "bad-charset.mht"),
                 t6, false, true,
-                "跳过/递归截断 + 缺 CTE 兜底成功（garbage 不可解析跳过、no-cte 缺 CTE 自 2026-10-16 起按 RFC 2045 默认 7bit 成功、deep 超 100 层截断）",
-                List.of()));
+                "跳过/递归截断/缺 CTE 兜底成功/异常失败四条边界路径（garbage 不可解析跳过、no-cte 缺 CTE 自 2026-10-16 起按 RFC 2045 默认 7bit 成功、deep 超 100 层截断、bad-charset 声明不存在的 charset 使最终兜底抛异常 → FAILED）",
+                List.of("bad-charset.mht：MimeParser 的多编码降级只接受「含中文且无乱码」的候选，纯 ASCII 正文全都落选，最后的 declared-charset 兜底因 charset 名不存在抛 UnsupportedEncodingException → 该文件 FAILED（有意的失败锚点，用于保住「异常 → FAILED → CLI exit 1」的基线覆盖；未计划修复）")));
 
         AppConfig t7 = new AppConfig();
         out.add(new Case("text-unparseable", List.of("garbage.mht"),

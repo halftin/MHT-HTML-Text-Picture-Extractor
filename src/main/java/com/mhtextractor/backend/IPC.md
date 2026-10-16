@@ -706,5 +706,5 @@ smoke 造 3 个 HTML（内嵌 1px PNG），stress 造 **10000** 个。压测产�
 - `heapPoolPeakBytes` 为 JVM 各 HEAP MemoryPoolMXBean 的 `peakUsage.used` **之和**（池峰值可能不同时，
   是保守上界，不是 RSS）；要求 **<768 MiB**，另以 JVM `-Xmx512m` 限制堆。回调队列峰值 **≤256**。
 
-这验证本机单次 10k 小文件的可用性，不涵盖 10k 大型 MHT 或大量大图预览吞吐、共享内存、native、
+这验证本机单次 10k 小文件的可用性，不涵盖 10k 大型 MHT 或大量大图预览吞吐、native、
 GUI 自动化/探针、P4-3/P4-4。协议总体输入帧大小上限与更细的分页版本令牌未在本批实现。
