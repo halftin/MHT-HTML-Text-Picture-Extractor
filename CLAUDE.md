@@ -222,7 +222,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
   **读源码/数行一律显式 `-Encoding UTF8`**（或直接读字节）。含中文的 **`.ps1` 必须带 UTF-8 BOM**；
   Node 读的**数据文件不要 BOM**；`.ps1` 用 CRLF（LF-only 会让 PS 5.1 静默丢哈希表键）。
 - 🚨 **禁止用 PowerShell 做文本替换改文档**（反引号是转义符，会把整篇改坏）。改内容用编辑器。
-  文档被改坏时用 `tools/recovery/recover-doc.js`（从 DSH transcript 切帧解压恢复）+ `verify-recovery.js` 核对。
+  文档被改坏时用开发区里的 `tools/recovery/recover-doc.js`（从 DSH transcript 切帧解压恢复）+ `verify-recovery.js` 核对（**该工具属本地开发区，不随发布**）。
 - **`-Dfoo=bar` 会被 PowerShell 解析坏**（`ClassNotFoundException: /mode=true`）：写成 `.cmd` 或用参数数组 `@(...)`。
   DSH 传给 pwsh 的 **stdin 是空的**；中文走文件或 argv 是安全的。不要给自动变量 `$args` 赋值。
 - **`.cmd` 的 `:label` 与函数体之间不能插任何东西**（`call :label` 会落空滑进下一个子程序 → 现象是"exit=0 却什么都没执行"）。
@@ -386,11 +386,11 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | `tools/native/native-preview-warning-smoke.ps1` | **同批新增**：把"产生警告的预览"编成**真 native 后端**镜像跑（`-MetadataDir` 切修复前快照做红组；带"重放旧镜像即报 `Selected metadata differs from image snapshot`"防伪控制）；配套 `native-preview-warning-client.mjs` |
 | `tools/native/native-ffm-smoke.ps1` | **P5a-1b-r 新增**：编 `NativeFfmProbe.java` 为 native 镜像，验证 **FFM downcall 在镜像里可调用**（`-MetadataDir` 切注册前快照 → 红 `MissingForeignRegistrationError`；注册后 → `FFM_OK`）；`-ExpectMissingRegistration` 断言红组 |
 | `tools/native/native-backend-exit-smoke.ps1` | **P5a-1b-r 新增**：无头 native 后端**退出/收尾**冒烟（`--once` 与 `--serve`+EOF） |
-| `tools/recovery/*` | 文档被误替换后的恢复与等价核对 |
-| `tools/drive/drive-claude.mjs` | 驱动 Claude Code CLI（多候选解析 exe 路径；提示词走文件，不走 stdin） |
+| `tools/recovery/*`（**本地开发区；不随发布**） | 文档被误替换后的恢复与等价核对 |
+| `tools/drive/drive-claude.mjs`（**本地开发区；不随发布**） | 驱动 Claude Code CLI（多候选解析 exe 路径；提示词走文件，不走 stdin） |
 | `tools/ipc/client.mjs` | **P4-2b 新增**：无头后端 IPC 脚本客户端（Node 内置模块；起 `--serve` → 导入→分组→设参→提取 → 收事件 → 干净退出；stdout/stderr 分流） |
 | `tools/ipc/verify-gui-backend.ps1` | **P4-17 新增**：GUI 随包后端（拉起/握手/确认/断连）的端到端验证脚本。⚠️ **选项 B（P4-20）后 GUI 不再启动后端，其 Gui 模式待 P5** |
-| `tools/diag/tee-probe.cmd` | 「命令行 tee 最小复现」：定位 `call :label` 落空类问题 |
+| `tools/diag/tee-probe.cmd`（**本地开发区；不随发布**） | 「命令行 tee 最小复现」：定位 `call :label` 落空类问题 |
 | `tools/launcher/make-launcher.ps1` | 生成 dynamic 产物的 `启动.cmd` / `Launch.cmd`（修"中文路径下启动失败"） |
 
 **测试怎样访问生产控制器**：生产类**不为测试开放状态面**（`test-support` 标记 = 0）。两条正路：
@@ -399,7 +399,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 
 ### 派发实施方：Claude Code CLI 与 Codex CLI（**长活走 detach**，2026-10-08）
 
-两条实施通道：`tools/drive/drive-claude.mjs`（Claude Code CLI）与 **`codex_run` 工具**（Codex CLI，底层是 `.claude-work/codex/drive-codex.mjs`）。
+两条实施通道：`tools/drive/drive-claude.mjs`（Claude Code CLI，**本地开发区；不随发布**）与 **`codex_run` 工具**（Codex CLI，底层是 `.claude-work/codex/drive-codex.mjs`）。
 **指挥方只做统筹与独立验收，不自己改 `src/`、`tools/`**（除紧急修正并说明）。
 
 | 任务规模 | 怎么派 | 为什么 |
