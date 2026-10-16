@@ -1,3 +1,5 @@
+**中文** · [English](README.en.md)
+
 # MHT/HTML 资源提取器 3.0
 
 > 把 `.mht` / `.mhtml` / `.html` / `.htm`（含 HTML 侧车文件夹）**批量提取为纯文本与图片**的 Windows 桌面工具。
@@ -137,15 +139,4 @@ MHT-HTML-Extractor3.0/            <-- 目录名必须保持 ASCII
 
 ---
 
-### English (short)
-
-**MHTExtractor3.0** — a Windows desktop tool that batch-extracts **text** and **images** from `.mht` / `.mhtml` /
-`.html` / `.htm` files (including HTML sidecar folders). No Java/.NET install required; the package ships the JVM and
-all native libraries. Import by drag-and-drop, organise items into groups, set global/group/item parameters, then
-extract text and/or images (with optional region limiting, output name templates, ZIP/CBZ archiving).
-
-**Known limitation:** the folder containing `MhtExtractor.exe` must be an **ASCII-only path** — JavaFX native DLL
-loading under GraalVM native-image does not work from non-ASCII directories (verified: ASCII path starts and shows the
-window; a Chinese parent folder exits with code 1 and no window). Simply **double-click `MhtExtractor.exe`** (no launcher
-script is shipped). Memory cap is dynamic: **50% of physical RAM**; override at run time with
-`MhtExtractor.exe -XX:MaxHeapSize=2g`. Licensed under Mulan PSL v2.
+> English documentation: **[README.en.md](README.en.md)**
