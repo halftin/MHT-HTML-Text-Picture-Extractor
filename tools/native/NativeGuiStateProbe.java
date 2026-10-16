@@ -30,6 +30,10 @@ public final class NativeGuiStateProbe {
             throw new AssertionError("Loaded fields differ");
         }
         System.out.println("[PASS] native load existing logs/gui-state.json: 6 fields");
+        if (state.getNameColumnWidth() != null || state.getSourceColumnWidth() != null) {
+            throw new AssertionError("Old state column widths must be null");
+        }
+        System.out.println("[PASS] native old file column widths: null/null");
         state.setImageModeEnabled(false);
         state.setInputFolder("saved-\u4e2d\u6587");
         state.setOutputFolder("saved-output");
@@ -55,6 +59,21 @@ public final class NativeGuiStateProbe {
         GuiState restored = GuiStateManager.load();
         if (!state.equals(restored)) throw new AssertionError("Saved state reload differs");
         System.out.println("[PASS] native reload saved fields");
+        state.setNameColumnWidth(720.0);
+        state.setSourceColumnWidth(540.0);
+        GuiStateManager.save(state);
+        String resizedJson = Files.readString(stateFile, StandardCharsets.UTF_8);
+        if (!resizedJson.contains("\"nameColumnWidth\" : 720.0")
+                || !resizedJson.contains("\"sourceColumnWidth\" : 540.0")) {
+            throw new AssertionError("Saved column width keys/values differ: " + resizedJson);
+        }
+        restored = GuiStateManager.load();
+        if (restored == null || !Double.valueOf(720.0).equals(restored.getNameColumnWidth())
+                || !Double.valueOf(540.0).equals(restored.getSourceColumnWidth())
+                || !state.equals(restored)) {
+            throw new AssertionError("Saved column widths reload differs");
+        }
+        System.out.println("[PASS] native column widths save/reload: nameColumnWidth=720.0 sourceColumnWidth=540.0");
         System.out.println("GUI_STATE_OK");
     }
 }
