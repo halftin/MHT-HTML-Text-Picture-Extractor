@@ -883,8 +883,26 @@ class WorkspaceModelTest {
 
         assertNull(m.renameGroup(9999, "组X"), "未知组号 → null 且不产生任何变更");
         assertEquals(1, m.groups().size());
-        assertNull(m.renameGroup(g.getGroupNo(), null), "null 新名原样透传（uniqueGroupName 口径），但仍写入");
-        assertNull(g.getName());
+    }
+
+    /**
+     * 契约裁决（2026-10-16）：{@code newName == null} 是**前置条件**失败 ——
+     * 与 {@code uiport.GroupVm.name} 的非空硬不变量、以及 IPC 侧 {@code newName} INVALID_PARAMS 对齐；
+     * 失败必须发生在**任何变更之前**（不写名、不退出「未命名组」提醒）。
+     */
+    @Test
+    void renameGroupRejectsNullNewNameWithoutMutation() {
+        WorkspaceModel m = new WorkspaceModel();
+        PreviewItem a = item("a.mht");
+        m.addItems(List.of(a));
+        GroupItem<PreviewItem> g = m.group(List.of(a), "组");
+        String before = g.getName();
+        assertTrue(g.isDefaultNamed());
+
+        assertThrows(NullPointerException.class, () -> m.renameGroup(g.getGroupNo(), null),
+                "null 新名违反前置条件（GroupVm 组名非空是硬不变量）");
+        assertEquals(before, g.getName(), "前置条件失败 → 组名不变");
+        assertTrue(g.isDefaultNamed(), "前置条件失败 → 不退出「未命名组」提醒");
     }
 
     /** B3-2：展开状态唯一写入口 —— 每调用恰好翻转一次（幂等 = 后端按当前状态原子翻转，快速连点 = 翻过去再翻回来）。 */

@@ -21,7 +21,7 @@ JavaFX 25 桌面 GUI：把 `.mht` / `.mhtml` / `.html` / `.htm`（含 HTML 侧�
 | **P5c 批次（2026-10-16）** | **关闭 3 个 P5b 遗留**（用户指示指挥 Codex 修复；harness 独立验收 + 亲手红控制，只本地提交）：**P5c-1 `d541bd6`**（`tools/ipc/client.mjs` 事件守卫匹配协议：白名单 = 标量/精确 FileRef/扁平 string 映射；帧上限拆为 事件 64 KiB / 响应 256 KiB；裁定 `.claude-work/D-p5c-1-范围裁定.md`；自测 35/0；10k 默认日志 `CLIENT_EXIT=0`）· **P5c-2 `b6a5ead`**（真 native GUI：`NativeGuiStateProbe` 断言 P5b-3 新增 `nameColumnWidth`/`sourceColumnWidth` 往返 **GUI_STATE_OK**（生产元数据无需修复），teeth = 削弱元数据 -> 运行期 `MissingReflectionRegistrationError`；新增 `tools/native/native-single-instance-smoke.ps1` -> 第二实例 4215 ms 自退/exit 0/`log.app.alreadyRunning`、不同 cwd 控制组两实例均存活）。仍未关闭：截图正式人工基线、真实 >64 MiB 图集、人手拖动、C 盘整盘、QML 文档归属。 |
 | **P5d 批次（2026-10-16）** | **补做三项长期未验证**（用户指示与 Codex 协作；harness 全部独立复跑）：**P5d-1 `31d5f39`**（仅 `tools/` 新增 9 文件）—— **A 截图链 JVM-vs-native**：JVM×2/native×2 共 6 组比较 + 控制组 + 红控制，该场景**逐字节一致**（4 张 PNG SHA256 全 `F70631D7…`）；**B native 端到端 GUI 冒烟**（`native-gui-e2e-smoke.ps1`：主界面可见/两列默认 50/50/来源列文本/真实导入/预览缩略图非空/生产关窗无残留，11 条 PASS + `-InjectWrongSource` 红）；**C 跨进程日志语言纯净度**（en GUI/后端/转发三路 CJK=0，zh 控制组 11/63/18，独立计数器一致 + `-InjectCjk` 红）。仓库全量 `accept-unit -Unit p5d1 -Native` **ALL GREEN（gate 1098/0 · headless 73/0 · 架构 17/0 · GUI 36/0 · native 0）**。未验证与附带发现（`MimeParser` 缺 CTE 回退 `utf-8`，**待裁决**）见台账 §80。 |
 | `MainController` | **1612** 行（上限常量 **2240**）。P3-B4 的 +8（1648→1656）已**裁决接受并记账**（装配适配器）；**P5a-3 接线切换后 1654 → 1627，P5a-8（D10a 命名配置端口化）再降至 1612** |
-| 测试 | 默认执行 **1098**（+ `headless-layer-b` **73**；2026-10-16 P5b 后实测）；架构不变式 **17** 条；产物黄金基线 **44** 份（P4-13 增 `{basename}` 两例；P4-15 只改 2 份的产物）|
+| 测试 | 默认执行 **1099**（+ `headless-layer-b` **74**；2026-10-16 renameGroup 前置条件修复后实测）；架构不变式 **17** 条；产物黄金基线 **44** 份（P4-13 增 `{basename}` 两例；P4-15 只改 2 份的产物）|
 | GUI 自动化 | zh / en **各 36 passed / 0 failed**（P5b-1/P5b-2 各 +1 步）；`tools/probes/` 探针全绿 |
 | i18n | zh_CN / en_US **各 583 键**（两份键集与占位符集合必须一致，P5b 后实测差异 = 0；+`main.source` 与 3 个单实例键）+ **22** 个 `ErrorCode` |
 | 日志键 | `log.*` **246 键**（P4-15/16/17 与 P5a-4/7 累计新增；既有键文案逐键不变） |
@@ -362,7 +362,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | 档 | 内容 | 判据 |
 |---|---|---|
 | **A**（分钟级） | `compile` + 定向单测 + 结构事实（行数 / 标记 / 直写） | 全绿；无"重排整文件"型 diff |
-| **B**（每阶段） | `mvn clean test` + 独立聚合 + `ProductBaselineTest` + `ArchitectureTest` + GUI 自动化 + 探针 + 日志键对账 | 默认 **1098/0**（2026-10-16 P5b 起）+ headless **73/0**；产物基线 **44/0**；不变式 **17/0**；GUI zh/en **36/0**（P5b 后）；探针 **16 原有** + **`LargeFileConfirmationProbe`（P4-18 新增）** 全绿（⚠️ `NonDaemonExitProbe` 判据为「60 s 内自退」而 `run-probe.ps1` 不设该超时，实际约 600 s 自然退出，`exit=0` **不得**当作「无残留风险」通过，见本节 P4-18 条）；`log.*` 键逐键不变（P4-15/16/17 只新增键）|
+| **B**（每阶段） | `mvn clean test` + 独立聚合 + `ProductBaselineTest` + `ArchitectureTest` + GUI 自动化 + 探针 + 日志键对账 | 默认 **1099/0**（2026-10-16 renameGroup 前置条件修复起）+ headless **74/0**；产物基线 **44/0**；不变式 **17/0**；GUI zh/en **36/0**（P5b 后）；探针 **16 原有** + **`LargeFileConfirmationProbe`（P4-18 新增）** 全绿（⚠️ `NonDaemonExitProbe` 判据为「60 s 内自退」而 `run-probe.ps1` 不设该超时，实际约 600 s 自然退出，`exit=0` **不得**当作「无残留风险」通过，见本节 P4-18 条）；`log.*` 键逐键不变（P4-15/16/17 只新增键）|
 | **C**（阶段收尾） | native 构建 + native 产物基线 + 截图对比 + i18n 键 | `build-native.cmd` exit 0、report `status=OK`；native 基线 **44/0**（2026-10-08 用含 P4-13/14 的**全新无头 exe** 复跑：matrix 45 行 = 表头 + 44，**PASS 44 / FAIL 0**）|
 
 **没实际跑过的项目要明确标为"未验证"，不许推断通过。**

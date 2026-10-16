@@ -12,6 +12,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -625,10 +626,13 @@ public final class WorkspaceModel {
      * <p><b>不发布变更</b>：组名不改变数据序/结构；改名后的列表刷新走
      * {@link GroupItem#addNameChangeListener} 的既有通知（值确实变化才触发）。</p>
      *
-     * @param newName 期望的新名（null / 空白名原样透传，与 {@code GroupStructure.uniqueGroupName} 一致）
+     * @param newName 期望的新名；**不得为 null**（端口/模型前置条件 —— {@code uiport.GroupVm} 的组名非空是硬不变量）；
+     *                空白名原样透传（与 {@code GroupStructure.uniqueGroupName} 一致）
      * @return 实际生效的组名（唯一化之后）；组不在顶层时返回 {@code null} 且不产生任何变更
+     * @throws NullPointerException newName 为 null（在**任何变更之前**抛出）
      */
     public String renameGroup(long groupNo, String newName) {
+        Objects.requireNonNull(newName, "newName");
         GroupItem<PreviewItem> g = groupByNo(groupNo);
         if (g == null) {
             return null;
