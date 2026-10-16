@@ -149,7 +149,8 @@ public final class GuiE2eProbe {
     }
 
     private void importFixture() {
-        ((ToggleButton)scene.lookup("#imageModeToggle")).fire();
+        var imageMode = (ToggleButton)scene.lookup("#imageModeToggle");
+        if (!imageMode.isSelected()) imageMode.fire();
         // 夹具目录：优先 -Dprobe.fixture，环境变量 MHT_FIXTURE_DIR 由 run-probe.ps1 转发；默认仓库内 fixtures。
         String input = System.getProperty("probe.fixture",
                 new java.io.File("src/test/resources/fixtures").getAbsolutePath());
@@ -167,7 +168,14 @@ public final class GuiE2eProbe {
             System.out.println("SOURCE expected=" + expected + " actual=" + sources.stream().map(Label::getText).toList());
             require(sources.stream().anyMatch(n -> n.isVisible() && expected.equals(n.getText())),
                     "source column text equals fixture directory");
-            Object item = list().getItems().stream().filter(n -> n instanceof PreviewRow).findFirst().orElseThrow();
+            // The repository directory also contains intentional failures and text-only
+            // fixtures. multi-image.mht has decodable GIF/JPEG images (single-image.mht's
+            // PNG has invalid compressed data). Also support the native smoke's fixture.
+            // List ordering is not a contract for which file can produce a thumbnail.
+            Path fixture = Path.of(input).resolve("multi-image.mht");
+            if (!Files.isRegularFile(fixture)) fixture = Path.of(input).resolve("fixture.mht");
+            String previewPath = fixture.toAbsolutePath().normalize().toString();
+            Object item = previewRow(previewPath);
             list().getSelectionModel().select(item);
             var params = new AppConfig();
             params.setEnableRegionExtraction(mode.equals("purity"));
@@ -180,9 +188,10 @@ public final class GuiE2eProbe {
                     && !((Button)scene.lookup("#previewEffectButton")).isDisabled(), () -> {
                 // Parameter refresh rebuilds the list projection. Select its current row,
                 // rather than retaining an object from the previous projection.
-                Object current = list().getItems().stream().filter(n -> n instanceof PreviewRow).findFirst().orElseThrow();
+                Object current = previewRow(previewPath);
                 list().getSelectionModel().select(current);
                 require(list().getSelectionModel().getSelectedItem() instanceof PreviewRow, "preview file selected in current projection");
+                System.out.println("PREVIEW_FIXTURE=" + previewPath);
                 System.out.println("PREVIEW_TRIGGER imageMode=" + ((ToggleButton)scene.lookup("#imageModeToggle")).isSelected()
                         + " runtimeMode=" + context.get().isImageModeEnabled() + " buttonDisabled="
                         + ((Button)scene.lookup("#previewEffectButton")).isDisabled() + " hint="
@@ -200,6 +209,12 @@ public final class GuiE2eProbe {
     }
 
     @SuppressWarnings("unchecked") private ListView<Object> list() { return (ListView<Object>)scene.lookup("#fileListView"); }
+    private PreviewRow previewRow(String path) {
+        return list().getItems().stream().filter(n -> n instanceof PreviewRow)
+                .map(n -> (PreviewRow)n)
+                .filter(row -> Path.of(row.path).toAbsolutePath().normalize().toString().equals(path))
+                .findFirst().orElseThrow(() -> new AssertionError("image preview fixture not imported: " + path));
+    }
     private static String pathOrNull(String value) { return value == null || value.isBlank() ? null : value; }
     private void closeWindow() {
         System.out.println("CLOSE_REQUEST production WindowEvent.WINDOW_CLOSE_REQUEST");
