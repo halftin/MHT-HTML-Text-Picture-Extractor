@@ -62,7 +62,8 @@ MHT-HTML-Extractor3.0/            <-- 目录名必须保持 ASCII
 ├── msvcp140*.dll  vcruntime140*.dll                         <-- VC++ 运行库（随包，免安装）
 ├── Backend/
 │   └── MhtExtractorBackend.exe    <-- 无头后端（高级用；GUI 不需要）
-├── README.md                      <-- 本文件
+├── README.md                      <-- 中文版（本文件）
+├── README.en.md                   <-- English version
 └── LICENSE                        <-- 木兰宽松许可证 v2（Mulan PSL v2）
 ```
 
