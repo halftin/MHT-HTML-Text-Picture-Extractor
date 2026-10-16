@@ -8,6 +8,7 @@ import { createInterface } from 'node:readline';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 import { exactText, golden, under, utf8 } from './path-assertions.mjs';
+import { isEventSummaryValue } from './client-guard.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
@@ -102,18 +103,21 @@ const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
 lines.on('line', line => {
   try {
     maxFrameBytes = Math.max(maxFrameBytes, Buffer.byteLength(line));
-    assert.ok(Buffer.byteLength(line) <= 64 * 1024, 'Control response/event frames must remain <=64 KiB');
     const frame = JSON.parse(line);
     assert.equal(frame.v, 1);
     assert.ok(['event', 'response', 'error'].includes(frame.type));
+    // IPC.md:342/496/508 permits inline workspacePage results of up to 256 expanded ItemVms
+    // plus snapshot references. Responses get 256 KiB; event summaries/references keep 64 KiB.
+    const maxBytes = (frame.type === 'response' ? 256 : 64) * 1024;
+    assert.ok(Buffer.byteLength(line) <= maxBytes, `${frame.type} frames must remain <=${maxBytes / 1024} KiB`);
     frames.push(frame);
     assert.ok(frames.length <= 256, 'Total protocol frames must remain <=256 for the 10k workflow');
     if (frame.type === 'event') {
       eventCounts[frame.event] = (eventCounts[frame.event] ?? 0) + 1;
       assert.ok(!frame.data?.items && !frame.data?.topLevelItems && !frame.data?.paths && !frame.data?.files,
         'Events must not push full item/path/result arrays');
-      if (frame.event !== 'ready') assert.ok(Object.values(frame.data ?? {}).every(value =>
-        value === null || typeof value !== 'object'), 'Activity events must contain only scalar summaries');
+      if (frame.event !== 'ready') assert.ok(Object.values(frame.data ?? {}).every(isEventSummaryValue),
+        'Activity events must contain only scalar summaries, exact file references, or flat string maps');
       if (frame.event === 'ready') resolveReady(frame);
     } else {
       const entry = pending.get(frame.id);
