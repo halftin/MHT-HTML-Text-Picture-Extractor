@@ -116,7 +116,8 @@ New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 Write-Output "[javac] $Probe"
 & $javac --module-path $modulePath --add-modules javafx.controls,javafx.fxml `
-    -cp "$repo\target\classes;$deps" -d $classDir $src (Join-Path $probeDir 'support\ProbeRuntime.java')
+    -cp "$repo\target\classes;$deps" -d $classDir $src `
+    (Get-ChildItem (Join-Path $probeDir 'support') -Filter '*.java' | ForEach-Object { $_.FullName })
 if ($LASTEXITCODE -ne 0) { Write-Output "[ERROR] compile failed, exit=$LASTEXITCODE"; exit $LASTEXITCODE }
 
 $parts = $Locale.Split('_')
@@ -130,6 +131,10 @@ Write-Output "[java] $Probe  locale=$Locale  out=$outDir  dialog=$Dialog"
 # defaults for code that reads Locale.getDefault().
 $extra = @()
 if ($Dialog) { $extra += '-Dprobe.dialog=true' }
+# 需要随包后端 exe 的探针（如 GuiE2eProbe）读 -Dprobe.backend；用环境变量统一喂进来。
+if ($env:MHT_BACKEND_EXE) { $extra += "-Dprobe.backend=$env:MHT_BACKEND_EXE" }
+# 需要夹具目录的探针（如 GuiE2eProbe）读 -Dprobe.fixture。
+if ($env:MHT_FIXTURE_DIR) { $extra += "-Dprobe.fixture=$env:MHT_FIXTURE_DIR" }
 if ($WorkingDirectory) { Set-Location -LiteralPath $WorkingDirectory }
 & $java --module-path $modulePath --add-modules javafx.controls,javafx.fxml `
     "-Dprobe.locale=$Locale" `

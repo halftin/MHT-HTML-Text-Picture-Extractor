@@ -109,14 +109,15 @@ public class ParamDraftProbe extends Application {
 
         // ---------- 4) R1.4: group target, mixed members -> hint appended ----------
         var backend = frontend.implementation();
-        var paths = List.of("H:/TEST/mht/probe/a.mht", "H:/TEST/mht/probe/b.mht");
+        var paths = List.of("H:/TEST/mht/probe/a.mht", "H:/TEST/mht/probe/b.mht").stream()
+                .map(path -> java.nio.file.Path.of(path).toAbsolutePath().toString()).toList();
         backend.commands().applyImportPlan(new com.mhtextractor.uiport.ImportPlanVm(
                 List.of(new com.mhtextractor.uiport.ImportPlanVm.ImportBatchVm("H:/TEST/mht/probe", null,
                         false, paths)), 0, 0, 0, 0, 0, false, false));
-        backend.commands().group(paths, "组1");
+        backend.commands().group(paths, "组"); // Port accepts a prefix and appends the group number.
         AppConfig itemParams = new AppConfig(); itemParams.setStartMarker("ITEM_ONLY");
         backend.commands().setItemParams(paths.getFirst(), false, itemParams);
-        frontend.bootstrap(new AppConfig());
+        ProbeFx.awaitCommands(frontend);
         var workspace = new com.mhtextractor.uicore.WorkspaceView(frontend);
         var group = workspace.groups().getFirst();
         var b = workspace.allItems().get(1);
@@ -128,7 +129,7 @@ public class ParamDraftProbe extends Application {
 
         // ---------- 5) R1.4: once the group has its own params, members are uniform -> no hint ----------
         backend.commands().setGroupParams(group.getGroupNo(), false, new AppConfig());
-        frontend.bootstrap(new AppConfig()); workspace.update(frontend.snapshot());
+        ProbeFx.awaitCommands(frontend); workspace.update(frontend.snapshot());
         pane.load(null, null, false, new ParamScope.GroupTarget(group));
         check("bar-group-uniform", expectedGroup.equals(bar.currentText()),
                 "bar=\"" + bar.currentText() + "\" expected=\"" + expectedGroup + "\"");

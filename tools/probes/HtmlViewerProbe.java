@@ -194,11 +194,10 @@ public class HtmlViewerProbe extends Application {
         controlNode = scene.lookup("#inputFolderField");
         modalPane = findModalPane();
         host = SidePanelHost.of(anchor);
-        guiStateKeysBefore = guiStateKeySet();
 
         System.out.println("locale=" + I18n.currentLocale() + "  window=" + stage.getWidth() + "x"
                 + stage.getHeight() + "  host=" + (host != null)
-                + "  gui-state keys before = " + guiStateKeysBefore);
+                + "  gui-state keys at startup = " + guiStateKeySet());
         check("probe can resolve #statusLabel / #paramSettingsButton / #inputFolderField / ModalPane",
                 anchor != null && paramSettingsButton != null && controlNode != null && modalPane != null);
         check("SidePanelHost is installed (App.start wiring)", host != null);
@@ -329,6 +328,10 @@ public class HtmlViewerProbe extends Application {
 
     /** 开查看器之前先记下三个点上的命中结果与场景坐标（控制组）。 */
     private void recordBaselinePicks() {
+        // Mode selection may create gui-state.json on a fresh runtime. Capture the
+        // viewer's persistence baseline after setup, immediately before opening it.
+        guiStateKeysBefore = guiStateKeySet();
+        System.out.println("gui-state keys before viewer = " + guiStateKeysBefore);
         double w = overlay.getWidth();
         double h = overlay.getHeight();
         leftPoint = overlay.localToScene(w * 0.25, h * 0.5);
@@ -532,8 +535,9 @@ public class HtmlViewerProbe extends Application {
      */
     private void selectFirstRow() {
         invoke(controller, "importFromFolder", new Class<?>[]{String.class}, FIXTURES_DIR);
-        sleepMs(1200);
         ListView<?> files = (ListView<?>) scene.lookup("#fileListView");
+        ProbeFx.await(() -> files != null && !files.getItems().isEmpty()
+                && !ProbeRuntime.controllerPort().queries().workspace().details().importing(), 3000);
         if (files == null || files.getItems().isEmpty()) {
             check("probe could import the fixtures so a list row can be selected", false);
             return;
@@ -664,14 +668,6 @@ public class HtmlViewerProbe extends Application {
 
     private static void vCopy(HtmlSourceViewer v) {
         invoke(v, "copySelection", new Class<?>[0]);
-    }
-
-    private static void sleepMs(long ms) {
-        try {
-            Thread.sleep(ms);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
     }
 
     private void checkR31Coexist() {
@@ -2698,7 +2694,7 @@ public class HtmlViewerProbe extends Application {
 
     /** 夹具目录（11 个平铺 .mht；与 SidePanelProbe 同一个来源）。 */
     private static final String FIXTURES_DIR =
-            new File("src/test/resources/fixtures").getAbsolutePath();
+            new File(System.getProperty("probe.fixtures", "src/test/resources/fixtures")).getAbsolutePath();
 
     /** 5000 行、每行都含 {@link #SEARCH_TOKEN}（于是"下一个"必然换行）。 */
     private String bigSource() {

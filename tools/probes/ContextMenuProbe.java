@@ -85,6 +85,7 @@ public class ContextMenuProbe extends Application {
         this.stage = primaryStage;
         I18n.setLocale(I18n.parseLocale(System.getProperty("probe.locale", "zh_CN")));
         Platform.setImplicitExit(false);
+        Application.setUserAgentStylesheet(new atlantafx.base.theme.NordLight().getUserAgentStylesheet());
 
         // 与 App.start() 同构：FXML + i18n bundle（initialize() 会装配右键菜单）
         FXMLLoader loader = new FXMLLoader(App.class.getResource("/com/mhtextractor/gui/view/MainView.fxml"));
@@ -96,6 +97,7 @@ public class ContextMenuProbe extends Application {
         Node mainRoot = loader.load();
         this.controller = loader.getController();
         this.scene = new Scene(new StackPane(mainRoot));
+        scene.getStylesheets().add(App.class.getResource("/custom.css").toExternalForm());
         stage.setScene(scene);
         stage.setWidth(1100);
         stage.setHeight(700);
@@ -111,35 +113,29 @@ public class ContextMenuProbe extends Application {
             }
         }, 25000);
 
-        Timer timer = new Timer("context-menu-probe", true);
-        timer.schedule(at(400, this::runStaticAssertions), 400);
-        timer.schedule(at(550, this::applyTextChecks), 550);
-        timer.schedule(at(700, this::r7CopyApplyEndToEnd), 700);
-        timer.schedule(at(1200, this::behaviorShowA), 1200);
-        timer.schedule(at(1700, this::behaviorFireA), 1700);
-        timer.schedule(at(2200, this::behaviorShowB), 2200);
-        timer.schedule(at(2700, this::behaviorFireB), 2700);
-        timer.schedule(at(3200, this::finish), 3200);
+        scheduleStep(List.of(this::runStaticAssertions, this::applyTextChecks, this::r7CopyApplyEndToEnd,
+                this::behaviorShowA, this::behaviorFireA, this::behaviorShowB, this::behaviorFireB,
+                this::finish), 0);
     }
 
     /**
-     * 定时步骤：{@code Timer} 线程不能碰 JavaFX（{@code ContextMenu.show/hide} 会抛
-     * {@code Not on FX application thread} —— 实测），故一律转投 FX 线程；{@code runLater} 是 FIFO，
-     * 步骤顺序不变。
+     * Only schedule the next step after the current one returns: nested FX waits must not
+     * let a later timer step reenter the current fixture setup or finish prematurely.
      */
-    private TimerTask at(long delay, Runnable body) {
-        return new TimerTask() {
-            @Override public void run() {
-                Platform.runLater(() -> {
-                    try {
-                        body.run();
-                    } catch (Throwable t) {
-                        check("step threw: " + t, false);
-                        t.printStackTrace(System.out);
-                    }
-                });
+    private void scheduleStep(List<Runnable> steps, int index) {
+        if (index >= steps.size()) return;
+        var pause = new javafx.animation.PauseTransition(javafx.util.Duration.millis(
+                index == 0 ? 400 : index < 3 ? 150 : 500));
+        pause.setOnFinished(ignored -> Platform.runLater(() -> {
+            try {
+                steps.get(index).run();
+            } catch (Throwable t) {
+                check("step threw: " + t, false);
+                t.printStackTrace(System.out);
             }
-        };
+            scheduleStep(steps, index + 1);
+        }));
+        pause.play();
     }
 
     // ==================== t=400ms：不需要菜单弹出的全部断言 ====================
@@ -444,7 +440,8 @@ public class ContextMenuProbe extends Application {
 
     private com.mhtextractor.uicore.FrontendPort frontend;
     private PreviewRow detached(String name) {
-        return new PreviewRow(new com.mhtextractor.uiport.ItemVm("H:/TEST/mht/probe/" + name + ".mht",
+        return new PreviewRow(new com.mhtextractor.uiport.ItemVm(
+                java.nio.file.Path.of("H:/TEST/mht/probe", name + ".mht").toAbsolutePath().toString(),
                 name + ".mht", false, false, 0, com.mhtextractor.uiport.UpdateKind.NONE), ignored -> {});
     }
     private PreviewRow newPreview(String name) throws Exception {
@@ -455,21 +452,13 @@ public class ContextMenuProbe extends Application {
         return (com.mhtextractor.uicore.WorkspaceView) fieldOf(controller, "ws");
     }
     private void sync() throws Exception {
-        frontend.bootstrap(new AppConfig()); view().update(frontend.snapshot());
+        ProbeFx.awaitCommands(frontend); view().update(frontend.snapshot());
     }
     private void setChecked(PreviewRow row, boolean value) throws Exception {
         frontend.implementation().commands().setChecked(List.of(row.path), value); sync();
     }
     private void awaitCommands() throws Exception {
-        var done = new java.util.concurrent.CompletableFuture<Void>();
-        frontend.execute(port -> null, ignored -> done.complete(null));
-        Object key = new Object();
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
-        var timer = new javafx.animation.Timeline(new javafx.animation.KeyFrame(javafx.util.Duration.millis(10), ignored -> {
-            if (done.isDone() || System.nanoTime() >= deadline) Platform.exitNestedEventLoop(key, null);
-        }));
-        timer.setCycleCount(javafx.animation.Animation.INDEFINITE); timer.play();
-        Platform.enterNestedEventLoop(key); timer.stop(); done.get(1, java.util.concurrent.TimeUnit.SECONDS);
+        ProbeFx.awaitCommands(frontend);
     }
 
     private static AppConfig params(String marker) {
@@ -542,8 +531,13 @@ public class ContextMenuProbe extends Application {
                             false, rows.stream().map(row -> row.path).toList())), 0, 0, 0, 0, 0, false, false)); sync();
         }
         GroupRow<PreviewRow> group(List<PreviewRow> rows, String name) throws Exception {
+            var before = view().groups().stream().map(GroupRow::getGroupNo).toList();
             frontend.implementation().commands().group(rows.stream().map(row -> row.path).toList(), name); sync();
-            return view().groups().stream().filter(group -> group.getName().equals(name)).findFirst().orElseThrow();
+            var created = view().groups().stream().filter(group -> !before.contains(group.getGroupNo()))
+                    .findFirst().orElseThrow();
+            // group() takes a prefix, whereas this fixture helper promises an exact name.
+            frontend.implementation().commands().renameGroup(created.getGroupNo(), name); sync();
+            return created;
         }
         void removeItems(List<PreviewRow> rows) throws Exception {
             frontend.implementation().commands().removeItems(rows.stream().map(row -> row.path).toList()); sync();

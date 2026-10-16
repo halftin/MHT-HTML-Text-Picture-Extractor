@@ -61,7 +61,22 @@ public final class GuiE2eProbe {
         frontend = new FrontendPort(ipc, Platform::runLater, context::set, true);
         Thread.ofPlatform().daemon().name("probe-startup").start(() -> {
             try {
+                // 随包后端 exe：优先 -Dprobe.backend，其次环境变量 MHT_BACKEND_EXE，再次**仓库同级**的
+                // mht-resource-extractor-dist/Backend（相对路径，不写死机器专有路径）；都找不到就如实报错 ——
+                // 原来直接 ProcessBuilder(null, …) 会抛 NPE，看不出缺什么。
                 String exe = System.getProperty("probe.backend");
+                if (exe == null || exe.isBlank()) exe = System.getenv("MHT_BACKEND_EXE");
+                if (exe == null || exe.isBlank()) {
+                    var rel = java.nio.file.Path.of("..", "mht-resource-extractor-dist", "Backend",
+                            "MhtExtractorBackend.exe").toAbsolutePath().normalize();
+                    if (java.nio.file.Files.isRegularFile(rel)) exe = rel.toString();
+                }
+                if (exe == null || exe.isBlank()
+                        || !java.nio.file.Files.isRegularFile(java.nio.file.Path.of(exe))) {
+                    throw new IllegalStateException("GuiE2eProbe 需要随包后端 exe：请用 "
+                            + "-Dprobe.backend=<MhtExtractorBackend.exe> 或环境变量 MHT_BACKEND_EXE 指定"
+                            + "（默认还会查找仓库同级的 mht-resource-extractor-dist/Backend/）。");
+                }
                 var command = new ProcessBuilder(exe, "-Djava.io.tmpdir=" + System.getProperty("java.io.tmpdir"),
                         "-Dmht.logs.root=" + work.resolve("logs"), "--serve", "--locale", saved.getLocale())
                         .directory(work.toFile()).redirectError(work.resolve("backend.stderr.log").toFile());
@@ -88,7 +103,16 @@ public final class GuiE2eProbe {
         frontend.events().subscribe(event -> {
             if (event.getClass().getSimpleName().startsWith("Preview"))
                 System.out.println("PREVIEW_EVENT=" + event.getClass().getSimpleName());
-            if (event instanceof PortEvent.PreviewLoadFailed failed) fail(new AssertionError("preview failed: " + failed.detail()));
+            // fixtures 里有一个**故意**解析失败的文件：bad-charset.mht（声明的字符集不存在 → FAILED，见台账 §83.3）。
+            // 只放行这一条**已知**错误；其它任何预览失败仍然算红。
+            if (event instanceof PortEvent.PreviewLoadFailed failed) {
+                String detail = String.valueOf(failed.detail());
+                if (detail.contains("x-nonexistent-charset")) {
+                    System.out.println("EXPECTED_PREVIEW_FAILURE=" + detail);
+                } else {
+                    fail(new AssertionError("preview failed: " + detail));
+                }
+            }
             if (event instanceof PortEvent.BackendLog entry) safely(() -> {
                 backendLogs++;
                 Files.writeString(work.resolve("backend-events.txt"), entry.toString() + "\n",
@@ -126,7 +150,13 @@ public final class GuiE2eProbe {
 
     private void importFixture() {
         ((ToggleButton)scene.lookup("#imageModeToggle")).fire();
-        String input = System.getProperty("probe.fixture");
+        // 夹具目录：优先 -Dprobe.fixture，环境变量 MHT_FIXTURE_DIR 由 run-probe.ps1 转发；默认仓库内 fixtures。
+        String input = System.getProperty("probe.fixture",
+                new java.io.File("src/test/resources/fixtures").getAbsolutePath());
+        if (input == null || input.isBlank() || !new java.io.File(input).isDirectory()) {
+            throw new IllegalStateException("GuiE2eProbe 需要一个夹具目录：请用 -Dprobe.fixture=<dir>"
+                    + "（或用 MHT_FIXTURE_DIR）指定；默认 src/test/resources/fixtures。");
+        }
         ((TextField)scene.lookup("#inputFolderField")).setText(input);
         await("fixture directory imported into real list", () -> !list().getItems().isEmpty()
                 && !frontend.queries().workspace().details().importing(), () -> {

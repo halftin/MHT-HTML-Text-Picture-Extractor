@@ -70,7 +70,7 @@ public class BackendEventsProbe extends Application {
                         .map(p -> Path.of(p).toAbsolutePath().toString()).collect(java.util.stream.Collectors.joining(File.pathSeparator));
                 ipc.start(() -> new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin/java.exe").toString(),
                         "-Djava.io.tmpdir=" + System.getProperty("java.io.tmpdir"), "-Dlogback.configurationFile=logback-headless.xml",
-                        "-cp", cp, "com.mhtextractor.backend.BackendEventsWireFixture").directory(work.toFile()),
+                        "-cp", cp, "com.mhtextractor.backend.ProbeBackendEventsFixture").directory(work.toFile()),
                         java.time.Duration.ofSeconds(10));
                 Path source = Files.writeString(work.resolve("input.html"), "<html><body>IPC toast</body></html>");
                 ipc.commands().importPaths(List.of(source.toString()), "drag", false);
