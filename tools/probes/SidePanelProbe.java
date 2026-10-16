@@ -955,21 +955,33 @@ public class SidePanelProbe extends Application {
         check("step 4 gate-order pre: at least two top-level items to merge (items=" + items.size() + ")",
                 items.size() >= 2);
         if (items.size() >= 2) {
+            // 🚨 P5a-3 起勾选归**模型（端口）**所有：经 PreviewRow.setSelected 走的是端口异步执行器，
+            //   探针从非 FX 线程驱动时未必落地（实测 rowChecked/portChecked 恒 0）。
+            //   这里与生产同源：**直接经端口下令**，再轮询等模型回写，最后才刷新按钮。
+            var commands = ProbeRuntime.controllerPort().commands();
             for (com.mhtextractor.uicore.PreviewRow i : allVisibleItems()) {
-                i.setSelected(false);
+                commands.setChecked(java.util.List.of(i.path), false);
             }
-            items.get(0).setSelected(true);
-            items.get(1).setSelected(true);
+            commands.setChecked(java.util.List.of(items.get(0).path, items.get(1).path), true);
+            boolean checked = awaitPortChecked(2, 3000);
             invoke(controller, "updateListButtons", new Class<?>[]{});
             javafx.scene.control.Button groupButton =
                     (javafx.scene.control.Button) scene.lookup("#groupButton");
-            check("step 4 gate-order pre: the merge button is enabled",
+            check("step 4 gate-order pre: the merge button is enabled (rowChecked=" + checkedCount()
+                            + ", portChecked=" + portCheckedCount() + ", awaited=" + checked
+                            + ", button=" + (groupButton != null) + ")",
                     groupButton != null && !groupButton.isDisabled());
             if (groupButton != null && !groupButton.isDisabled()) {
                 groupButton.fire();
+                // 分组命令同样经端口**异步**生效：不推进队列就会读到"组还不存在"（级联 4 条红）。
+                long groupDeadline = System.currentTimeMillis() + 3000;
+                while (manualGroupName() == null && System.currentTimeMillis() < groupDeadline) {
+                    pumpFx(10);
+                }
             }
         }
-        check("step 4 gate-order pre: a default-named manual group now exists",
+        check("step 4 gate-order pre: a default-named manual group now exists (name="
+                        + manualGroupName() + ")",
                 manualGroupName() != null);
         makeDirty();
     }
@@ -986,7 +998,12 @@ public class SidePanelProbe extends Application {
 
     /** 草稿提交后（草稿门放行），未命名组门照常拦截 —— 证明顺序是串行、前者不吞后者。 */
     private void checkUnnamedGateAfterCommit() {
-        startButton.fire();   // 链是 FX 同步的：deny → R1.6 参数卡 → 草稿门（已干净，放行）→ 未命名组门
+        startButton.fire();   // 链：deny → R1.6 参数卡 → 草稿门（已干净，放行）→ 未命名组门
+        // 🚨 P5a-3 后这条链经**端口（异步）**走，不再是 FX 同步的：不推进队列就看不到卡片。
+        long gateDeadline = System.currentTimeMillis() + 3000;
+        while (!cardShown() && System.currentTimeMillis() < gateDeadline) {
+            pumpFx(10);
+        }
         String expected = I18n.get("group.unnamedConfirm", "names", manualGroupName());
         check("step 4 gate order: after the draft is committed, the unnamed-group gate fires (card="
                 + cardShown() + ")", cardShown() && expected.equals(cardMessage()));
@@ -994,6 +1011,10 @@ public class SidePanelProbe extends Application {
                 NotificationHost.hasPendingDecision(anchor));
         snapshot("unnamed-group-card");
         check("step 4 gate order: cancel on the unnamed card", clickCardCancel());
+        long runDeadline = System.currentTimeMillis() + 2000;
+        while (extractionRunning() && System.currentTimeMillis() < runDeadline) {
+            pumpFx(10);
+        }
         check("step 4 gate order: canceling the unnamed card aborts extraction (running="
                 + extractionRunning() + ")", !extractionRunning());
     }
@@ -1112,7 +1133,9 @@ public class SidePanelProbe extends Application {
     private void prepareCloseGate() {
         // 走完清缓存分支、让窗口显示出来；注意顺序：清缓存是异步的，但 test.mode 下同步走完
         Object lifecycle = field(controller, "workspaceLifecycle");
-        invoke(lifecycle, "clearPreviewCache", new Class<?>[]{});
+        // 🚨 P5a-3 后清缓存要等经 runLater 送达的"后端已关闭"回调：在 FX 线程上直接调必然 30 s 超时。
+        boolean cleared = runOffFx(() -> invoke(lifecycle, "clearPreviewCache", new Class<?>[]{}), 10000);
+        System.out.println("      (prepareCloseGate: clearPreviewCache returned=" + cleared + ")");
         if (!stage.isShowing()) {
             stage.show();
             sleep(300);
@@ -1500,7 +1523,11 @@ public class SidePanelProbe extends Application {
             } catch (NoSuchMethodException ignored) {
                 // 继续沿父链找（如 selectIndex 声明在 MultipleSelectionModelBase，实现类是它子类）
             } catch (Exception e) {
-                System.out.println("      (reflect " + name + " failed: " + e + ")");
+                // InvocationTargetException 会把被调方法的真实异常包一层：必须打 cause，否则只见类名、无从定位。
+                Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ite && ite.getCause() != null
+                        ? ite.getCause() : e;
+                System.out.println("      (reflect " + name + " failed: " + cause.getClass().getName()
+                        + ": " + cause.getMessage() + ")");
                 return null;
             }
         }
@@ -1517,6 +1544,78 @@ public class SidePanelProbe extends Application {
     private long visibleCount() {
         Object r = invoke(controller, "visibleCount", new Class<?>[]{});
         return r instanceof Long l ? l : -1L;
+    }
+
+    /** 端口侧（模型）已勾选的顶层条目数 —— 与行字段对照，区分“命令没到模型”与“行没回写”。 */
+    private long portCheckedCount() {
+        try {
+            return ProbeRuntime.controllerPort().queries().workspace().topLevelItems().stream()
+                    .filter(com.mhtextractor.uiport.ItemVm::checked).count();
+        } catch (Throwable t) { return -1; }
+    }
+
+    /** 当前被勾选的行数（读模型回写后的行字段）。 */
+    private long checkedCount() {
+        return allVisibleItems().stream().filter(i -> i.selected).count();
+    }
+
+    /** 轮询等待**端口/模型**侧勾选到位（勾选命令经执行器异步生效）。 */
+    private boolean awaitPortChecked(int min, long timeoutMs) {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            if (portCheckedCount() >= min) return true;
+            pumpFx(10);
+        }
+        return false;
+    }
+
+    /**
+     * 轮询等待勾选回写到位。
+     *
+     * <p>勾选经端口异步（探针里 {@code FrontendPort} 用 {@code Platform::runLater} 派发），所以
+     * “设完立即断言”是**同帧断言**——见 CLAUDE.md §6 的探针时序纪律。本方法按 10 ms 步长轮询到
+     * 超时为止；断言本身不放松，只是改在“状态确实到位”之后再判。</p>
+     */
+    private boolean awaitChecked(int min, long timeoutMs) {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            if (checkedCount() >= min) return true;
+            pumpFx(10);
+        }
+        return false;
+    }
+
+    /**
+     * 在 FX 线程上"推进"事件队列若干毫秒。
+     *
+     * <p>🚨 本探针的步骤跑在 <b>FX 线程</b>上（见 {@code start()}），而 P5a-3 之后端口结果与关闭回调
+     * 都靠 {@code Platform.runLater} 送达 —— 在 FX 线程上 {@code Thread.sleep} 死等会让队列**永不推进**：
+     * 表现为勾选命令"没生效"（{@code portChecked=0}）或 {@code clearPreviewCache} 的 30 s 超时。
+     * 嵌套事件循环是公开 API（{@code Platform.enterNestedEventLoop}），期间队列照常被处理。</p>
+     */
+    private static void pumpFx(long ms) {
+        long deadline = System.currentTimeMillis() + ms;
+        do {
+            Object key = new Object();
+            Platform.runLater(() -> Platform.exitNestedEventLoop(key, null));
+            Platform.enterNestedEventLoop(key);
+        } while (System.currentTimeMillis() < deadline);
+    }
+
+    /**
+     * 在<b>后台线程</b>上执行 body，同时在 FX 线程上推进队列直到它结束（返回是否已完成）。
+     *
+     * <p>生产 {@code WorkspaceLifecycleController.clearPreviewCache()} 会等"后端已关闭"回调（30 s 上限），
+     * 而该回调经 {@code Platform.runLater} 送达 —— 在 FX 线程上等它必然超时（P5a-3 前是同步的，故此前可过）。</p>
+     */
+    private static boolean runOffFx(Runnable body, long timeoutMs) {
+        Thread worker = Thread.ofPlatform().daemon().name("probe-offfx").unstarted(body);
+        worker.start();
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (worker.isAlive() && System.currentTimeMillis() < deadline) {
+            pumpFx(10);
+        }
+        return !worker.isAlive();
     }
 
     private static void sleep(long ms) {

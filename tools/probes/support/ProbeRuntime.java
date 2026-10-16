@@ -34,7 +34,12 @@ final class ProbeRuntime {
     static void close(FrontendPort port, Runnable finished) {
         Owner owner = owners.remove(port);
         Thread.ofPlatform().daemon().name("probe-backend-shutdown").start(() -> {
-            if (owner != null) owner.close(); Platform.runLater(finished);
+            long t0 = System.currentTimeMillis();
+            if (owner != null) owner.close();
+            long t1 = System.currentTimeMillis();
+            Platform.runLater(finished);
+            // 诊断：区分“owner.close() 卡住”与“回调没送达 FX”（clearPreviewCache 的 30 s 超时就在这等）。
+            System.out.println("      (probe-backend-close: ownerClose=" + (t1 - t0) + " ms, owner=" + (owner != null) + ")");
         });
     }
 
