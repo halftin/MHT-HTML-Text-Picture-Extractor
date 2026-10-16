@@ -23,7 +23,7 @@ JavaFX 25 桌面 GUI：把 `.mht` / `.mhtml` / `.html` / `.htm`（含 HTML 侧�
 | `MainController` | **1612** 行（上限常量 **2240**）。P3-B4 的 +8（1648→1656）已**裁决接受并记账**（装配适配器）；**P5a-3 接线切换后 1654 → 1627，P5a-8（D10a 命名配置端口化）再降至 1612** |
 | 测试 | 默认执行 **1101**（+ `headless-layer-b` **74**；2026-10-16 P5d-2 后实测）；架构不变式 **17** 条；产物黄金基线 **46** 份（P4-13 增 `{basename}` 两例；P5d-2 改 `text-boundary` 2 份 + 新增 `text-unparseable` 2 份作为 CLI exit-1 锚点）|
 | GUI 自动化 | zh / en **各 36 passed / 0 failed**（P5b-1/P5b-2 各 +1 步）；`tools/probes/` 探针全绿 |
-| i18n | zh_CN / en_US **各 583 键**（两份键集与占位符集合必须一致，P5b 后实测差异 = 0；+`main.source` 与 3 个单实例键）+ **22** 个 `ErrorCode` |
+| i18n | zh_CN / en_US **各 584 键**（两份键集与占位符集合必须一致，P5b 后实测差异 = 0；+`main.source` 与 3 个单实例键）+ **22** 个 `ErrorCode` |
 | 日志键 | `log.*` **247 键**（P4-15/16/17 与 P5a-4/7 累计新增；P5d-2 新增 `log.mimeparser.07`（未知传输编码兜底）；既有键文案逐键不变） |
 | native | **2026-10-15 P5a-6 Gate C 实测**：默认 `dynamic`：**23 文件 ≈108 MB**（随包后端在 `Backend\`、前端 exe + DLL 在根）；`static`：**16 文件 ≈138.9 MB**（**零 JavaFX DLL**）；**`NATIVE_TARGET=headless`（P4-3）**：**5 文件 ≈40 MB**（`MhtExtractorBackend.exe`，**零 JavaFX**）。三配方均 `build-native.cmd` exit 0 + `status=OK` + 卡片冒烟 `5 passed, 0 failed`；产物基线 native/JVM 各 **44/0**；⚠️ **两个配方共用同一 dist 目录，测体积前必须先清空 dist**（否则计数被上一配方残留污染） |
 | 规模 | 主源集 **230** 个 java 文件（其中 `gui` **36**、`uicore` **18**、`uiport` **29**、`app` **53**、`model` **10**、`backend` **19**、`config` **1**、`util` **12**）/ 测试源集 **150** 个（2026-10-16 P5b 后实测；P5b 新增 gui **3** / uicore **3** / 测试 **3** —— 缩略图驻留、来源列与列宽、单实例，均落在框架无关层或新协作者类） |
