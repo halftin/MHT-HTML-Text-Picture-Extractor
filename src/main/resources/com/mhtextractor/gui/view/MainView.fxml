@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import com.mhtextractor.gui.component.LogTextArea?>
+<?import atlantafx.base.controls.ToggleSwitch?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.mhtextractor.gui.controller.MainController"
+            prefWidth="900" prefHeight="650">
+
+    <!-- 顶部：控制栏 -->
+    <top>
+        <VBox spacing="10">
+            <padding>
+                <Insets top="10" right="10" bottom="10" left="10"/>
+            </padding>
+
+            <!-- 标题栏 -->
+            <HBox spacing="10" alignment="CENTER_LEFT">
+                <Label text="模式选择:"/>
+                <ToggleButton fx:id="textModeToggle" text="文本提取">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-file-alt" iconSize="16"/>
+                    </graphic>
+                </ToggleButton>
+                <ToggleButton fx:id="imageModeToggle" text="图片提取">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-file-image" iconSize="16"/>
+                    </graphic>
+                </ToggleButton>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label text="MHT 资源提取器" styleClass="heading-3"/>
+            </HBox>
+
+            <!-- 输入/输出目录 -->
+            <GridPane hgap="10" vgap="8">
+                <columnConstraints>
+                    <ColumnConstraints minWidth="80" prefWidth="80"/>
+                    <ColumnConstraints hgrow="ALWAYS" minWidth="200"/>
+                    <ColumnConstraints minWidth="100" prefWidth="100"/>
+                </columnConstraints>
+
+                <Label text="输入目录:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                <TextField fx:id="inputFolderField" promptText="选择包含 .mht 文件的目录" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+                <Button fx:id="browseInputButton" text="浏览..." onAction="#onBrowseInput" GridPane.rowIndex="0" GridPane.columnIndex="2">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-folder-open" iconSize="14"/>
+                    </graphic>
+                </Button>
+
+                <Label text="输出目录:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                <TextField fx:id="outputFolderField" promptText="选择输出目录" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                <Button fx:id="browseOutputButton" text="浏览..." onAction="#onBrowseOutput" GridPane.rowIndex="1" GridPane.columnIndex="2">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-folder-open" iconSize="14"/>
+                    </graphic>
+                </Button>
+            </GridPane>
+        </VBox>
+    </top>
+
+    <!-- 中间：参数配置区 -->
+    <center>
+        <TabPane fx:id="configTabPane" tabClosingPolicy="UNAVAILABLE">
+
+            <!-- 文本提取配置 -->
+            <Tab text="文本提取参数" fx:id="textConfigTab">
+                <ScrollPane fitToWidth="true">
+                    <VBox spacing="12">
+                        <padding>
+                            <Insets top="10" right="10" bottom="10" left="10"/>
+                        </padding>
+
+                        <!-- 章节与标题 -->
+                        <TitledPane fx:id="textTitlePane" text="章节与标题" expanded="false">
+                            <VBox spacing="8">
+                                <ToggleSwitch fx:id="addChapterNumberCheck" text="自动添加章节序号（第一章、第二章...）"/>
+                                <ToggleSwitch fx:id="enableTitleExtractCheck" text="提取隐藏标题"/>
+                                <GridPane hgap="8" vgap="4">
+                                    <columnConstraints>
+                                        <ColumnConstraints minWidth="100" prefWidth="100"/>
+                                        <ColumnConstraints hgrow="ALWAYS"/>
+                                    </columnConstraints>
+                                    <Label text="标题起始:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                    <TextField fx:id="titleStartMarkerField" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+                                    <Label text="标题结束:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                    <TextField fx:id="titleEndMarkerField" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                                </GridPane>
+                                <ToggleSwitch fx:id="titleUseRegexCheck" text="标题标记使用正则表达式"/>
+                            </VBox>
+                        </TitledPane>
+
+                        <!-- 内容限定 -->
+                        <TitledPane fx:id="textContentLimitPane" text="内容限定" expanded="false">
+                            <VBox spacing="8">
+                                <ToggleSwitch fx:id="enableLimitCheck" text="启用内容区域限定"/>
+                                <GridPane hgap="8" vgap="4">
+                                    <columnConstraints>
+                                        <ColumnConstraints minWidth="100" prefWidth="100"/>
+                                        <ColumnConstraints hgrow="ALWAYS"/>
+                                    </columnConstraints>
+                                    <Label text="起始标记:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                    <TextField fx:id="startMarkerField" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+                                    <Label text="结束标记:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                    <TextField fx:id="endMarkerField" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                                </GridPane>
+                                <ToggleSwitch fx:id="useRegexCheck" text="标记使用正则表达式"/>
+                            </VBox>
+                        </TitledPane>
+
+                        <!-- 自定义模板 -->
+                        <TitledPane fx:id="textTemplatePane" text="自定义模板" expanded="false">
+                            <VBox spacing="8">
+                                <ToggleSwitch fx:id="enableTemplateCheck" text="启用自定义模板"/>
+                                <GridPane hgap="8" vgap="4">
+                                    <columnConstraints>
+                                        <ColumnConstraints minWidth="100" prefWidth="100"/>
+                                        <ColumnConstraints hgrow="ALWAYS"/>
+                                    </columnConstraints>
+                                    <Label text="开头模板:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                    <TextField fx:id="startTemplateField" promptText="&#10; ========== START ==========&#10; " GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+                                    <Label text="结尾模板:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                    <TextField fx:id="endTemplateField" promptText="&#10; ========== END ==========&#10; " GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                                </GridPane>
+                                <Label text="支持变量：{filename} {datetime} {date} {time} | 按 Enter 键插入 \n 换行符" styleClass="text-muted"/>
+                            </VBox>
+                        </TitledPane>
+
+
+
+                        <!-- 输出模式 -->
+                        <TitledPane fx:id="textOutputModePane" text="输出模式" expanded="false">
+                            <VBox spacing="8">
+                                <ToggleSwitch fx:id="separateFilesCheck" text="每个文件输出到独立 TXT（不勾选则合并为一个文件）"/>
+                                <ToggleSwitch fx:id="autoFixEncodingCheck" text="自动修复编码乱码"/>
+                            </VBox>
+                        </TitledPane>
+                    </VBox>
+                </ScrollPane>
+            </Tab>
+
+            <!-- 图片提取配置 -->
+            <Tab text="图片提取参数" fx:id="imageConfigTab">
+                <ScrollPane fitToWidth="true">
+                    <VBox spacing="12">
+                        <padding>
+                            <Insets top="10" right="10" bottom="10" left="10"/>
+                        </padding>
+
+                        <!-- 名称提取 -->
+                        <TitledPane fx:id="imageNamePane" text="名称提取" expanded="false">
+                            <VBox spacing="8">
+                                <ToggleSwitch fx:id="imageNameExtractCheck" text="启用图片文件夹名称提取"/>
+                                <GridPane hgap="8" vgap="4">
+                                    <columnConstraints>
+                                        <ColumnConstraints minWidth="100" prefWidth="100"/>
+                                        <ColumnConstraints hgrow="ALWAYS"/>
+                                    </columnConstraints>
+                                    <Label text="起始标记:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                    <TextField fx:id="imageNameStartField" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+                                    <Label text="结束标记:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                    <TextField fx:id="imageNameEndField" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                                </GridPane>
+                            </VBox>
+                        </TitledPane>
+
+                        <!-- 区域限定 -->
+                        <TitledPane fx:id="imageRegionPane" text="内容区域限定" expanded="false">
+                            <VBox spacing="8">
+                                <ToggleSwitch fx:id="imageRegionExtractCheck" text="启用区域限定"/>
+                                <GridPane hgap="8" vgap="4">
+                                    <columnConstraints>
+                                        <ColumnConstraints minWidth="100" prefWidth="100"/>
+                                        <ColumnConstraints hgrow="ALWAYS"/>
+                                    </columnConstraints>
+                                    <Label text="起始标记:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                    <TextField fx:id="imageRegionStartField" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+                                    <Label text="结束标记:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                    <TextField fx:id="imageRegionEndField" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                                </GridPane>
+                            </VBox>
+                        </TitledPane>
+
+                        <!-- 图片处理 -->
+                        <TitledPane fx:id="imageProcessPane" text="图片处理选项" expanded="false">
+                            <VBox spacing="8">
+                                <ToggleSwitch fx:id="imageRenameCheck" text="批量重命名图片（001.jpg、002.jpg...）"/>
+                                <ToggleSwitch fx:id="imageZipCheck" text="ZIP 打包"/>
+                                <ToggleSwitch fx:id="imageCbzCheck" text="CBZ 打包"/>
+                            </VBox>
+                        </TitledPane>
+
+                        <!-- 输出模式 -->
+                        <TitledPane fx:id="imageOutputModePane" text="输出模式" expanded="false">
+                            <VBox spacing="8">
+                                <ToggleSwitch fx:id="singleOutputCheck" text="所有图片合并到一个目录"/>
+                            </VBox>
+                        </TitledPane>
+
+                        <!-- 性能 -->
+                        <TitledPane fx:id="imagePerformancePane" text="性能" expanded="false">
+                            <VBox spacing="8">
+                                <ToggleSwitch fx:id="highSpeedMemoryCheck" text="高速内存模式（开启后占用大量内存）"/>
+                            </VBox>
+                        </TitledPane>
+                    </VBox>
+                </ScrollPane>
+            </Tab>
+        </TabPane>
+    </center>
+
+    <!-- 底部：日志/进度/按钮 -->
+    <bottom>
+        <VBox spacing="8">
+            <padding>
+                <Insets top="5" right="10" bottom="10" left="10"/>
+            </padding>
+
+            <!-- 进度条 -->
+            <ProgressBar fx:id="progressBar" progress="0" prefWidth="860" visible="false"/>
+            <Label fx:id="statusLabel" text="就绪" styleClass="text-small"/>
+
+            <!-- 完成后操作 -->
+            <ToggleSwitch fx:id="openFolderAfterCompleteCheck" text="提取完成后打开输出文件夹"/>
+
+
+            <!-- 操作按钮 -->
+            <!-- 操作按钮 -->
+            <HBox spacing="10" alignment="CENTER">
+                <Button fx:id="startButton" text="开始提取" onAction="#onStartProcessing" styleClass="action-button">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-play" iconSize="14"/>
+                    </graphic>
+                </Button>
+                <Button fx:id="stopButton" text="停止" onAction="#onStopProcessing"
+                        disable="true" styleClass="stop-button">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-stop" iconSize="14"/>
+                    </graphic>
+                </Button>
+                <Region HBox.hgrow="ALWAYS"/>
+                <!-- 配置管理 -->
+                <Label text="配置:"/>
+                <ComboBox fx:id="configComboBox" prefWidth="150" promptText="选择配置" styleClass="config-combo-box"/>
+                <Button text="加载" onAction="#onLoadConfig" styleClass="load-button">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-share-square" iconSize="14"/>
+                    </graphic>
+                </Button>
+                <Button text="保存" onAction="#onSaveConfig" styleClass="save-button">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-save" iconSize="14"/>
+                    </graphic>
+                </Button>
+                <Button text="删除" onAction="#onDeleteConfig" styleClass="delete-button">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-trash-alt" iconSize="14"/>
+                    </graphic>
+                </Button>
+            </HBox>
+
+            <!-- 日志区域 -->
+            <LogTextArea fx:id="logTextArea" prefHeight="150" VBox.vgrow="ALWAYS"/>
+        </VBox>
+    </bottom>
+</BorderPane>
