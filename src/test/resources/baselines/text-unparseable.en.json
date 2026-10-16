@@ -1,0 +1,23 @@
+{
+  "case": "text-unparseable",
+  "locale": "en",
+  "imageMode": false,
+  "mergedOutput": true,
+  "fixtures": ["garbage.mht"],
+  "note": "全不可解析输入：0 成功 → CLI exit 1（承接 text-boundary 在「缺 CTE 可解析」修复后让出的失败锚点）",
+  "knownIssues": [],
+  "stats": {
+    "total": 1,
+    "success": 0,
+    "fail": 0,
+    "skip": 1,
+    "warn": 0,
+    "outcomes": ["garbage.mht=SKIPPED"]
+  },
+  "products": [
+    {"path": "merged.txt", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+  ],
+  "contentDigests": {
+    "merged.txt": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+  }
+}

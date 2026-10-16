@@ -57,7 +57,8 @@ class BackendConfigBaselineTest {
 
                     var expected = json.readTree(Files.readString(Path.of("src/test/resources/baselines",
                             c.name() + "." + loc + ".json")));
-                    // text-boundary intentionally has 0 successes / 1 failure: exit 1 is its golden behavior.
+                    // text-unparseable (0 successes, 0 failures) is the exit-1 anchor; since the missing-CTE fix
+                    // text-boundary has 1 success / 0 failures, so it no longer exercises the failure path.
                     int expectedExit = expected.path("stats").path("fail").asInt() > 0
                             || expected.path("stats").path("success").asInt() == 0 ? 1 : 0;
                     assertEquals(expectedExit, run.code(), "CLI exit; stderr=" + run.stderr());

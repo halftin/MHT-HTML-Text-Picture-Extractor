@@ -179,4 +179,39 @@ class MimeParserTest {
                     "进度必须单调不减，实际序列：" + progress);
         }
     }
+
+    // ==================== CTE 兜底（2026-10-16 裁决） ====================
+
+    /** 缺 Content-Transfer-Encoding 的 HTML part：按 RFC 2045 默认 7bit，不得因 “utf-8 不是传输编码” 整段失败。 */
+    @Test
+    void htmlPartWithoutTransferEncodingFallsBackToSevenBit() throws Exception {
+        String part = "Content-Type: text/html; charset=utf-8\r\n"
+                + "\r\n"
+                + "<html><body><p>中文正文 sentinel</p></body></html>";
+        String path = writeMht(wrapRelated(part));
+
+        MimeParser.ParsedMht result = assertDoesNotThrow(
+                () -> new MimeParser().parse(path, true, null, null, null),
+                "CTE 缺失时不得抛 Unknown encoding（修复前把 CTE 回退成 utf-8 会整段失败）");
+        assertNotNull(result.getHtmlContent());
+        assertTrue(result.getHtmlContent().contains("中文正文 sentinel"),
+                "缺 CTE 的 HTML 正文应被正确解码，实际：" + result.getHtmlContent());
+    }
+
+    /** 未知/非法 Content-Transfer-Encoding：降级为原样读字节，不得让 part 解析失败。 */
+    @Test
+    void htmlPartWithUnknownTransferEncodingFallsBackToRawBytes() throws Exception {
+        String part = "Content-Type: text/html; charset=utf-8\r\n"
+                + "Content-Transfer-Encoding: x-bogus\r\n"
+                + "\r\n"
+                + "<html><body><p>raw fallback sentinel</p></body></html>";
+        String path = writeMht(wrapRelated(part));
+
+        MimeParser.ParsedMht result = assertDoesNotThrow(
+                () -> new MimeParser().parse(path, true, null, null, null),
+                "未知传输编码应降级为原样读字节，而不是抛异常");
+        assertNotNull(result.getHtmlContent());
+        assertTrue(result.getHtmlContent().contains("raw fallback sentinel"),
+                "未知 CTE 时仍应拿到正文，实际：" + result.getHtmlContent());
+    }
 }

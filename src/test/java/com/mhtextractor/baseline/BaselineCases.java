@@ -111,7 +111,13 @@ public final class BaselineCases {
         AppConfig t6 = new AppConfig();
         out.add(new Case("text-boundary", List.of("garbage.mht", "no-cte.mht", "deep-nesting.mht"),
                 t6, false, true,
-                "失败/跳过/递归截断路径（garbage 不可解析、no-cte 缺 CTE、deep 超 100 层截断）",
+                "跳过/递归截断 + 缺 CTE 兜底成功（garbage 不可解析跳过、no-cte 缺 CTE 自 2026-10-16 起按 RFC 2045 默认 7bit 成功、deep 超 100 层截断）",
+                List.of()));
+
+        AppConfig t7 = new AppConfig();
+        out.add(new Case("text-unparseable", List.of("garbage.mht"),
+                t7, false, true,
+                "全不可解析输入：0 成功 → CLI exit 1（承接 text-boundary 在「缺 CTE 可解析」修复后让出的失败锚点）",
                 List.of()));
 
         // ---------- 图片：单独输出 ----------

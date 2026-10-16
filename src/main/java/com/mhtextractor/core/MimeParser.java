@@ -3,6 +3,7 @@ package com.mhtextractor.core;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.util.EncodingUtils;
 import com.mhtextractor.util.SanitizeUtils;
+import jakarta.mail.MessagingException;
 import jakarta.mail.Multipart;
 import jakarta.mail.Session;
 import jakarta.mail.internet.ContentType;
@@ -270,7 +271,8 @@ public class MimeParser implements SourceParser {
         try (InputStream is = raw) {
             String encoding = (part instanceof MimePart)
                     ? ((MimePart) part).getEncoding() : null;
-            if (encoding == null) encoding = "utf-8";
+            // 传输编码（CTE）≠ 字符集：缺失时按 RFC 2045 默认 7bit（字符集在下方 declaredCharset/降级里处理）
+            if (encoding == null || encoding.isBlank()) encoding = "7bit";
 
             String declaredCharset = "UTF-8";
             try {
@@ -284,7 +286,7 @@ public class MimeParser implements SourceParser {
                 logger.debug(I18n.msg("log.mimeparser.04", e.getMessage()), e);
             }
 
-            try (InputStream decodedIs = MimeUtility.decode(is, encoding)) {
+            try (InputStream decodedIs = decodeTransfer(is, encoding)) {
                 byte[] bytes = decodedIs.readAllBytes();
 
                 // 多编码降级：当声明的charset与实际编码不符时，尝试常见中文编码
@@ -305,6 +307,23 @@ public class MimeParser implements SourceParser {
                 // 兜底：使用声明的charset
                 return new String(bytes, declaredCharset);
             }
+        }
+    }
+
+    /**
+     * 传输编码解码：未知/非法的 {@code Content-Transfer-Encoding} 降级为**原样读取字节**，
+     * 而不是让整个 HTML part 解析失败。
+     *
+     * <p>{@code MimeUtility.decode} 对未知编码在**读取任何字节之前**就抛
+     * {@code MessagingException("Unknown encoding: ...")}，故回退到原流是安全的；
+     * {@code 7bit}/{@code 8bit}/{@code binary} 在 MimeUtility 里本就原样返回。</p>
+     */
+    private static InputStream decodeTransfer(InputStream raw, String encoding) {
+        try {
+            return MimeUtility.decode(raw, encoding);
+        } catch (MessagingException e) {
+            logger.warn(I18n.msg("log.mimeparser.07", encoding, e.getMessage()));
+            return raw;
         }
     }
 
