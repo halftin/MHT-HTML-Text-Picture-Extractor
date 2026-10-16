@@ -301,9 +301,12 @@ goto :prism_done
 :prism_missing
 call :say "      [WARN] 静态配方却找不到 %PRISM_COMMON_LIB% —— 链接很可能因未解析符号失败"
 :prism_done
+REM   运行期堆参数（发行决定 2026-10-16）：动态取机器内存的 50%（-R:MaximumHeapSizePercent=50；构建期必须用 -R: 前缀，
+REM   -XX: 在构建期会被当成主类）。native-image 无 InitialHeapSize 选项；用户在更小内存机器上可在运行期用 -XX:MaxHeapSize=<size> 覆盖。
+call :say "      运行期堆   : MaximumHeapSizePercent=50（机器内存的 50%，动态）"
 call :say "      链接附加库  : %PRISM_COMMON_OPT%   (dynamic 配方此处为空是正常的)"
 > "%TMPCMD%" echo @echo off
->>"%TMPCMD%" echo call "%NATIVE_IMAGE%" -jar "target\mhtExtractor-%APP_VERSION%.jar" --no-fallback -H:Path="%OUTPUT_DIR%" -H:Name=MhtExtractor -H:+JNI -H:+ReportExceptionStackTraces --enable-all-security-services --enable-http --enable-https --enable-url-protocols=file,http,https --initialize-at-run-time=com.sun.glass,com.sun.prism,com.sun.scenario,com.sun.javafx.font,com.sun.javafx.iio,com.sun.media,com.sun.webkit,com.sun.javafx.tk.quantum,com.sun.marlin -Djava.library.path="target/jfx-dlls" -J-Xmx%NATIVE_XMX% -Ob %PRISM_COMMON_OPT%
+>>"%TMPCMD%" echo call "%NATIVE_IMAGE%" -jar "target\mhtExtractor-%APP_VERSION%.jar" --no-fallback -H:Path="%OUTPUT_DIR%" -H:Name=MhtExtractor -H:+JNI -H:+ReportExceptionStackTraces --enable-all-security-services --enable-http --enable-https --enable-url-protocols=file,http,https --initialize-at-run-time=com.sun.glass,com.sun.prism,com.sun.scenario,com.sun.javafx.font,com.sun.javafx.iio,com.sun.media,com.sun.webkit,com.sun.javafx.tk.quantum,com.sun.marlin -Djava.library.path="target/jfx-dlls" -R:MaximumHeapSizePercent=50 -J-Xmx%NATIVE_XMX% -Ob %PRISM_COMMON_OPT%
 call :tee
 if not "%RC%"=="0" ( call :say "[ERROR] native-image 构建失败，exit=%RC%" & call :end %RC% & set "FAILSTEP=5/6 native-image" & goto :done )
 call :end 0
@@ -434,7 +437,7 @@ REM Initialize MSVC in the same leaf cmd process as native-image, and retain its
 >>"%TMPCMD%" echo if errorlevel 1 exit /b 20
 >>"%TMPCMD%" echo where cl.exe
 >>"%TMPCMD%" echo if errorlevel 1 exit /b 20
->>"%TMPCMD%" echo call "%NATIVE_IMAGE%" --limit-modules=java.se,jdk.unsupported -cp "%HEADLESS_CP%" --native-compiler-path="%HEADLESS_CL%" -H:+UnlockExperimentalVMOptions -H:DefaultCharset="%HEADLESS_CHARSET%" -H:ConfigurationFileDirectories="%HEADLESS_METADATA%" -H:+PrintClassInitialization -H:-UnlockExperimentalVMOptions com.mhtextractor.backend.BackendCli --no-fallback -o "%OUTPUT_DIR%\MhtExtractorBackend" --enable-url-protocols=http,https -J-Xmx%NATIVE_XMX% -Ob
+>>"%TMPCMD%" echo call "%NATIVE_IMAGE%" --limit-modules=java.se,jdk.unsupported -cp "%HEADLESS_CP%" --native-compiler-path="%HEADLESS_CL%" -H:+UnlockExperimentalVMOptions -H:DefaultCharset="%HEADLESS_CHARSET%" -H:ConfigurationFileDirectories="%HEADLESS_METADATA%" -H:+PrintClassInitialization -H:-UnlockExperimentalVMOptions com.mhtextractor.backend.BackendCli --no-fallback -o "%OUTPUT_DIR%\MhtExtractorBackend" --enable-url-protocols=http,https -R:MaximumHeapSizePercent=50 -J-Xmx%NATIVE_XMX% -Ob
 call :say "      command file: %TMPCMD%"
 type "%TMPCMD%"
 type "%TMPCMD%" >>"%LOG%"
