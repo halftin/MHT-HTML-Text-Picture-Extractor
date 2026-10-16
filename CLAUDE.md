@@ -24,7 +24,7 @@ JavaFX 25 桌面 GUI：把 `.mht` / `.mhtml` / `.html` / `.htm`（含 HTML 侧�
 | 测试 | 默认执行 **1101**（+ `headless-layer-b` **74**；2026-10-16 P5d-2 后实测）；架构不变式 **17** 条；产物黄金基线 **46** 份（P4-13 增 `{basename}` 两例；P5d-2 改 `text-boundary` 2 份 + 新增 `text-unparseable` 2 份作为 CLI exit-1 锚点）|
 | GUI 自动化 | zh / en **各 36 passed / 0 failed**（P5b-1/P5b-2 各 +1 步）；`tools/probes/` 探针全绿 |
 | i18n | zh_CN / en_US **各 584 键**（两份键集与占位符集合必须一致，P5b 后实测差异 = 0；+`main.source` 与 3 个单实例键）+ **22** 个 `ErrorCode` |
-| 日志键 | `log.*` **247 键**（P4-15/16/17 与 P5a-4/7 累计新增；P5d-2 新增 `log.mimeparser.07`（未知传输编码兜底）；既有键文案逐键不变） |
+| 日志键 | `log.*` **249 键**（可复跑口径：两份 bundle 的 `^log\.` 行数 = 编号键 243 + 具名键 6〔`log.backend.unstructured`/`cleanupFailed`/`unavailable`、`log.region.warning`、`log.app.alreadyRunning`/`ready`〕）。⚠️ 2026-10-16 复核发现旧值「246」与任何可复现计数都不符（当时已漂移），现按实测重钉；P5d-2 新增 `log.mimeparser.07`；既有键文案逐键不变 |
 | native | **2026-10-15 P5a-6 Gate C 实测**：默认 `dynamic`：**23 文件 ≈108 MB**（随包后端在 `Backend\`、前端 exe + DLL 在根）；`static`：**16 文件 ≈138.9 MB**（**零 JavaFX DLL**）；**`NATIVE_TARGET=headless`（P4-3）**：**5 文件 ≈40 MB**（`MhtExtractorBackend.exe`，**零 JavaFX**）。三配方均 `build-native.cmd` exit 0 + `status=OK` + 卡片冒烟 `5 passed, 0 failed`；产物基线 native/JVM 各 **44/0**；⚠️ **两个配方共用同一 dist 目录，测体积前必须先清空 dist**（否则计数被上一配方残留污染） |
 | 规模 | 主源集 **230** 个 java 文件（其中 `gui` **36**、`uicore` **18**、`uiport` **29**、`app` **53**、`model` **10**、`backend` **19**、`config` **1**、`util` **12**）/ 测试源集 **150** 个（2026-10-16 P5b 后实测；P5b 新增 gui **3** / uicore **3** / 测试 **3** —— 缩略图驻留、来源列与列宽、单实例，均落在框架无关层或新协作者类） |
 
@@ -104,7 +104,7 @@ backend      ← 无头后端（P4 起）：backend-cli 入口（--once / --serv
 | `util` | `SourceKinds`（**来源扩展名与侧车后缀唯一入口**）· **P3 起陆续迁出**（见下 `model`/`app`）：`FingerprintEncoder` · `GroupItem` · `ParamScope` · `DropResolver` · `UndoManager` · `MhtImportPlanner` · `OutputUnitPlanner` + `GroupStructure` · `IncrementalImport` · `SelectionState` / `UnitProgressAggregator` · `SanitizeUtils` / `EncodingUtils` / `FileUtils` / `HtmlUtils` / `HtmlExportBuilder` / `ThumbnailPixels` |
 | `cache` | **预览缓存（会话级）**：`PreviewCacheKey`（绝对路径+size+mtime+参数指纹+格式版本 → SHA-256 目录名）· `PreviewCacheMeta`（`meta.json` schema）· `PreviewCacheStore`（`.tmp`→改名→`.complete` 原子写；`imageFileFor(meta, index)` 由 meta 反推缓存图片路径）· `PreviewCacheLifecycle`（**四条删除规则集中在此** + 每项目写锁 + 10 GiB 台阶提醒）· `DirectoryImageSource` |
 | `config` | （`AppConfig` 已迁 `model`，见下）· `ConfigManager` · `GuiState` / `GuiStateManager`（`logs/gui-state.json`：模式/目录/开关/**locale**） |
-| `i18n` | `I18n`（**唯一文案入口**；界面走 `get` 具名占位符 `{name}`，日志走 `msg` 位置占位符 `{0}`，结构化警告走 `render(ExtractWarning)`；缺键返回 `!key!` + `log.error`）· `ErrorCode`（**22** 个，键 `error.<CODE>`）· 两份 bundle（**各 571 键**，`log.*` **243** 条） |
+| `i18n` | `I18n`（**唯一文案入口**；界面走 `get` 具名占位符 `{name}`，日志走 `msg` 位置占位符 `{0}`，结构化警告走 `render(ExtractWarning)`；缺键返回 `!key!` + `log.error`）· `ErrorCode`（**22** 个，键 `error.<CODE>`）· 两份 bundle（**各 584 键**，`log.*` **249** 条 —— 口径见 §1「日志键」行） |
 | `model` | `PreviewItem`（领域数据与 JavaFX 属性已分离）· `ThumbnailData`（持解码后 ARGB `int[]`，不用 `Image`/PNG 字节）· `ExtractWarning`（**结构化警告**：i18n 键 + 具名参数 `Map`，语言中立；E4.1）· **P3 起陆续迁入**：`GroupItem`、`ChangeListener`、`ExtractOutcome`、`ParamScope`（三态目标/生效参数解析）、`AppConfig`（参数数据模型，Jackson POJO）、`FingerprintEncoder`（指纹长度前缀编码唯一口径） |
 | `platform` | `BrowserLauncher`（`openHtml` / `openViewSource` + 三级兜底）· `SourceViewPage`（源码视图页生成）· `CdpClient`（CDP 客户端 + 调试实例管理，原生 Socket，native 安全）· `BrowserDetector` · `FileOpener`（**用系统默认程序打开文件**，含 UAC 关闭导致 UWP 文件激活被阻断的环境预判）· `HtmlTextSelection`（选择/复制语义，纯函数）· `HtmlWrapMap`（折行几何 ↔ 逻辑字符偏移，纯函数） |
 
