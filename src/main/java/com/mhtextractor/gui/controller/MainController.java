@@ -1,9 +1,6 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.PreviewService;
-import com.mhtextractor.app.PreviewSession;
 import com.mhtextractor.uicore.SessionStateService;
-import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.uicore.ImportAddresses;
 import com.mhtextractor.uicore.WorkspaceView;
 import com.mhtextractor.model.AppConfig;
@@ -178,7 +175,7 @@ public class MainController {
         public void setStatusText(String text) {
             refs.statusLabel().setText(text);
         }
-    });
+    }, activityPort);
         this.previewRenderer = new PreviewRenderer(new PreviewRenderer.Host() {
         @Override public TextArea textPreviewArea() { return refs.textPreviewArea(); }
         @Override public Label imageHintLabel() { return refs.imageHintLabel(); }

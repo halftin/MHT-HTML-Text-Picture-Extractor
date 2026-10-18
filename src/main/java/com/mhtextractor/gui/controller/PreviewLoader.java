@@ -84,7 +84,7 @@ public final class PreviewLoader {
                 else if(!(item.cachedThumbs instanceof java.util.ArrayList<?>))item.cachedThumbs=new java.util.ArrayList<>(item.cachedThumbs);
                 while(item.cachedThumbs.size()<=thumb.index())item.cachedThumbs.add(null);
                 item.cachedThumbs.set(thumb.index(),decoded);
-                host.renderer().appendThumb(item,decoded,thumb.index());
+                host.renderer().appendThumb(item,decoded,thumb.index(),thumb.imageFile());
                 item.retainImageData();
             }
         } else if (event instanceof PortEvent.PreviewLoaded loaded) {

@@ -35,14 +35,7 @@ gui.controller.PreviewListCell	app.SelectionRules
 gui.controller.PreviewListCell	app.SelectionRules$TriState
 gui.controller.PreviewListCell	app.Texts
 gui.controller.PreviewLoader	app.Texts
-gui.controller.PreviewRenderer	app.PreviewImageData
-gui.controller.PreviewRenderer	app.PreviewNamingService
 gui.controller.PreviewRenderer	app.Texts
-gui.controller.SourceViewActions	app.SourceViewService
-gui.controller.SourceViewActions	app.SourceViewService$Export
-gui.controller.SourceViewActions	app.SourceViewService$Export$Failed
-gui.controller.SourceViewActions	app.SourceViewService$Export$Success
-gui.controller.SourceViewActions	app.SourceViewService$Export$Unparseable
 gui.controller.SourceViewActions	app.Texts
 gui.controller.WorkspaceInfoPresenter	app.Texts
 gui.controller.WorkspaceLifecycleController	app.Texts

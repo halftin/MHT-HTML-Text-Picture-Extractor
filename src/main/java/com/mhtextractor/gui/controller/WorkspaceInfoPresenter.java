@@ -1,8 +1,6 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.ExtractResultService;
 import com.mhtextractor.model.ExtractionStats;
-import com.mhtextractor.app.OutputNameService;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.uicore.WorkspaceView;
 import com.mhtextractor.model.AppConfig;
@@ -181,7 +179,7 @@ public final class WorkspaceInfoPresenter {
     }
 
     /** 提取结果一次性回写（拍板：提取结束/取消后统一回写，非逐文件实时更新）：
-     *  按路径匹配条目写入结果字段（下沉 {@code app.ExtractResultService}），列表一次刷新，选中条目 banner 同步 */
+     *  按路径匹配条目读取端口结果事实，列表一次刷新，选中条目 banner 同步 */
     void applyExtractResults(ExtractionStats stats) {
         long matched = host.allPreviewItems().stream().filter(item -> item.extractOutcome != ExtractOutcome.NONE).count();
         host.refreshList();

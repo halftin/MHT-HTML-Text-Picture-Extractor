@@ -1,14 +1,12 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.PreviewImageData;
-import com.mhtextractor.app.PreviewNamingService;
-import com.mhtextractor.app.PreviewSession;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.util.ThumbnailFxBridge;
 import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.model.ThumbnailData;
 import com.mhtextractor.platform.FileOpener;
+import com.mhtextractor.uiport.PortEvent;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.control.Button;
@@ -35,11 +33,11 @@ import java.util.List;
  * 预览渲染协作者（C1b）—— 承载文本预览、缩略图呈现与"单击缩略图打开缓存图片"这一组渲染动作，
  * 从 {@code MainController} 原样外迁：{@code renderTextPreview} / {@code resetImageArea} /
  * {@code renderThumbnails} / {@code appendThumb} / {@code buildThumbBox} / {@code openCachedImage} /
- * {@code thumbFileName} / {@code decodeThumb} 全部搬到本类；对宿主的全部能力需求收窄为 {@link Host}。
+ * 图片名称与格式直接读取端口事实；对宿主的全部能力需求收窄为 {@link Host}。
  *
  * <p>文案键、日志键（{@code log.maincontroller.64/65/66}）、线程名（{@code open-cached-image}）、
  * 缩略图下标与缓存清单 {@code meta.images()} 的 1:1 语义、{@link FileOpener} 的两级兜底
- * （系统默认查看器 → 「照片」协议）、以及 {@code thumbFileName} 的合并重命名 {@code f%02d_} 前缀规则
+ * （系统默认查看器 → 「照片」协议）、以及端口提供的合并输出和批量重命名显示名
  * 全部保持不变。</p>
  *
  * <p>本类含 JavaFX，属 {@code gui} 层；业务侧不得反向依赖它。</p>
@@ -72,8 +70,6 @@ public final class PreviewRenderer {
 
         /** 条目在输出单元规划中的序号（搬迁前是 {@code unitIndex(PreviewRow)}）。 */
         int unitIndex(Object item);
-
-        /** 预览会话缓存（搬迁前是 {@code previewCacheLifecycle} 字段，P3-3b-16 起经 {@code app.PreviewSession} 门面）。 */
 
     }
 
@@ -138,24 +134,33 @@ public final class PreviewRenderer {
     }
 
     public void appendThumb(PreviewRow item, ThumbnailData entry, int index) {
+        appendThumb(item, entry, index, null);
+    }
+
+    public void appendThumb(PreviewRow item, ThumbnailData entry, int index, PortEvent.ImageFile file) {
         host.imageHintLabel().setVisible(false);
         host.previewEffectButton().setVisible(false);
         host.imageScrollPane().setVisible(true);
         host.imageScrollPane().setManaged(true);
-        host.thumbnailPane().getChildren().add(buildThumbBox(item, entry, index));
+        host.thumbnailPane().getChildren().add(buildThumbBox(item, entry, index, file));
     }
 
-    public ThumbnailData decodeFile(com.mhtextractor.uiport.PortEvent.ImageFile file) {
+    public ThumbnailData decodeFile(PortEvent.ImageFile file) {
         try {
-            ThumbnailData decoded=decodeThumb(new PreviewImageData(file.coreName(),file.path(),
-                    Files.readAllBytes(Path.of(file.path()))),file.index(),null);
-            return new ThumbnailData(file.coreName(),decoded.width(),decoded.height(),decoded.pixels());
+            return decode(Files.readAllBytes(Path.of(file.imagePath() == null ? file.path() : file.imagePath())),
+                    file.extension(), file.coreName());
         } catch(java.io.IOException error) {
             return new ThumbnailData(file.coreName(),0,0,null);
         }
     }
 
     private VBox buildThumbBox(PreviewRow item, ThumbnailData entry, int index) {
+        var file = item.cachedImages == null || index >= item.cachedImages.size()
+                ? null : item.cachedImages.get(index);
+        return buildThumbBox(item, entry, index, file);
+    }
+
+    private VBox buildThumbBox(PreviewRow item, ThumbnailData entry, int index, PortEvent.ImageFile file) {
         VBox box = new VBox(4);
         box.setAlignment(Pos.TOP_CENTER);
         // E1.4：模型只存像素；JavaFX Image 在此（渲染层）按需构造。构造失败等价于原 image == null
@@ -169,7 +174,7 @@ public final class PreviewRenderer {
             iv.setPreserveRatio(true);
             box.getChildren().add(iv);
         }
-        Label nameLabel = new Label(thumbFileName(entry, item));
+        Label nameLabel = new Label(file == null || file.displayName() == null ? entry.coreName() : file.displayName());
         nameLabel.setWrapText(true);
         nameLabel.setMaxWidth(150);
         nameLabel.setStyle("-fx-font-size: 0.85em;");
@@ -205,16 +210,6 @@ public final class PreviewRenderer {
         t.start();
     }
 
-    /** 合并输出且不重命名时，文件名按当前列表位置重算 f%02d_ 前缀（拖拽重排后同步刷新，按条目生效参数判定） */
-    private String thumbFileName(ThumbnailData entry, PreviewRow item) {
-        AppConfig params = host.effectiveParams(item);
-        boolean mergedNoRename = params != null && params.isSingleOutputMode()
-                && !params.isEnableBatchRenaming() && host.visibleCount() > 1;
-        return mergedNoRename
-                ? String.format("f%02d_", (int) host.unitIndex(item) + 1) + entry.coreName()
-                : entry.coreName();
-    }
-
     /**
      * 解码单张缩略图：WebP 走 JWebP 缩放解码（150 边界），其余走 JavaFX 原生缩放解码。
      *
@@ -224,14 +219,10 @@ public final class PreviewRenderer {
      * {@link com.mhtextractor.gui.util.ThumbnailFxBridge#toFxImage(ThumbnailData)}。失败时 pixels=null，
      * 渲染层显示"无法加载"占位 —— 与原 {@code image == null} 语义一致。</p>
      */
-    public ThumbnailData decodeThumb(PreviewImageData imageData, int index, AppConfig params) {
-        byte[] data = imageData.getData();
-        String ext = PreviewNamingService.detectExtension(data, "jpg");
-        boolean rename = params != null && params.isEnableBatchRenaming();
-        String coreName = PreviewNamingService.imageFileName(imageData, ext, rename, index + 1, "");
+    public ThumbnailData decode(byte[] data, String extension, String coreName) {
         Image img = null;
         try {
-            if ("webp".equals(ext)) {
+            if ("webp".equals(extension)) {
                 WebPImage webp = WebPImage.read(new ByteArrayInputStream(data),
                         WebPImageLoadOptions.builder()
                                 .requestedWidth(150).requestedHeight(150)

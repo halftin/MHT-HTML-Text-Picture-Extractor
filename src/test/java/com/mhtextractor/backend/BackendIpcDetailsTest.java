@@ -248,6 +248,29 @@ class BackendIpcDetailsTest {
             assertEquals("unparseable", wireUnparseable.path("status").asText());
             assertTrue(wireUnparseable.has("htmlFile"));
             assertTrue(wireUnparseable.path("htmlFile").isNull());
+            String missing = tmp.resolve("missing-source.html").toString();
+            var failed = p.direct.queries().exportSource(missing);
+            var wireFailed = p.call("exportSource", object().put("path", missing));
+            assertEquals("failed", failed.status());
+            assertNull(failed.htmlFile());
+            assertEquals("failed", wireFailed.path("status").asText());
+            assertTrue(wireFailed.path("htmlFile").isNull());
+            assertEquals(failed.detailKey(), wireFailed.path("detailKey").asText());
+            assertEquals(JSON.valueToTree(failed.detailParams()), wireFailed.path("detailParams"));
+            var previousLocale = com.mhtextractor.i18n.I18n.currentLocale();
+            try {
+            for (var locale : List.of(java.util.Locale.SIMPLIFIED_CHINESE, java.util.Locale.US)) {
+                com.mhtextractor.i18n.I18n.setLocale(locale);
+                var bundle = com.mhtextractor.i18n.I18n.bundle();
+                assertTrue(bundle.containsKey(failed.detailKey()));
+                String rendered = bundle.getString(failed.detailKey());
+                for (var param : failed.detailParams().entrySet())
+                    rendered = rendered.replace("{" + param.getKey() + "}", param.getValue());
+                assertFalse(rendered.isBlank());
+                assertFalse(rendered.contains("{"));
+                assertFalse(rendered.contains("!"));
+            }
+            } finally { com.mhtextractor.i18n.I18n.setLocale(previousLocale); }
             p.call("releaseFiles", object().set("paths", JSON.valueToTree(List.of(wireFile.toString()))));
             assertFalse(Files.exists(wireFile));
         }

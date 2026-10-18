@@ -59,7 +59,12 @@ public class PreviewLoadingProbe extends Application implements PreviewLoader.Ho
             public boolean textMode() { return false; }
             public AppConfig effectiveParams(PreviewItem ignored) { return params; }
             public AppConfig effectiveImageParams(PreviewItem ignored) { return params; }
-        }, new PreviewService(session.lifecycle()), renderer::decodeThumb, deliveries::add);
+        }, new PreviewService(session.lifecycle()), (image, index, config) -> {
+            String extension = PreviewNamingService.detectExtension(image.getData(), "jpg");
+            String coreName = PreviewNamingService.imageFileName(image, extension,
+                    config.isEnableBatchRenaming(), index + 1, "");
+            return renderer.decode(image.getData(), extension, coreName);
+        }, deliveries::add);
         var port = new InProcessUiport(model, request -> {
             throw new AssertionError("Empty HTML should require no confirmation");
         }, activities);

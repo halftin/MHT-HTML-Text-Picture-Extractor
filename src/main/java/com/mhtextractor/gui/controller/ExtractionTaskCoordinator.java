@@ -28,7 +28,7 @@ import java.util.function.Consumer;
  *       （从 {@code MainController} 原样外迁，见 {@link #begin()}）；</li>
  *   <li>提取任务通道事件（{@link PortEvent.ExtractionChannelEvent}）的<b>前端渲染</b> ——
  *       任务代际、终态恰好一次、取消竞态、结果通道已随 B6 整体下沉
- *       {@code app.WorkspaceExtractionCoordinator}，本类只把事件翻译成控件状态与列表回写
+ *       端口的 {@code startExtraction/cancelExtraction}，本类只把事件翻译成控件状态与列表回写
  *       （{@link #applyExtractionEvent}）。</li>
  * </ol>
  *
@@ -223,7 +223,7 @@ public final class ExtractionTaskCoordinator {
     // deny 链 + R1.6 卡通过之后、{@link #startExtractionTask} 之前按插入顺序串行询问。
     //
     // P3-B6：请求构建（会话目录 / 单元计划 / 逐文件覆盖 / 递归确认）与任务通道已下沉 app 层
-    // （{@code WorkspaceExtractionCoordinator}），{@link #startExtractionTask} 只做前端预清理、
+    // （端口 startExtraction/cancelExtraction），{@link #startExtractionTask} 只做前端预清理、
     // 界面锁定与命令转发；日志键 log.maincontroller.31/32/33/39 随请求构建迁至 app 层（逐键不变）。
 
     /**
@@ -286,7 +286,7 @@ public final class ExtractionTaskCoordinator {
     }
 
     /**
-     * 执行正式提取任务（P3-B6：请求构建与任务通道已下沉 {@code app.WorkspaceExtractionCoordinator}，
+     * 执行正式提取任务（P3-B6：请求构建与任务通道已下沉端口 {@code startExtraction}，
      * 此处只剩三件前端事：取消工作区后台活动、只提取选中时的旧结果色清理、界面锁定（原
      * {@code extractionUi.extractionStarted} 五连）+ 命令转发。日志键 log.maincontroller.39 随请求
      * 构建迁至 app 层（逐键不变），本处清理与锁定顺序与迁移前一致。）
@@ -321,7 +321,7 @@ public final class ExtractionTaskCoordinator {
 
     /**
      * 提取任务通道事件入口（{@code MainController.onPortEvent} 的薄转发目标）：事件由后端
-     * 任务通道（{@code app.WorkspaceExtractionCoordinator}）经派发器投递到 FX 线程、<b>恰好一次</b>
+     * 任务通道（{@code startExtraction/cancelExtraction}）经派发器投递到 FX 线程、<b>恰好一次</b>
      * （成功/失败终态在 worker 收尾后；取消终态在取消请求时刻；取消 partial 经
      * {@link PortEvent.ExtractionResult} 单独投递）。本方法只做控件状态与列表回写渲染，
      * 与搬迁前 {@code onSucceeded/onFailed/onCancelled} 三回调逐条对应（幂等：重复投递只重复复位）。
@@ -368,7 +368,7 @@ public final class ExtractionTaskCoordinator {
      * 三终态（成功 / 失败 / 取消）共用的 UI 终态落地（事件已由后端保证恰好一次；本动作幂等）：
      * 停止按钮禁用、勾选框与开关解锁（功能一）、开始按钮按唯一派生函数重算
      * （注入的 {@code updateStartButtonState}；null = 历史兼容构造，跳过）。
-     * 运行标记复位由后端任务通道持有（{@code app.WorkspaceExtractionCoordinator.running}），
+     * 运行标记复位由后端任务通道持有（{@code PortEvent.RunningChanged}），
      * 不在前端重复维护第二份状态。
      */
     private void landTerminalUi() {

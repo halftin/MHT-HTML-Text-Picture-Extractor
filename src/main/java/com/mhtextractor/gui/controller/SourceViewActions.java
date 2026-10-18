@@ -1,11 +1,11 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.SourceViewService;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.HtmlSourceViewer;
 import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.platform.BrowserLauncher;
+import com.mhtextractor.uicore.FrontendPort;
 import javafx.application.Platform;
 import javafx.scene.Node;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>搬迁前的成员在 {@code MainController} 上：{@code browserExporting} 字段、
  * {@code onContextOpenInBrowser} / {@code onContextViewSource}（右键菜单转发）与
  * {@code openHtmlInBrowser}（主体）。文案键、日志键、提醒图标/锚点、线程名
- * （{@code html-browser-export} / {@code html-browser-launch}）与 {@code browserExporting}
+ * （{@code html-browser-launch}；导出经端口串行执行）与 {@code browserExporting}
  * 的并发去重语义全部保持不变。</p>
  *
  * <p>本类含 JavaFX，属 {@code gui} 层；业务侧不得反向依赖它。</p>
@@ -40,12 +40,14 @@ public final class SourceViewActions {
     }
 
     private final Host host;
+    private final FrontendPort activityPort;
 
     /** 浏览器查看页生成并发闸（防重复点击并发导出） */
     private final AtomicBoolean browserExporting = new AtomicBoolean(false);
 
-    public SourceViewActions(Host host) {
+    public SourceViewActions(Host host, FrontendPort activityPort) {
         this.host = host;
+        this.activityPort = activityPort;
     }
 
     /** 在浏览器中查看（浏览器查看HTML需求）：导出 MHT 内嵌 HTML 后用系统默认浏览器打开渲染视图 */
@@ -80,16 +82,24 @@ public final class SourceViewActions {
             return;
         }
         host.setStatusText(Texts.get("browser.generatingPage"));
-        Thread t = new Thread(() -> {
+        activityPort.execute(p -> {
             try {
-                SourceViewService.Export result = SourceViewService.export(it.path);
-                switch (result) {
-                    case SourceViewService.Export.Unparseable() ->
+                return p.queries().exportSource(it.path);
+            } catch (RuntimeException e) {
+                exportFailed(it, e);
+                Platform.runLater(this::exportFinished);
+                throw e;
+            }
+        }, result -> {
+            try {
+                switch (result.status()) {
+                    case "unparseable" ->
                             throw new IllegalStateException(Texts.get("browser.exportUnparseable"));
-                    case SourceViewService.Export.Failed(String detailKey, java.util.Map<String, String> detailParams) ->
-                            throw new IllegalStateException(WorkspaceInfoPresenter.detailText(detailKey, detailParams));
-                    case SourceViewService.Export.Success(Path htmlFile, int imageCount, int warningCount) -> {
-                        log.info(Texts.msg("log.maincontroller.24", htmlFile, imageCount, warningCount));
+                    case "failed" ->
+                            throw new IllegalStateException(WorkspaceInfoPresenter.detailText(result.detailKey(), result.detailParams()));
+                    case "success" -> {
+                        Path htmlFile = Path.of(result.htmlFile().path());
+                        log.info(Texts.msg("log.maincontroller.24", htmlFile, result.imageCount(), result.warningCount()));
                         // 浏览器启动可能耗时（注册表探测 / CDP 端点等待最长约 15 秒），独立后台线程避免冻结界面
                         Thread launcher = new Thread(() -> {
                             if (sourceMode) {
@@ -106,16 +116,23 @@ public final class SourceViewActions {
                         launcher.setDaemon(true);
                         launcher.start();
                     }
+                    default -> throw new IllegalStateException(result.status());
                 }
             } catch (Exception e) {
-                log.error(Texts.msg("log.maincontroller.26", it.path), e);
-                Platform.runLater(() -> GuiNotifications.browserViewFailed(host.anchor()));
+                exportFailed(it, e);
             } finally {
-                browserExporting.set(false);
-                Platform.runLater(() -> host.setStatusText(Texts.get("main.statusReady")));
+                exportFinished();
             }
-        }, "html-browser-export");
-        t.setDaemon(true);
-        t.start();
+        });
+    }
+
+    private void exportFailed(PreviewRow it, Exception error) {
+        log.error(Texts.msg("log.maincontroller.26", it.path), error);
+        Platform.runLater(() -> GuiNotifications.browserViewFailed(host.anchor()));
+    }
+
+    private void exportFinished() {
+        browserExporting.set(false);
+        host.setStatusText(Texts.get("main.statusReady"));
     }
 }

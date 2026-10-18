@@ -73,7 +73,11 @@ public class LargeFileConfirmationProbe extends Application implements PreviewLo
             public AppConfig effectiveParams(PreviewItem ignored) { return params; }
             public AppConfig effectiveImageParams(PreviewItem ignored) { return params; }
         }, new PreviewService(session.lifecycle()), (image, index, config) -> {
-            decodes.incrementAndGet(); return renderer.decodeThumb(image, index, config);
+            decodes.incrementAndGet();
+            String extension = PreviewNamingService.detectExtension(image.getData(), "jpg");
+            String coreName = PreviewNamingService.imageFileName(image, extension,
+                    config.isEnableBatchRenaming(), index + 1, "");
+            return renderer.decode(image.getData(), extension, coreName);
         }, Platform::runLater);
         port = new InProcessUiport(model, request -> { throw new AssertionError("Unexpected import confirmation"); }, activities);
         port.events().subscribe(event -> {
