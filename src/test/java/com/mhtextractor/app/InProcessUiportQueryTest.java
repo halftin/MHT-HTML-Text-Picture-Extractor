@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class InProcessUiportQueryTest {
     private static final class State implements ExtractionPlanService.Context {
@@ -70,6 +71,25 @@ class InProcessUiportQueryTest {
     private static List<Object> observable(OutputUnitVm u) {
         return Arrays.asList(u.outputName(), u.group(), u.params(), u.paths(), u.outputPath(), u.fileCount(), u.labelKey(),
                 u.baseName(), u.extension(), u.finalFileName(), u.uniqueName());
+    }
+
+    @Test
+    void removedMemberWithReimportedPathDoesNotMarkRenamedGroupAsDefault() {
+        State state = new State();
+        var removed = item("reimport.mht", true); var retained = item("retained.mht", true);
+        var defaultGroup = new GroupItem<PreviewItem>(1, "default1");
+        defaultGroup.setDefaultNamed(true);
+        defaultGroup.getMembers().addAll(List.of(removed, retained));
+        removed.removed = true;
+        var replacement = item("reimport.mht", true);
+        var namedGroup = new GroupItem<PreviewItem>(2, "renamed");
+        namedGroup.getMembers().add(replacement);
+        state.order.addAll(List.of(defaultGroup, namedGroup));
+        var units = new ExtractionPlanService(state).outputUnitPlan(false);
+        assertNull(units.getFirst().outputName());
+        assertEquals("core.groupDefault", units.getFirst().labelKey());
+        assertEquals("renamed", units.getLast().outputName());
+        assertNull(units.getLast().labelKey());
     }
 
     @Test

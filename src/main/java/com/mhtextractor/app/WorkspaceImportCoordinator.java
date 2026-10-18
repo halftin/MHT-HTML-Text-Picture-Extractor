@@ -270,19 +270,11 @@ public final class WorkspaceImportCoordinator {
 
     /** 后台线程阻塞等待配额确认（窗口内居中确认卡片经端口确认往返；等待方是导入后台线程，不冻结界面） */
     private boolean awaitQuotaConfirm(QuotaCounts counts) {
-        // 文案拼装口径与迁移前 ImportSessionCoordinator.awaitQuotaConfirm 逐字一致（同键同参）
-        String msg = Texts.get("import.quotaReached",
-                        "groups", maxGroupsPerRound,
-                        "files", maxFilesPerRound)
-                + Texts.get("import.quotaContinue")
-                + Texts.get("import.quotaStop",
-                        "files", counts.files(),
-                        "groups", counts.groups());
         ConfirmRequest request = new ConfirmRequest("import.quotaReached", Map.of(
                 "groups", String.valueOf(maxGroupsPerRound), "files", String.valueOf(maxFilesPerRound),
                 "accumulatedGroups", String.valueOf(counts.groups()),
                 "accumulatedFiles", String.valueOf(counts.files())),
-                List.of(ACTION_CONTINUE, ACTION_STOP), 0, msg);
+                List.of(ACTION_CONTINUE, ACTION_STOP), 0);
         String chosen;
         try {
             chosen = confirmer.confirm(request).await();

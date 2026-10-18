@@ -62,10 +62,18 @@ public final class ExtractionPlanService {
         return plan(context.dataOrder(), context.imageMode(), context.textParamsCache(), context.imageParamsCache(),
                 sessionOutputFolder == null ? context.outputFolder() : sessionOutputFolder,
                 context.inputFolder(), context.outputFolder(), context.openFolderAfterComplete(), checkedOnly)
-                .stream().map(u -> new OutputUnitVm(u.getOutputName(), u.isGroup(), u.getParams(),
-                        u.getPaths(), u.getOutputPath(), u.getOutputName() == null ? "core.ungrouped" : null,
-                        u.getName().baseName(), u.getName().extension(), u.getName().finalFileName(),
-                        u.getUniqueName())).toList();
+                .stream().map(u -> {
+                    boolean defaultNamed = u.isGroup() && context.dataOrder().stream()
+                            .filter(com.mhtextractor.model.GroupItem.class::isInstance)
+                            .map(g -> (com.mhtextractor.model.GroupItem<?>) g)
+                            .anyMatch(g -> g.isDefaultNamed() && g.getMembers().stream()
+                                    .map(PreviewItem.class::cast).filter(i -> !i.removed)
+                                    .anyMatch(i -> u.getPaths().contains(i.path)));
+                    return new OutputUnitVm(defaultNamed ? null : u.getOutputName(), u.isGroup(), u.getParams(),
+                            u.getPaths(), u.getOutputPath(), defaultNamed ? "core.groupDefault"
+                                    : u.getOutputName() == null ? "core.ungrouped" : null,
+                            u.getName().baseName(), u.getName().extension(), u.getName().finalFileName(), u.getUniqueName());
+                }).toList();
     }
 
     /**

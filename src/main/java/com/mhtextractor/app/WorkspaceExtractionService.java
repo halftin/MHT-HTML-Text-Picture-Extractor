@@ -51,9 +51,14 @@ public final class WorkspaceExtractionService {
             List<com.mhtextractor.uiport.OutputUnitVm> units, Map<String, PerFileOverrides> overrides,
             boolean imageMode, Supplier<Boolean> recursionCallback) {
         return new ExtractionRequest(sessionOutputFolder, units.stream().map(u ->
-                new OutputUnitPlanner.OutputUnit(u.outputName(), u.group(), u.params(), u.paths(), u.outputPath(),
+                new OutputUnitPlanner.OutputUnit(outputName(u), u.group(), u.params(), u.paths(), u.outputPath(),
                         new com.mhtextractor.model.OutputName(u.baseName(), u.extension()), u.uniqueName()))
                 .toList(), overrides, imageMode, recursionCallback);
+    }
+
+    static String outputName(com.mhtextractor.uiport.OutputUnitVm unit) {
+        if (unit.outputName() != null || !unit.group()) return unit.outputName();
+        return unit.baseName() != null ? unit.baseName() : new java.io.File(unit.outputPath()).getName();
     }
 
     /**

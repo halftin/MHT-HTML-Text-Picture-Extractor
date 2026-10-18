@@ -143,7 +143,7 @@ class BackendSessionTest {
                 Question first = view.questions.poll(5, TimeUnit.SECONDS);
                 assertNotNull(first, "Backend must ask instead of silently cancelling");
                 assertEquals("alert.recursionDepthHeader", first.request.key());
-                assertNull(first.request.message());
+                assertEquals(java.util.Map.of(), first.request.namedParams());
                 if (mode.equals("answer")) {
                     first.answer.accept(System.getProperty("mht.cg.session.answer", "continue"));
                     assertEquals("SUCCEEDED", extract.get(5, TimeUnit.SECONDS).path("end").asText());

@@ -64,7 +64,7 @@ public interface WorkspaceCommands {
     /**
      * 组改名：新名按后端组名集合唯一化后写入并永久退出「未命名组」提醒；组不存在时为 no-op。
      *
-     * <p><b>前置条件：{@code newName} 不得为 null</b>（{@code GroupVm.name} 非空是硬不变量）。
+     * <p><b>前置条件：{@code newName} 不得为 null</b>（用户改名必须提供非空引用）。
      * 进程内路径抛 {@code NullPointerException}（且在任何变更之前）；IPC 路径返回 {@code INVALID_PARAMS}。
      * 空白名合法（原样透传，唯一化不处理）。</p>
      */

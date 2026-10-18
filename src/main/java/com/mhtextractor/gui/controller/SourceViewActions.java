@@ -86,8 +86,8 @@ public final class SourceViewActions {
                 switch (result) {
                     case SourceViewService.Export.Unparseable() ->
                             throw new IllegalStateException(Texts.get("browser.exportUnparseable"));
-                    case SourceViewService.Export.Failed(String error) ->
-                            throw new IllegalStateException(error);
+                    case SourceViewService.Export.Failed(String detailKey, java.util.Map<String, String> detailParams) ->
+                            throw new IllegalStateException(WorkspaceInfoPresenter.detailText(detailKey, detailParams));
                     case SourceViewService.Export.Success(Path htmlFile, int imageCount, int warningCount) -> {
                         log.info(Texts.msg("log.maincontroller.24", htmlFile, imageCount, warningCount));
                         // 浏览器启动可能耗时（注册表探测 / CDP 端点等待最长约 15 秒），独立后台线程避免冻结界面

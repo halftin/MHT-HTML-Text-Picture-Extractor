@@ -106,7 +106,8 @@ targets:array<TargetId>,count:integer,states:array<TargetState>,uniform:boolean,
 TargetState：`target:TargetId,independent:boolean,effective:boolean,source:NONE/GLOBAL/GROUP,config:Config或null`。
 null 表示未确认/无生效参数，不能替换为默认 Config；null 参与混合值判定，空集合 uniform=true、hasEffective=false。
 
-Q11：`denial:{key,level,namedParams}或null,textConfirmed,imageConfirmed,defaultNamedGroups:array<string>,subsetMergedName:boolean`。
+Q11：`denial:{key,level,namedParams}或null,textConfirmed,imageConfirmed,defaultNamedGroups:array<integer>,subsetMergedName:boolean`。
+defaultNamedGroups 为组号（Java `List<Long>`），前端逐项以 `core.groupDefault` + 组号渲染，再按既有分隔符拼接。
 拒绝顺序为输入空、输出空、输入非目录、无可提取项、checkedOnly 下无勾选项；级别沿用既有业务规则。
 默认名组及合并单元来自同版后端计划。runtime 的空路径作为事实返回 denial；查询不创建输出目录、不含 draftDirty、不发确认卡。
 
@@ -129,17 +130,26 @@ Presentation 保留旧预览命名上下文（例如合并文本按 runtime.inpu
 共享缓存图片仍由原缓存生命周期回收，客户端 release 不得删除借用原图。
 
 Q13 status 为 `unparseable/failed/success`。成功的 htmlFile 为 UTF-8 HTML FileRef，附带 imageCount/warningCount；
-失败保留导出器/解析器诊断 detail。sessionId 用于丢弃旧会话结果，HTML 不应在浏览器仍引用时释放。
+失败返回 `detailKey:string或null,detailParams:object<string,string>或null`，不再有 detail 字段。
+前端用 detailKey + detailParams 渲染；导出器失败用 `browser.exportFailed` + reason，
+解析异常诊断用 `browser.exportDiagnostic` + reason（模板仅 `{reason}`，保持既有原始诊断显示）。
+sessionId 用于丢弃旧会话结果，HTML 不应在浏览器仍引用时释放。
 unparseable 的 htmlFile=null。进程内导出原件位于会话 `port-details/source-view` 根；
 IPC 保持相对图片引用，复制到 welcome.bulkRoot 下的 `source-export-*` 签发目录，返回实际文件字节数。
 FileRef 只在所属会话内有效：客户端读用完毕后必须调用 `releaseFiles` 释放已签发引用；
 源视图仍在浏览器使用期间应保留页面与图片引用。会话关闭清理剩余文件，不能跨会话缓存 FileRef。
 
-ItemVm 追加 `modifiedTime,status,errorMsg,chapterEnabled,badge,cachedTitle,titleOverride,extractOutcome,extractDetail,textFile,previewManifest`。
+ItemVm 追加 `modifiedTime,status,errorKey,errorDetail,chapterEnabled,badge,cachedTitle,titleOverride,extractOutcome,extractDetail,textFile,previewManifest`。
+errorMsg 字段已删除。errorKey/errorDetail 均为 string 或 null（可省略）；errorKey 为 null 时不显示错误，
+否则前端按 `Texts.get(errorKey) + errorDetail` 原顺序渲染，errorDetail 保留诊断串。
 modifiedTime 为 LocalDateTime 的 ISO 字符串，textFile/previewManifest 为 FileRef 或 null（空可省略），不传 cachedText 正文。
 GroupVm 追加 `confirmation:{textConfirmed,imageConfirmed}`（该组独立参数确认摘要）。WorkspaceVm 追加 `details`：
 `textConfirmed,imageConfirmed,activityGeneration,previewGeneration,loadingPath,importing,importGeneration,running,extractionGeneration,lastStats,sessionOutputFolder`。
 lastStats 是完整 ExtractionStats 的 JSON FileRef，不以 StatsVm 四计数代替；所有状态随宿主串行事件快照投影。
+
+P-F2b-1（协议仍为 2）：GroupVm.name 为 string 或 null，`defaultNamed=true` 时必须显式写 `name:null`，
+前端显示 `core.groupDefault` + no；用户改名后 defaultNamed=false、name 非 null。
+ExtractionStats.summaryLine、FileOutcome.message、ItemVm.extractDetail 留待 P-F2b-2，本单元不改变。
 
 E19 追加 `undoKind:string或null,affected:FileRef,suggestedSelection:TargetId或null`，affected 文件为有序 TargetId 数组。
 撤销完成才提供 undoKind/选择建议，U2 参数撤销已由后端恢复 before 并恰好消耗一条记录。Q09 `cacheState` 返回
@@ -232,6 +242,8 @@ Q05/Q06 每次创建请求局部计划上下文，读取同一后端参数权威
 OutputUnitVm 文件每项十字段：原六字段顺序保留——outputName:string 或 null、group:boolean、params:RuntimeConfig、
 paths:array<string>、outputPath:string 或 null、labelKey:string 或 null；追加 baseName/extension/finalFileName/uniqueName（均 string 或 null）。数组顺序和 null 保留，
 不添加 fileCount（数量为 paths.length）。生效参数解析与输出规划复用进程内实现。
+默认命名的组单元 outputName=null、labelKey=`core.groupDefault`；前端以 paths 关联所属 GroupVm，按 no 渲染标签。
+baseName/extension/finalFileName/uniqueName/outputPath 仍是真实产物名和路径，保留产品既有 locale 命名规则。
 
 | 单元种类 | baseName | extension | finalFileName | uniqueName |
 |---|---|---|---|---|
@@ -354,14 +366,15 @@ P4-3 实际交付为独立无头 native 构建；本处曾误归 P4-3 的确认�
   `key` 标识问题类型及文案入口，`namedParams` 是字符串具名参数对象，`actionKeys` 是有序动作键数组。
   `defaultAction=null` 明确默认按取消交付；取消选项始终存在，用 `actionKey=null` 回答。
   非 null 的答案必须属于 `actionKeys`。协议层零 I18n 引用，不传预渲染正文，尤其不序列化
-  `ConfirmRequest.message`。前端按当前语言渲染，下列组合键口径由前端实现。
+  正文。Java ConfirmRequest 仅有 key/namedParams/actionKeys/timeoutMs 四字段，message 字段及五参构造均已删除。
+  前端按当前语言渲染，下列组合键口径由前端实现。
 - `alert.recursionDepthHeader`：组合同名前缀的 Header、Content、Continue、Skip 四个既有键；
   选 `continue` 继续既有解析流程，取消/超时按既有语义跳过超深子树。
   **继续也不会解除解析器深度上限**。跳过可能得到 SUCCEEDED + SKIPPED 文件结果，不等于整任务 CANCELLED。
 - `import.quotaReached`：`groups/files` 为单轮配额，`accumulatedGroups/accumulatedFiles` 为已导入累计；
   组合既有 `import.quotaReached`、`import.quotaContinue`、`import.quotaStop`，最后一个键的
   groups/files 用累计值渲染。动作 `continue/stop`；`stop`、null、超时均停止下一轮。
-  既有 in-process 渲染正文保留，IPC 只取键和参数。
+  进程内与 IPC 均只传键和参数；既有三段正文由前端按同键同参同顺序拼接。
 - `confirmAnswer` 必须已完成 hello，`confirmationId` 必须是非空字符串，`actionKey` 必须显式存在
   且为字符串或 null。已到期、重复、未知 id 回答返回 `{accepted:false}`，不改变其它确认。
   在途确认的非候选动作返回 `INVALID_PARAMS`，不消耗确认。每张卡答案、取消、超时只能有一个胜者。

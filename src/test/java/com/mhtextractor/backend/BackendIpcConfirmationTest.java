@@ -227,7 +227,7 @@ class BackendIpcConfirmationTest {
         var events = new ArrayList<JsonNode>();
         var confirmations = new IpcConfirmations(JSON, Runnable::run, events::add);
         var token = confirmations.confirm(new ConfirmRequest("question.key", Map.of("files", "17"),
-                List.of("continue", "stop"), 0, "rendered text must never cross the pipe"));
+                List.of("continue", "stop"), 0));
         JsonNode data = events.getFirst();
         assertFalse(data.has("message"));
         assertEquals("17", data.path("namedParams").path("files").asText());

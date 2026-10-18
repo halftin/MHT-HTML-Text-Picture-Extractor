@@ -203,7 +203,7 @@ class HtmlExportBuilderTest {
         HtmlExportBuilder.ExportResult r = HtmlExportBuilder.export(
                 tmp.resolve("broken.mht").toString(), parsed(null, Map.of()));
         assertFalse(r.success());
-        assertNotNull(r.error());
-        assertFalse(r.error().isEmpty());
+        assertNotNull(r.detailKey());
+        assertFalse(r.detailKey().isEmpty());
     }
 }

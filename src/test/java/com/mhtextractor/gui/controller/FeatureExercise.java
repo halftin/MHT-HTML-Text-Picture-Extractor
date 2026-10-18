@@ -879,6 +879,9 @@ public boolean runAutomatedTests() {
                 throw new IllegalStateException("前置：应恰有 1 个未命名组，实际 " + unnamed.size());
             }
             String unnamedName = unnamed.get(0).getName();
+            if (!unnamedName.equals(I18n.get("core.groupDefault") + unnamed.get(0).getGroupNo())) {
+                throw new IllegalStateException("默认组名未按当前语言和组号渲染：" + unnamedName);
+            }
             outputFolderField().setText(new File(System.getProperty("java.io.tmpdir"),
                     "mht-auto-output-gate").getPath()); FxDelay.pause(200);
             // ② 卡片出现且列出组名 → 取消 → 不提取

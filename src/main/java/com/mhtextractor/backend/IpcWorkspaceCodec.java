@@ -23,7 +23,8 @@ final class IpcWorkspaceCodec {
         result.put("sourceFolder", vm.sourceFolder());
         putOptional(result, "modifiedTime", vm.modifiedTime());
         putOptional(result, "status", vm.status());
-        putOptional(result, "errorMsg", vm.errorMsg());
+        putOptional(result, "errorKey", vm.errorKey());
+        putOptional(result, "errorDetail", vm.errorDetail());
         if (vm.chapterEnabled() != null) result.put("chapterEnabled", vm.chapterEnabled());
         putOptional(result, "badge", vm.badge());
         putOptional(result, "cachedTitle", vm.cachedTitle());

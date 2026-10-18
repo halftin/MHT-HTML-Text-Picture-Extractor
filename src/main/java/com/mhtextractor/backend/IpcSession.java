@@ -530,7 +530,8 @@ final class IpcSession implements AutoCloseable {
                 IpcFiles.input(path);
                 var vm = port.queries().exportSource(path);
                 var value = json.createObjectNode().put("status", vm.status()).put("imageCount", vm.imageCount())
-                        .put("warningCount", vm.warningCount()).put("detail", vm.detail());
+                        .put("warningCount", vm.warningCount()).put("detailKey", vm.detailKey());
+                value.set("detailParams", json.valueToTree(vm.detailParams()));
                 value.set("htmlFile", vm.htmlFile() == null ? json.nullNode() : exportedHtml(vm.htmlFile()));
                 return value;
             }

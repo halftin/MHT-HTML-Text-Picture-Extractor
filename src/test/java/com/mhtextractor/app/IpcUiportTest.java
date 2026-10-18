@@ -137,19 +137,60 @@ class IpcUiportTest {
                     .map(PortEvent.WorkspaceChanged.class::cast).findFirst().orElseThrow();
             assertEquals("edited title",title.snapshot().topLevelItems().getFirst().titleOverride());
             var a=local.queries().exportSource(paths.getFirst()); var b=ipc.queries().exportSource(paths.getFirst());
-            assertEquals(a.status(),b.status()); assertEquals(a.detail(),b.detail());
+            assertEquals(a.status(),b.status()); assertEquals(a.detailKey(),b.detailKey()); assertEquals(a.detailParams(),b.detailParams());
             assertEquals(a.imageCount(),b.imageCount()); assertEquals(a.warningCount(),b.warningCount());
             assertArrayEquals(Files.readAllBytes(Path.of(a.htmlFile().path())),Files.readAllBytes(Path.of(b.htmlFile().path())));
             assertEquals(a.htmlFile().bytes(),b.htmlFile().bytes()); assertEquals(a.htmlFile().mediaType(),b.htmlFile().mediaType());
             ipc.commands().startPreparse(); until(events,PortEvent.PreparseFinished.class::isInstance);
             until(events,PortEvent.PreparseFinished.class::isInstance);
             var item=ipc.queries().workspace().topLevelItems().getFirst();
-            assertEquals("READY",item.status()); assertEquals("",item.errorMsg()); assertNotNull(item.textFile());
+            assertEquals("READY",item.status()); assertNull(item.errorKey()); assertEquals("",item.errorDetail()); assertNotNull(item.textFile());
             assertEquals("content 0",Files.readString(Path.of(item.textFile().path())));
             var presentation=ipc.queries().presentation(List.of(paths.getFirst()),runtime).getFirst();
             assertEquals(Files.readString(Path.of(item.textFile().path())),Files.readString(Path.of(presentation.textFile().path())));
             assertEquals("edited title",ipc.queries().workspace().topLevelItems().getFirst().titleOverride());
             assertFalse(ipc.failure().isDone());
+        }
+    }
+
+    @Test void neutralFailureAndDefaultGroupFieldsSurviveBothPaths() throws Exception {
+        Path root = root();
+        Path bad = Files.writeString(root.resolve("bad.mht"), "MIME-Version: 1.0\r\n"
+                + "Content-Type: text/html; charset=x-invalid-neutral\r\nContent-Transfer-Encoding: 8bit\r\n\r\n<html>bad</html>");
+        var paths = List.of(bad.toString());
+        var model = new WorkspaceModel();
+        var local = new InProcessUiport(model, new Cards(), new ExtractionPlanService(new ExtractionPlanService.Context() {
+            public List<Object> dataOrder() { return model.topLevel(); }
+            public boolean imageMode() { return false; }
+            public AppConfig textParamsCache() { return null; }
+            public AppConfig imageParamsCache() { return null; }
+            public String inputFolder() { return null; }
+            public String outputFolder() { return root.resolve("output").toString(); }
+            public boolean openFolderAfterComplete() { return false; }
+        }));
+        try (var ipc = real(root, new Cards())) {
+            for (Uiport port : List.of(local, ipc)) {
+                port.commands().applyImportPlan(plan(root, paths, false));
+                port.commands().group(paths, "neutral");
+                port.commands().setItemParams(paths.getFirst(), false, new AppConfig());
+                var events = new LinkedBlockingQueue<PortEvent>();
+                try (var ignored = port.events().subscribe(events::add)) {
+                    port.commands().startPreparseFor(paths);
+                    until(events, PortEvent.PreparseFinished.class::isInstance);
+                }
+            }
+            assertEquals(local.queries().workspace(), ipc.queries().workspace());
+            var group = ipc.queries().workspace().groups().getFirst();
+            assertTrue(group.defaultNamed()); assertNull(group.name());
+            var item = group.members().getFirst();
+            assertEquals("preview.parseFailed", item.errorKey()); assertEquals("x-invalid-neutral", item.errorDetail());
+            var runtime = new AppConfig(); runtime.setInputFolder(root.toString()); runtime.setOutputFolder(root.resolve("out").toString());
+            assertEquals(local.queries().preStartState(runtime, false), ipc.queries().preStartState(runtime, false));
+            assertEquals(List.of(group.no()), ipc.queries().preStartState(runtime, false).defaultNamedGroups());
+            assertEquals(local.queries().presentation(paths, runtime), ipc.queries().presentation(paths, runtime));
+            assertEquals(JSON.valueToTree(local.queries().outputUnitPlan(false)), JSON.valueToTree(ipc.queries().outputUnitPlan(false)));
+            var missing = root.resolve("missing.html").toString();
+            assertEquals(local.queries().exportSource(missing), ipc.queries().exportSource(missing));
         }
     }
 
@@ -463,6 +504,8 @@ class IpcUiportTest {
             Path root=root(); Cards cards=new Cards();
             try (var ipc=port(root,cards,IpcUiportWirePeer.class.getName(),mode)) {
                 ipc.commands().cancelWorkspaceActivity(); Question first=cards.next();
+                assertEquals(new ConfirmRequest("confirm.test", Map.of("id", "first"), List.of("continue"),
+                        mode.equals("timeout") ? 80 : 2000), first.request());
                 assertNull(first.token.result.get(5,TimeUnit.SECONDS));
                 if (mode.equals("replace")) { Question second=cards.next(); second.token.answer("continue"); }
                 // Priority confirmation answers run independently from file-release RPCs and subscribers.

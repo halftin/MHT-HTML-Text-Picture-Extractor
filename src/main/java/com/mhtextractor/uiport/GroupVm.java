@@ -7,7 +7,7 @@ import java.util.Objects;
  * 分组视图模型（不可变 record，自持；不引用任何业务类型）。
  *
  * @param no           组序号（工作区内唯一）
- * @param name         组名
+ * @param name         用户组名；defaultNamed 时固定为 null，由前端按组号渲染
  * @param expanded     展开状态（后端持有，影响投影与单元规划）
  * @param defaultNamed 是否默认命名（未命名组拦截门判定用）
  * @param members      成员条目（{@link List#copyOf} 防御性不可变拷贝）
@@ -30,7 +30,8 @@ public record GroupVm(long no, String name, boolean expanded, boolean defaultNam
     }
 
     public GroupVm {
-        Objects.requireNonNull(name, "name");
+        if (defaultNamed) name = null;
+        else Objects.requireNonNull(name, "name");
         members = List.copyOf(Objects.requireNonNull(members, "members"));
         sourceFolders = java.util.Collections.unmodifiableList(new java.util.ArrayList<>(sourceFolders));
     }

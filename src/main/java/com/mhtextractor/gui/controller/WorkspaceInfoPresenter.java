@@ -31,6 +31,18 @@ import java.util.List;
 @Slf4j
 public final class WorkspaceInfoPresenter {
 
+    /** GUI rendering of language-neutral port errors, in the original concatenation order. */
+    static String errorText(PreviewRow row) {
+        return row.errorKey == null ? "" : Texts.get(row.errorKey) + row.errorDetail;
+    }
+
+    static String detailText(String key, java.util.Map<String, String> params) {
+        if (key == null) return null;
+        Object[] args = params == null ? new Object[0] : params.entrySet().stream()
+                .flatMap(e -> java.util.stream.Stream.of(e.getKey(), e.getValue())).toArray();
+        return Texts.get(key, args);
+    }
+
     /**
      * 宿主能力面（C5）：对 {@code MainController} 的全部能力需求收窄为具名方法。
      * 实现由 {@code MainController} 的匿名内部类提供（转发到其保留成员）。
@@ -204,7 +216,7 @@ public final class WorkspaceInfoPresenter {
             }
         }
         if (sel instanceof PreviewRow it && it.status == PreviewRow.Status.FAILED) {
-            host.extractResultBanner().setText(Texts.get("extract.parseFailed") + it.errorMsg);
+            host.extractResultBanner().setText(Texts.get("extract.parseFailed") + WorkspaceInfoPresenter.errorText(it));
             host.extractResultBanner().setVisible(true);
             host.extractResultBanner().setManaged(true);
             return;

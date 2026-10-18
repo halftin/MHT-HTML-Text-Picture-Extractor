@@ -185,7 +185,7 @@ public final class ExtractionTaskCoordinator {
                 else { GuiNotifications.draftBlocksStart(host.statusLabel()); proceed.accept(false); }
             });
             preStartGates.add(proceed -> {
-                var names = preStart.defaultNamedGroups();
+                var names = preStart.defaultNamedGroups().stream().map(no -> Texts.get("core.groupDefault") + no).toList();
                 if (names.isEmpty()) proceed.accept(true);
                 else GuiNotifications.unnamedGroupConfirm(host.statusLabel(),
                         Texts.get("group.unnamedConfirm", "names", String.join(Texts.get("list.nameSeparator"), names)), proceed);

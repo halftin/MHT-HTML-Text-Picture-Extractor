@@ -201,7 +201,7 @@ class BackendIpcDetailsTest {
             var direct=p.direct.queries().preStartState(runtimeConfig(runtime),true);
             assertNull(direct.denial());assertEquals(1,direct.defaultNamedGroups().size());assertTrue(direct.subsetMergedName());
             var wire=(ObjectNode)p.call("preStartState",object().put("checkedOnly",true).put("revision",p.revision).set("runtime",runtime));wire.remove("revision");
-            assertEquals(JSON.valueToTree(direct),wire); assertFalse(Files.exists(Path.of(out)));
+            assertEquals(JSON.readTree(JSON.writeValueAsString(direct)),wire); assertFalse(Files.exists(Path.of(out)));
         }
     }
 

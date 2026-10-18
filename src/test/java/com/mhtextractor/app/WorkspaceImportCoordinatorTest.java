@@ -121,12 +121,19 @@ class WorkspaceImportCoordinatorTest {
 
         @Override
         public ConfirmToken confirm(ConfirmRequest request) {
-            lastCardMessage = request.message();
+            lastCardMessage = render(request);
             lastRequest = request;
-            cardMessages.add(request.message());
+            cardMessages.add(lastCardMessage);
             BlockingToken token = new BlockingToken();
             tokens.add(token);
             return token;
+        }
+
+        private String render(ConfirmRequest request) {
+            var p = request.namedParams();
+            return Texts.get(request.key(), "groups", p.get("groups"), "files", p.get("files"))
+                    + Texts.get("import.quotaContinue") + Texts.get("import.quotaStop",
+                    "groups", p.get("accumulatedGroups"), "files", p.get("accumulatedFiles"));
         }
 
         /** 测试线程阻塞取走令牌（扫描线程尚未发出确认请求时等待 —— 超时 = 实现回归）。 */

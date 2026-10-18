@@ -129,7 +129,7 @@ public class MainController {
         this.fxmlLoader = fxmlLoader;
         this.activityPort = (com.mhtextractor.uicore.FrontendPort) java.util.Objects.requireNonNull(port);
         this.closeBackend = java.util.Objects.requireNonNull(closeBackend);
-        this.ws = new WorkspaceView(activityPort);
+        this.ws = new WorkspaceView(activityPort, no -> Texts.get("core.groupDefault") + no);
         this.adapter = new WorkspaceFxAdapter(ws);
         this.items = adapter.dataOrder();
         this.displayItems = adapter.displayItems();
@@ -1533,7 +1533,7 @@ public class MainController {
             }
             switch (it.status) {
                 case WAITING -> refs.textPreviewArea().setText(Texts.get("preview.imageParsing"));
-                case FAILED -> refs.textPreviewArea().setText(Texts.get("preview.parseFailed") + it.errorMsg);
+                case FAILED -> refs.textPreviewArea().setText(Texts.get("preview.parseFailed") + WorkspaceInfoPresenter.errorText(it));
                 case EMPTY -> refs.textPreviewArea().setText(Texts.get("preview.emptyContentShort"));
                 case READY -> previewRenderer.renderTextPreview(it);
             }
@@ -1551,7 +1551,7 @@ public class MainController {
                 return;
             }
             if (it.status == PreviewRow.Status.FAILED) {
-                refs.imageHintLabel().setText(Texts.get("preview.parseFailed") + it.errorMsg);
+                refs.imageHintLabel().setText(Texts.get("preview.parseFailed") + WorkspaceInfoPresenter.errorText(it));
                 refs.imageHintLabel().setVisible(true);
                 refs.previewEffectButton().setVisible(true);
                 refs.previewEffectButton().setDisable(true);

@@ -156,7 +156,7 @@ class InProcessUiportTest {
         assertEquals(1, vm.groups().size());
         GroupVm gv = vm.groups().get(0);
         assertEquals(1, gv.no());
-        assertEquals("组1", gv.name());
+        assertNull(gv.name());
         assertTrue(gv.expanded());
         assertTrue(gv.defaultNamed(), "手工建组 = 默认名（未命名组拦截标记）");
         assertEquals(2, gv.members().size());
@@ -261,7 +261,7 @@ class InProcessUiportTest {
         WorkspaceVm vm = uiport.queries().workspace();
         assertEquals(1, vm.groups().size(), "未知路径静默跳过，其余按路径建组");
         GroupVm g = vm.groups().get(0);
-        assertEquals("组1", g.name(), "组名唯一化由后端保证");
+        assertNull(g.name(), "默认组名由前端按组号渲染");
         assertTrue(g.expanded());
 
         uiport.commands().renameGroup(g.no(), "组1");

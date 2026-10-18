@@ -59,7 +59,7 @@ final class IpcConfirmations implements Confirmer {
             request.namedParams().forEach(params::put);
             var actions = data.putArray("actionKeys");
             request.actionKeys().forEach(actions::add);
-            // message() is deliberately never serialized: clients render keys and named parameters.
+            // Clients render keys and named parameters.
             events.accept(data);
         });
         return token;

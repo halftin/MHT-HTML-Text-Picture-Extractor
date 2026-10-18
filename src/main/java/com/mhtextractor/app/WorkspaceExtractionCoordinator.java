@@ -308,7 +308,8 @@ public final class WorkspaceExtractionCoordinator {
             List<com.mhtextractor.uiport.OutputUnitVm> units = plans.outputUnitPlan(checkedOnly);
             log.info(Texts.msg("log.maincontroller.33", units.stream()
                     .map(u -> Texts.get("extract.groupFileCount",
-                            "group", u.outputName() != null ? u.outputName() : Texts.get(u.labelKey()),
+                            "group", u.group() ? WorkspaceExtractionService.outputName(u)
+                                    : u.outputName() != null ? u.outputName() : Texts.get(u.labelKey()),
                             "count", u.fileCount())).toList()));
             Map<String, com.mhtextractor.processor.PerFileOverrides> overrides =
                     ExtractionPlanService.overrides(allVisibleItems.get());
@@ -324,12 +325,8 @@ public final class WorkspaceExtractionCoordinator {
      */
     private static Supplier<Boolean> recursionDecision(Confirmer confirmer) {
         return () -> {
-            String msg = Texts.get("alert.recursionDepthHeader") + "\n"
-                    + Texts.get("alert.recursionDepthContent")
-                    + Texts.get("alert.recursionDepthContinue")
-                    + Texts.get("alert.recursionDepthSkip");
             ConfirmRequest request = new ConfirmRequest("alert.recursionDepthHeader", Map.of(),
-                    List.of(ACTION_CONTINUE), 0, msg);
+                    List.of(ACTION_CONTINUE), 0);
             try {
                 return ACTION_CONTINUE.equals(confirmer.confirm(request).await());
             } catch (InterruptedException e) {

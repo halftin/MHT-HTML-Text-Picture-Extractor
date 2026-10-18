@@ -340,7 +340,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
                     ? null : new Tooltip(it.extractDetail));
         } else if (it.status == PreviewRow.Status.FAILED) {
             setStyle(isSelected ? FAILED_SELECTED_ROW_STYLE : FAILED_ROW_STYLE);
-            setTooltip(new Tooltip(it.errorMsg));
+            setTooltip(new Tooltip(WorkspaceInfoPresenter.errorText(it)));
         } else {
             setStyle(itemParamStyle(it, isSelected));
             setTooltip(it.status == PreviewRow.Status.EMPTY

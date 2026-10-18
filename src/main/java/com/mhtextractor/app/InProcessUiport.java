@@ -247,8 +247,10 @@ public final class InProcessUiport implements Uiport {
         activities.subscribe(event -> {
             if (event instanceof PortEvent.PreparseFinished parsed) {
                 var result = parsed.result();
-                for (var item : model.allItems()) if (item.path.equals(result.path()))
-                    item.errorMsg = result.errorKey() == null ? "" : Texts.get(result.errorKey()) + result.errorDetail();
+                for (var item : model.allItems()) if (item.path.equals(result.path())) {
+                    item.errorKey = result.errorKey();
+                    item.errorDetail = result.errorDetail();
+                }
             }
         });
         paramCommands.subscribe(event -> {
@@ -562,7 +564,7 @@ public final class InProcessUiport implements Uiport {
                 var units = com.mhtextractor.util.OutputUnitPlanner.plan(model.topLevel(), ExtractionPlanService.itemView(checkedOnly),
                         runtime.isImageModeEnabled(), globals.textGlobal(), globals.imageGlobal(), runtime.getOutputFolder());
                 return new com.mhtextractor.uiport.PreStartStateVm(denial, globals.textGlobal() != null, globals.imageGlobal() != null,
-                        ExtractionPreconditions.unnamedGroups(groups), checkedOnly
+                        groups.stream().filter(GroupItem::isDefaultNamed).map(g -> (long) g.getGroupNo()).toList(), checkedOnly
                         && com.mhtextractor.util.OutputUnitPlanner.hasMergedUnit(units, runtime.isImageModeEnabled()));
             }
             public List<com.mhtextractor.uiport.PresentationVm> presentation(List<String> paths, AppConfig runtime) {
@@ -589,14 +591,14 @@ public final class InProcessUiport implements Uiport {
                         case SourceViewService.Export.Success success -> new com.mhtextractor.uiport.ExportSourceVm(
                                 "success", new com.mhtextractor.uiport.FileRef(success.htmlFile().toString(),
                                 java.nio.file.Files.size(success.htmlFile()), "text/html; charset=utf-8"),
-                                success.imageCount(), success.warningCount(), null);
+                                success.imageCount(), success.warningCount(), null, null);
                         case SourceViewService.Export.Unparseable ignored -> new com.mhtextractor.uiport.ExportSourceVm(
-                                "unparseable", null, 0, 0, null);
+                                "unparseable", null, 0, 0, null, null);
                         case SourceViewService.Export.Failed failed -> new com.mhtextractor.uiport.ExportSourceVm(
-                                "failed", null, 0, 0, failed.error());
+                                "failed", null, 0, 0, failed.detailKey(), failed.detailParams());
                     };
                 } catch (Exception e) {
-                    return new com.mhtextractor.uiport.ExportSourceVm("failed", null, 0, 0, e.getMessage());
+                    return new com.mhtextractor.uiport.ExportSourceVm("failed", null, 0, 0, "browser.exportDiagnostic", Map.of("reason", String.valueOf(e.getMessage())));
                 }
             }
         };
@@ -773,7 +775,7 @@ public final class InProcessUiport implements Uiport {
 
     private ItemVm toItemVm(PreviewItem it, Integer unitIndex) {
         return new ItemVm(it.path, it.name, it.selected, it.removed, unitIndex, UpdateKind.NONE, it.sourceFolder,
-                it.modifiedTime == null ? null : it.modifiedTime.toString(), it.status.name(), it.errorMsg,
+                it.modifiedTime == null ? null : it.modifiedTime.toString(), it.status.name(), it.errorKey, it.errorDetail,
                 it.chapterEnabled, it.badge, it.cachedTitle, it.titleOverride, it.extractOutcome.name(),
                 it.extractDetail, textFile(it.cachedText), previewManifest(it));
     }

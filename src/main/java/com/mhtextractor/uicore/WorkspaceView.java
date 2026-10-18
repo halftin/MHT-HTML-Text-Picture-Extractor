@@ -6,13 +6,15 @@ import java.util.*;
 /** Materializes display identities from a complete VM snapshot. No domain objects or undo stack. */
 public final class WorkspaceView {
     private final FrontendPort port;
+    private final java.util.function.LongFunction<String> defaultGroupName;
     private final PreviewRetention previewRetention=new PreviewRetention();
     private final Map<String,PreviewRow> items=new LinkedHashMap<>();
     private final Map<Long,GroupRow<PreviewRow>> groups=new LinkedHashMap<>();
     private List<Object> order=List.of();
     private long version;
     private final AutoCloseable subscription;
-    public WorkspaceView(FrontendPort port){this.port=port;update(port.snapshot());subscription=port.events().subscribe(ignored->update(port.snapshot()));}
+    public WorkspaceView(FrontendPort port){this(port, no -> null);}
+    public WorkspaceView(FrontendPort port, java.util.function.LongFunction<String> defaultGroupName){this.defaultGroupName=defaultGroupName;this.port=port;update(port.snapshot());subscription=port.events().subscribe(ignored->update(port.snapshot()));}
     public void update(PortSnapshot state){
         var vm=state.workspace();
         var active=new HashSet<String>();var topActive=new HashSet<String>();
@@ -22,7 +24,7 @@ public final class WorkspaceView {
         current.values().forEach(i->{item(i);if(!i.removed())active.add(i.id());});
         for(var row:items.values())row.parentGroup=null;
         for(var g:vm.groups()){
-            var row=groups.computeIfAbsent(g.no(),ignored->new GroupRow<>(g));
+            var row=groups.computeIfAbsent(g.no(),ignored->new GroupRow<>(g, defaultGroupName));
             var members=g.members().stream().filter(i->!i.removed()||!active.contains(i.id())).map(i->items.get(i.id())).toList();row.update(g,members);
             for(var member:members)member.parentGroup=row;
         }

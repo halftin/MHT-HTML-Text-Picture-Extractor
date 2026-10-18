@@ -17,7 +17,7 @@ import java.util.List;
  *
  * <p><b>会话 18 的分步改造记录</b>：</p>
  * <ul>
- *   <li>E1.3a：5 个 JavaFX 属性（{@code status}/{@code errorMsg}/{@code chapterEnabled}/
+ *   <li>E1.3a：5 个 JavaFX 属性（{@code status}/{@code errorKey}/{@code errorDetail}/{@code chapterEnabled}/
  *       {@code selected}/{@code badge}）→ 普通字段 + 自研 {@link ChangeListener}；</li>
  *   <li>E1.4：{@code cachedThumbs} 由 JavaFX {@code Image} → {@link ThumbnailData}（纯像素）；</li>
  *   <li>E2.1：本类从 {@code MainController} 内部类外迁到 {@code com.mhtextractor.model}。</li>
@@ -49,7 +49,8 @@ public class PreviewItem {
     // ==================== UI 状态（普通字段，E1.3a 去 JavaFX 属性） ====================
 
     public Status status = Status.WAITING;
-    public String errorMsg = "";
+    public String errorKey;
+    public String errorDetail;
     public boolean chapterEnabled = true;
     /** 复选框勾选状态（F1）：默认未选中，仅用于批量选择，不影响提取名单 */
     public boolean selected = false;

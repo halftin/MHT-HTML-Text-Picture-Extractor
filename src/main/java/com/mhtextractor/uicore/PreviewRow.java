@@ -16,7 +16,7 @@ public final class PreviewRow implements ParamTargetView {
     public final String path,name,sourceFolder;
     public final LocalDateTime modifiedTime;
     public Status status=Status.WAITING;
-    public String errorMsg="",badge,cachedText,cachedTitle,titleOverride,extractDetail;
+    public String errorKey,errorDetail,badge,cachedText,cachedTitle,titleOverride,extractDetail;
     public boolean chapterEnabled,selected,removed;
     public ExtractOutcome extractOutcome=ExtractOutcome.NONE;
     public GroupRow<PreviewRow> parentGroup;
@@ -39,7 +39,7 @@ public final class PreviewRow implements ParamTargetView {
     }
     void update(ItemVm vm){
         boolean changed=selected!=vm.checked();selected=vm.checked();removed=vm.removed();
-        status=vm.status()==null?Status.WAITING:Status.valueOf(vm.status());errorMsg=vm.errorMsg()==null?"":vm.errorMsg();
+        status=vm.status()==null?Status.WAITING:Status.valueOf(vm.status());errorKey=vm.errorKey();errorDetail=vm.errorDetail();
         chapterEnabled=Boolean.TRUE.equals(vm.chapterEnabled());badge=vm.badge();cachedTitle=vm.cachedTitle();titleOverride=vm.titleOverride();
         boolean hadPreview=previewCached;previewCached=vm.previewManifest()!=null;
         if(hadPreview&&!previewCached){releaseImageData();cachedMeta=null;}

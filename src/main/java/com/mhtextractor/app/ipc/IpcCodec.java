@@ -71,14 +71,14 @@ public final class IpcCodec {
         return new ItemVm(text(n,"id"),text(n,"name"),bool(n,"checked"),bool(n,"removed"),
                 n.path("unitIndex").isNull() ? null : integer(n,"unitIndex"),
                 UpdateKind.valueOf(text(n,"update")),nullable(n,"sourceFolder"),
-                optional(n,"modifiedTime"),optional(n,"status"),optional(n,"errorMsg"),
+                optional(n,"modifiedTime"),optional(n,"status"),optional(n,"errorKey"),optional(n,"errorDetail"),
                 n.hasNonNull("chapterEnabled") ? bool(n,"chapterEnabled") : null,
                 optional(n,"badge"),optional(n,"cachedTitle"),optional(n,"titleOverride"),
                 optional(n,"extractOutcome"),optional(n,"extractDetail"),
                 reference(n.path("textFile")),reference(n.path("previewManifest")));
     }
     public GroupVm group(JsonNode n) {
-        return new GroupVm(number(n,"no"),text(n,"name"),bool(n,"expanded"),bool(n,"defaultNamed"),
+        return new GroupVm(number(n,"no"),nullable(n,"name"),bool(n,"expanded"),bool(n,"defaultNamed"),
                 list(n.path("members"),this::item),list(n.path("sourceFolders"),v -> v.isNull() ? null : string(v)),
                 n.hasNonNull("confirmation") ? new GroupVm.Confirmation(bool(n.path("confirmation"),"textConfirmed"),
                         bool(n.path("confirmation"),"imageConfirmed")) : null);
@@ -111,7 +111,7 @@ public final class IpcCodec {
     public PreStartStateVm preStart(JsonNode n) {
         var d = n.path("denial");
         return new PreStartStateVm(d.isNull() ? null : new PreStartStateVm.Denial(text(d,"key"),text(d,"level"),map(d.path("namedParams"))),
-                bool(n,"textConfirmed"),bool(n,"imageConfirmed"),strings(n.path("defaultNamedGroups")),bool(n,"subsetMergedName"));
+                bool(n,"textConfirmed"),bool(n,"imageConfirmed"),list(n.path("defaultNamedGroups"),v -> { if (!v.isIntegralNumber()) throw new IllegalArgumentException("Group number required"); return v.longValue(); }),bool(n,"subsetMergedName"));
     }
     public synchronized List<PresentationVm> presentation(JsonNode n) throws IOException {
         if (!n.isArray()) throw new IllegalArgumentException("Presentation array required");
@@ -129,7 +129,7 @@ public final class IpcCodec {
     }
     public ExportSourceVm exportSource(JsonNode n) {
         return new ExportSourceVm(text(n,"status"),reference(n.path("htmlFile")),integer(n,"imageCount"),
-                integer(n,"warningCount"),nullable(n,"detail"));
+                integer(n,"warningCount"),nullable(n,"detailKey"),n.path("detailParams").isNull() ? null : map(n.path("detailParams")));
     }
     public ImportPlanVm plan(JsonNode n) {
         return new ImportPlanVm(list(n.path("batches"), b -> new ImportPlanVm.ImportBatchVm(text(b,"dirPath"),

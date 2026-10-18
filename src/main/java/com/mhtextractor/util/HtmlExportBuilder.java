@@ -49,11 +49,12 @@ public final class HtmlExportBuilder {
 
     private HtmlExportBuilder() {}
 
-    /** 导出结果（不抛异常，失败信息放 error） */
+    /** 导出结果（不抛异常；失败仅携带文案键与诊断参数）。 */
     public record ExportResult(boolean success, Path htmlFile, int imageCount,
-                               List<ExtractWarning> warnings, String error) {
-        public static ExportResult failure(String msg) {
-            return new ExportResult(false, null, 0, List.of(), msg);
+                               List<ExtractWarning> warnings, String detailKey, Map<String, String> detailParams) {
+        public ExportResult { detailParams = detailParams == null ? null : Map.copyOf(detailParams); }
+        public static ExportResult failure(String key, Map<String, String> params) {
+            return new ExportResult(false, null, 0, List.of(), key, params);
         }
     }
 
@@ -68,7 +69,7 @@ public final class HtmlExportBuilder {
     /** Explicit session-owned root for ports; the legacy browser API retains its cache root. */
     public static ExportResult export(String mhtPath, MimeParser.ParsedMht parsed, Path root) {
         if (parsed == null || parsed.getHtmlContent() == null) {
-            return ExportResult.failure(parsed == null ? I18n.get("browser.exportParseEmpty") : I18n.get("browser.exportUnparseable"));
+            return ExportResult.failure(parsed == null ? "browser.exportParseEmpty" : "browser.exportUnparseable", Map.of());
         }
         try {
             Path dir = root.resolve(cacheKey(mhtPath));
@@ -77,7 +78,7 @@ public final class HtmlExportBuilder {
             // 缓存命中：完成标记存在且页面文件在 → 直接复用
             if (Files.exists(dir.resolve(COMPLETE_MARKER)) && Files.exists(htmlFile)) {
                 log.info(I18n.msg("log.htmlexportbuilder.01", htmlFile));
-                return new ExportResult(true, htmlFile, countImages(dir), List.of(), null);
+                return new ExportResult(true, htmlFile, countImages(dir), List.of(), null, null);
             }
 
             // 重新生成：清掉旧目录残留（含上次半途而废的产物），完成后写标记
@@ -95,10 +96,10 @@ public final class HtmlExportBuilder {
             log.info(I18n.msg("log.htmlexportbuilder.02", htmlFile, finalHtml.length(), countImages(dir)));
 
             pruneOldDirs(root, dir);
-            return new ExportResult(true, htmlFile, countImages(dir), warnings, null);
+            return new ExportResult(true, htmlFile, countImages(dir), warnings, null, null);
         } catch (Exception e) {
             log.error(I18n.msg("log.htmlexportbuilder.03", mhtPath), e);
-            return ExportResult.failure(I18n.get("browser.exportFailed", "reason", e.getMessage()));
+            return ExportResult.failure("browser.exportFailed", Map.of("reason", String.valueOf(e.getMessage())));
         }
     }
 

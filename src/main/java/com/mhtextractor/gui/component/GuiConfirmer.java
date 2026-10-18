@@ -66,11 +66,8 @@ public final class GuiConfirmer implements Confirmer {
                 answer.accept(accepted && !request.actionKeys().isEmpty() ? request.actionKeys().getFirst() : null));
     }
 
-    /** 文案：预渲染 message 直接展示；否则按 key + 具名参数渲染（键 + 参数的口径与 Notice 一致）。 */
+    /** 按 key + 具名参数渲染；复合卡片维持既有拼接顺序。 */
     private static String messageOf(ConfirmRequest request) {
-        if (request.message() != null) {
-            return request.message();
-        }
         Map<String, String> params = request.namedParams();
         Object[] args = new Object[params.size() * 2];
         int i = 0;

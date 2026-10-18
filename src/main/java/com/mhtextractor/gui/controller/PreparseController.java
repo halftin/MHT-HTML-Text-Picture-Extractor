@@ -58,8 +58,8 @@ public final class PreparseController {
             PreviewRow item = host.allItems().stream()
                     .filter(i -> i.path.equals(result.path())).findFirst().orElse(null);
             if (item == null) return;
-            item.errorMsg = result.errorKey() == null ? ""
-                    : Texts.get(result.errorKey()) + result.errorDetail();
+            item.errorKey = result.errorKey();
+            item.errorDetail = result.errorDetail();
             if (item.removed) return;
             if (!host.isDragActive() && !host.isAnimating()) {
                 host.refreshList();
