@@ -23,7 +23,7 @@ class WorkspaceFxAdapterTest {
         final WorkspaceView view;final WorkspaceFxAdapter adapter;
         Fixture(){this(null);}
         Fixture(StubHost host){var r=new AppConfig();r.setInputFolder("H:/TEST/mht/adapter");r.setOutputFolder("H:/TEST/mht/adapter-output");
-            port.bootstrap(r);view=new WorkspaceView(port);adapter=new WorkspaceFxAdapter(view,host);}
+            port.bootstrap(r);view=new WorkspaceView(port, no -> "Group " + no);adapter=new WorkspaceFxAdapter(view,host);}
         void sync(){var done=new CompletableFuture<Void>();port.execute(p->null,ignored->done.complete(null));done.orTimeout(10,TimeUnit.SECONDS).join();}
         PreviewRow row(PreviewItem i){return view.allItems().stream().filter(v->v.path.equals(i.path)).findFirst().orElseThrow();}
         void refresh(){sync();adapter.refresh();}

@@ -118,7 +118,8 @@ public class ParamDraftProbe extends Application {
         AppConfig itemParams = new AppConfig(); itemParams.setStartMarker("ITEM_ONLY");
         backend.commands().setItemParams(paths.getFirst(), false, itemParams);
         ProbeFx.awaitCommands(frontend);
-        var workspace = new com.mhtextractor.uicore.WorkspaceView(frontend);
+        var workspace = new com.mhtextractor.uicore.WorkspaceView(frontend,
+                no -> com.mhtextractor.i18n.I18n.get("core.groupDefault") + no);
         var group = workspace.groups().getFirst();
         var b = workspace.allItems().get(1);
 

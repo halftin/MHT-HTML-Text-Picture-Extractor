@@ -122,7 +122,7 @@ class ParamTargetTextTest {
             itemParams.setStartMarker("ITEM");
             commands.setItemParams(withOwn, false, itemParams);
             frontend.bootstrap(new AppConfig());
-            var view = new com.mhtextractor.uicore.WorkspaceView(frontend);
+            var view = new com.mhtextractor.uicore.WorkspaceView(frontend, no -> "Group " + no);
             var group = view.groups().getFirst();
             var target = new com.mhtextractor.uicore.ParamScope.GroupTarget(group);
             assertTrue(ParamTargetText.isGroupMixed(target, root.port().queries(), false),

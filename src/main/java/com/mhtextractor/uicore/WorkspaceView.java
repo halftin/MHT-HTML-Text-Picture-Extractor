@@ -13,7 +13,6 @@ public final class WorkspaceView {
     private List<Object> order=List.of();
     private long version;
     private final AutoCloseable subscription;
-    public WorkspaceView(FrontendPort port){this(port, no -> null);}
     public WorkspaceView(FrontendPort port, java.util.function.LongFunction<String> defaultGroupName){this.defaultGroupName=defaultGroupName;this.port=port;update(port.snapshot());subscription=port.events().subscribe(ignored->update(port.snapshot()));}
     public void update(PortSnapshot state){
         var vm=state.workspace();
