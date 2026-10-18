@@ -294,7 +294,8 @@ class WorkspaceExtractionCoordinatorRunChannelTest {
     /** 单单元请求（空文件列表也足以驱动一次单元调用：单元执行器是接缝，不真解析）。 */
     private static WorkspaceExtractionService.ExtractionRequest request(String session) {
         List<OutputUnitPlanner.OutputUnit> units = List.of(
-                new OutputUnitPlanner.OutputUnit(null, false, new AppConfig(), List.of("p"), session));
+                new OutputUnitPlanner.OutputUnit(null, false, new AppConfig(), List.of("p"), session,
+                        new com.mhtextractor.model.OutputName(null, "txt"), null));
         return new WorkspaceExtractionService.ExtractionRequest(session, units, Map.of(), false, () -> true);
     }
 

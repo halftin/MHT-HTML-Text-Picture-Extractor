@@ -512,6 +512,16 @@ public final class InProcessUiport implements Uiport {
             public AppConfig runtimeConfig() { return plans.runtimeConfig(); }
             public List<OutputUnitVm> outputUnitPlan(boolean checkedOnly) { return plans.outputUnitPlan(checkedOnly); }
             public ParamSchemaVm paramSchema(boolean imageMode) { return ParamSchemaService.schema(imageMode); }
+            public Map<String, Object> paramValues(AppConfig config, boolean imageMode) {
+                return ParamSchemaService.values(config, ParamSchemaService.schema(imageMode));
+            }
+            public AppConfig collectParams(Map<String, Object> values, boolean imageMode) {
+                var defaults = new AppConfig();
+                var complete = ParamSchemaService.values(defaults, ParamSchemaService.schema(!imageMode));
+                complete.putAll(ParamSchemaService.values(defaults, ParamSchemaService.schema(imageMode)));
+                complete.putAll(values);
+                return ParamSchemaService.collect(complete);
+            }
             public com.mhtextractor.uiport.CacheStateVm cacheState() {
                 return new com.mhtextractor.uiport.CacheStateVm(detailPreviews.store().root().toString(),
                         detailPreviews.lastObservedTotalBytes(), new WorkspaceParamService(detailPreviews.lifecycle()).hasCachedEntries());
@@ -569,7 +579,8 @@ public final class InProcessUiport implements Uiport {
                     String head = PreviewNamingService.applyTemplate(config.isEnableTemplate() ? config.getStartTemplate() : "", item.name, item.modifiedTime);
                     String tail = PreviewNamingService.applyTemplate(config.isEnableTemplate() ? config.getEndTemplate() : "", item.name, item.modifiedTime);
                     return new com.mhtextractor.uiport.PresentationVm(item.path, name.value(), name.parsing(), runtime.isImageModeEnabled(),
-                            item.status.name(), head, tail, textFile(item.cachedText), imageDescriptions(item, config));
+                            item.status.name(), head, tail, textFile(item.cachedText), imageDescriptions(item, config),
+                            name.name().baseName(), name.name().extension(), name.name().finalFileName());
                 }).toList();
             }
             public com.mhtextractor.uiport.ExportSourceVm exportSource(String path) {

@@ -68,6 +68,49 @@ class IpcUiportTest {
         return event;
     }
 
+    @Test void parameterFormValuesAndCollectionAreEquivalentAcrossTransports() throws Exception {
+        Path root = root(); var cards = new Cards();
+        var local = new InProcessUiport(new WorkspaceModel(), cards);
+        try (var ipc = real(root, cards)) {
+            var defaults = new AppConfig();
+            for (boolean mode : List.of(false, true)) {
+                var expected = ParamSchemaService.values(defaults, ParamSchemaService.schema(mode));
+                var actual = ipc.queries().paramValues(defaults, mode);
+                assertFalse(actual.isEmpty());
+                assertInstanceOf(LinkedHashMap.class, actual);
+                assertEquals(new ArrayList<>(expected.entrySet()), new ArrayList<>(actual.entrySet()));
+                assertEquals(local.queries().paramValues(defaults, mode), actual);
+                assertEquals("", actual.get(mode ? "imageNameStartMarker" : "titleStartMarker"));
+
+                var page = new LinkedHashMap<>(expected);
+                page.replaceAll((key, value) -> value instanceof Boolean b ? !b : "value:" + key);
+                var complete = new LinkedHashMap<>(ParamSchemaService.values(defaults, ParamSchemaService.schema(!mode)));
+                complete.putAll(page);
+                AppConfig canonical = ParamSchemaService.collect(complete);
+                for (var port : List.<Uiport>of(local, ipc)) {
+                    assertEquals(page, port.queries().paramValues(canonical, mode));
+                    assertEquals(canonical, port.queries().collectParams(port.queries().paramValues(canonical, mode), mode));
+                }
+            }
+            var both = new LinkedHashMap<>(ParamSchemaService.values(defaults, ParamSchemaService.schema(false)));
+            both.putAll(ParamSchemaService.values(defaults, ParamSchemaService.schema(true)));
+            both.replaceAll((key, value) -> value instanceof Boolean b ? !b : "both:" + key);
+            for (boolean enabled : List.of(true, false)) {
+                both.put("enableRegionExtraction", enabled);
+                AppConfig expected = ParamSchemaService.collect(both);
+                assertEquals(enabled ? "both:imageRegionStartMarker" : null, expected.getImageRegionStartMarker());
+                assertEquals(enabled ? "both:imageRegionEndMarker" : null, expected.getImageRegionEndMarker());
+                for (boolean mode : List.of(false, true)) {
+                    assertEquals(expected, local.queries().collectParams(both, mode));
+                    assertEquals(expected, ipc.queries().collectParams(both, mode));
+                    var roundTrip = new LinkedHashMap<>(ipc.queries().paramValues(expected, false));
+                    roundTrip.putAll(ipc.queries().paramValues(expected, true));
+                    assertEquals(expected, ipc.queries().collectParams(roundTrip, mode));
+                }
+            }
+        }
+    }
+
     @Test void detailMethodsAndSupplementalFieldsSurviveClientRoundTrip() throws Exception {
         Path root=root(); var paths=sources(root,2); var cards=new Cards();
         var local=new InProcessUiport(new WorkspaceModel(),cards);
@@ -85,7 +128,11 @@ class IpcUiportTest {
             var runtime=new AppConfig(); runtime.setInputFolder(root.toString()); runtime.setOutputFolder(root.resolve("query-only").toString());
             assertEquals(local.queries().preStartState(runtime,true),ipc.queries().preStartState(runtime,true));
             assertFalse(Files.exists(root.resolve("query-only")));
-            assertEquals(local.queries().presentation(paths,runtime),ipc.queries().presentation(paths,runtime));
+            var presentationRows = ipc.queries().presentation(paths,runtime);
+            assertFalse(presentationRows.isEmpty());
+            assertNotNull(presentationRows.getFirst().baseName());
+            assertNotNull(presentationRows.getFirst().finalFileName());
+            assertEquals(local.queries().presentation(paths,runtime),presentationRows);
             var title=events.stream().filter(e -> e instanceof PortEvent.WorkspaceChanged w && w.kind().equals("TITLE_CHANGED"))
                     .map(PortEvent.WorkspaceChanged.class::cast).findFirst().orElseThrow();
             assertEquals("edited title",title.snapshot().topLevelItems().getFirst().titleOverride());
@@ -230,8 +277,17 @@ class IpcUiportTest {
                 assertEquals(local.queries().workspace(),ipc.queries().workspace(),"Workspace at step "+steps);
                 assertEquals(local.queries().canUndo(),ipc.queries().canUndo());
                 assertEquals(local.queries().runtimeConfig(),ipc.queries().runtimeConfig());
-                assertEquals(local.queries().outputUnitPlan(false),ipc.queries().outputUnitPlan(false));
-                assertEquals(local.queries().outputUnitPlan(true),ipc.queries().outputUnitPlan(true));
+                var allUnits = ipc.queries().outputUnitPlan(false);
+                if (steps == 0) {
+                    assertFalse(allUnits.isEmpty());
+                    assertNotNull(allUnits.getFirst().baseName());
+                    assertNotNull(allUnits.getFirst().finalFileName());
+                    assertNotNull(allUnits.getFirst().uniqueName());
+                }
+                assertEquals(local.queries().outputUnitPlan(false),allUnits);
+                var checkedUnits = ipc.queries().outputUnitPlan(true);
+                if (steps == 1) assertFalse(checkedUnits.isEmpty());
+                assertEquals(local.queries().outputUnitPlan(true),checkedUnits);
                 assertEquals(localEvents.stream().map(IpcUiportTest::comparable).toList(),ipcEvents.stream().map(IpcUiportTest::comparable).toList(),"Events at step "+steps++);
             }
             assertEquals(local.queries().paramSchema(false),ipc.queries().paramSchema(false));

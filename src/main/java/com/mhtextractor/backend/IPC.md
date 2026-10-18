@@ -1,4 +1,31 @@
-# JSON Lines 控制协议 v1（P4-2a + P4-2b + P4-13 启动握手 + P4-14 确认往返）
+# JSON Lines 控制协议 2（帧格式 v1）
+
+## P-F2：命名事实与表单值契约
+
+握手 `protocolVersion=2`，JSON Lines 帧格式仍为 `v=1`。**协议 2 与 3.0 不可混装**：
+已发布 3.0 使用协议 1，新前端配旧后端或旧前端配新后端均应在 hello/welcome 阶段拒绝。
+version/buildId 仍按既有规则精确匹配；本单元不改变产品版本或产物黄金基线。
+Java 常量在 `BackendIdentity.PROTOCOL_VERSION`，Node 客户端在 `client.mjs` 声明一次预期版本，
+`BackendIpcContractTest.scriptClientProtocolVersionMatchesJavaIdentity` 校验二者一致。
+
+| 查询 | params | result（直接 JSON 对象，不使用 FileRef） |
+|---|---|---|
+| `paramValues` | `config:Config,imageMode:boolean` | 当前页有序的 `object<fieldId,boolean或string>` |
+| `collectParams` | `values:object<fieldId,boolean或string或null>,imageMode:boolean` | `Config` |
+
+每次查询各一帧，不改变工作区或 revision；revision 仅在响应帧外层。
+Config 使用既有持久化字段编解码，表单 key 使用 `ParamSchemaVm` 的字段 id。
+`paramValues` 逐值复用 `ParamSchemaService.values(config,schema)`，保持 LinkedHashMap 顺序，null 字符串变成 `""`。
+`collectParams` 为未提供的字段补默认控件值，再调用唯一的 `ParamSchemaService.collect`；允许当前页或两页合并 Map。
+`nullWhenDisabled` 规则仍由后端执行（关闭图片区域开关时，两标记收为 null）。
+单页不携带另一页配置；跨页非默认值须把两次 `paramValues` 合并后收集。null→空串的规范化、
+运行时字段及废弃字段不在表单里的事实，决定了任意原始 AppConfig 不能保证单页无损往返；
+AppConfig.equals 往返适用于表单规范化配置（单页配置的另一页为默认控件值，或完整两页 Map）。
+`disabledValues` 不进端口，只读 schema 的前端禁用渲染留给 P-F3。
+
+本次不新增 `exportSourceView`：既有 `exportSource` 已完成后端导出并返回 FileRef，
+会话根约束比前端自选 outPath 更严格。`importAddressPlan` 也不新增，纯路径处理在 P-F3 迁入
+`uicore.ImportAddresses`；不新增 `dropPlan`，纯几何迁 uicore，合法性与执行继续由 `applyDrop` 裁决。
 
 ## P5a-8：命名配置端口
 
@@ -62,7 +89,7 @@ GUI 启动后端前创建发行根 logs；启动参数固定日志根，后端�
 | Q10 `parameterState` | `imageMode:boolean,fallbackTargets:FileRef,revision:integer,targetResolution?:selectedFirst/explicit` | `{state:FileRef,revision}`，文件内容见下 |
 | Q11 `preStartState` | `runtime:RuntimeContext,checkedOnly:boolean,revision:integer` | 下述 PreStartState VM + revision |
 | Q12 `presentation` | `paths:FileRef,runtime:RuntimeContext,revision:integer` | `{items:FileRef,revision}`，文件为有序 PresentationVm 数组 |
-| Q13 `exportSource` | `path:string` | `{status,htmlFile,imageCount,warningCount,detail,sessionId,revision}`；无需预先导入工作区 |
+| Q13 `exportSource`（源视图导出，查询） | `path:string` | `{status:string,htmlFile:FileRef或null,imageCount:integer,warningCount:integer,detail:string或null,sessionId:string,revision:integer}`；无需预先导入工作区 |
 
 `fallbackTargets` 文件为 `array<TargetId>`，`paths` 文件为 `array<string>`，沿用会话内上传校验。
 C29 与 Q10 共用后端勾选优先解析：有未移除的勾选项时忽略 fallback，否则采用首个可解析 fallback。
@@ -83,7 +110,19 @@ Q11：`denial:{key,level,namedParams}或null,textConfirmed,imageConfirmed,defaul
 拒绝顺序为输入空、输出空、输入非目录、无可提取项、checkedOnly 下无勾选项；级别沿用既有业务规则。
 默认名组及合并单元来自同版后端计划。runtime 的空路径作为事实返回 denial；查询不创建输出目录、不含 draftDirty、不发确认卡。
 
-Q12 每项：`path,displayName:string或null,parsing:boolean,imageMode:boolean,status,head,tail,textFile:FileRef或null,images:array<ImageFile>`。
+Q12 每项（协议 2 追加最后三字段）：`path,displayName:string或null,parsing:boolean,imageMode:boolean,status,head,tail,textFile:FileRef或null,images:array<ImageFile>,baseName:string或null,extension:string或null,finalFileName:string或null`。
+文本的 baseName 为不含扩展名的名字本体，extension=`txt`，finalFileName=`baseName + ".txt"`；
+图片的 baseName 为目录名，extension/finalFileName 均为 null；parsing=true 时三者和 displayName 均为 null。
+displayName 保持旧 GUI 行为；新前端直接读结构化字段，不做剥扩展名或补扩展名操作。
+
+| Presentation 模式 | baseName | extension | finalFileName |
+|---|---|---|---|
+| 文本 | 旧显示名对应的名字本体 | `txt` | 与旧 displayName 相同的文本文件名 |
+| 图片（已知名） | 目录名，与旧 displayName 相同 | null | null |
+| parsing=true | null | null | null |
+
+Presentation 保留旧预览命名上下文（例如合并文本按 runtime.inputFolder）；
+包含组名及来源桶冲突消解的真实提取单元以 outputUnitPlan 为权威，不用旧显示名反推执行路径。
 正文始终走 UTF-8 文件；head/tail 与显示名复用模板/命名业务规则；未解析显示名保留 parsing 状态。
 图片描述与 E12/E13 共用实际缓存原图表示：`path,bytes,mediaType,imagePath,extension,coreName,displayName,width,height,index,dimensions:{width,height}`。
 `imagePath` 为真实缓存图片路径，不能伪称 PNG；mediaType/extension 按魔数，displayName 随当前序与参数重算。
@@ -91,6 +130,10 @@ Q12 每项：`path,displayName:string或null,parsing:boolean,imageMode:boolean,s
 
 Q13 status 为 `unparseable/failed/success`。成功的 htmlFile 为 UTF-8 HTML FileRef，附带 imageCount/warningCount；
 失败保留导出器/解析器诊断 detail。sessionId 用于丢弃旧会话结果，HTML 不应在浏览器仍引用时释放。
+unparseable 的 htmlFile=null。进程内导出原件位于会话 `port-details/source-view` 根；
+IPC 保持相对图片引用，复制到 welcome.bulkRoot 下的 `source-export-*` 签发目录，返回实际文件字节数。
+FileRef 只在所属会话内有效：客户端读用完毕后必须调用 `releaseFiles` 释放已签发引用；
+源视图仍在浏览器使用期间应保留页面与图片引用。会话关闭清理剩余文件，不能跨会话缓存 FileRef。
 
 ItemVm 追加 `modifiedTime,status,errorMsg,chapterEnabled,badge,cachedTitle,titleOverride,extractOutcome,extractDetail,textFile,previewManifest`。
 modifiedTime 为 LocalDateTime 的 ISO 字符串，textFile/previewManifest 为 FileRef 或 null（空可省略），不传 cachedText 正文。
@@ -115,8 +158,8 @@ Java 端口的新细节查询需要与参数命令服务共享真实 GlobalParam
 
 ```json
 {"v":1,"type":"event","event":"ready","data":{"methods":["workspace","setChecked","importPaths","group","setParams","extract","workspacePage","previewFiles","fileInfo","releaseFiles","metrics","confirmAnswer","hello"]}}
-{"v":1,"type":"request","id":"h1","method":"hello","params":{"protocolVersion":1,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1"}}
-{"v":1,"type":"response","id":"h1","result":{"kind":"welcome","protocolVersion":1,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1","capabilities":["workspace","setChecked","workspacePage","bulkFiles","confirmationRoundTrip"],"confirmationRoundTrip":true}}
+{"v":1,"type":"request","id":"h1","method":"hello","params":{"protocolVersion":2,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1"}}
+{"v":1,"type":"response","id":"h1","result":{"kind":"welcome","protocolVersion":2,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1","capabilities":["workspace","setChecked","workspacePage","bulkFiles","confirmationRoundTrip"],"confirmationRoundTrip":true}}
 {"v":1,"type":"request","id":"q1","method":"workspace","params":{}}
 {"v":1,"type":"response","id":"q1","result":{"groups":[],"topLevelItems":[],"canUndo":false,"undoDepth":0,"selection":"NONE"}}
 {"v":1,"type":"request","id":"c1","method":"setChecked","params":{"paths":["H:/input/a.mht"],"checked":true}}
@@ -186,9 +229,25 @@ Q05/Q06 每次创建请求局部计划上下文，读取同一后端参数权威
 尚未实现 P1 的 Java Uiport.forRequest 门面（须随未来 IpcUiport/前置 root 迁移闭合）；
 本批同步查询已绑定本次 runtime，活动/提取的更广 Context 迁移不在此处冒称完成。
 
-OutputUnitVm 文件每项恰好六字段：outputName:string 或 null、group:boolean、params:RuntimeConfig、
-paths:array<string>、outputPath:string 或 null、labelKey:string 或 null。数组顺序和 null 保留，
+OutputUnitVm 文件每项十字段：原六字段顺序保留——outputName:string 或 null、group:boolean、params:RuntimeConfig、
+paths:array<string>、outputPath:string 或 null、labelKey:string 或 null；追加 baseName/extension/finalFileName/uniqueName（均 string 或 null）。数组顺序和 null 保留，
 不添加 fileCount（数量为 paths.length）。生效参数解析与输出规划复用进程内实现。
+
+| 单元种类 | baseName | extension | finalFileName | uniqueName |
+|---|---|---|---|---|
+| 文本合并（组/来源桶） | 规划完成的名字本体 | `txt` | baseName + `.txt` | 冲突消解后的本体 |
+| 文本单独 | null | `txt` | null | null |
+| 图片合并 | 输出目录名 | null | null | 输出目录名 |
+| 图片单独 | null | null | null | null |
+| labelKey 非空的未分组单独单元 | null | 按模式 | null | null |
+
+未分组同名合并桶从第二个起为 `名字(2)`；此时 baseName 和 uniqueName 都为 `名字(2)`，
+finalFileName 与真实写盘名一致。该规则也适用于图片来源桶；不承诺组名清洗后的跨组去重，
+也不检查已有目录来分配新后缀，既有引擎没有这样的目录去重。
+outputPath 为文本合并文件全路径，其余为目录全路径；组单独模式仍写入原有组目录，单元内有多个名字。
+归档（zip/cbz）不是输出单元，extension 不使用 zip/cbz：**归档名由引擎用 uniqueName + `.zip/.cbz` 生成**
+（图片合并单元；单独模式按逐来源目录名归档，不具有单一单元归档名）。归档成功后引擎会清理源目录，
+outputPath 仍描述归档前写入图片的目录，不改写成归档路径。
 
 ParamSchemaVm 顶层为 imageMode/groups/fields；group 为 id/labelKey/noteKey（最后一项可 null）。
 每个 field 显式且始终发送十项：id、type（BOOLEAN/TEXT）、labelKey、group、defaultValue、enabledBy、
@@ -243,13 +302,14 @@ P4-2b 方法次之，并追加 `hello`。所有 `--serve` 会话必须先完成 
 原五个错误码仍各司原职，坏 JSON/坏帧的检查先于握手检查。
 
 保留整数帧版本 `v=1` 的理由：JSON Lines 编码、四类帧、id 对应、旧方法字段与业务语义均未变。
-握手协议版本单独用 `protocolVersion=1`，本批只接受精确匹配，不做降级。
-**兼容边界**：既有业务请求/响应格式兼容；旧客户端必须在 ready 后补一次 hello 才能继续，
-未升级客户端会明确收到 HANDSHAKE_FAILED。本批不提供绕过握手的兼容开关。
+握手协议版本单独用 `protocolVersion=2`，只接受精确匹配，不做降级。
+**兼容边界**：协议 2 与 3.0 不可混装；协议 1 客户端或后端会明确收到 HANDSHAKE_FAILED。
+本批不提供绕过握手的兼容开关。
 `--once` 不使用 IPC，不受握手影响。
 
 构建标识由 Maven 过滤 `/backend-build.properties` 注入：`version=${project.version}`，
 `buildId=${backend.build.id}`；默认 buildId 为 `${project.version}-p4-13-ipc1`。
+上述历史 buildId 后缀不是协议版本；示例沿用当前 Maven 标识，协议值以独立的 protocolVersion 为准。
 发版可用 `-Dbackend.build.id=<release-id>` 指定不可复用的发布标识，UI 与后端应分发同一预期标识。
 这是**构建标识**，不是产物 SHA-256 或真实性签名；复用标识无法发现内容篡改。
 未过滤/缺失资源直接启动失败，不静默给默认版本。基于资源的标识也便于控制组篡改：
@@ -546,7 +606,7 @@ C25 后处理预解析因此不依赖下一次同步活动；未产生 wire 事�
 
 ```json
 {"v":1,"type":"event","event":"ready","data":{"methods":["workspace","setChecked","importPaths","group","setParams","extract","workspacePage","previewFiles","fileInfo","releaseFiles","metrics","confirmAnswer","hello","ungroup","renameGroup","toggleGroupExpanded","clearItems","applyDrop","removeItems","removeGroup","canUndo"],"sessionId":"session-A","revision":0}}
-{"v":1,"type":"response","id":"h","revision":0,"result":{"kind":"welcome","protocolVersion":1,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1","capabilities":["workspace","setChecked","workspacePage","bulkFiles","confirmationRoundTrip"],"confirmationRoundTrip":true,"sessionId":"session-A","bulkRoot":"H:/TEST/temp/mht-ipc-123"}}
+{"v":1,"type":"response","id":"h","revision":0,"result":{"kind":"welcome","protocolVersion":2,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1","capabilities":["workspace","setChecked","workspacePage","bulkFiles","confirmationRoundTrip"],"confirmationRoundTrip":true,"sessionId":"session-A","bulkRoot":"H:/TEST/temp/mht-ipc-123"}}
 {"v":1,"type":"request","id":"w","method":"workspace","params":{"bulk":true}}
 {"v":1,"type":"response","id":"w","revision":3,"result":{"revision":3,"manifest":{"path":"H:/TEST/temp/mht-ipc-123/bulk-1.json","bytes":230,"mediaType":"application/json"}}}
 {"v":1,"type":"request","id":"p","method":"workspacePage","params":{"offset":0,"limit":1,"revision":3}}

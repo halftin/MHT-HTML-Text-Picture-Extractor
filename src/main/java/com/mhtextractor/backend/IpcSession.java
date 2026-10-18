@@ -33,7 +33,8 @@ final class IpcSession implements AutoCloseable {
             "resolvePreviewRegion", "awaitPreviewInFlight", "applyImportPlan",
             "activityGeneration", "previewGeneration", "previewLoadingPath");
     static final List<String> PARAM_METHODS = List.of("setGlobalParams", "setGroupParams", "setItemParams",
-            "clearParams", "applyGlobalParams", "undo", "runtimeConfig", "outputUnitPlan", "paramSchema");
+            "clearParams", "applyGlobalParams", "undo", "runtimeConfig", "outputUnitPlan", "paramSchema",
+            "paramValues", "collectParams");
     static final List<String> NAMED_CONFIG_METHODS = List.of("listNamedConfigs", "loadNamedConfig", "saveNamedConfig", "deleteNamedConfig");
     static final List<String> EXTRACTION_METHODS = List.of("startExtraction", "cancelExtraction");
     static final List<String> DETAIL_METHODS = List.of("setTitleOverride", "applyParamsToTargets",
@@ -567,6 +568,12 @@ final class IpcSession implements AutoCloseable {
             }
             case "paramSchema" -> {
                 return json.createObjectNode().set("schema", paramCodec.schema(port.queries().paramSchema(bool(p, "imageMode"))));
+            }
+            case "paramValues" -> {
+                return paramCodec.values(port.queries().paramValues(paramCodec.readConfig(p.path("config")), bool(p, "imageMode")));
+            }
+            case "collectParams" -> {
+                return paramCodec.config(port.queries().collectParams(paramCodec.readValues(p.path("values")), bool(p, "imageMode")));
             }
             case "runtimeConfig" -> {
                 return json.createObjectNode().set("config", paramCodec.runtimeConfig(requestPlans(p).runtimeConfig()));

@@ -1252,7 +1252,7 @@ public class SidePanelProbe extends Application {
 
         // 播种"有 meta + 可点击缩略图"的已渲染状态（生产渲染入口 appendThumb；meta 为 public 字段直接赋值）
         ((PreviewRow) item).cachedMeta = new com.mhtextractor.uiport.PresentationVm(
-                ((PreviewRow) item).path, "probe", false, true, "READY", "", "", null, List.of());
+                ((PreviewRow) item).path, "probe", false, true, "READY", "", "", null, List.of(), "probe", null, null);
         ((PreviewRenderer) renderer).appendThumb((PreviewRow) item,
                 new ThumbnailData("0001.png", 2, 2,
                         new int[]{0xFF0000FF, 0xFF00FF00, 0xFFFF0000, 0xFFFFFFFF}), 0);

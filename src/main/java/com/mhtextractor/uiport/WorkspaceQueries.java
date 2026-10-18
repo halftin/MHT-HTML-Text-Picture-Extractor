@@ -2,6 +2,7 @@ package com.mhtextractor.uiport;
 
 import com.mhtextractor.model.AppConfig;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 工作区查询（最小切片）：视图模型快照。
@@ -52,4 +53,14 @@ public interface WorkspaceQueries {
     public List<OutputUnitVm> outputUnitPlan(boolean checkedOnly);
 
     public ParamSchemaVm paramSchema(boolean imageMode);
+
+    /** 当前页的有序控件值；null 字符串转换为空串。 */
+    default Map<String, Object> paramValues(AppConfig config, boolean imageMode) {
+        throw new UnsupportedOperationException("Parameter values are not wired");
+    }
+
+    /** 收集当前页或两页值；缺失页使用默认控件值，禁用字段规则由后端执行。 */
+    default AppConfig collectParams(Map<String, Object> values, boolean imageMode) {
+        throw new UnsupportedOperationException("Parameter collection is not wired");
+    }
 }

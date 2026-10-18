@@ -10,6 +10,8 @@ import com.mhtextractor.uiport.ParamSchemaVm;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /** Explicit wire dictionaries; schema records need no native reflection registration. */
 final class IpcParamCodec {
@@ -61,11 +63,13 @@ final class IpcParamCodec {
     ArrayNode units(List<OutputUnitVm> units) {
         var result = json.createArrayNode();
         for (var unit : units) {
-            var node = result.addObject().put("outputName", unit.outputName()).put("group", unit.group())
-                    .put("outputPath", unit.outputPath()).put("labelKey", unit.labelKey());
+            var node = result.addObject().put("outputName", unit.outputName()).put("group", unit.group());
             node.set("params", runtimeConfig(unit.params()));
             var paths = node.putArray("paths");
             unit.paths().forEach(paths::add);
+            node.put("outputPath", unit.outputPath()).put("labelKey", unit.labelKey())
+                    .put("baseName", unit.baseName()).put("extension", unit.extension())
+                    .put("finalFileName", unit.finalFileName()).put("uniqueName", unit.uniqueName());
         }
         return result;
     }
@@ -84,6 +88,24 @@ final class IpcParamCodec {
             scalar(node, "defaultValue", field.defaultValue());
             scalar(node, "disabledValue", field.disabledValue());
         }
+        return result;
+    }
+
+    ObjectNode values(Map<String, Object> values) {
+        var result = json.createObjectNode();
+        values.forEach((key, value) -> scalar(result, key, value));
+        return result;
+    }
+
+    Map<String, Object> readValues(JsonNode values) {
+        if (!values.isObject()) throw new IllegalArgumentException("Form values object required");
+        var result = new LinkedHashMap<String, Object>();
+        values.fields().forEachRemaining(field -> {
+            var value = field.getValue();
+            if (!value.isNull() && !value.isBoolean() && !value.isTextual())
+                throw new IllegalArgumentException("Invalid form value: " + field.getKey());
+            result.put(field.getKey(), value.isNull() ? null : value.isBoolean() ? value.booleanValue() : value.textValue());
+        });
         return result;
     }
 

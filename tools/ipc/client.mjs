@@ -163,7 +163,7 @@ try {
   const identityText = utf8(identityFile < 0 ? path.join(repo, 'target/classes/backend-build.properties') : argv[identityFile + 1]);
   const identityProperties = Object.fromEntries(identityText.split(/\r?\n/).filter(line => line.includes('='))
     .map(line => { const i = line.indexOf('='); return [line.slice(0, i).trim(), line.slice(i + 1).trim()]; }));
-  const expectedIdentity = { protocolVersion: 1, version: identityProperties.version, buildId: identityProperties.buildId };
+  const expectedIdentity = { protocolVersion: 2, version: identityProperties.version, buildId: identityProperties.buildId };
   assert.ok(expectedIdentity.version && expectedIdentity.buildId && !identityText.includes('${'), 'Filtered build identity required');
   const welcome = await request('hello', expectedIdentity);
   assert.equal(welcome.kind, 'welcome');

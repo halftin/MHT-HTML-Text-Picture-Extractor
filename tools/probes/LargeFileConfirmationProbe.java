@@ -195,7 +195,7 @@ public class LargeFileConfirmationProbe extends Application implements PreviewLo
                         com.mhtextractor.uiport.UpdateKind.NONE, domain.sourceFolder), ignored -> { }));
         row.cachedThumbs = domain.cachedThumbs;
         row.cachedMeta = domain.cachedMeta == null ? null : new com.mhtextractor.uiport.PresentationVm(
-                domain.path, domain.name, false, true, "READY", "", "", null, List.of());
+                domain.path, domain.name, false, true, "READY", "", "", null, List.of(), domain.name, null, null);
         return row;
     }
     public Object currentSelection() { return display(current); }

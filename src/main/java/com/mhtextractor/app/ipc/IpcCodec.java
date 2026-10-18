@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-/** Explicit v1 decoding; no record reflection registration is needed by a native frontend. */
+/** Explicit protocol v2 decoding; no record reflection registration is needed by a native frontend. */
 public final class IpcCodec {
     private final ObjectMapper json;
     private final IpcFilesClient files;
@@ -120,7 +120,8 @@ public final class IpcCodec {
             var images = new ArrayList<PortEvent.ImageFile>();
             for (var i : p.path("images")) images.add(image(i));
             result.add(new PresentationVm(text(p,"path"),nullable(p,"displayName"),bool(p,"parsing"),bool(p,"imageMode"),
-                    text(p,"status"),nullable(p,"head"),nullable(p,"tail"),reference(p.path("textFile")),images));
+                    text(p,"status"),nullable(p,"head"),nullable(p,"tail"),reference(p.path("textFile")),images,
+                    nullable(p,"baseName"),nullable(p,"extension"),nullable(p,"finalFileName")));
         }
         // Presentation images are retained value references, not transient preview-event payloads.
         imageLeases.clear();
@@ -162,13 +163,20 @@ public final class IpcCodec {
         var result = new ArrayList<OutputUnitVm>();
         if (!n.isArray()) throw new IllegalArgumentException("Output units required");
         for (var u : n) result.add(new OutputUnitVm(nullable(u,"outputName"),bool(u,"group"),config(u.path("params")),
-                strings(u.path("paths")),nullable(u,"outputPath"),nullable(u,"labelKey")));
+                strings(u.path("paths")),nullable(u,"outputPath"),nullable(u,"labelKey"),
+                nullable(u,"baseName"),nullable(u,"extension"),nullable(u,"finalFileName"),nullable(u,"uniqueName")));
         return List.copyOf(result);
     }
     private Object scalar(JsonNode n) {
         if (n.isNull()) return null;
         if (n.isBoolean()) return n.booleanValue();
         return string(n);
+    }
+    public Map<String, Object> values(JsonNode n) {
+        if (!n.isObject()) throw new IllegalArgumentException("Form values object required");
+        var values = new LinkedHashMap<String, Object>();
+        n.fields().forEachRemaining(field -> values.put(field.getKey(), scalar(field.getValue())));
+        return values;
     }
     public ParamSchemaVm schema(JsonNode n) {
         return new ParamSchemaVm(bool(n,"imageMode"),list(n.path("groups"),g -> new ParamSchemaVm.Group(text(g,"id"),

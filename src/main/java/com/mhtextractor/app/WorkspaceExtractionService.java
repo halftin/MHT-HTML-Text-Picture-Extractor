@@ -51,7 +51,8 @@ public final class WorkspaceExtractionService {
             List<com.mhtextractor.uiport.OutputUnitVm> units, Map<String, PerFileOverrides> overrides,
             boolean imageMode, Supplier<Boolean> recursionCallback) {
         return new ExtractionRequest(sessionOutputFolder, units.stream().map(u ->
-                new OutputUnitPlanner.OutputUnit(u.outputName(), u.group(), u.params(), u.paths(), u.outputPath()))
+                new OutputUnitPlanner.OutputUnit(u.outputName(), u.group(), u.params(), u.paths(), u.outputPath(),
+                        new com.mhtextractor.model.OutputName(u.baseName(), u.extension()), u.uniqueName()))
                 .toList(), overrides, imageMode, recursionCallback);
     }
 
@@ -248,7 +249,7 @@ public final class WorkspaceExtractionService {
                 processor.setRecursionContinueCallback(recursionCallback);
                 if (config.isSingleOutputMode()) {
                     // 逐文件覆盖项透传：合并目录名优先取第一个文件的用户编辑标题
-                    return processor.process(files, sessionOutputFolder, unit.getOutputName(), callback, overrides);
+                    return processor.process(files, sessionOutputFolder, unit.getUniqueName(), callback, overrides);
                 }
                 // 单独模式没有显式目录名（传 null），但仍需逐文件覆盖项用于图片标题命名
                 return processor.process(files, unit.getOutputPath(), null, callback, overrides);

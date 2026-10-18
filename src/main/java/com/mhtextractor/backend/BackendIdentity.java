@@ -6,7 +6,7 @@ import java.util.Properties;
 
 /** Compile-time release identity. It detects mixed builds; it is not an authenticity signature. */
 public record BackendIdentity(int protocolVersion, String version, String buildId) {
-    public static final int PROTOCOL_VERSION = 1;
+    public static final int PROTOCOL_VERSION = 2;
 
     public BackendIdentity {
         if (protocolVersion < 1 || version == null || version.isBlank()

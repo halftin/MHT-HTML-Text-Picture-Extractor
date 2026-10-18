@@ -24,6 +24,14 @@ class BackendIpcContractTest {
     @TempDir
     Path tmp;
 
+    @Test void scriptClientProtocolVersionMatchesJavaIdentity() throws Exception {
+        String script = java.nio.file.Files.readString(Path.of("tools/ipc/client.mjs"));
+        var match = java.util.regex.Pattern.compile("protocolVersion: (\\d+)").matcher(script);
+        assertTrue(match.find(), "Script must declare its expected protocol version");
+        assertEquals(BackendIdentity.PROTOCOL_VERSION, Integer.parseInt(match.group(1)));
+        assertFalse(match.find(), "Keep a single script protocol version declaration");
+    }
+
     @Test
     void ipcAndInProcessHaveIdenticalSnapshotsAndSilentCommands() throws Exception {
         Uiport direct = BackendIpcFixture.port();
@@ -179,13 +187,14 @@ class BackendIpcContractTest {
             JsonNode result = welcome.path("result");
             assertEquals("welcome", result.path("kind").asText());
             assertEquals(identity.protocolVersion(), result.path("protocolVersion").intValue());
+            assertEquals(2, result.path("protocolVersion").intValue());
             assertEquals(identity.version(), result.path("version").asText());
             assertEquals(identity.buildId(), result.path("buildId").asText());
             assertEquals(JSON.readTree("[\"workspace\",\"setChecked\",\"workspacePage\",\"bulkFiles\",\"confirmationRoundTrip\",\"startExtraction\",\"cancelExtraction\",\"setTitleOverride\",\"applyParamsToTargets\",\"parameterState\",\"preStartState\",\"presentation\",\"exportSource\",\"cacheState\",\"listNamedConfigs\",\"loadNamedConfig\",\"saveNamedConfig\",\"deleteNamedConfig\"]"), result.path("capabilities"));
             assertTrue(result.path("confirmationRoundTrip").booleanValue());
             for (String field : List.of("protocolVersion", "version", "buildId")) {
                 var bad = params.deepCopy();
-                if (field.equals("protocolVersion")) bad.put(field, 2); else bad.put(field, "tampered");
+                if (field.equals("protocolVersion")) bad.put(field, identity.protocolVersion() + 1); else bad.put(field, "tampered");
                 JsonNode rejected = ipc.request("mismatch", "hello", bad);
                 assertError(rejected, "HANDSHAKE_FAILED");
                 assertTrue(rejected.path("error").path("message").asText().contains("mismatch"));

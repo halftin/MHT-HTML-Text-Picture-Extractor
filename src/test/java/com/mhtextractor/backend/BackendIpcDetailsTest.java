@@ -219,6 +219,40 @@ class BackendIpcDetailsTest {
         }
     }
 
+    @Test void realMhtSourceExportHasOwnedFileRefAndUnparseableHasNoneOnBothPaths() throws Exception {
+        try (var p = new Pair()) {
+            Path source = Files.copy(Path.of("src/test/resources/fixtures/single-image.mht"), tmp.resolve("real.mht"));
+            Path plain = Files.writeString(tmp.resolve("plain.mht"),
+                    "MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nplain only");
+            var direct = p.direct.queries().exportSource(source.toString());
+            var wire = p.call("exportSource", object().put("path", source.toString()));
+            assertEquals("success", direct.status());
+            assertEquals("success", wire.path("status").asText());
+            assertNotNull(direct.htmlFile());
+            assertTrue(wire.path("htmlFile").isObject());
+            Path directFile = Path.of(direct.htmlFile().path()).toRealPath();
+            Path wireFile = Path.of(wire.path("htmlFile").path("path").asText()).toRealPath();
+            assertTrue(directFile.startsWith(tmp.resolve("direct-preview/port-details/source-view").toRealPath()));
+            assertTrue(wireFile.startsWith(p.bulk.toRealPath()));
+            assertTrue(wireFile.getParent().getFileName().toString().startsWith("source-export-"));
+            assertTrue(Files.isRegularFile(directFile));
+            assertTrue(Files.isRegularFile(wireFile));
+            assertTrue(Files.size(directFile) > 0);
+            assertEquals(Files.size(directFile), direct.htmlFile().bytes());
+            assertEquals(Files.size(wireFile), wire.path("htmlFile").path("bytes").longValue());
+            assertArrayEquals(Files.readAllBytes(directFile), Files.readAllBytes(wireFile));
+            var unparseable = p.direct.queries().exportSource(plain.toString());
+            var wireUnparseable = p.call("exportSource", object().put("path", plain.toString()));
+            assertEquals("unparseable", unparseable.status());
+            assertNull(unparseable.htmlFile());
+            assertEquals("unparseable", wireUnparseable.path("status").asText());
+            assertTrue(wireUnparseable.has("htmlFile"));
+            assertTrue(wireUnparseable.path("htmlFile").isNull());
+            p.call("releaseFiles", object().set("paths", JSON.valueToTree(List.of(wireFile.toString()))));
+            assertFalse(Files.exists(wireFile));
+        }
+    }
+
     @Test void everyVersionedDetailQueryRejectsStaleRevisionBeforeReadingBulkFiles() throws Exception {
         try(var p=new Pair()) {
             for(String method:List.of("parameterState","preStartState","presentation")) {
@@ -248,6 +282,9 @@ class BackendIpcDetailsTest {
             assertEquals(3,p.events.stream().filter(e -> e instanceof PortEvent.PreparseFinished).count());
             p.call("workspace",object());
             var direct=p.direct.queries().presentation(p.paths,runtimeConfig(runtime));
+            assertFalse(direct.isEmpty());
+            assertNotNull(direct.getFirst().baseName());
+            assertNotNull(direct.getFirst().finalFileName());
             var wire=p.call("presentation",object().put("revision",p.revision).<ObjectNode>set("runtime",runtime).set("paths",p.upload(JSON.valueToTree(p.paths))));
             assertEquals(canonical(JSON.valueToTree(direct)),canonical(contents(wire.path("items"))));
             assertTrue(direct.getFirst().textFile().bytes()>100000);
@@ -261,6 +298,10 @@ class BackendIpcDetailsTest {
             while(received.stream().noneMatch(e -> e.path("event").asText().equals("previewLoaded"))) received.add(p.ipc.receive());
             p.call("workspace",object());
             direct=p.direct.queries().presentation(p.paths,runtimeConfig(runtime));
+            assertFalse(direct.isEmpty());
+            assertNotNull(direct.getFirst().baseName());
+            assertNull(direct.getFirst().extension());
+            assertNull(direct.getFirst().finalFileName());
             wire=p.call("presentation",object().put("revision",p.revision).<ObjectNode>set("runtime",runtime).set("paths",p.upload(JSON.valueToTree(p.paths))));
             assertEquals(canonical(JSON.valueToTree(direct)),canonical(contents(wire.path("items"))));
             assertEquals(1,direct.getFirst().images().size());

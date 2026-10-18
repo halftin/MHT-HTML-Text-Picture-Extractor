@@ -363,6 +363,13 @@ public final class IpcUiport implements Uiport, AutoCloseable {
             return decode(() -> codec.units(files.consumeJson(result.path("units"))));
         }
         public ParamSchemaVm paramSchema(boolean mode) { return codec.schema(call("paramSchema",p().put("imageMode",mode)).path("schema")); }
+        public Map<String, Object> paramValues(AppConfig config, boolean mode) {
+            return codec.values(call("paramValues",p().put("imageMode",mode).set("config",json.valueToTree(config))));
+        }
+        public AppConfig collectParams(Map<String, Object> values, boolean mode) {
+            var result = call("collectParams",p().put("imageMode",mode).set("values",json.valueToTree(values)));
+            return decode(() -> json.treeToValue(result,AppConfig.class));
+        }
     };
     public WorkspacePage workspacePage(int offset, int limit) {
         JsonNode result = call("workspacePage",p().put("offset",offset).put("limit",limit));

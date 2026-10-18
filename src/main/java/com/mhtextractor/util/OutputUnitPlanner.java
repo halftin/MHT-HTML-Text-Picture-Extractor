@@ -1,6 +1,7 @@
 package com.mhtextractor.util;
 
 import com.mhtextractor.model.AppConfig;
+import com.mhtextractor.model.OutputName;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.ParamScope;
@@ -104,15 +105,23 @@ public final class OutputUnitPlanner {
         private final List<String> paths;
         /** 输出路径：合并文本 = 文件路径；其余 = 目录路径 */
         private final String outputPath;
+        private final OutputName name;
+        private final String uniqueName;
 
         public OutputUnit(String outputName, boolean group, AppConfig params, List<String> paths,
-                   String outputPath) {
+                   String outputPath, OutputName name, String uniqueName) {
             this.outputName = outputName;
             this.group = group;
             this.params = params;
             this.paths = List.copyOf(paths);
             this.outputPath = outputPath;
+            this.name = java.util.Objects.requireNonNull(name);
+            this.uniqueName = uniqueName;
         }
+
+        public OutputName getName() { return name; }
+
+        public String getUniqueName() { return uniqueName; }
 
         public String getOutputName() {
             return outputName;
@@ -194,20 +203,24 @@ public final class OutputUnitPlanner {
                 boolean separate = imageMode ? !params.isSingleOutputMode() : params.isSeparateFiles();
                 String name;
                 String outputPath;
+                OutputName outputName;
                 if (separate) {
                     // 单独输出：各单元直写会话目录（输出名 null，成员文件名互不冲突）
                     name = null;
+                    outputName = new OutputName(null, imageMode ? null : "txt");
                     outputPath = sessionDir;
                 } else {
                     String base = sourceOutputName(e.getKey().source(), imageMode);
                     int n = usedNames.merge(base, 1, Integer::sum);
                     name = n == 1 ? base : base + "(" + n + ")";
+                    outputName = new OutputName(name, imageMode ? null : "txt");
                     outputPath = imageMode
-                            ? new File(sessionDir, name).getPath()
-                            : new File(sessionDir, name + ".txt").getPath();
+                            ? new File(sessionDir, outputName.baseName()).getPath()
+                            : new File(sessionDir, outputName.finalFileName()).getPath();
                 }
                 entries.add(new UnitEntry(keyFirstPos.get(e.getKey()),
-                        new OutputUnit(name, false, params, pathsOf(e.getValue(), view), outputPath)));
+                        new OutputUnit(name, false, params, pathsOf(e.getValue(), view), outputPath,
+                                outputName, name)));
             }
         }
 
@@ -249,10 +262,12 @@ public final class OutputUnitPlanner {
         AppConfig params = resolve(g, null, null, imageMode, textGlobal, imageGlobal);
         boolean separate = imageMode ? !params.isSingleOutputMode() : params.isSeparateFiles();
         String name = sanitizedGroupName(g);
+        OutputName outputName = new OutputName(separate ? null : name, imageMode ? null : "txt");
         String outputPath = (!imageMode && !separate)
-                ? new File(sessionDir, name + ".txt").getPath()
+                ? new File(sessionDir, outputName.finalFileName()).getPath()
                 : new File(sessionDir, name).getPath();
-        return new OutputUnit(name, true, params, pathsOf(members, view), outputPath);
+        return new OutputUnit(name, true, params, pathsOf(members, view), outputPath,
+                outputName, separate ? null : name);
     }
 
     private static String sanitizedGroupName(GroupItem<?> g) {

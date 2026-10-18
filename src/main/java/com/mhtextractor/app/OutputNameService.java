@@ -1,6 +1,7 @@
 package com.mhtextractor.app;
 
 import com.mhtextractor.model.AppConfig;
+import com.mhtextractor.model.OutputName;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.ImageBatchProcessor;
 import com.mhtextractor.util.SanitizeUtils;
@@ -28,18 +29,18 @@ public final class OutputNameService {
     /**
      * 文本模式输出文件名本体（不含 {@code preview.outputFilePrefix} 前缀与
      * {@code preview.outputFileTxtSuffix} 后缀）：
-     * separate → {@code SourceKinds.stripKnownExtension(item.name) + ".txt"}；
-     * merged → {@code <输入目录名，空则 "mht_output"> + ".txt"}。
+     * separate 的 baseName 为 {@code SourceKinds.stripKnownExtension(item.name)}；
+     * merged 的 baseName 为输入目录名（空则 {@code mht_output}），extension 均为 {@code txt}。
      */
-    public static String textOutputName(PreviewItem item, AppConfig params, String inputFolder) {
+    public static OutputName textOutputName(PreviewItem item, AppConfig params, String inputFolder) {
         if (params.isSeparateFiles()) {
-            return SourceKinds.stripKnownExtension(item.name) + ".txt";
+            return new OutputName(SourceKinds.stripKnownExtension(item.name), "txt");
         }
         String inputDirName = new File(inputFolder).getName();
         if (inputDirName.isEmpty()) {
             inputDirName = "mht_output";
         }
-        return inputDirName + ".txt";
+        return new OutputName(inputDirName, "txt");
     }
 
     /**
@@ -52,23 +53,23 @@ public final class OutputNameService {
         if (params.isSingleOutputMode()) {
             if (params != null && params.isEnableNameExtraction() && firstVisible != null) {
                 if (firstVisible.status == PreviewItem.Status.WAITING) {
-                    return new Name(null, true);
+                    return new Name(new OutputName(null, null), true);
                 }
                 if (firstVisible.cachedTitle != null) {
-                    return new Name(SanitizeUtils.sanitize(firstVisible.cachedTitle), false);
+                    return new Name(new OutputName(SanitizeUtils.sanitize(firstVisible.cachedTitle), null), false);
                 }
             }
-            return new Name(ImageBatchProcessor.determineDefaultFolderName(inputFolder), false);
+            return new Name(new OutputName(ImageBatchProcessor.determineDefaultFolderName(inputFolder), null), false);
         }
         if (params != null && params.isEnableNameExtraction()) {
             if (item.status == PreviewItem.Status.WAITING) {
-                return new Name(null, true);
+                return new Name(new OutputName(null, null), true);
             }
             if (item.cachedTitle != null) {
-                return new Name(SanitizeUtils.sanitize(item.cachedTitle), false);
+                return new Name(new OutputName(SanitizeUtils.sanitize(item.cachedTitle), null), false);
             }
         }
-        return new Name(SourceKinds.stripKnownExtension(item.name), false);
+        return new Name(new OutputName(SourceKinds.stripKnownExtension(item.name), null), false);
     }
 
     /**
@@ -76,6 +77,8 @@ public final class OutputNameService {
      * 此时 {@code value} 为 null —— 展示文案（{@code preview.parsing}）由 gui 层渲染，
      * app 不产文案。
      */
-    public record Name(String value, boolean parsing) {
+    public record Name(OutputName name, boolean parsing) {
+        /** 旧 GUI 显示口径保持不变；结构化事实直接取 name。 */
+        public String value() { return name.directory() ? name.baseName() : name.finalFileName(); }
     }
 }

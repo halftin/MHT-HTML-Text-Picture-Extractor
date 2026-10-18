@@ -63,11 +63,13 @@ class InProcessUiportQueryTest {
 
     private static List<Object> observable(OutputUnitPlanner.OutputUnit u) {
         return Arrays.asList(u.getOutputName(), u.isGroup(), u.getParams(), u.getPaths(), u.getOutputPath(),
-                u.fileCount(), u.getOutputName() == null ? "core.ungrouped" : null);
+                u.fileCount(), u.getOutputName() == null ? "core.ungrouped" : null,
+                u.getName().baseName(), u.getName().extension(), u.getName().finalFileName(), u.getUniqueName());
     }
 
     private static List<Object> observable(OutputUnitVm u) {
-        return Arrays.asList(u.outputName(), u.group(), u.params(), u.paths(), u.outputPath(), u.fileCount(), u.labelKey());
+        return Arrays.asList(u.outputName(), u.group(), u.params(), u.paths(), u.outputPath(), u.fileCount(), u.labelKey(),
+                u.baseName(), u.extension(), u.finalFileName(), u.uniqueName());
     }
 
     @Test

@@ -48,7 +48,8 @@ final class IpcDetailCodec {
         var value=json.createArrayNode();
         for(var item:items) {
             var node=value.addObject().put("path",item.path()).put("displayName",item.displayName()).put("parsing",item.parsing())
-                    .put("imageMode",item.imageMode()).put("status",item.status()).put("head",item.head()).put("tail",item.tail());
+                    .put("imageMode",item.imageMode()).put("status",item.status()).put("head",item.head()).put("tail",item.tail())
+                    .put("baseName",item.baseName()).put("extension",item.extension()).put("finalFileName",item.finalFileName());
             node.set("textFile",workspace.reference(item.textFile()));
             var images=node.putArray("images"); for(var image:item.images()) images.add(image(image));
         }

@@ -56,7 +56,8 @@ class PreviewRetentionTest {
 
     @Test void evictionPreservesTextTitleMetaAndStatus() {
         var oldest = row("oldest"); oldest.cachedText = "text";
-        oldest.cachedMeta = new PresentationVm("oldest", "oldest", false, true, "READY", "", "", null, List.of());
+        oldest.cachedMeta = new PresentationVm("oldest", "oldest", false, true, "READY", "", "", null, List.of(),
+                "oldest", null, null);
         var status = oldest.status;
         var meta = oldest.cachedMeta;
         pixels(oldest, 9); pixels(row("next"), 8);

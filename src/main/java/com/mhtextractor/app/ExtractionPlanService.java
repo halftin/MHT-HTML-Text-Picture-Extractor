@@ -63,7 +63,9 @@ public final class ExtractionPlanService {
                 sessionOutputFolder == null ? context.outputFolder() : sessionOutputFolder,
                 context.inputFolder(), context.outputFolder(), context.openFolderAfterComplete(), checkedOnly)
                 .stream().map(u -> new OutputUnitVm(u.getOutputName(), u.isGroup(), u.getParams(),
-                        u.getPaths(), u.getOutputPath(), u.getOutputName() == null ? "core.ungrouped" : null)).toList();
+                        u.getPaths(), u.getOutputPath(), u.getOutputName() == null ? "core.ungrouped" : null,
+                        u.getName().baseName(), u.getName().extension(), u.getName().finalFileName(),
+                        u.getUniqueName())).toList();
     }
 
     /**

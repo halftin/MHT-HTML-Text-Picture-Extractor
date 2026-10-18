@@ -31,23 +31,23 @@ class OutputNameServiceTest {
     void textSeparateStripsKnownExtensionAndAppendsTxt() {
         AppConfig params = new AppConfig();
         params.setSeparateFiles(true);
-        assertEquals("a.txt", OutputNameService.textOutputName(item("a.mht"), params, "C:/in"));
+        assertEquals("a.txt", OutputNameService.textOutputName(item("a.mht"), params, "C:/in").finalFileName());
     }
 
     @Test
     void textMergedUsesInputFolderName() {
         AppConfig params = new AppConfig();
         params.setSeparateFiles(false);
-        assertEquals("in.txt", OutputNameService.textOutputName(item("a.mht"), params, "C:/in"));
+        assertEquals("in.txt", OutputNameService.textOutputName(item("a.mht"), params, "C:/in").finalFileName());
     }
 
     @Test
     void textMergedFallsBackToMhtOutputWhenInputFolderNameEmpty() {
         AppConfig params = new AppConfig();
         params.setSeparateFiles(false);
-        assertEquals("mht_output.txt", OutputNameService.textOutputName(item("a.mht"), params, ""));
+        assertEquals("mht_output.txt", OutputNameService.textOutputName(item("a.mht"), params, "").finalFileName());
         // 以分隔符结尾的路径，getName() 为空 → 同样回落
-        assertEquals("mht_output.txt", OutputNameService.textOutputName(item("a.mht"), params, "C:/"));
+        assertEquals("mht_output.txt", OutputNameService.textOutputName(item("a.mht"), params, "C:/").finalFileName());
     }
 
     @Test
@@ -56,8 +56,8 @@ class OutputNameServiceTest {
         separate.setSeparateFiles(true);
         AppConfig merged = new AppConfig();
         merged.setSeparateFiles(false);
-        String s = OutputNameService.textOutputName(item("a.mht"), separate, "C:/in");
-        String m = OutputNameService.textOutputName(item("a.mht"), merged, "C:/in");
+        String s = OutputNameService.textOutputName(item("a.mht"), separate, "C:/in").finalFileName();
+        String m = OutputNameService.textOutputName(item("a.mht"), merged, "C:/in").finalFileName();
         assertEquals("a.txt", s);
         assertEquals("in.txt", m);
         assertNotEquals(s, m);

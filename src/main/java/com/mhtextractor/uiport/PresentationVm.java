@@ -4,6 +4,7 @@ import java.util.List;
 
 public record PresentationVm(String path, String displayName, boolean parsing, boolean imageMode,
                               String status, String head, String tail, FileRef textFile,
-                              List<PortEvent.ImageFile> images) {
+                              List<PortEvent.ImageFile> images,
+                              String baseName, String extension, String finalFileName) {
     public PresentationVm { images = List.copyOf(images); }
 }
