@@ -1,6 +1,5 @@
 package com.mhtextractor.gui.component;
 
-import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.GroupItem;
@@ -108,38 +107,36 @@ class ParamTargetTextTest {
     }
 
     @Test
-    void isGroupMixedOnlyForGroupTargetsAndUsesEffectiveParamsService() {
-        // 上下文：文本模式、两个全局缓存均未确认 —— 生效参数只可能来自组参数或条目级参数
-        EffectiveParamsService.Context ctx =
-                new EffectiveParamsService.Context(false, null, null);
-
-        AppConfig itemParams = new AppConfig();
-        itemParams.setStartMarker("ITEM");
-
-        GroupItem<PreviewItem> mixedGroup = new GroupItem<>(1, "组1");
-        PreviewItem withOwn = item("C:\\src\\a.mht", "a.mht");
-        withOwn.textItemParams = itemParams;
-        PreviewItem without = item("C:\\src\\b.mht", "b.mht");
-        mixedGroup.getMembers().addAll(List.of(withOwn, without));
-        // 生效参数解析走 PreviewItem.parentGroup（与生产一致，由 WorkspaceModel 维护），
-        // 故夹具必须把父组指针接上 —— 否则"组参数"根本不在解析路径里（本测试第一版就栽在这）。
-        withOwn.parentGroup = mixedGroup;
-        without.parentGroup = mixedGroup;
-        assertTrue(ParamTargetText.isGroupMixed(new ParamScope.GroupTarget(mixedGroup), ctx),
-                "一个成员有条目级参数、另一个没有 ⇒ 组内不统一");
-
-        // 组参数一旦设置，组内所有成员都继承它 ⇒ 统一（与 EffectiveParamsService 的口径一致）
-        mixedGroup.setTextParamsCache(new AppConfig());
-        assertFalse(ParamTargetText.isGroupMixed(new ParamScope.GroupTarget(mixedGroup), ctx),
-                "组参数已设置 ⇒ 组内统一");
-
-        // 边界：单成员组与非组目标都不提示
-        GroupItem<PreviewItem> single = new GroupItem<>(2, "组2");
-        single.getMembers().add(withOwn);
-        assertFalse(ParamTargetText.isGroupMixed(new ParamScope.GroupTarget(single), ctx), "单成员组不算混合");
-        assertFalse(ParamTargetText.isGroupMixed(ParamScope.GLOBAL, ctx), "全局目标不算混合");
-        assertFalse(ParamTargetText.isGroupMixed(new ParamScope.ItemTarget<>(withOwn, null, null), ctx),
-                "条目目标不算混合");
+    void isGroupMixedOnlyForGroupTargetsAndUsesExplicitMemberQuery() {
+        try (var root = new com.mhtextractor.app.BackendWorkspace(request -> {
+            throw new AssertionError("Unexpected confirmation");
+        }, AppConfig::new, Runnable::run);
+             var frontend = new com.mhtextractor.uicore.FrontendPort(root.port(), Runnable::run, ignored -> {})) {
+            var commands = root.port().commands();
+            String withOwn = java.nio.file.Path.of("H:/TEST/mht/a.mht").toString();
+            String without = java.nio.file.Path.of("H:/TEST/mht/b.mht").toString();
+            commands.applyImportPlan(new com.mhtextractor.uiport.ImportPlanVm(List.of(
+                    new com.mhtextractor.uiport.ImportPlanVm.ImportBatchVm("H:/TEST/mht", "group", true,
+                            List.of(withOwn, without))), 0, 0, 0, 0, 0, false, false));
+            AppConfig itemParams = new AppConfig();
+            itemParams.setStartMarker("ITEM");
+            commands.setItemParams(withOwn, false, itemParams);
+            frontend.bootstrap(new AppConfig());
+            var view = new com.mhtextractor.uicore.WorkspaceView(frontend);
+            var group = view.groups().getFirst();
+            var target = new com.mhtextractor.uicore.ParamScope.GroupTarget(group);
+            assertTrue(ParamTargetText.isGroupMixed(target, root.port().queries(), false),
+                    "一个成员有条目级参数、另一个没有 ⇒ 组内不统一");
+            assertTrue(ParamTargetText.isGroupMixed(target, frontend.queries(), false));
+            commands.setGroupParams(group.getGroupNo(), false, new AppConfig());
+            assertFalse(ParamTargetText.isGroupMixed(target, root.port().queries(), false),
+                    "组参数已设置 ⇒ 组内统一");
+            assertFalse(ParamTargetText.isGroupMixed(com.mhtextractor.uicore.ParamScope.GLOBAL,
+                    root.port().queries(), false), "全局目标不算混合");
+            assertFalse(ParamTargetText.isGroupMixed(new com.mhtextractor.uicore.ParamScope.ItemTarget<>(
+                    group.getMembers().getFirst(), null, null), root.port().queries(), false), "条目目标不算混合");
+            view.dispose();
+        }
     }
 
     // ==================== i18n：4 个新键在两份 bundle 都在 ====================

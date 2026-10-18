@@ -164,7 +164,7 @@ public final class AcceptanceDriver {
 
         /** 拖拽（程序化驱动，与真实 DnD 同一实现）：第 4 个参数（真实 DnD 的发起单元格）在程序化演练路径恒为 null。 */
         public boolean performDrop(Object dragged, Object target, DropResolver.Zone zone) {
-            return mc.listInteraction.performDrop(dragged, target, zone, null);
+            return mc.listInteraction.performDrop(dragged, target, com.mhtextractor.uicore.DragDrop.Zone.valueOf(zone.name()), null);
         }
 
         // ==================== B：由模型可读投影派生（与 MainController 私有实现逐条一致） ====================

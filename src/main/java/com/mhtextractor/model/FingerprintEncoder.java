@@ -4,7 +4,7 @@ package com.mhtextractor.model;
  * 指纹/签名字段的<b>长度前缀编码器</b>（E3.2 收口的全项目唯一实现点）。
  *
  * <p>{@link com.mhtextractor.model.AppConfig#imageExtractionFingerprint()} 与
- * {@link com.mhtextractor.app.EffectiveParamsService#signatureOf} 都要把 String 字段以
+ * {@link ParamSignature#signatureOf} 都要把 String 字段以
  * "长度前缀"方式写入 {@link StringBuilder}（先写长度再写内容；null 与空串可区分、固定字段顺序稳定）。
  * 该编码口径直接决定预览缓存键 —— 两处必须逐字一致，故收敛到本类，禁止就地重写。</p>
  */

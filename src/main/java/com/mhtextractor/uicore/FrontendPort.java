@@ -251,6 +251,9 @@ public final class FrontendPort implements Uiport, AutoCloseable {
         public AppConfig runtimeConfig(){return lastRuntime;}
         public List<OutputUnitVm> outputUnitPlan(boolean checked){return checked?snapshot().checkedUnits():snapshot().allUnits();}
         public ParamSchemaVm paramSchema(boolean image){return image?snapshot().imageSchema():snapshot().textSchema();}
+        // Pure value conversions: no workspace mutation, confirmation, or snapshot refresh.
+        public Map<String,Object> paramValues(AppConfig config,boolean image){return backend.queries().paramValues(config,image);}
+        public AppConfig collectParams(Map<String,Object> values,boolean image){return backend.queries().collectParams(values,image);}
         public CacheStateVm cacheState(){return snapshot().cache();}
         public ParameterStateVm parameterState(boolean image,List<TargetId> fallback){return parameterState(image,fallback,TargetResolution.SELECTED_FIRST);}
         public ParameterStateVm parameterState(boolean image,List<TargetId> targets,TargetResolution resolution){
@@ -262,7 +265,8 @@ public final class FrontendPort implements Uiport, AutoCloseable {
                 if(selected.isEmpty()&&targets!=null)targets.stream().filter(available::containsKey).findFirst().ifPresent(selected::add);
             }else if(targets!=null)selected.addAll(targets.stream().distinct().filter(available::containsKey).toList());
             var states=selected.stream().map(available::get).toList();
-            boolean uniform=states.isEmpty()||states.stream().allMatch(s->Objects.equals(s.config(),states.getFirst().config()));
+            boolean uniform=states.isEmpty()||states.stream().allMatch(s->com.mhtextractor.model.ParamSignature.signatureOf(s.config())
+                    .equals(com.mhtextractor.model.ParamSignature.signatureOf(states.getFirst().config())));
             return new ParameterStateVm(all.textConfirmed(),all.textGlobal(),all.imageConfirmed(),all.imageGlobal(),selected,selected.size(),states,uniform,states.stream().anyMatch(ParameterStateVm.TargetState::effective));
         }
         public List<PresentationVm> presentation(List<String> paths,AppConfig runtime){return snapshot().presentation().stream().filter(p->paths.contains(p.path())).toList();}

@@ -7,7 +7,7 @@ import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.model.ChangeListener;
-import com.mhtextractor.app.DropResolver;
+import com.mhtextractor.uicore.DragDrop;
 import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.uicore.GroupRow;
 import com.mhtextractor.uicore.ParamScope;
@@ -407,14 +407,14 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             if (e.getDragboard().hasString() && actions.draggedObject() != null) {
                 Object t = getItem();
                 if (t != null && !(t instanceof PreviewRow it && it.removed)) {
-                    DropResolver.Zone zone = DropResolver.zoneFor(t, e.getY(), getHeight(), GROUP_ROW_EDGE_ZONE);
+                    DragDrop.Zone zone = DragDrop.zoneFor(t, e.getY(), getHeight(), GROUP_ROW_EDGE_ZONE);
                     // 合法落点判定与落点解析共用同一规则（resolve 返回 null = 非法组合）
-                    if (DropResolver.resolve(actions.dataOrder(), actions.draggedObject(), t, zone) != null) {
+                    if (DragDrop.resolve(actions.dataOrder(), actions.draggedObject(), t, zone) != null) {
                         e.acceptTransferModes(TransferMode.MOVE);
-                        if (zone == DropResolver.Zone.INTO) {
+                        if (zone == DragDrop.Zone.INTO) {
                             showIntoIndicator();
                         } else {
-                            showInsertIndicator(zone == DropResolver.Zone.TOP);
+                            showInsertIndicator(zone == DragDrop.Zone.TOP);
                         }
                         actions.setLastDragOverCell(this);
                     }
@@ -475,7 +475,7 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
         if (t == null || (t instanceof PreviewRow it && it.removed)) {
             return;
         }
-        DropResolver.Zone zone = DropResolver.zoneFor(t, e.getY(), getHeight(), GROUP_ROW_EDGE_ZONE);
+        DragDrop.Zone zone = DragDrop.zoneFor(t, e.getY(), getHeight(), GROUP_ROW_EDGE_ZONE);
         if (actions.performDrop(actions.draggedObject(), t, zone, this)) {
             actions.markDropHandled();
         }

@@ -416,7 +416,7 @@ public void exerciseAllFeatures() throws Exception {
     this.view.updateImportDropHighlight(true);
     FxDelay.pause(100);
     this.view.clearImportDropHighlight();
-    MhtImportPlanner.findDriveRoots(List.of("D:\\", "C:\\test"));
+    com.mhtextractor.uicore.ImportAddresses.driveRoots(List.of("D:\\", "C:\\test"));
     MhtImportPlanner.scanner(List.of("C:\\test"), MhtImportPlanner.DEFAULT_MAX_DEPTH,
             MhtImportPlanner.DEFAULT_MAX_GROUPS, MhtImportPlanner.DEFAULT_MAX_FILES);
     FxDelay.pause(100);

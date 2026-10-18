@@ -1,7 +1,6 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.Texts;
-import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.uicore.WorkspaceView;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.gui.component.NotificationHost;

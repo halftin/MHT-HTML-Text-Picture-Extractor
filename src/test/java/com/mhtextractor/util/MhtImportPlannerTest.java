@@ -397,10 +397,10 @@ class MhtImportPlannerTest {
 
     @Test
     void findDriveRootsDetectsRootPaths() {
-        assertEquals(List.of("D:\\"), MhtImportPlanner.findDriveRoots(List.of("D:\\")));
-        assertTrue(MhtImportPlanner.findDriveRoots(List.of("D:\\a")).isEmpty());
+        assertEquals(List.of("D:\\"), com.mhtextractor.uicore.ImportAddresses.driveRoots(List.of("D:\\")));
+        assertTrue(com.mhtextractor.uicore.ImportAddresses.driveRoots(List.of("D:\\a")).isEmpty());
         assertEquals(List.of("D:\\"),
-                MhtImportPlanner.findDriveRoots(List.of("C:\\x", "D:\\", "E:\\y")));
+                com.mhtextractor.uicore.ImportAddresses.driveRoots(List.of("C:\\x", "D:\\", "E:\\y")));
     }
 
     // ---- 20. 组批次的 dirPath = 该子目录的绝对路径 ----

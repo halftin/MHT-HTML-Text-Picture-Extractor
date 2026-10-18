@@ -96,17 +96,6 @@ public final class ParamSchemaService {
         return result;
     }
 
-    /** 一个开关的联动：返回需要禁用并复位的字段值；启用时保留原输入。 */
-    public static Map<String, Object> disabledValues(ParamSchemaVm schema, Map<String, Object> values,
-                                                      String controller) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        for (Field f : schema.fields()) {
-            if (controller.equals(f.enabledBy()) && !Boolean.TRUE.equals(values.get(controller)))
-                result.put(f.id(), f.disabledValue());
-        }
-        return result;
-    }
-
     /** 两页控件值 -> 参数快照；仅关闭的图片区域标记收为 null，其余逐值保留。 */
     public static AppConfig collect(Map<String, Object> values) {
         AppConfig config = new AppConfig();

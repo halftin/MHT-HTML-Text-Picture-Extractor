@@ -1,9 +1,8 @@
 package com.mhtextractor.gui.controller;
 
 import atlantafx.base.controls.ToggleSwitch;
-import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.app.ParamDraft;
-import com.mhtextractor.app.ParamSchemaService;
+import com.mhtextractor.uicore.ParamSchemaRules;
 import com.mhtextractor.uiport.WorkspaceQueries;
 import com.mhtextractor.uiport.ParamSchemaVm;
 import java.util.Map;
@@ -155,7 +154,6 @@ public class ParamFormPane extends BorderPane {
     /** 参数草稿状态机（R1.5）：基线 / 脏判定 / 提交；纯逻辑在 {@code app.ParamDraft}。 */
     private final ParamDraft draft = new ParamDraft();
     /** 「组内参数是否混合」的判定入口（R1.4 增强项）；服务本身无状态，仅此一处持有。 */
-    private final EffectiveParamsService effectiveParams = new EffectiveParamsService();
     /** 目标信息栏（R1.4）：固定挂在 top，见类注释。 */
     private final ParamTargetBar targetBar = new ParamTargetBar();
 
@@ -250,8 +248,7 @@ public class ParamFormPane extends BorderPane {
         notifyDraftStateChanged();
         // R1.4：刷新目标信息栏（组内混合提示的上下文就是本次载入用的全局参数缓存）
         targetBar.show(target, null,
-                target instanceof ParamScope.GroupTarget gt && gt.group() instanceof com.mhtextractor.uicore.GroupRow<?> group
-                        && !queries.parameterState(imageMode, group.getMembers().stream().map(member -> ((com.mhtextractor.uicore.PreviewRow) member).id()).toList(), com.mhtextractor.uiport.TargetResolution.EXPLICIT).uniform());
+                com.mhtextractor.uicore.ParamTargetText.isGroupMixed(target, queries, imageMode));
     }
 
     /**
@@ -278,7 +275,7 @@ public class ParamFormPane extends BorderPane {
 
     /** 以两组控件当前值构建参数快照（仅参数，不含目录/模式/GUI 状态）；字段映射与拆分前逐条一致。 */
     public AppConfig collect() {
-        return ParamSchemaService.collect(fieldValues());
+        return queries.collectParams(fieldValues(), imageMode);
     }
 
     /** 切模式：显示当前模式的参数组（另一组隐藏且不占位）；初值载入时由 {@link #load} 调用。 */
@@ -461,7 +458,7 @@ public class ParamFormPane extends BorderPane {
     private void applyImageParamsToGui(AppConfig config) { applyParams(config, true); }
 
     private void applyParams(AppConfig config, boolean image) {
-        ParamSchemaService.values(config, queries.paramSchema(image)).forEach(this::writeField);
+        queries.paramValues(config, image).forEach(this::writeField);
     }
 
     private Map<String, Object> fieldValues() {
@@ -484,7 +481,7 @@ public class ParamFormPane extends BorderPane {
             if (controller.equals(field.enabledBy()))
                 fields.get(field.id()).setDisable(!Boolean.TRUE.equals(values.get(controller)));
         }
-        ParamSchemaService.disabledValues(schema, values, controller).forEach(this::writeField);
+        ParamSchemaRules.disabledValues(schema, values, controller).forEach(this::writeField);
     }
 
     private void toggleLimitSettings() { applyRules(false, "enableContentLimit"); }

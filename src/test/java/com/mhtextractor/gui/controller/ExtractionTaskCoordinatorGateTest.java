@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.model.ExtractionStats;
-import com.mhtextractor.app.PreStartGate;
+import com.mhtextractor.uicore.PreStartGate;
 import com.mhtextractor.app.WorkspaceExtractionCoordinator;
 import com.mhtextractor.app.WorkspaceExtractionService;
 import com.mhtextractor.app.WorkspaceModel;

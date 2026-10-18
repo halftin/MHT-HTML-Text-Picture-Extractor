@@ -2,7 +2,7 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.uiport.PortEvent;
 import com.mhtextractor.uiport.WorkspaceQueries;
-import com.mhtextractor.app.PreStartGate;
+import com.mhtextractor.uicore.PreStartGate;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;

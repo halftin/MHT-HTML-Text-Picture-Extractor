@@ -113,28 +113,6 @@ public final class MhtImportPlanner {
                 maxDepth, maxGroupsPerRound, maxFilesPerRound);
     }
 
-    /** 需要盘符根目录确认的地址（toPath().getParent() == null，对 "D:\" 与 UNC 成立） */
-    public static List<String> findDriveRoots(List<String> addresses) {
-        if (addresses == null) {
-            return List.of();
-        }
-        List<String> out = new ArrayList<>();
-        for (String a : addresses) {
-            if (a == null || a.isBlank()) {
-                continue;
-            }
-            try {
-                Path p = Path.of(a);
-                if (p.getParent() == null) {
-                    out.add(a);
-                }
-            } catch (RuntimeException e) {
-                // 非法路径格式：不视为盘符根目录
-            }
-        }
-        return out;
-    }
-
     /** 目录扫描工作项（深度优先游标用） */
     private record DirWork(File dir, int depth) {
     }

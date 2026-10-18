@@ -1,14 +1,13 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.app.SelectionRules;
-import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.uicore.WorkspaceView;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.uicore.GroupRow;
 import com.mhtextractor.uicore.PreviewRow;
-import com.mhtextractor.app.DropResolver;
+import com.mhtextractor.uicore.DragDrop;
 import com.mhtextractor.uicore.ParamScope;
 import javafx.animation.ParallelTransition;
 import javafx.animation.TranslateTransition;
@@ -52,7 +51,7 @@ public final class ListInteractionController implements MainViewActions {
         List<Object> dataOrder();                                      // = MainController.items（只读投影）
         javafx.collections.ObservableList<Object> displayItems();      // = adapter.displayItems()
         void hideRow(Object item);                                     // = adapter.hideRow(item)
-        void applyDrop(Object dragged, Object target, DropResolver.Zone zone, java.util.function.Consumer<com.mhtextractor.uiport.DropVm> finished);
+        void applyDrop(Object dragged, Object target, DragDrop.Zone zone, java.util.function.Consumer<com.mhtextractor.uiport.DropVm> finished);
         void rebuildDisplay();                                         // 仍由 MainController 提供（含动画快进）
         // 勾选唯一写入口（B3-1）：= ws.setChecked(...)，本类所有勾选写入都经它，不得直写 PreviewRow.setSelected
         void setChecked(List<PreviewRow> targets, boolean value);
@@ -433,7 +432,7 @@ public final class ListInteractionController implements MainViewActions {
      * cell 非空 = 真实 DnD 路径（含动画）；cell 为 null = 程序化演练路径（跳过动画）。
      */
     @Override
-    public boolean performDrop(Object dragged, Object target, DropResolver.Zone zone,
+    public boolean performDrop(Object dragged, Object target, DragDrop.Zone zone,
                                PreviewListCell cell) {
         if (dragged == null || target == null || (target instanceof PreviewRow it && it.removed)) {
             return false;
@@ -446,7 +445,7 @@ public final class ListInteractionController implements MainViewActions {
         double gapTopY = 0;
         if (cell != null) {
             gapTopY = DragGeometry.cellBoundsInOverlay(cell, host.dragOverlay()).getMinY()
-                    + (zone == DropResolver.Zone.TOP ? 0 : cell.getHeight());
+                    + (zone == DragDrop.Zone.TOP ? 0 : cell.getHeight());
         }
         final double gap = gapTopY;
         host.applyDrop(dragged,target,zone,drop -> {

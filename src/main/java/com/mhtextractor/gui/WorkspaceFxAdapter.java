@@ -1,6 +1,6 @@
 package com.mhtextractor.gui;
 
-import com.mhtextractor.app.WorkspaceChange;
+import com.mhtextractor.uiport.PortEvent.WorkspaceChanged;
 import com.mhtextractor.uicore.WorkspaceView;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -9,7 +9,6 @@ import javafx.scene.control.ListView;
 
 import java.util.AbstractList;
 import java.util.List;
-import java.util.function.Consumer;
 
 /**
  * 工作区模型的 **JavaFX 投影层**（Q4 / P3）—— 「模型唯一拥有业务数据，JavaFX 列表是它的投影」的落地处。
@@ -29,7 +28,7 @@ import java.util.function.Consumer;
  * </ol>
  *
  * <p><b>🚩 本步的取舍：订阅变更，但<b>不</b>在每次变更上自动投影（逐条给理由）</b></p>
- * <p>指南对 adapter 的要求是"订阅 {@link WorkspaceChange}，只在 FX 线程应用"，
+ * <p>指南对 adapter 的要求是"订阅 {@link WorkspaceChanged}，只在 FX 线程应用"，
  * 并<b>同时</b>明令"不要在动画流程中重复发布中间快照"。这两条在本步的代码事实下会互相打架：</p>
  * <ol>
  *   <li><b>拖拽动画的时序会坏</b>：{@code performResolvedDrop} 先改数据序、再由
@@ -91,8 +90,8 @@ public final class WorkspaceFxAdapter {
     /** 数据序只读投影 —— 见类 javadoc 的第 2 条 */
     private final List<Object> dataOrder;
 
-    /** 订阅句柄（存字段而不是每次 {@code this::onChange}：{@code removeListener} 必须能退掉同一个实例） */
-    private final Consumer<WorkspaceChange> listener = this::onChange;
+    /** 端口工作区事件订阅；只标脏，不提前投影或应用 suggestedSelection。 */
+    private final AutoCloseable subscription;
 
     /** 选择宿主；默认 {@link SelectionHost#NONE} */
     private SelectionHost host = SelectionHost.NONE;
@@ -117,6 +116,7 @@ public final class WorkspaceFxAdapter {
      */
     public WorkspaceFxAdapter(WorkspaceView model, SelectionHost host) {
         this.model = model;
+        this.subscription = model.subscribe(this::onChange);
         this.host = host == null ? SelectionHost.NONE : host;
         // 数据序只读投影：AbstractList 只要求 get/size；add/remove/set 由基类抛 UnsupportedOperationException
         this.dataOrder = new AbstractList<>() {
@@ -155,7 +155,7 @@ public final class WorkspaceFxAdapter {
 
     /** 自上次投影以来模型是否发布过变更（订阅证据，也是 P4 自动投影的合并依据） */
     public boolean isStale() {
-        return projectedVersion != model.version();
+        return stale || projectedVersion != model.version();
     }
 
     /** 绑定选择宿主（生产：{@code ListView} 的选择模型） */
@@ -191,6 +191,11 @@ public final class WorkspaceFxAdapter {
 
     /** 退订（宿主窗口销毁时用；未订阅是 no-op） */
     public void dispose() {
+        try {
+            subscription.close();
+        } catch (Exception error) {
+            throw new IllegalStateException(error);
+        }
         model.dispose();
     }
 
@@ -251,7 +256,7 @@ public final class WorkspaceFxAdapter {
     }
 
     /** 订阅回调：只记"脏"，不投影（理由见类 javadoc） */
-    private void onChange(WorkspaceChange change) {
+    private void onChange(WorkspaceChanged change) {
         stale = true;
     }
 }

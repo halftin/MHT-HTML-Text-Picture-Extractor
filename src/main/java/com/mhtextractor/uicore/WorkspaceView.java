@@ -55,6 +55,9 @@ public final class WorkspaceView {
     public boolean canUndo(){return port.queries().workspace().canUndo();}
     public long version(){return version;}
     public PortSnapshot snapshot(){return port.snapshot();}
+    public AutoCloseable subscribe(java.util.function.Consumer<PortEvent.WorkspaceChanged> listener){
+        return port.events().subscribe(event->{if(event instanceof PortEvent.WorkspaceChanged change)listener.accept(change);});
+    }
     public void dispose(){try{subscription.close();}catch(Exception error){throw new IllegalStateException(error);}}
     public void clearItems(){port.commands().clearItems();}
     @SuppressWarnings("unchecked") public static GroupRow<PreviewRow> asPreviewGroup(GroupRow<?> group){return (GroupRow<PreviewRow>)group;}

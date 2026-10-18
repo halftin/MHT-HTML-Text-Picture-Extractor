@@ -1,12 +1,10 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.MhtImportPlanner;
 import com.mhtextractor.app.PreviewService;
 import com.mhtextractor.app.PreviewSession;
 import com.mhtextractor.uicore.SessionStateService;
 import com.mhtextractor.app.WorkspaceExtractionService;
-import com.mhtextractor.app.WorkspaceImportService;
-import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.uicore.ImportAddresses;
 import com.mhtextractor.uicore.WorkspaceView;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.GuiNotifications;
@@ -18,7 +16,7 @@ import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.app.Texts;
 import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
-import com.mhtextractor.app.DropResolver;
+import com.mhtextractor.uicore.DragDrop;
 import com.mhtextractor.uicore.ParamScope;
 import com.mhtextractor.uiport.ImportPlanVm;
 import com.mhtextractor.uiport.PortEvent;
@@ -249,7 +247,7 @@ public class MainController {
         @Override public List<Object> dataOrder() { return items; }
         @Override public ObservableList<Object> displayItems() { return displayItems; }
         @Override public void hideRow(Object item) { adapter.hideRow(item); }
-        @Override public void applyDrop(Object dragged,Object target,DropResolver.Zone zone,java.util.function.Consumer<com.mhtextractor.uiport.DropVm> finished) {
+        @Override public void applyDrop(Object dragged,Object target,DragDrop.Zone zone,java.util.function.Consumer<com.mhtextractor.uiport.DropVm> finished) {
             var from=dragged instanceof PreviewRow i?i.id():((GroupRow<?>)dragged).id();
             var to=target instanceof PreviewRow i?i.id():((GroupRow<?>)target).id();
             activityPort.execute(port -> port.commands().applyDrop(from,to,zone.name()),finished);
@@ -660,10 +658,10 @@ public class MainController {
             return;
         }
         // 地址规范化（RISK-6）：祖先/后代包含关系合并为祖先，防重复扫描与重复批次
-        WorkspaceImportService.NormalizeResult normalized = new WorkspaceImportService().normalizeAddresses(addresses);
+        ImportAddresses.NormalizeResult normalized = ImportAddresses.normalizeAddresses(addresses);
         // 规范化日志（.06 重复 / .07 被祖先覆盖）：规则在 app 层回传有序事件，文案留在 GUI 层。
         // ★ 必须在 .04 之前逐条产出 —— 原实现是"规范化过程中打日志，返回后才打 .04"。
-        for (WorkspaceImportService.DroppedAddress dropped : normalized.dropped()) {
+        for (ImportAddresses.DroppedAddress dropped : normalized.dropped()) {
             if (dropped.ancestor() == null) {
                 log.info(Texts.msg("log.maincontroller.06", dropped.address()));
             } else {
@@ -677,7 +675,7 @@ public class MainController {
 
         // BC-8：仅拖拽来源 + 盘符根目录 → 确认（会话 19：窗口内居中确认卡片，回调式取代 showAndWait）
         if (fromDrag) {
-            List<String> roots = MhtImportPlanner.findDriveRoots(normalized.kept());
+            List<String> roots = ImportAddresses.driveRoots(normalized.kept());
             if (!roots.isEmpty()) {
                 String msg = Texts.get("import.rootDirConfirmMsg") + String.join("\n", roots)
                         + Texts.get("import.rootDirConfirmNote");
@@ -993,7 +991,7 @@ public class MainController {
                 List<Object> targets = paramDomain.resolveParamTargets(target);
                 ParamDomainController.TargetCounts counts = ParamDomainController.countTargets(targets);
                 var state = activityPort.queries().parameterState(refs.imageModeToggle().isSelected(),
-                        target == null ? List.of() : List.of(target instanceof PreviewRow i ? com.mhtextractor.uiport.TargetId.ofItem(i.path) : com.mhtextractor.uiport.TargetId.ofGroup(((GroupRow<?>) target).getGroupNo())));
+                        targets.stream().map(row -> row instanceof PreviewRow i ? i.id() : ((GroupRow<?>) row).id()).toList(), com.mhtextractor.uiport.TargetResolution.EXPLICIT);
                 return new com.mhtextractor.app.ParamsInfo(hasIndependentParams(target), state.hasEffective(), state.uniform(), !paramClipboard.isEmpty(), counts.topLevelCount(), counts.distinctGroupCount());
             }
             @Override public void select(Object target) { onContextSelect(target); }

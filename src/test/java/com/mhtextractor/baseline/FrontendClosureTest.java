@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 /** Exact frozen debt, with a visible ratchet. Removal requires retiring the corresponding TSV row. */
 class FrontendClosureTest {
     // P-F1 initial measured counts; only lower these. P-F6: FROZEN_MAX = 0 and an empty baseline.
-    private static final int FROZEN_MAX = 70;
+    private static final int FROZEN_MAX = 48;
     private static final int PENDING_MAX = 15;
     private static final Path BASELINE = Path.of("src/test/resources/frontend-closure-baseline.tsv");
 

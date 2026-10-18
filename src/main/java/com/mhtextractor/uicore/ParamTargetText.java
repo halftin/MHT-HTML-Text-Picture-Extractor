@@ -1,6 +1,5 @@
 package com.mhtextractor.uicore;
 
-import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.model.ParamScope;
@@ -39,9 +38,6 @@ public final class ParamTargetText {
         return mixed?base+" "+I18n.get("paramTarget.groupMixed"):base;
     }
 
-    /** 无状态服务（{@link EffectiveParamsService} 不持有可变状态，可安全共享）。 */
-    private static final EffectiveParamsService EFFECTIVE = new EffectiveParamsService();
-
     private ParamTargetText() {
     }
 
@@ -69,16 +65,20 @@ public final class ParamTargetText {
     /**
      * 组目标的组内参数是否<b>不统一</b>（R1.4 增强项）。
      *
-     * <p>判定本身<b>不在这里新写</b>：交给 {@link EffectiveParamsService#hasMixedEffectiveParams}
-     * （Q1 交付的唯一实现点）。本方法只做"仅组目标才判"的路由，故 R1.4 的提示与列表里其他
+     * <p>判定本身<b>不在这里新写</b>：读取端口对组成员显式查询的 uniform。
+     * 本方法只做"仅组目标才判"的路由，故 R1.4 的提示与列表里其他
      * "混合/独立参数"判定永远同源，不会各自演化。</p>
      *
      * <p>边界（沿用服务口径）：非组目标 → {@code false}；空组/单成员组 → {@code false}；
      * {@code null}（无生效参数）算作一种独立取值。</p>
      */
-    public static boolean isGroupMixed(ParamScope.Target target, EffectiveParamsService.Context ctx) {
-        return target instanceof ParamScope.GroupTarget gt
-                && EFFECTIVE.hasMixedEffectiveParams(gt.group().getMembers(), ctx);
+    public static boolean isGroupMixed(com.mhtextractor.uicore.ParamScope.Target target,
+                                       com.mhtextractor.uiport.WorkspaceQueries queries, boolean imageMode) {
+        return target instanceof com.mhtextractor.uicore.ParamScope.GroupTarget gt
+                && gt.group() instanceof GroupRow<?> group
+                && !queries.parameterState(imageMode, group.getMembers().stream()
+                        .map(member -> ((PreviewRow) member).id()).toList(),
+                        com.mhtextractor.uiport.TargetResolution.EXPLICIT).uniform();
     }
 
     /** 括号对（复用既有键）：{@code zh}=（）、{@code en}=()。 */

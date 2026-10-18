@@ -94,7 +94,7 @@ class ParamSchemaServiceTest {
             for (var row : before()) if (!row[6].equals("-") && !Boolean.TRUE.equals(input.get(row[6])))
                 wanted.put(row[0], resetValue(row));
             for (String controller : switches) for (boolean image : List.of(false, true))
-                found.putAll(ParamSchemaService.disabledValues(schema(image), input, controller));
+                found.putAll(com.mhtextractor.uicore.ParamSchemaRules.disabledValues(schema(image), input, controller));
             expected.add(wanted);
             actual.add(found);
         }

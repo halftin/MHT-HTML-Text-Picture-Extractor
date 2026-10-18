@@ -1,6 +1,5 @@
 package com.mhtextractor.gui.component;
 
-import com.mhtextractor.app.ExtractionPreconditions;
 import com.mhtextractor.app.Texts;
 import javafx.scene.Node;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
@@ -182,14 +181,6 @@ public final class GuiNotifications {
      * {@code EXCLAMATION_TRIANGLE}），任何一处漏判都会让"必须确认的错误"退化成
      * "会自己消失的 toast"。</p>
      */
-    public static void preconditionDenied(Node anchor, ExtractionPreconditions.Denial denial) {
-        if (denial.level() == ExtractionPreconditions.Level.ERROR) {
-            NotificationHost.error(anchor, denial.code().message(), FontAwesomeSolid.EXCLAMATION_CIRCLE);
-        } else {
-            NotificationHost.toastWarning(anchor, denial.code().message(), FontAwesomeSolid.EXCLAMATION_TRIANGLE);
-        }
-    }
-
     public static void preconditionDenied(Node anchor, com.mhtextractor.uiport.PreStartStateVm.Denial denial) {
         Object[] params = denial.namedParams().entrySet().stream()
                 .flatMap(entry -> java.util.stream.Stream.of(entry.getKey(), entry.getValue())).toArray();

@@ -3,7 +3,7 @@ package com.mhtextractor.gui.controller;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.uicore.GroupRow;
 import com.mhtextractor.uicore.PreviewRow;
-import com.mhtextractor.app.DropResolver;
+import com.mhtextractor.uicore.DragDrop;
 import com.mhtextractor.uicore.ParamScope;
 import java.util.List;
 import javafx.scene.input.MouseEvent;
@@ -35,6 +35,6 @@ interface MainViewActions {
     void setLastDragOverCell(CellIndicator cell);
     void markDropHandled();
     void beginDrag(PreviewListCell sourceCell);
-    boolean performDrop(Object dragged, Object target, DropResolver.Zone zone, PreviewListCell cell);
+    boolean performDrop(Object dragged, Object target, DragDrop.Zone zone, PreviewListCell cell);
     void cancelDrag();
 }
