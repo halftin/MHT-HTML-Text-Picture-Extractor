@@ -1,4 +1,4 @@
-package com.mhtextractor.util;
+package com.mhtextractor.uicore;
 
 import javafx.beans.property.SimpleBooleanProperty;
 import org.junit.jupiter.api.Test;
@@ -6,9 +6,9 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.mhtextractor.util.SelectionState.TriState.ALL;
-import static com.mhtextractor.util.SelectionState.TriState.NONE;
-import static com.mhtextractor.util.SelectionState.TriState.SOME;
+import static com.mhtextractor.uicore.SelectionState.TriState.ALL;
+import static com.mhtextractor.uicore.SelectionState.TriState.NONE;
+import static com.mhtextractor.uicore.SelectionState.TriState.SOME;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;

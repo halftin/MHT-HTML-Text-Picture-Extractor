@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.component;
 
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import javafx.animation.TranslateTransition;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;

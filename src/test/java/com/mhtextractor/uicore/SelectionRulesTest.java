@@ -1,6 +1,6 @@
-package com.mhtextractor.app;
+package com.mhtextractor.uicore;
 
-import com.mhtextractor.util.SelectionState;
+import com.mhtextractor.uicore.SelectionState;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

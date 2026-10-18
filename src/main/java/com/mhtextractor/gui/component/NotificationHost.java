@@ -5,7 +5,7 @@ import atlantafx.base.controls.Message;
 import atlantafx.base.controls.Notification;
 import atlantafx.base.theme.Styles;
 import atlantafx.base.util.Animations;
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;

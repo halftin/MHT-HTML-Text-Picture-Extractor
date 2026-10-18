@@ -1,5 +1,7 @@
 package com.mhtextractor.app;
 
+import com.mhtextractor.i18n.Texts;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mhtextractor.i18n.I18n;

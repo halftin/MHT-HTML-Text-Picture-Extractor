@@ -10,7 +10,7 @@ import com.mhtextractor.gui.WorkspaceFxAdapter;
 import com.mhtextractor.gui.util.JavaFxUtil;
 import com.mhtextractor.uicore.GroupRow;
 import com.mhtextractor.uicore.PreviewRow;
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.uicore.DragDrop;
@@ -984,12 +984,12 @@ public class MainController {
             @Override public boolean isLiveTarget(Object item) {
                 return !(item instanceof PreviewRow it && it.removed);
             }
-            @Override public com.mhtextractor.app.ParamsInfo paramsInfo(Object target) {
+            @Override public com.mhtextractor.uicore.ParamsInfo paramsInfo(Object target) {
                 List<Object> targets = paramDomain.resolveParamTargets(target);
                 ParamDomainController.TargetCounts counts = ParamDomainController.countTargets(targets);
                 var state = activityPort.queries().parameterState(refs.imageModeToggle().isSelected(),
                         targets.stream().map(row -> row instanceof PreviewRow i ? i.id() : ((GroupRow<?>) row).id()).toList(), com.mhtextractor.uiport.TargetResolution.EXPLICIT);
-                return new com.mhtextractor.app.ParamsInfo(hasIndependentParams(target), state.hasEffective(), state.uniform(), !paramClipboard.isEmpty(), counts.topLevelCount(), counts.distinctGroupCount());
+                return new com.mhtextractor.uicore.ParamsInfo(hasIndependentParams(target), state.hasEffective(), state.uniform(), !paramClipboard.isEmpty(), counts.topLevelCount(), counts.distinctGroupCount());
             }
             @Override public void select(Object target) { onContextSelect(target); }
             @Override public void selectAll(Object target) { onContextSelectAll(target); }

@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.component;
 
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.uiport.Confirmer;
 import com.mhtextractor.uiport.ConfirmRequest;
 import com.mhtextractor.uiport.ConfirmToken;

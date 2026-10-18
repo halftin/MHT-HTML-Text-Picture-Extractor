@@ -1,6 +1,6 @@
-package com.mhtextractor.app;
+package com.mhtextractor.uicore;
 
-import com.mhtextractor.util.ThumbnailPixels;
+import com.mhtextractor.uicore.ThumbnailPixels;
 import org.junit.jupiter.api.Test;
 
 import java.nio.IntBuffer;

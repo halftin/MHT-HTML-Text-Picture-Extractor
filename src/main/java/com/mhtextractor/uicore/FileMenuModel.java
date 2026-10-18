@@ -4,15 +4,13 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-import com.mhtextractor.app.ParamsInfo;
-
 /**
  * 文件列表右键菜单的<b>纯模型层</b>（Q9a / P4b-①，P2-2 从 {@code gui.controller.FileListContextMenu} 原样迁出）：
  * 目标类型快照（{@link TargetType}）、菜单条目身份（{@link Entry}）、菜单结构（{@link #LAYOUT}）、
  * 文案键（{@link #KEY_PARAMS} 等）、启用状态（{@link State}）与两条纯函数
  * （{@link #stateFor} / {@link #applyToSelectionTextKey}）。
  *
- * <p>零 JavaFX、零副作用：不构造任何 JavaFX 对象、不认模型类型 —— 参数判定快照 {@code app.ParamsInfo}
+ * <p>零 JavaFX、零副作用：不构造任何 JavaFX 对象、不认模型类型 —— 参数判定快照 {@code ParamsInfo}
  * 由宿主算好传入。故可被普通 JUnit 直接断言；JavaFX 壳（{@code MenuItem} 装配 / 动作转发 /
  * 显示生命周期）留在 {@code gui.controller.FileListContextMenu}，经本类取数。</p>
  *

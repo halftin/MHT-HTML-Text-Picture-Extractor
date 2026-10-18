@@ -1,17 +1,16 @@
-package com.mhtextractor.app;
+package com.mhtextractor.i18n;
 
-import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.ExtractWarning;
 
 import java.util.Locale;
 import java.util.ResourceBundle;
 
 /**
- * 文案门面（P3-3b-24）：P3 端口文案能力在进程内的实现 —— {@code gui} 对 {@code i18n.I18n}
+ * 文案门面（P3-3b-24）：前端与后端共享的叶子层入口 —— 对 {@code i18n.I18n}
  * 的全部静态调用经本门面 1:1 委托，文案键、实参、占位符语义与缺键返回 {@code !key!} 行为逐字不变，
  * gui 层不再直连 {@code i18n.I18n}，只依赖本门面。
  *
- * <p>本类<b>零 JavaFX</b>，属 {@code app} 层。</p>
+ * <p>本类<b>零 JavaFX</b>，属 {@code i18n} 叶子层。</p>
  */
 public final class Texts {
 

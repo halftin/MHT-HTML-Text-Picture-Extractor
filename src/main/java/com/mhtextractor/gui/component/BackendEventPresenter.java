@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.component;
 
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.uiport.PortEvent;
 import javafx.scene.Node;
 import javafx.scene.control.TextArea;

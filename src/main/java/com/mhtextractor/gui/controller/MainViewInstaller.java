@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.uicore.PreviewRow;
 import javafx.application.Platform;
 import javafx.geometry.HorizontalDirection;

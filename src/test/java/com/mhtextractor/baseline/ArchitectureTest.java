@@ -1151,7 +1151,7 @@ class ArchitectureTest {
      * 闸门 3（方案 §8 新增不变式 3）：gui 层直连业务包计数。
      *
      * <p>口径：gui 主源集<b>去除注释与字符串字面量</b>后，匹配
-     * {@code com.mhtextractor.(core|extractor|processor|output|util|cache|config|i18n).<类型名>}，
+     * {@code com.mhtextractor.(core|extractor|processor|output|util|cache|config).<类型名>}（i18n 为共享叶子层），
      * 取 (包, 类型) 的 distinct 集合；断言 ≤ {@value #GUI_DIRECT_BUSINESS_TYPES_MAX}（只减不增，
      * P1–P3 逐阶段下调，P3 目标 0）。import 语句条数仅作<b>非门禁</b>诊断打印。</p>
      */

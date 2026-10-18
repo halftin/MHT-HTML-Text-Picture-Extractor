@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.util;
 
-import com.mhtextractor.app.PreviewPixelService;
+import com.mhtextractor.uicore.PreviewPixelService;
 import com.mhtextractor.model.ThumbnailData;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;

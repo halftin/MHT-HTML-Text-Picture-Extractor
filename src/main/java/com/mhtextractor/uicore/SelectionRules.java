@@ -1,16 +1,14 @@
-package com.mhtextractor.app;
-
-import com.mhtextractor.util.SelectionState;
+package com.mhtextractor.uicore;
 
 import java.util.List;
 import java.util.function.Predicate;
 
 /**
- * 列表复选框三态 / Shift 区间多选的规则入口（P3-3b-12）：{@code gui} 对 {@code util.SelectionState}
+ * 列表复选框三态 / Shift 区间多选的规则入口（P3-3b-12）：{@code gui} 对 {@code SelectionState}
  * 的全部静态调用经本类 1:1 收口 —— 三态枚举与四静态方法的参数顺序、返回语义与底层完全一致
- * （只搬不改，枚举间双向映射），gui 层不再直连 {@code util.SelectionState}。
+ * （只搬不改，枚举间双向映射）。
  *
- * <p>本类<b>零 JavaFX、零 I18n</b>，属 {@code app} 层。</p>
+ * <p>本类<b>零 JavaFX、零 I18n</b>，属 {@code uicore} 层。</p>
  */
 public final class SelectionRules {
 

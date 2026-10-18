@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.component;
 
 import atlantafx.base.theme.NordLight;
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import javafx.animation.PauseTransition;
 import javafx.application.Application;
 import javafx.application.Platform;

@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.component;
 
 import com.mhtextractor.app.BackendSession;
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.app.UiportRuntime;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import com.mhtextractor.uiport.ConfirmRequest;

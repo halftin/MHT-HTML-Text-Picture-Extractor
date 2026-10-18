@@ -32,7 +32,7 @@ public final class SingleInstanceProbe extends Application {
                 close.start();
             } else if (containsNotice(stage.getScene().getRoot())) {
                 observed = true;
-                System.out.println("NOTICE_VISIBLE: " + com.mhtextractor.app.Texts.get("app.alreadyRunning"));
+                System.out.println("NOTICE_VISIBLE: " + com.mhtextractor.i18n.Texts.get("app.alreadyRunning"));
             }
         }));
         poll.setCycleCount(Timeline.INDEFINITE);
@@ -42,7 +42,7 @@ public final class SingleInstanceProbe extends Application {
     private static boolean containsNotice(Node node) {
         if (node instanceof Notification notice && notice.isVisible()
                 && notice.getWidth() > 0 && notice.getHeight() > 0 && notice.localToScreen(notice.getBoundsInLocal()) != null
-                && com.mhtextractor.app.Texts.get("app.alreadyRunning").equals(notice.getMessage())) return true;
+                && com.mhtextractor.i18n.Texts.get("app.alreadyRunning").equals(notice.getMessage())) return true;
         if (node instanceof Parent parent) {
             for (Node child : parent.getChildrenUnmodifiable()) if (containsNotice(child)) return true;
         }

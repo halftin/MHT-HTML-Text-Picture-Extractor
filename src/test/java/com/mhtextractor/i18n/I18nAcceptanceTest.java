@@ -23,6 +23,7 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -38,8 +39,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class I18nAcceptanceTest {
 
     private static final Pattern BANG = Pattern.compile("^![A-Za-z0-9_.]+!$");
-    /** 两个入口都要扫：{@code I18n.get}（具名占位符）与 {@code I18n.msg}（日志位置占位符） */
-    private static final Pattern GET_KEY = Pattern.compile("I18n\\.(?:get|msg)\\(\\s*\"([^\"]+)\"");
+    /** 实现与共享门面都要扫，覆盖界面具名占位符与日志位置占位符。 */
+    private static final Pattern GET_KEY = Pattern.compile("(?:I18n|Texts)\\.(?:get|msg)\\(\\s*\"([^\"]+)\"(?=\\s*[,)])");
     private static final Pattern FXML_KEY = Pattern.compile("%([a-zA-Z][a-zA-Z0-9_.]*)");
 
     @AfterEach
@@ -146,14 +147,20 @@ class I18nAcceptanceTest {
         for (ErrorCode code : ErrorCode.values()) {
             keys.add(code.key());
         }
+        // 全 bundle 覆盖拼接/动态键（如 backend.status.*），同时锁定迁包前后的逐键委托。
+        keys.addAll(I18n.bundle().keySet());
 
         assertFalse(keys.isEmpty(), "应至少扫到若干活跃键");
         int failures = 0;
         for (String key : keys) {
             I18n.setLocale(new Locale("zh", "CN"));
             String zh = I18n.get(key);
+            assertEquals(zh, Texts.get(key), "zh Texts 文案必须逐键不变：" + key);
+            assertSame(I18n.bundle(), Texts.bundle(), "FXML 必须共享同一 bundle");
             I18n.setLocale(new Locale("en", "US"));
             String en = I18n.get(key);
+            assertEquals(en, Texts.get(key), "en Texts 文案必须逐键不变：" + key);
+            assertSame(I18n.bundle(), Texts.bundle(), "FXML 必须共享同一 bundle");
             if (BANG.matcher(zh).matches() || BANG.matcher(en).matches()
                     || zh.isBlank() || en.isBlank()) {
                 failures++;

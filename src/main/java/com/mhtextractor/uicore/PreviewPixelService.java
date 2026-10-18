@@ -1,18 +1,16 @@
-package com.mhtextractor.app;
-
-import com.mhtextractor.util.ThumbnailPixels;
+package com.mhtextractor.uicore;
 
 import java.nio.IntBuffer;
 
 /**
  * 缩略图像素打包与尺寸校验纯函数（P3-3b-8）：{@code gui.util.ThumbnailFxBridge} 对
- * {@code util.ThumbnailPixels} 的两处纯静态调用经本类 1:1 收口 —— 参数顺序与返回语义
- * 与底层完全一致（只搬不改），gui 层不再直连 {@code util} 包。
+ * {@code ThumbnailPixels} 的两处纯静态调用经本类 1:1 收口 —— 参数顺序与返回语义
+ * 与底层完全一致（只搬不改）。
  *
  * <p>像素契约（ARGB 非预乘、行优先连续、stride == width）由底层 {@link ThumbnailPixels}
  * 定义，本类不复制、不改写。</p>
  *
- * <p>本类<b>零 JavaFX、零 I18n</b>，属 {@code app} 层。</p>
+ * <p>本类<b>零 JavaFX、零 I18n</b>，属 {@code uicore} 层。</p>
  */
 public final class PreviewPixelService {
 

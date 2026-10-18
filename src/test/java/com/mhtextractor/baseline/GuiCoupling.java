@@ -42,7 +42,7 @@ import java.util.stream.Stream;
  * </ol>
  *
  * <p><b>闸门 3 —— gui 直连业务包计数</b>：对 gui 源码<b>去除注释与字符串字面量</b>后，匹配
- * {@code com.mhtextractor.(core|extractor|processor|output|util|cache|config|i18n).<类型名>}，
+ * {@code com.mhtextractor.(core|extractor|processor|output|util|cache|config).<类型名>}，
  * 取 (包, 类型) 的 distinct 集合（基线 35，只减不增）。{@link #businessImportCount} 是
  * 非门禁诊断（基线 119 条 import 语句）。</p>
  */
@@ -54,8 +54,8 @@ public final class GuiCoupling {
     /** gui 主源集目录（相对仓库根）。 */
     public static final Path GUI_SOURCES = Path.of("src", "main", "java", "com", "mhtextractor", "gui");
 
-    /** 业务包段（与 ArchitectureTest.BUSINESS_PACKAGES 同口径，不含 model/app/platform）。 */
-    static final String BUSINESS_SEGMENTS = "(core|extractor|processor|output|util|cache|config|i18n)";
+    /** 前端禁止直连的业务包；P-F5 按已裁决的叶子层约定排除 i18n。 */
+    static final String BUSINESS_SEGMENTS = "(core|extractor|processor|output|util|cache|config)";
 
     /** 直连引用匹配：com.mhtextractor.<业务包>.<大写开头类型名>。 */
     private static final Pattern BUSINESS_TYPE_REF = Pattern.compile(

@@ -1,6 +1,7 @@
-package com.mhtextractor.app;
+package com.mhtextractor.uicore;
 
 import com.mhtextractor.model.AppConfig;
+import com.mhtextractor.model.ParamSignature;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -11,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 参数草稿状态机（R1.5）—— <b>无头</b>单测：本测试类不引用任何 UI 类，也不需要 JavaFX 工具包
- * （{@link ParamDraft} 是零 JavaFX 的纯逻辑，放 {@code app} 包正是为了这一点）。
+ * （{@link ParamDraft} 是零 JavaFX 的前端纯逻辑，放 {@code uicore} 包正是为了这一点）。
  *
  * <p>钉死的语义（对应任务 §4.2 的 6 条）：</p>
  * <ol>
@@ -81,7 +82,7 @@ class ParamDraftTest {
     void runtimeOnlyFieldsDoNotMakeItDirty() {
         // 先与 signatureOf 的排除集合对账：这 4 个就是"不进签名"的字段（防日后签名口径变了而本测试还绿）
         assertEquals(List.of("inputFolder", "outputFolder", "imageModeEnabled", "openFolderAfterComplete"),
-                EffectiveParamsService.runtimeOnlyFields(),
+                ParamSignature.runtimeOnlyFields(),
                 "signatureOf 的排除集合变了 —— 本测试的语义前提需要同步复核");
 
         ParamDraft draft = new ParamDraft();

@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.uicore.WorkspaceView;
 import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.uicore.GroupRow;

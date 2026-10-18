@@ -14,11 +14,16 @@ import java.util.Map;
 
 import com.mhtextractor.app.EffectiveParamsService;
 import com.mhtextractor.app.ParamClipboard;
-import com.mhtextractor.app.ParamsInfo;
+import com.mhtextractor.app.InProcessUiport;
+import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.uicore.ParamsInfo;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uicore.FileMenuModel;
+import com.mhtextractor.uiport.TargetId;
+import com.mhtextractor.uiport.TargetResolution;
+import com.mhtextractor.uiport.Uiport;
 import com.mhtextractor.model.ParamScope;
 import com.mhtextractor.app.UndoManager;
 
@@ -186,34 +191,36 @@ class ParamClipboardTest {
         assertEquals("BEFORE-X", itemSlots.get(x.path).getStartMarker(), "未复制过 ⇒ 槽位不动");
     }
 
-    // ==================== R7.2/R7.6：判定快照来自 EffectiveParamsService + 剪贴板状态 ====================
+    // ==================== R7.2/R7.6：判定快照来自参数查询 + 前端剪贴板状态 ====================
 
     @Test
     void paramsInfoCombinesEffectiveParamsJudgementWithClipboardState() {
-        EffectiveParamsService service = new EffectiveParamsService();
-        EffectiveParamsService.Context ctx = new EffectiveParamsService.Context(false, null, null);
+        WorkspaceModel model = new WorkspaceModel();
+        Uiport port = new InProcessUiport(model, request -> null);
+        var frontendClipboard = new com.mhtextractor.uicore.ParamClipboard();
         PreviewItem a = item("a");
         a.textItemParams = params("SAME");
         PreviewItem b = item("b");
         b.textItemParams = params("SAME");
+        model.addItems(List.of(a, b));
 
-        ParamsInfo before = clipboard.paramsInfo(List.of(a, b), true, service, ctx, 0, 0);
+        ParamsInfo before = paramsInfo(port, frontendClipboard, a, b);
         assertTrue(before.independent(), "独立参数位由宿主传入");
         assertTrue(before.hasEffective(), "两条目都有生效参数");
         assertTrue(before.uniform(), "签名相同 ⇒ 统一");
         assertFalse(before.copied(), "未复制过 ⇒ copied=false");
         assertTrue(FileMenuModel.stateFor(FileMenuModel.TargetType.TOP_ITEM, before).copyParams());
 
-        clipboard.copy(params("X"));
-        ParamsInfo after = clipboard.paramsInfo(List.of(a, b), true, service, ctx, 0, 0);
+        frontendClipboard.copy(params("X"));
+        ParamsInfo after = paramsInfo(port, frontendClipboard, a, b);
         assertTrue(after.copied(), "复制后 copied=true");
         assertTrue(FileMenuModel.stateFor(FileMenuModel.TargetType.TOP_ITEM, after).applyToSelection());
-        clipboard.clear();
-        assertFalse(clipboard.paramsInfo(List.of(a, b), true, service, ctx, 0, 0).copied(), "清空后 copied 回到 false");
+        frontendClipboard.clear();
+        assertFalse(paramsInfo(port, frontendClipboard, a, b).copied(), "清空后 copied 回到 false");
 
         // 混合：a 有参数、b 没有 ⇒ 服务判为"不统一" ⇒ 文案走 mixed 键（null 算一种取值，见服务 javadoc）
         b.textItemParams = null;
-        ParamsInfo mixed = clipboard.paramsInfo(List.of(a, b), true, service, ctx, 0, 0);
+        ParamsInfo mixed = paramsInfo(port, frontendClipboard, a, b);
         assertTrue(mixed.hasEffective());
         assertFalse(mixed.uniform());
         FileMenuModel.State state = FileMenuModel.stateFor(FileMenuModel.TargetType.TOP_ITEM, mixed);
@@ -222,10 +229,18 @@ class ParamClipboardTest {
 
         // 全无参数 ⇒ hasEffective=false ⇒ 文案走"无参数"键
         a.textItemParams = null;
-        ParamsInfo none = clipboard.paramsInfo(List.of(a, b), false, service, ctx, 0, 0);
+        ParamsInfo none = paramsInfo(port, frontendClipboard, a, b);
         assertFalse(none.hasEffective());
         assertEquals(FileMenuModel.KEY_COPY_NO_PARAMS,
                 FileMenuModel.stateFor(FileMenuModel.TargetType.TOP_ITEM, none).copyParamsTextKey());
+    }
+
+    private static ParamsInfo paramsInfo(Uiport port, com.mhtextractor.uicore.ParamClipboard clipboard,
+                                         PreviewItem a, PreviewItem b) {
+        var state = port.queries().parameterState(false,
+                List.of(TargetId.ofItem(a.path), TargetId.ofItem(b.path)), TargetResolution.EXPLICIT);
+        return new ParamsInfo(state.states().getFirst().independent(), state.hasEffective(), state.uniform(),
+                !clipboard.isEmpty(), 2, 0);
     }
 
     /** 装置自检：桩 apply 确实按宿主的形态调用了 pushParamUndo（否则上面的"一条记录"断言可能假通过） */

@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.mhtextractor.app.EffectiveParamsService;
-import com.mhtextractor.app.ParamsInfo;
+import com.mhtextractor.uicore.ParamsInfo;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.GroupItem;

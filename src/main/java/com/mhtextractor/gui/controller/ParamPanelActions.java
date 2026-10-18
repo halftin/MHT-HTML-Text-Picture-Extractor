@@ -2,7 +2,7 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.uiport.Uiport;
 import com.mhtextractor.uicore.FrontendPort;
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.NotificationHost;
 import javafx.scene.control.TextInputDialog;

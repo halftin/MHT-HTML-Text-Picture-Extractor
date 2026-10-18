@@ -1,4 +1,4 @@
-package com.mhtextractor.util;
+package com.mhtextractor.uicore;
 
 import org.junit.jupiter.api.Test;
 

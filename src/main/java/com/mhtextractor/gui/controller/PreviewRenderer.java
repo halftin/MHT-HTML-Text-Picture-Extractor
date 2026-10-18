@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.util.ThumbnailFxBridge;
 import com.mhtextractor.uicore.PreviewRow;

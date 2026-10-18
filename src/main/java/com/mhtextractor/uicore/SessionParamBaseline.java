@@ -1,4 +1,4 @@
-package com.mhtextractor.app;
+package com.mhtextractor.uicore;
 
 import com.mhtextractor.model.AppConfig;
 
@@ -9,7 +9,7 @@ import com.mhtextractor.model.AppConfig;
  * {@code sessionImageCache} 收敛为此 record；「取消」丢弃草稿时按会话起点的缓存重新载入同一目标
  * （复位语义见 {@code ParamSidePanel} 会话基线 javadoc）。</p>
  *
- * <p><b>零 JavaFX 依赖</b>：本类只依赖 {@code config} 业务包，
+ * <p><b>零 JavaFX 依赖</b>：本类只依赖 {@code model} 数据模型，
  * 由 {@code ArchitectureTest} 强制其依赖闭包不含 {@code javafx}。</p>
  */
 public record SessionParamBaseline(AppConfig text, AppConfig image) {

@@ -1,4 +1,4 @@
-package com.mhtextractor.util;
+package com.mhtextractor.uicore;
 
 import java.util.ArrayList;
 import java.util.List;

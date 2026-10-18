@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.uicore.ExtractOutcomeStyles;
 import com.mhtextractor.uiport.PortEvent;

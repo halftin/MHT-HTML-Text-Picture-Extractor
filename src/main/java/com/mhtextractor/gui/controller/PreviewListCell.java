@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.SelectionRules;
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.uicore.SelectionRules;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.util.DragGeometry;
 import com.mhtextractor.uicore.PreviewRow;

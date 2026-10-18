@@ -10,6 +10,7 @@ import com.mhtextractor.gui.controller.AgentExercise;
 import com.mhtextractor.gui.controller.FeatureExercise;
 import com.mhtextractor.gui.controller.MainController;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.i18n.Texts;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
@@ -91,7 +92,7 @@ public final class TestMain extends Application {
         // P6-B：与 App.start() 同一行（逐行等价 —— 改一处必须改另一处，见类 javadoc）。
         // 控制器由此拿到 loader，从而能在 initialize() 里用 getNamespace() 构造 MainViewRefs。
         loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader, runtime.port(), runtime::closeAsync));
-        loader.setResources(I18n.bundle());
+        loader.setResources(Texts.bundle());
         Parent root = loader.load();
         StackPane overlay = SidePanelHost.install(root);
         StackPane shell = new StackPane(overlay);

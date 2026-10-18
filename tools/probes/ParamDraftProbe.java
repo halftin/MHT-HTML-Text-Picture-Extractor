@@ -23,7 +23,7 @@ import java.util.Locale;
  *
  * Why a probe and not a unit test: isDirty()/commitDraft() live on ParamFormPane (an HBox/BorderPane
  * subtree - a JavaFX object), so "only confirm commits" and "the bar is really installed at the top"
- * cannot be asserted headlessly. The unit tests cover the pure parts (app.ParamDraft,
+ * cannot be asserted headlessly. The unit tests cover the pure parts (uicore.ParamDraft,
  * ParamTargetText); this probe covers the WIRING in the real container.
  *
  * It also deliberately does NOT touch FeatureExercise / the 31 GUI assertions, so the GUI automation
@@ -85,7 +85,7 @@ public class ParamDraftProbe extends Application {
 
         // ---------- 1) R1.4: global target ----------
         String expectedGlobal = zh ? "全局" : "Global";
-        String expectedGroup = zh ? "组（组1）" : "Group (组1)";
+        String expectedGroup = zh ? "组（组1）" : "Group (Group1)";
         String expectedItem = zh ? "条目（b.mht）" : "Item (b.mht)";
         String expectedMixed = expectedGroup
                 + (zh ? " · 组内存在多种参数" : " · multiple parameter sets in this group");

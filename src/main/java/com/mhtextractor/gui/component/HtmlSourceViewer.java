@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.component;
 
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.platform.HtmlSyntaxPalette;
 import com.mhtextractor.platform.HtmlSyntaxTokens;
 import com.mhtextractor.platform.HtmlTextSelection;

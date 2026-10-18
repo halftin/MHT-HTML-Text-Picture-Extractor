@@ -1,4 +1,4 @@
-package com.mhtextractor.app;
+package com.mhtextractor.uicore;
 
 /**
  * 复制/应用两项的输入快照（R7.2/R7.3/R7.6）—— 全部由宿主判定后传入，本类只做布尔组合：

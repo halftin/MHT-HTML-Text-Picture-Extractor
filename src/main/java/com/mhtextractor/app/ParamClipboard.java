@@ -87,23 +87,6 @@ public final class ParamClipboard {
         params = null;
     }
 
-    /**
-     * 复制/应用两项的<b>参数判定快照</b>（R7.2/R7.3/R7.6）：目标集合"是否有生效参数 / 是否统一"的判定
-     * 一律经 {@link EffectiveParamsService}（唯一实现，禁止各写一套），本类只做布尔组合；
-     * {@code copied} 位就是本剪贴板是否非空（{@link #isEmpty()}）。
-     *
-     * @param targets     本次"所选"集合（宿主按勾选优先 → 右键目标解析）
-     * @param independent 目标是否有独立参数（宿主的既有判定）
-     */
-    public ParamsInfo paramsInfo(List<Object> targets, boolean independent,
-                                 EffectiveParamsService service,
-                                 EffectiveParamsService.Context ctx,
-                                 int topLevelCount, int distinctGroupCount) {
-        return new ParamsInfo(independent,
-                service.anyHasEffectiveParams(targets, ctx), service.isUniform(targets, ctx), !isEmpty(),
-                topLevelCount, distinctGroupCount);
-    }
-
     // ==================== 批量应用与"整批一条撤销记录"（R7.4/R7.5） ====================
 
     /**

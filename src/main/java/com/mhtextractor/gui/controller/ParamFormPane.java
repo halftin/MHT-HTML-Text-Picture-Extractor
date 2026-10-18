@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.controller;
 
 import atlantafx.base.controls.ToggleSwitch;
-import com.mhtextractor.app.ParamDraft;
+import com.mhtextractor.uicore.ParamDraft;
 import com.mhtextractor.uicore.ParamSchemaRules;
 import com.mhtextractor.uiport.WorkspaceQueries;
 import com.mhtextractor.uiport.ParamSchemaVm;
@@ -12,7 +12,7 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.Priority;
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.gui.component.ParamTargetBar;
 import com.mhtextractor.uicore.ParamTargetText;
@@ -151,7 +151,7 @@ public class ParamFormPane extends BorderPane {
 
     private boolean imageMode;
 
-    /** 参数草稿状态机（R1.5）：基线 / 脏判定 / 提交；纯逻辑在 {@code app.ParamDraft}。 */
+    /** 参数草稿状态机（R1.5）：基线 / 脏判定 / 提交；纯逻辑在 {@code uicore.ParamDraft}。 */
     private final ParamDraft draft = new ParamDraft();
     /** 「组内参数是否混合」的判定入口（R1.4 增强项）；服务本身无状态，仅此一处持有。 */
     /** 目标信息栏（R1.4）：固定挂在 top，见类注释。 */

@@ -1,5 +1,7 @@
 package com.mhtextractor.app;
 
+import com.mhtextractor.i18n.Texts;
+
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uiport.Confirmer;
 import com.mhtextractor.uiport.ConfirmRequest;

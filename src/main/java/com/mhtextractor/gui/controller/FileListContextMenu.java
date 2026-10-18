@@ -5,8 +5,8 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-import com.mhtextractor.app.ParamsInfo;
-import com.mhtextractor.app.Texts;
+import com.mhtextractor.uicore.ParamsInfo;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.uicore.FileMenuModel;
 
 import javafx.event.EventHandler;

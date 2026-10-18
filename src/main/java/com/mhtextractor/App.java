@@ -8,6 +8,7 @@ import com.mhtextractor.gui.component.SingleInstanceNotice;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.gui.component.SidePanelHost;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.i18n.Texts;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
@@ -71,7 +72,7 @@ public class App extends Application {
         // （javafx.fxml.FXMLLoader 源码 926-931 与 2555-2664 行），故 initialize() 里 namespace 已完整。
         // TestMain 里同一行是逐行等价的镜像（改一处必须改另一处）。
         loader.setControllerFactory(_ -> new com.mhtextractor.gui.controller.MainController(loader, runtime.port(), runtime::closeAsync));
-        loader.setResources(I18n.bundle());
+        loader.setResources(Texts.bundle());
         // 会话 19：场景根外包一层 StackPane，供 NotificationHost 挂"右上角 toast + 居中提醒"两层
         //（取代模态 Alert；两条图层的 z 序与鼠标穿透见 NotificationHost 的类说明）
         // ⚠️ 必须先落到 Parent 局部变量再传：直接写 new StackPane(loader.load()) 会被推断成
