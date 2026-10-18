@@ -19,6 +19,9 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import com.mhtextractor.model.ExtractionStats.WarningDetail;
+import com.mhtextractor.i18n.ExtractionTexts;
 import java.util.function.Supplier;
 
 /**
@@ -92,7 +95,7 @@ public abstract class BatchProcessor {
 
         private final List<String> failDetails = new ArrayList<>();
         private final List<String> skipDetails = new ArrayList<>();
-        private final List<String> warnDetails = new ArrayList<>();
+        private final List<WarningDetail> warnDetails = new ArrayList<>();
         /** 结构化单文件结果（《提取结果状态需求文档.md》）：提取结束后按路径回写列表条目背景色 */
         private final List<FileResult> fileResults = new ArrayList<>();
 
@@ -113,7 +116,7 @@ public abstract class BatchProcessor {
                     w.add(warning);
                     ExtractOutcome o = r.outcome() == ExtractOutcome.SUCCESS
                             ? ExtractOutcome.SUCCESS_WARNED : r.outcome();
-                    fileResults.set(i, new FileResult(r.path(), o, r.message(), w));
+                    fileResults.set(i, new FileResult(r.path(), o, r.messageKey(), r.messageParams(), r.messageDetail(), w));
                     return;
                 }
             }
@@ -127,7 +130,7 @@ public abstract class BatchProcessor {
             skipDetails.add(detail);
         }
 
-        public void addWarnDetail(String detail) {
+        public void addWarnDetail(WarningDetail detail) {
             warnDetails.add(detail);
         }
 
@@ -136,11 +139,14 @@ public abstract class BatchProcessor {
         public void incrementSkip() { skipCount++; }
         public void incrementWarn() { warnCount++; }
 
+        public Map<String, String> getSummaryParams() {
+            return Map.of("total", String.valueOf(totalFiles), "success", String.valueOf(successCount),
+                    "failed", String.valueOf(failCount), "skipped", String.valueOf(skipCount),
+                    "warned", String.valueOf(warnCount), "elapsed", String.valueOf(endTime - startTime));
+        }
+
         public String getSummaryLine() {
-            return I18n.get("extract.summary",
-                    "total", totalFiles, "success", successCount, "failed", failCount,
-                    "skipped", skipCount, "warned", warnCount,
-                    "elapsed", String.format("%.2f", (endTime - startTime) / 1000.0));
+            return ExtractionTexts.summaryLine("extract.summary", getSummaryParams());
         }
 
         @Override
@@ -156,8 +162,8 @@ public abstract class BatchProcessor {
                 for (String detail : skipDetails) {
                     sb.append("\n").append(detail);
                 }
-                for (String detail : warnDetails) {
-                    sb.append("\n").append(detail);
+                for (WarningDetail detail : warnDetails) {
+                    sb.append("\n").append(ExtractionTexts.warningDetail(detail));
                 }
             }
             return sb.toString();
@@ -268,20 +274,33 @@ public abstract class BatchProcessor {
             if (warning.key().startsWith("extract.region."))
                 log.warn(I18n.msg("log.region.warning", fileName, I18n.render(warning)));
             stats.incrementWarn();
-            stats.addWarnDetail(I18n.get("extract.fileWarned", "file", fileName,
-                    "message", I18n.render(warning)));
+            stats.addWarnDetail(new WarningDetail("extract.fileWarned", Map.of("file", fileName), warning));
         }
     }
 
     /**
      * 记录单文件结果（《提取结果状态需求文档.md》）：警告非空时 SUCCESS 自动升级为 SUCCESS_WARNED。
-     * message 为失败/跳过原因（成功时传 null）；warnings 为该文件全部警告。
+     * messageKey 为失败/跳过原因键（成功时传 null）；warnings 为该文件全部警告。
      */
     protected void recordFileResult(ProcessStats stats, String path, ExtractOutcome outcome,
-                                    String message, List<ExtractWarning> warnings) {
+                                    String messageKey, List<ExtractWarning> warnings) {
+        recordFileResult(stats, path, outcome, messageKey, null, null, warnings);
+    }
+
+    protected void recordFileFailure(ProcessStats stats, String path, Exception failure) {
+        if (failure instanceof ResultFailure structured) {
+            recordFileResult(stats, path, ExtractOutcome.FAILED, structured.key, structured.params, null, List.of());
+        } else {
+            recordFileResult(stats, path, ExtractOutcome.FAILED, null, null, failure.getMessage(), List.of());
+        }
+    }
+
+    protected void recordFileResult(ProcessStats stats, String path, ExtractOutcome outcome,
+                                    String messageKey, Map<String, String> messageParams, String messageDetail,
+                                    List<ExtractWarning> warnings) {
         if (outcome == ExtractOutcome.SUCCESS && !warnings.isEmpty()) {
             outcome = ExtractOutcome.SUCCESS_WARNED;
         }
-        stats.addFileResult(new FileResult(path, outcome, message, warnings));
+        stats.addFileResult(new FileResult(path, outcome, messageKey, messageParams, messageDetail, warnings));
     }
 }

@@ -44,7 +44,7 @@ final class PreloadedImageInput implements ImageInputStrategy {
     public MimeParser.ParsedMht provide(int index) {
         String failure = loadFailures.get(index);
         if (failure != null) {
-            throw new RuntimeException(I18n.get("error.LOAD_MHT_FAILED", "reason", failure));
+            throw new ResultFailure("error.LOAD_MHT_FAILED", Map.of("reason", failure));
         }
         return byFileIndex.get(index);
     }

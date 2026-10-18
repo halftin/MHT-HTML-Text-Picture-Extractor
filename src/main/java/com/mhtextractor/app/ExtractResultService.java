@@ -1,21 +1,15 @@
 package com.mhtextractor.app;
 
-import com.mhtextractor.model.ExtractWarning;
 import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.model.PreviewItem;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 /**
- * 提取结果回写与详情拼接（P3-3b-13）：{@code gui.WorkspaceInfoPresenter} 的
- * {@code applyExtractResults} / {@code buildExtractDetail} <b>原样下沉</b> ——
- * 按 {@code path} 建 map、遍历条目命中即写 {@code extractOutcome} 与 {@code extractDetail}，
- * 匹配口径、赋值顺序、null/空回落、分隔符语义逐字不变；警告渲染与分隔符经入参注入
- * （本类<b>零 JavaFX、零 I18n</b>，属 {@code app} 层）。
+ * 按路径回写中立的提取结果：原因键、参数、原始诊断与结构化警告。
+ * 不渲染文案；同路径最后一条结果覆盖前值，未命中的条目保持不变。
  */
 public final class ExtractResultService {
 
@@ -28,12 +22,9 @@ public final class ExtractResultService {
      *
      * @param stats         提取统计快照（含单文件结果列表）
      * @param items         待回写的列表条目（全量预览项投影）
-     * @param renderWarning 警告渲染（调用方注入 {@code I18n::render}，按当前 locale）
-     * @param separator     详情分隔符（调用方注入 {@code I18n.get("list.itemSeparator")}）
      * @return 命中路径数（{@code byPath.size()}，原日志 {@code log.maincontroller.29} 的实参口径）
      */
-    public static int apply(ExtractionStats stats, List<PreviewItem> items,
-                            Function<ExtractWarning, String> renderWarning, String separator) {
+    public static int apply(ExtractionStats stats, List<PreviewItem> items) {
         Map<String, ExtractionStats.FileOutcome> byPath = new HashMap<>();
         for (ExtractionStats.FileOutcome r : stats.files()) {
             byPath.put(r.path(), r);
@@ -42,23 +33,13 @@ public final class ExtractResultService {
             ExtractionStats.FileOutcome r = byPath.get(it.path);
             if (r != null) {
                 it.extractOutcome = r.outcome();
-                it.extractDetail = buildExtractDetail(r, renderWarning, separator);
+                it.extractMessageKey = r.messageKey();
+                it.extractMessageParams = r.messageParams();
+                it.extractMessageDetail = r.messageDetail();
+                it.extractWarnings = r.warnings();
             }
         }
         return byPath.size();
     }
 
-    /** 结果详情拼接：失败/跳过原因 + 警告（逐条按当前 locale 渲染），分隔符分隔；无内容返回 null */
-    private static String buildExtractDetail(ExtractionStats.FileOutcome r,
-                                             Function<ExtractWarning, String> renderWarning,
-                                             String separator) {
-        List<String> parts = new ArrayList<>();
-        if (r.message() != null && !r.message().isEmpty()) {
-            parts.add(r.message());
-        }
-        for (ExtractWarning warning : r.warnings()) {
-            parts.add(renderWarning.apply(warning));
-        }
-        return parts.isEmpty() ? null : String.join(separator, parts);
-    }
 }

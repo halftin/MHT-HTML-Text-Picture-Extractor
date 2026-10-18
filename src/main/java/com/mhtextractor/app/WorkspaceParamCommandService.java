@@ -152,7 +152,10 @@ public final class WorkspaceParamCommandService {
         for (PreviewItem item : affected) {
             item.resetPreviewState();
             item.extractOutcome = com.mhtextractor.model.ExtractOutcome.NONE;
-            item.extractDetail = null;
+            item.extractMessageKey = null;
+            item.extractMessageParams = null;
+            item.extractMessageDetail = null;
+            item.extractWarnings = java.util.List.of();
         }
         context.cacheService().paramsChanged(imageMode, affected);
         return affected;

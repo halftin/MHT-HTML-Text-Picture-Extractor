@@ -275,7 +275,7 @@ public final class InProcessUiport implements Uiport {
                         : channel == null ? null : channel.sessionOutputFolder;
             }
             if (lastStats != null && (event instanceof PortEvent.ExtractionTerminal || event instanceof PortEvent.ExtractionResult))
-                ExtractResultService.apply(lastStats, model.allItems(), Texts::render, Texts.get("list.itemSeparator"));
+                ExtractResultService.apply(lastStats, model.allItems());
         });
     }
 
@@ -777,7 +777,7 @@ public final class InProcessUiport implements Uiport {
         return new ItemVm(it.path, it.name, it.selected, it.removed, unitIndex, UpdateKind.NONE, it.sourceFolder,
                 it.modifiedTime == null ? null : it.modifiedTime.toString(), it.status.name(), it.errorKey, it.errorDetail,
                 it.chapterEnabled, it.badge, it.cachedTitle, it.titleOverride, it.extractOutcome.name(),
-                it.extractDetail, textFile(it.cachedText), previewManifest(it));
+                it.extractMessageKey, it.extractMessageParams, it.extractMessageDetail, it.extractWarnings, textFile(it.cachedText), previewManifest(it));
     }
 
     private com.mhtextractor.uiport.FileRef previewManifest(PreviewItem item) {
@@ -817,14 +817,7 @@ public final class InProcessUiport implements Uiport {
     private com.mhtextractor.uiport.FileRef statsFile() {
         if (lastStats == null) return null;
         var json = new com.fasterxml.jackson.databind.ObjectMapper();
-        var value = json.createObjectNode().put("summaryLine", lastStats.summaryLine()).put("failCount", lastStats.failCount())
-                .put("skipCount", lastStats.skipCount()).put("warnCount", lastStats.warnCount());
-        var outcomes = value.putArray("files");
-        for (var outcome : lastStats.files()) {
-            var entry = outcomes.addObject().put("path", outcome.path()).put("outcome", outcome.outcome().name()).put("message", outcome.message());
-            var warnings = entry.putArray("warnings");
-            for (var warning : outcome.warnings()) warning.args().forEach(warnings.addObject().put("key", warning.key()).putObject("args")::put);
-        }
+        var value = ExtractionStatsJson.encode(json, lastStats);
         var ref = textFile(value.toString());
         return new com.mhtextractor.uiport.FileRef(ref.path(), ref.bytes(), "application/json");
     }

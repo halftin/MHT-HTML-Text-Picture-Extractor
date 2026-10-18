@@ -68,6 +68,34 @@ class IpcUiportTest {
         return event;
     }
 
+    @Test void neutralExtractionDetailsSurviveStatsFileAndWorkspaceRoundTrip() throws Exception {
+        Path root = root(); var paths = sources(root, 1); var cards = new Cards();
+        try (var ipc = real(root, cards)) {
+            var events = new LinkedBlockingQueue<PortEvent>(); ipc.events().subscribe(events::add);
+            ipc.commands().applyImportPlan(plan(root, paths, false));
+            var config = new AppConfig(); config.setTitleStartMarker("<missing>"); config.setTitleEndMarker("</missing>");
+            config.setEnableTitleExtraction(true);
+            ipc.commands().setGlobalParams(false, config);
+            ipc.commands().startExtraction(false);
+            var received = until(events, PortEvent.ExtractionTerminal.class::isInstance);
+            var terminal = (PortEvent.ExtractionTerminal) received.getLast();
+            assertEquals(PortEvent.ExtractionEnd.SUCCEEDED, terminal.end());
+            var stats = terminal.stats(); assertNotNull(stats);
+            assertEquals("extract.summary", stats.summaryKey());
+            assertEquals(String.valueOf(stats.elapsedMillis()), stats.summaryParams().get("elapsed"));
+            assertFalse(stats.warnDetails().isEmpty());
+            var outcome = stats.files().getFirst(); assertFalse(outcome.warnings().isEmpty());
+            assertEquals("extract.noTitleMarkers", outcome.warnings().getFirst().key());
+            var workspace = ipc.queries().workspace(); var item = workspace.topLevelItems().getFirst();
+            assertEquals(outcome.messageKey(), item.extractMessageKey());
+            assertEquals(outcome.messageParams(), item.extractMessageParams());
+            assertEquals(outcome.messageDetail(), item.extractMessageDetail());
+            assertEquals(outcome.warnings(), item.extractWarnings());
+            assertEquals(JSON.readTree(ExtractionStatsJson.encode(JSON, stats).toString()),
+                    JSON.readTree(Files.readString(Path.of(workspace.details().lastStats().path()))));
+        }
+    }
+
     @Test void parameterFormValuesAndCollectionAreEquivalentAcrossTransports() throws Exception {
         Path root = root(); var cards = new Cards();
         var local = new InProcessUiport(new WorkspaceModel(), cards);

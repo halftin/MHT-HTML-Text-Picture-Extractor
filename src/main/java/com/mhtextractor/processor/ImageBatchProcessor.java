@@ -337,7 +337,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                         stats.incrementSkip();
                         stats.addSkipDetail(I18n.get("extract.fileSkippedUnparseable", "file", name));
                         recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
-                                I18n.get("extract.reasonUnparseable"), List.of());
+                                "extract.reasonUnparseable", List.of());
                         fireProgress(idx, total, name, 1.0);
                         continue;
                     }
@@ -372,7 +372,7 @@ public class ImageBatchProcessor extends BatchProcessor {
                         stats.incrementSkip();
                         stats.addSkipDetail(I18n.get("extract.fileSkippedNoExtracted", "file", name));
                         recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
-                                I18n.get("extract.reasonNoExtracted"), fileWarnings);
+                                "extract.reasonNoExtracted", fileWarnings);
                         fireProgress(idx, total, name, 1.0);
                         continue;
                     }
@@ -403,14 +403,15 @@ public class ImageBatchProcessor extends BatchProcessor {
                     String failReason = I18n.get("extract.allImagesWriteFailed", "count", imageSource.size());
                     stats.incrementFail();
                     stats.addFailDetail(I18n.get("extract.fileFailed", "file", name, "reason", failReason));
-                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, failReason, fileWarnings);
+                    recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, "extract.allImagesWriteFailed",
+                            Map.of("count", String.valueOf(imageSource.size())), null, fileWarnings);
                     log.error(I18n.msg("log.imagebatchprocessor.27", name, failReason));
                 }
 
             } catch (Exception e) {
                 stats.incrementFail();
                 stats.addFailDetail(I18n.get("extract.fileFailed", "file", name, "reason", e.getMessage()));
-                recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, e.getMessage(), List.of());
+                recordFileFailure(stats, fileInfo.getPath(), e);
                 log.error(I18n.msg("log.imagebatchprocessor.28", name), e);
             } finally {
                 fireProgress(idx, total, name, 1.0);

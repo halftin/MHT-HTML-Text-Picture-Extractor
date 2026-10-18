@@ -62,7 +62,7 @@ final class SeparateImageOutput implements ImageOutputStrategy {
         boolean archived = OutputArchive.archiveWithCleanup(ctx.config(), fileOutputDir, outputFolder,
                 baseName, 0.85, 0.05, 0.05, ctx::fireProgress);
         if (!archived) {
-            throw new RuntimeException(I18n.get("extract.fileArchiveFailedKeep", "dir", fileOutputDir));
+            throw new ResultFailure("extract.fileArchiveFailedKeep", java.util.Map.of("dir", fileOutputDir));
         }
         ctx.fireProgress(0.95);
 

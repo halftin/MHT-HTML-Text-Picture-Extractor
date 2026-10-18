@@ -6,7 +6,6 @@ import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.GroupItem;
 import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.processor.BatchProcessor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -101,15 +100,15 @@ public final class OnceRunner {
             return BackendCli.EXIT_FAILURE;
         }
 
-        BatchProcessor.ProcessStats stats = result.stats();
-        stats.getFileResults().forEach(r -> System.out.println("result: "
+        var stats = com.mhtextractor.app.WorkspaceExtractionService.statsFrom(result.stats());
+        stats.files().forEach(r -> System.out.println("result: "
                 + Path.of(r.path()).getFileName() + "=" + r.outcome()));
-        System.out.println("done: total=" + stats.getTotalFiles() + " success=" + stats.getSuccessCount()
-                + " fail=" + stats.getFailCount() + " skip=" + stats.getSkipCount()
-                + " warn=" + stats.getWarnCount() + " -> " + out);
-        if (stats.getFailCount() > 0 || stats.getSuccessCount() == 0) {
-            System.err.println("error: extraction incomplete (total=" + stats.getTotalFiles()
-                    + " success=" + stats.getSuccessCount() + " fail=" + stats.getFailCount() + ")");
+        System.out.println("done: total=" + stats.totalFiles() + " success=" + stats.successCount()
+                + " fail=" + stats.failCount() + " skip=" + stats.skipCount()
+                + " warn=" + stats.warnCount() + " -> " + out);
+        if (stats.failCount() > 0 || stats.successCount() == 0) {
+            System.err.println("error: extraction incomplete (total=" + stats.totalFiles()
+                    + " success=" + stats.successCount() + " fail=" + stats.failCount() + ")");
             return BackendCli.EXIT_FAILURE;
         }
         return BackendCli.EXIT_OK;

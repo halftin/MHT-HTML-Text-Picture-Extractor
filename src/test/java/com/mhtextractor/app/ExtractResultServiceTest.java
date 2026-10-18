@@ -1,6 +1,7 @@
 package com.mhtextractor.app;
 
 import com.mhtextractor.model.ExtractWarning;
+import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.processor.BatchProcessor;
 import com.mhtextractor.processor.FileResult;
@@ -15,9 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * P3-3b-13：{@link ExtractResultService} 回写口径 —— 按 path 匹配、message 空跳过、
- * warnings 逐个渲染拼接、无内容 → null、返回命中数（{@code byPath.size()} 口径）。
- * 零 JavaFX、零 I18n（渲染与分隔符经入参注入），可在 headless 上下文执行。
+ * {@link ExtractResultService} 回写口径：按 path 匹配、诊断原样保留、警告保持结构与顺序、
+ * 返回去重后的结果路径数。回写不进行渲染，可在无头上下文执行。
  *
  * <p>P3-3b-22 起回写入参为 {@link ExtractionStats}：夹具仍按生产路径先建
  * {@code BatchProcessor.ProcessStats} 再经 {@link WorkspaceExtractionService#statsFrom} 搬运，顺带覆盖搬运口径。</p>
@@ -30,53 +30,53 @@ class ExtractResultServiceTest {
 
     private static FileResult result(String path, ExtractOutcome outcome, String message,
                                      ExtractWarning... warnings) {
-        return new FileResult(path, outcome, message, List.of(warnings));
+        return new FileResult(path, outcome, null, null, message, List.of(warnings));
     }
 
     @Test
-    void matchesByPathAndWritesOutcomeWithRenderedDetail() {
+    void matchesByPathAndWritesOutcomeWithNeutralDetails() {
         BatchProcessor.ProcessStats stats = new BatchProcessor.ProcessStats();
         stats.addFileResult(result("C:\\a.mht", ExtractOutcome.FAILED, "原因",
                 new ExtractWarning("w.key", Map.of("name", "x"))));
         List<PreviewItem> items = List.of(item("C:\\a.mht"), item("C:\\b.mht"));
 
-        int matched = ExtractResultService.apply(WorkspaceExtractionService.statsFrom(stats), items,
-                w -> "[" + w.key() + "]", ";");
+        int matched = ExtractResultService.apply(WorkspaceExtractionService.statsFrom(stats), items);
 
         assertEquals(1, matched, "命中数 = byPath.size()（与 log.maincontroller.29 同口径）");
         assertEquals(ExtractOutcome.FAILED, items.get(0).extractOutcome);
-        assertEquals("原因;[w.key]", items.get(0).extractDetail, "message + 渲染后的警告，分隔符连接");
+        assertEquals("原因", items.get(0).extractMessageDetail);
+        assertEquals(List.of(new ExtractWarning("w.key", Map.of("name", "x"))), items.get(0).extractWarnings);
         assertEquals(ExtractOutcome.NONE, items.get(1).extractOutcome, "未命中条目不动");
-        assertNull(items.get(1).extractDetail);
+        assertNull(items.get(1).extractMessageDetail);
     }
 
     @Test
-    void emptyMessageIsSkippedAndNoContentYieldsNull() {
+    void emptyAndNullDiagnosticsArePreserved() {
         BatchProcessor.ProcessStats stats = new BatchProcessor.ProcessStats();
         stats.addFileResult(result("C:\\a.mht", ExtractOutcome.SKIPPED, ""));
         stats.addFileResult(result("C:\\b.mht", ExtractOutcome.SUCCESS, null));
         List<PreviewItem> items = List.of(item("C:\\a.mht"), item("C:\\b.mht"));
 
-        int matched = ExtractResultService.apply(WorkspaceExtractionService.statsFrom(stats), items, w -> "!", " | ");
+        int matched = ExtractResultService.apply(WorkspaceExtractionService.statsFrom(stats), items);
 
         assertEquals(2, matched);
         assertEquals(ExtractOutcome.SKIPPED, items.get(0).extractOutcome);
-        assertNull(items.get(0).extractDetail, "message 为空且无警告 → null");
+        assertEquals("", items.get(0).extractMessageDetail, "原始诊断不渲染、不归一化");
         assertEquals(ExtractOutcome.SUCCESS, items.get(1).extractOutcome);
-        assertNull(items.get(1).extractDetail, "message null 且无警告 → null");
+        assertNull(items.get(1).extractMessageDetail);
     }
 
     @Test
-    void warningsAreRenderedOneByOneInOrder() {
+    void warningsRemainStructuredAndOrdered() {
         BatchProcessor.ProcessStats stats = new BatchProcessor.ProcessStats();
         stats.addFileResult(result("C:\\a.mht", ExtractOutcome.SUCCESS_WARNED, null,
                 new ExtractWarning("w1", Map.of()), new ExtractWarning("w2", Map.of())));
         List<PreviewItem> items = List.of(item("C:\\a.mht"));
 
-        int matched = ExtractResultService.apply(WorkspaceExtractionService.statsFrom(stats), items, w -> "R(" + w.key() + ")", "、");
+        int matched = ExtractResultService.apply(WorkspaceExtractionService.statsFrom(stats), items);
 
         assertEquals(1, matched);
-        assertEquals("R(w1)、R(w2)", items.get(0).extractDetail, "警告逐个经 renderWarning 渲染后按序连接");
+        assertEquals(List.of("w1", "w2"), items.get(0).extractWarnings.stream().map(ExtractWarning::key).toList());
     }
 
     @Test
@@ -86,10 +86,10 @@ class ExtractResultServiceTest {
         stats.addFileResult(result("C:\\a.mht", ExtractOutcome.FAILED, "second"));
         List<PreviewItem> items = List.of(item("C:\\a.mht"));
 
-        int matched = ExtractResultService.apply(WorkspaceExtractionService.statsFrom(stats), items, w -> "!", ";");
+        int matched = ExtractResultService.apply(WorkspaceExtractionService.statsFrom(stats), items);
 
         assertEquals(1, matched, "byPath.size() 按去重后的 key 数");
         assertEquals(ExtractOutcome.FAILED, items.get(0).extractOutcome);
-        assertEquals("second", items.get(0).extractDetail, "同路径后写覆盖（Map.put 语义）");
+        assertEquals("second", items.get(0).extractMessageDetail, "同路径后写覆盖（Map.put 语义）");
     }
 }

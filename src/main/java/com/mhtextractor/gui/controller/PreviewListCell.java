@@ -336,8 +336,8 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
             setStyle(rowStyle(isSelected
                     ? ExtractOutcomeStyles.listPaintSelected(it.extractOutcome)
                     : ExtractOutcomeStyles.listPaint(it.extractOutcome)));
-            setTooltip(it.extractDetail == null || it.extractDetail.isEmpty()
-                    ? null : new Tooltip(it.extractDetail));
+            String detail = Texts.extractDetail(it.extractMessageKey, it.extractMessageParams, it.extractMessageDetail, it.extractWarnings);
+            setTooltip(detail == null || detail.isEmpty() ? null : new Tooltip(detail));
         } else if (it.status == PreviewRow.Status.FAILED) {
             setStyle(isSelected ? FAILED_SELECTED_ROW_STYLE : FAILED_ROW_STYLE);
             setTooltip(new Tooltip(WorkspaceInfoPresenter.errorText(it)));

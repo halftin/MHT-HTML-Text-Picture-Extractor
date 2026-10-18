@@ -372,7 +372,10 @@ class InProcessUiportActivityTest {
             assertNotNull(timeout);
             timeout.run();
             assertNull(port.queries().previewLoadingPath());
-            assertTrue(events.stream().anyMatch(PortEvent.PreviewLoadFailed.class::isInstance));
+            var failed = events.stream().filter(PortEvent.PreviewLoadFailed.class::isInstance)
+                    .map(PortEvent.PreviewLoadFailed.class::cast).findFirst().orElseThrow();
+            assertEquals("preview.loadTimeout", failed.detailKey());
+            assertNull(failed.detail());
             release.countDown();
             port.commands().awaitPreviewInFlight(5000);
             drain();

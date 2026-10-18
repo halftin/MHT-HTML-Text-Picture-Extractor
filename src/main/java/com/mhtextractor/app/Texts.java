@@ -47,6 +47,15 @@ public final class Texts {
         return I18n.render(warning);
     }
 
+    public static String extractionSummary(com.mhtextractor.model.ExtractionStats stats) {
+        return com.mhtextractor.i18n.ExtractionTexts.summary(stats);
+    }
+
+    public static String extractDetail(String key, java.util.Map<String, String> params,
+                                       String diagnostic, java.util.List<ExtractWarning> warnings) {
+        return com.mhtextractor.i18n.ExtractionTexts.detail(key, params, diagnostic, warnings);
+    }
+
     /**
      * 供 FXMLLoader 注入：1:1 委托 {@link I18n#bundle()}（{@code loader.setResources(Texts.bundle())}）。
      * 业务代码取文案请走 {@link #get}。

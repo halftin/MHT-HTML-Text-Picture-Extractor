@@ -17,7 +17,7 @@ class PreviewRetentionTest {
 
     private ItemVm vm(String name, FileRef manifest) {
         return new ItemVm(name, name, false, false, null, UpdateKind.NONE, null,
-                null, "READY", null, null, null, null, "title", null, null, null, null, manifest);
+                null, "READY", null, null, null, null, "title", null, null, null, null, null, List.of(), null, manifest);
     }
 
     private PreviewRow row(String name) {

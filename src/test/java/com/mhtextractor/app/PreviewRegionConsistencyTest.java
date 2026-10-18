@@ -53,7 +53,8 @@ class PreviewRegionConsistencyTest {
                 assertEquals(preview.meta().warnings(), stats.getFileResults().getFirst().warnings());
                 if (i != 0) {
                     assertEquals(ExtractOutcome.SUCCESS_WARNED, stats.getFileResults().getFirst().outcome());
-                    assertTrue(WorkspaceExtractionService.statsFrom(stats).summaryLine().contains("region.mht"));
+                    assertTrue(WorkspaceExtractionService.statsFrom(stats).warnDetails().stream()
+                            .anyMatch(d -> "region.mht".equals(d.params().get("file"))));
                     assertFalse(stats.getWarnDetails().isEmpty());
                 }
                 System.out.println("CONSISTENCY case=" + i + " cached=" + cached + " sha256=" + hashes

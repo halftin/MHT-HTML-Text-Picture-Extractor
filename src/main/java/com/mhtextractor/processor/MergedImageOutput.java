@@ -69,8 +69,8 @@ final class MergedImageOutput implements ImageOutputStrategy {
                     nameWarning = new ExtractWarning("extract.titleFallback",
                             Map.of("name", folderName));
                     stats.incrementWarn();
-                    stats.addWarnDetail(I18n.get("extract.fileWarned",
-                            "file", mhtFiles.getFirst().getName(), "message", I18n.render(nameWarning)));
+                    stats.addWarnDetail(new com.mhtextractor.model.ExtractionStats.WarningDetail("extract.fileWarned",
+                            Map.of("file", mhtFiles.getFirst().getName()), nameWarning));
                     log.warn(I18n.msg("log.imagebatchprocessor.17", folderName));
                 }
             }

@@ -139,7 +139,7 @@ public class TextBatchProcessor extends BatchProcessor {
                     stats.incrementSkip();
                     stats.addSkipDetail(I18n.get("extract.fileSkippedUnparseable", "file", fileInfo.getName()));
                     recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
-                            I18n.get("extract.reasonUnparseable"), List.of());
+                            "extract.reasonUnparseable", List.of());
                     log.info(I18n.msg("log.textbatchprocessor.09", fileInfo.getName()));
                     fireProgress(idx, mhtFiles.size(), fileInfo.getName(), 1.0);
                     continue;
@@ -157,7 +157,7 @@ public class TextBatchProcessor extends BatchProcessor {
                     stats.incrementSkip();
                     stats.addSkipDetail(I18n.get("extract.fileSkippedEmpty", "file", fileInfo.getName()));
                     recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.SKIPPED,
-                            I18n.get("extract.reasonEmpty"), fileWarnings);
+                            "extract.reasonEmpty", fileWarnings);
                     log.info(I18n.msg("log.textbatchprocessor.10", fileInfo.getName()));
                     fireProgress(idx, mhtFiles.size(), fileInfo.getName(), 1.0);
                     continue;
@@ -193,14 +193,14 @@ public class TextBatchProcessor extends BatchProcessor {
                     stats.incrementFail();
                     stats.addFailDetail(I18n.get("extract.fileFailedWrite", "file", fileInfo.getName()));
                     recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED,
-                            I18n.get("extract.reasonWriteFailed"), fileWarnings);
+                            "extract.reasonWriteFailed", fileWarnings);
                 }
 
             } catch (Exception e) {
                 stats.incrementFail();
                 stats.addFailDetail(I18n.get("extract.fileFailed", "file", fileInfo.getName(),
                         "reason", e.getMessage()));
-                recordFileResult(stats, fileInfo.getPath(), ExtractOutcome.FAILED, e.getMessage(), List.of());
+                recordFileFailure(stats, fileInfo.getPath(), e);
                 log.error(I18n.msg("log.textbatchprocessor.11", fileInfo.getName()), e);
             } finally {
                 fireProgress(i + 1, mhtFiles.size(), fileInfo.getName(), 1.0);
@@ -243,8 +243,13 @@ public class TextBatchProcessor extends BatchProcessor {
                 } else {
                     log.warn(I18n.msg("log.textbatchprocessor.15", fileName, titleStart, titleEnd));
                     stats.incrementWarn();
-                    stats.addWarnDetail(I18n.get("extract.fileWarnedNoTitle",
-                            "file", fileName, "start", titleStart, "end", titleEnd));
+                    var detailParams = new java.util.HashMap<String, String>();
+                    detailParams.put("file", fileName);
+                    detailParams.put("start", titleStart);
+                    // The old get(..., "end", null) leaves {end} visible in the summary.
+                    if (titleEnd != null) detailParams.put("end", titleEnd);
+                    stats.addWarnDetail(new com.mhtextractor.model.ExtractionStats.WarningDetail("extract.fileWarnedNoTitle",
+                            detailParams, null));
                     fileWarnings.add(new ExtractWarning("extract.noTitleMarkers",
                             Map.of("start", titleStart, "end", String.valueOf(titleEnd))));
                     extractedTitle = null;

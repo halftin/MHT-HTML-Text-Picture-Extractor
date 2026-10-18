@@ -124,7 +124,11 @@ public sealed interface PortEvent {
 
     record PreviewConfirmationRequired(String path, String name, long sizeMiB) implements PortEvent {}
 
-    record PreviewLoadFailed(long generation, String path, boolean fileInfo, String detail) implements PortEvent {}
+    record PreviewLoadFailed(long generation, String path, boolean fileInfo, String detailKey, String detail) implements PortEvent {
+        public PreviewLoadFailed(long generation, String path, boolean fileInfo, String detail) {
+            this(generation, path, fileInfo, null, detail);
+        }
+    }
 
     /** imageFile != null selects the IPC encoded-file representation; local pixels remain frontend-owned. */
     record PreviewThumbnail(long generation, String path, int index,

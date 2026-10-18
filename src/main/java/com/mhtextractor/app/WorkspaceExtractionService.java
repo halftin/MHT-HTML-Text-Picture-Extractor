@@ -127,8 +127,8 @@ public final class WorkspaceExtractionService {
 
     /**
      * 统计搬运（原 {@code app.ExtractionStats.from}，P3-B6 随记录迁入 {@code model} 后留在 app 层的
-     * 唯一工厂，逐字照搬）：从批量处理器统计 1:1 搬运到中性 DTO（摘要行在<b>此刻</b>按当前 locale 求值，
-     * 与原调用点时机一致；files/warnings 均拷贝，顺序不变）。
+     * 唯一工厂）：只搬运原始数值、原因键、诊断与警告，不在端口边界渲染文案。
+     * 耗时以毫秒记录；files/warnings/warnDetails 均拷贝，顺序不变。
      *
      * @param stats 批量处理统计
      * @return 不可变快照（{@link com.mhtextractor.model.ExtractionStats}）
@@ -136,12 +136,11 @@ public final class WorkspaceExtractionService {
     public static com.mhtextractor.model.ExtractionStats statsFrom(BatchProcessor.ProcessStats stats) {
         java.util.List<com.mhtextractor.model.ExtractionStats.FileOutcome> files = stats.getFileResults().stream()
                 .map(r -> new com.mhtextractor.model.ExtractionStats.FileOutcome(
-                        r.path(), r.outcome(), r.message(), java.util.List.copyOf(r.warnings())))
+                        r.path(), r.outcome(), r.messageKey(), r.messageParams(), r.messageDetail(), r.warnings()))
                 .toList();
-        String summary = stats.getSummaryLine();
-        if (!stats.getWarnDetails().isEmpty()) summary += "\n" + String.join("\n", stats.getWarnDetails());
-        return new com.mhtextractor.model.ExtractionStats(summary, stats.getFailCount(),
-                stats.getSkipCount(), stats.getWarnCount(), files);
+        return new com.mhtextractor.model.ExtractionStats("extract.summary", stats.getSummaryParams(),
+                stats.getEndTime() - stats.getStartTime(), stats.getTotalFiles(), stats.getSuccessCount(),
+                stats.getFailCount(), stats.getSkipCount(), stats.getWarnCount(), stats.getWarnDetails(), files);
     }
 
     private final UnitProcessor unitProcessor;

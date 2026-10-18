@@ -24,7 +24,7 @@ import java.util.List;
  *
  * <p>宿主能力经 {@link Host} 收窄为具名方法：本类不持有 {@code MainController} / {@code MainViewRefs} /
  * FXML namespace，也不得在数据序上直写（结果回写只改 {@link PreviewRow} 的
- * {@code extractOutcome / extractDetail} 字段）。</p>
+ * {@code extractOutcome / extractMessageKey/Params/Detail / extractWarnings} 字段）。</p>
  *
  * <p>本类含 JavaFX，属 {@code gui} 层。</p>
  */
@@ -193,15 +193,20 @@ public final class WorkspaceInfoPresenter {
     void clearExtractOutcomes(List<PreviewRow> targets) {
         for (PreviewRow it : targets) {
             it.extractOutcome = ExtractOutcome.NONE;
-            it.extractDetail = null;
+            it.extractMessageKey = null;
+            it.extractMessageParams = null;
+            it.extractMessageDetail = null;
+            it.extractWarnings = java.util.List.of();
         }
     }
 
     /** 预览区顶部 banner（拍板）：选中条目结果含红（失败/跳过/成功+警告）时显示具体情况；
      *  无提取结果时，解析失败（黄色）条目显示解析失败原因 */
     void updateExtractBanner(Object sel) {
+        String detail = sel instanceof PreviewRow row ? Texts.extractDetail(row.extractMessageKey,
+                row.extractMessageParams, row.extractMessageDetail, row.extractWarnings) : null;
         if (sel instanceof PreviewRow it && it.extractOutcome != ExtractOutcome.NONE
-                && it.extractDetail != null && !it.extractDetail.isEmpty()) {
+                && detail != null && !detail.isEmpty()) {
             String prefix = switch (it.extractOutcome) {
                 case FAILED -> Texts.get("extract.statusFailed");
                 case SKIPPED -> Texts.get("extract.statusSkipped");
@@ -209,7 +214,7 @@ public final class WorkspaceInfoPresenter {
                 default -> null;
             };
             if (prefix != null) {
-                host.extractResultBanner().setText(prefix + Texts.get("list.colon") + it.extractDetail);
+                host.extractResultBanner().setText(prefix + Texts.get("list.colon") + detail);
                 host.extractResultBanner().setVisible(true);
                 host.extractResultBanner().setManaged(true);
                 return;

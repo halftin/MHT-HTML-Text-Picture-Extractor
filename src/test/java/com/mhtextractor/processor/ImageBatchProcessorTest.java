@@ -155,8 +155,8 @@ class ImageBatchProcessorTest {
         Map<String, FileResult> results = resultsByName(stats);
         assertEquals(ExtractOutcome.SUCCESS_WARNED, results.get("a.mht").outcome());
         assertEquals(ExtractOutcome.FAILED, results.get("bad.mht").outcome());
-        assertTrue(results.get("bad.mht").message().contains("加载 MHT 文件失败"),
-                "失败原因应保留解析异常信息：" + results.get("bad.mht").message());
+        assertEquals("error.LOAD_MHT_FAILED", results.get("bad.mht").messageKey());
+        assertFalse(results.get("bad.mht").messageParams().get("reason").isBlank());
         assertEquals(ExtractOutcome.SUCCESS_WARNED, results.get("b.mht").outcome());
 
         assertEquals(1, Files.list(out.resolve("a")).count());
@@ -246,7 +246,7 @@ class ImageBatchProcessorTest {
         assertTrue(stats.getFailDetails().stream().anyMatch(d -> d.contains("归档")), stats.toString());
         FileResult r = stats.getFileResults().get(0);
         assertEquals(ExtractOutcome.FAILED, r.outcome());
-        assertTrue(r.message().contains("归档"), r.message());
+        assertEquals("extract.fileArchiveFailedKeep", r.messageKey());
 
         // 源目录未被删除，图片仍在（修复前此处唯一副本被删）
         Path fileOutDir = out.resolve("a");
@@ -329,7 +329,8 @@ class ImageBatchProcessorTest {
         assertTrue(stats.getFailDetails().stream().anyMatch(d -> d.contains("写入失败")), stats.toString());
         FileResult r = stats.getFileResults().get(0);
         assertEquals(ExtractOutcome.FAILED, r.outcome());
-        assertTrue(r.message().contains("写入失败"), r.message());
+        assertEquals("extract.allImagesWriteFailed", r.messageKey());
+        assertNotNull(r.messageParams().get("count"));
     }
 
     @Test
@@ -356,7 +357,8 @@ class ImageBatchProcessorTest {
         assertEquals(1, stats.getFailCount(), stats.toString());
         FileResult r = stats.getFileResults().get(0);
         assertEquals(ExtractOutcome.FAILED, r.outcome());
-        assertTrue(r.message().contains("写入失败"), r.message());
+        assertEquals("extract.allImagesWriteFailed", r.messageKey());
+        assertNotNull(r.messageParams().get("count"));
         // 5 个占位文件仍在（未被覆盖/追加），且没有新文件写入
         assertEquals(5, Files.list(fileOutDir).count());
     }

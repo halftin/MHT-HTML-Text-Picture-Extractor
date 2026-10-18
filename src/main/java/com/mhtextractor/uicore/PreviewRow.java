@@ -16,7 +16,11 @@ public final class PreviewRow implements ParamTargetView {
     public final String path,name,sourceFolder;
     public final LocalDateTime modifiedTime;
     public Status status=Status.WAITING;
-    public String errorKey,errorDetail,badge,cachedText,cachedTitle,titleOverride,extractDetail;
+    public String errorKey,errorDetail,badge,cachedText,cachedTitle,titleOverride;
+    public String extractMessageKey, extractMessageDetail;
+    public java.util.Map<String, String> extractMessageParams;
+    public java.util.List<com.mhtextractor.model.ExtractWarning> extractWarnings = java.util.List.of();
+
     public boolean chapterEnabled,selected,removed;
     public ExtractOutcome extractOutcome=ExtractOutcome.NONE;
     public GroupRow<PreviewRow> parentGroup;
@@ -43,7 +47,8 @@ public final class PreviewRow implements ParamTargetView {
         chapterEnabled=Boolean.TRUE.equals(vm.chapterEnabled());badge=vm.badge();cachedTitle=vm.cachedTitle();titleOverride=vm.titleOverride();
         boolean hadPreview=previewCached;previewCached=vm.previewManifest()!=null;
         if(hadPreview&&!previewCached){releaseImageData();cachedMeta=null;}
-        extractOutcome=vm.extractOutcome()==null?ExtractOutcome.NONE:ExtractOutcome.valueOf(vm.extractOutcome());extractDetail=vm.extractDetail();
+        extractOutcome=vm.extractOutcome()==null?ExtractOutcome.NONE:ExtractOutcome.valueOf(vm.extractOutcome());extractMessageKey=vm.extractMessageKey();extractMessageParams=vm.extractMessageParams();
+        extractMessageDetail=vm.extractMessageDetail();extractWarnings=vm.extractWarnings();
         if(changed)for(var listener:List.copyOf(checkedListeners))listener.onValueChanged();
     }
     public TargetId id(){return TargetId.ofItem(path);}

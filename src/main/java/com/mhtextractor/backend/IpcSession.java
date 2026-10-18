@@ -274,7 +274,7 @@ final class IpcSession implements AutoCloseable {
             case PortEvent.PreviewLoadFailed failed -> {
                 previewInputs.remove(failed.generation());
                 emit("previewLoadFailed", generation(failed.generation()).put("path", failed.path())
-                        .put("fileInfo", failed.fileInfo()).put("detail", failed.detail()));
+                        .put("fileInfo", failed.fileInfo()).put("detailKey", failed.detailKey()).put("detail", failed.detail()));
             }
             case PortEvent.PreviewThumbnail thumbnail -> {
                 var prepared = previewInputs.get(thumbnail.generation());
@@ -345,20 +345,7 @@ final class IpcSession implements AutoCloseable {
 
     /** Explicit full DTO encoding also works in native without registering record reflection. */
     private ObjectNode stats(ExtractionStats stats) {
-        var value = json.createObjectNode().put("summaryLine", stats.summaryLine()).put("failCount", stats.failCount())
-                .put("skipCount", stats.skipCount()).put("warnCount", stats.warnCount());
-        var outcomes = value.putArray("files");
-        for (var outcome : stats.files()) {
-            var file = outcomes.addObject().put("path", outcome.path()).put("outcome", outcome.outcome().name())
-                    .put("message", outcome.message());
-            var warnings = file.putArray("warnings");
-            for (var warning : outcome.warnings()) {
-                var entry = warnings.addObject().put("key", warning.key());
-                var args = entry.putObject("args");
-                warning.args().forEach(args::put);
-            }
-        }
-        return value;
+        return com.mhtextractor.app.ExtractionStatsJson.encode(json, stats);
     }
 
     private void flushImportChanges() {
@@ -724,9 +711,7 @@ final class IpcSession implements AutoCloseable {
                 await(() -> terminal != null);
                 var result = terminalSummary(terminal);
                 if (terminal.stats() != null) {
-                    var outcomes = json.createArrayNode();
-                    for (var outcome : terminal.stats().files()) outcomes.addObject().put("path", outcome.path())
-                            .put("outcome", outcome.outcome().name()).put("message", outcome.message());
+                    var outcomes = com.mhtextractor.app.ExtractionStatsJson.outcomes(json, terminal.stats().files());
                     result.set("resultsFile", files.write(".json", json.writeValueAsBytes(outcomes), "application/json"));
                 }
                 // Use the lifecycle's batch deletion for completed inputs (same deletion semantics as rule b).

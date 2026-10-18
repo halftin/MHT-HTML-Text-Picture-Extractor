@@ -188,12 +188,14 @@ class WorkspaceExtractionServiceTest {
             skipDetails.forEach(s::addSkipDetail);
         }
         if (warnDetails != null) {
-            warnDetails.forEach(s::addWarnDetail);
+            warnDetails.forEach(value -> s.addWarnDetail(new com.mhtextractor.model.ExtractionStats.WarningDetail(
+                    "extract.fileWarned", Map.of("file", value), new com.mhtextractor.model.ExtractWarning(
+                    "extract.titleFallback", Map.of("name", "fallback")))));
         }
         if (resultPaths != null) {
             for (String p : resultPaths) {
                 s.addFileResult(new com.mhtextractor.processor.FileResult(p,
-                        com.mhtextractor.model.ExtractOutcome.SUCCESS, null, List.of()));
+                        com.mhtextractor.model.ExtractOutcome.SUCCESS, null, null, null, List.of()));
             }
         }
         return s;
@@ -256,7 +258,7 @@ class WorkspaceExtractionServiceTest {
         assertEquals(12, total.getWarnCount(), "警告数应为两单元之和");
         assertEquals(List.of("f1", "f2", "f3"), total.getFailDetails(), "失败详情应按单元顺序拼接");
         assertEquals(List.of("s1", "s2"), total.getSkipDetails(), "跳过详情应按单元顺序拼接");
-        assertEquals(List.of("w1", "w2"), total.getWarnDetails(), "警告详情应按单元顺序拼接");
+        assertEquals(List.of("w1", "w2"), total.getWarnDetails().stream().map(d -> d.params().get("file")).toList(), "警告详情应按单元顺序拼接");
         assertEquals(List.of("p1", "p2", "p3"), total.getFileResults().stream()
                 .map(com.mhtextractor.processor.FileResult::path).toList(),
                 "结构化单文件结果应按单元顺序拼接");

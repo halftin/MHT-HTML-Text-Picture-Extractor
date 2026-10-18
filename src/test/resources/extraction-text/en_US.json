@@ -1,0 +1,5 @@
+{
+  "summary": "Processing complete - Total: 5, Succeeded: 2, Failed: 1, Skipped: 2, Warnings: 3, Elapsed: 1.24 s\nFile a.mht had warnings: No title extracted (markers: <h1> ... </h1>)\nFile b.mht had warnings: no title extracted (markers: <h1> ... </h1>)",
+  "detail": "Empty content; No title extracted (markers: <h1> ... </h1>)",
+  "diagnostic": "raw {diagnostic}\nline; No title extracted (markers: <h1> ... </h1>)"
+}

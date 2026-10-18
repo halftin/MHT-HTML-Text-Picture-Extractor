@@ -23,14 +23,17 @@ public record ItemVm(String id, String name, boolean checked, boolean removed,
                      @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String cachedTitle,
                      @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String titleOverride,
                      @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String extractOutcome,
-                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String extractDetail,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String extractMessageKey,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) java.util.Map<String, String> extractMessageParams,
+                     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String extractMessageDetail,
+                     java.util.List<com.mhtextractor.model.ExtractWarning> extractWarnings,
                      @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) FileRef textFile,
                      @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) FileRef previewManifest) {
 
     public ItemVm(String id, String name, boolean checked, boolean removed,
                   Integer unitIndex, UpdateKind update, String sourceFolder) {
         this(id, name, checked, removed, unitIndex, update, sourceFolder,
-                null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, java.util.List.of(), null, null);
     }
 
     public ItemVm(String id, String name, boolean checked, boolean removed,
@@ -39,6 +42,8 @@ public record ItemVm(String id, String name, boolean checked, boolean removed,
     }
 
     public ItemVm {
+        extractMessageParams = extractMessageParams == null ? null : java.util.Map.copyOf(extractMessageParams);
+        extractWarnings = java.util.List.copyOf(extractWarnings);
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(update, "update");

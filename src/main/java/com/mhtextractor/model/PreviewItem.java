@@ -163,8 +163,11 @@ public class PreviewItem {
 
     /** 最近一次提取结果（提取结果状态需求）：NONE 无结果；仅在 FX 线程回写/清除 */
     public ExtractOutcome extractOutcome = ExtractOutcome.NONE;
-    /** 提取结果详情（失败/跳过原因 + 警告，分号拼接）；点击含红条目时预览区 banner 展示 */
-    public String extractDetail;
+    /** 提取原因键、原始诊断、参数及警告；详情由前端按当前 locale 渲染。 */
+
+    public String extractMessageKey, extractMessageDetail;
+    public java.util.Map<String, String> extractMessageParams;
+    public java.util.List<com.mhtextractor.model.ExtractWarning> extractWarnings = java.util.List.of();
 
     // ==================== 条目级独立参数 ====================
 

@@ -271,7 +271,7 @@ public final class WorkspaceActivityService {
                 .execute(() -> dispatch(() -> {
                     if (token != previewGeneration || !path.equals(loadingPath)) return;
                     finishPreview(token, path, new PortEvent.PreviewLoadFailed(token, path, false,
-                            Texts.get("preview.loadTimeout")));
+                            "preview.loadTimeout", null));
                     if (previewGeneration == token) previewGeneration++;
                     worker.interrupt();
                 }));

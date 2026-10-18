@@ -97,9 +97,10 @@ class BackendIpcExtractionTest {
             var expected = direct(data.path("generation").longValue(), kind);
             var stats = read(data.path("stats"));
             assertEquals(expected.path("stats"), stats, "All stats fields, file order, warnings and summary must survive IPC");
-            assertEquals(Set.of("summaryLine", "failCount", "skipCount", "warnCount", "files"), keys(stats));
+            assertEquals(Set.of("summaryKey", "summaryParams", "elapsedMillis", "totalFiles", "successCount",
+                    "failCount", "skipCount", "warnCount", "warnDetails", "files"), keys(stats));
             for (var file : stats.path("files")) {
-                assertEquals(Set.of("path", "outcome", "message", "warnings"), keys(file));
+                assertEquals(Set.of("path", "outcome", "messageKey", "messageParams", "messageDetail", "warnings"), keys(file));
                 assertTrue(file.path("warnings").isArray());
                 for (var warning : file.path("warnings")) {
                     assertEquals(Set.of("key", "args"), keys(warning));
@@ -200,8 +201,8 @@ class BackendIpcExtractionTest {
             var stats = read(end.path("stats"));
             assertEquals(stats.path("files").size(), legacy.size());
             for (int i = 0; i < legacy.size(); i++) {
-                assertEquals(Set.of("path", "outcome", "message"), keys(legacy.get(i)));
-                var expected = (ObjectNode) stats.path("files").get(i).deepCopy(); expected.remove("warnings");
+                assertEquals(Set.of("path", "outcome", "messageKey", "messageParams", "messageDetail", "warnings"), keys(legacy.get(i)));
+                var expected = (ObjectNode) stats.path("files").get(i).deepCopy();
                 assertEquals(expected, legacy.get(i));
             }
             assertTrue(c.named("extractionProgress").size() <= 101);

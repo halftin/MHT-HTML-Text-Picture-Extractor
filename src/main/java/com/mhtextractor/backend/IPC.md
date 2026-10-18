@@ -139,7 +139,7 @@ IPC 保持相对图片引用，复制到 welcome.bulkRoot 下的 `source-export-
 FileRef 只在所属会话内有效：客户端读用完毕后必须调用 `releaseFiles` 释放已签发引用；
 源视图仍在浏览器使用期间应保留页面与图片引用。会话关闭清理剩余文件，不能跨会话缓存 FileRef。
 
-ItemVm 追加 `modifiedTime,status,errorKey,errorDetail,chapterEnabled,badge,cachedTitle,titleOverride,extractOutcome,extractDetail,textFile,previewManifest`。
+ItemVm 追加 `modifiedTime,status,errorKey,errorDetail,chapterEnabled,badge,cachedTitle,titleOverride,extractOutcome,extractMessageKey,extractMessageParams,extractMessageDetail,extractWarnings,textFile,previewManifest`。
 errorMsg 字段已删除。errorKey/errorDetail 均为 string 或 null（可省略）；errorKey 为 null 时不显示错误，
 否则前端按 `Texts.get(errorKey) + errorDetail` 原顺序渲染，errorDetail 保留诊断串。
 modifiedTime 为 LocalDateTime 的 ISO 字符串，textFile/previewManifest 为 FileRef 或 null（空可省略），不传 cachedText 正文。
@@ -149,7 +149,37 @@ lastStats 是完整 ExtractionStats 的 JSON FileRef，不以 StatsVm 四计数�
 
 P-F2b-1（协议仍为 2）：GroupVm.name 为 string 或 null，`defaultNamed=true` 时必须显式写 `name:null`，
 前端显示 `core.groupDefault` + no；用户改名后 defaultNamed=false、name 非 null。
-ExtractionStats.summaryLine、FileOutcome.message、ItemVm.extractDetail 留待 P-F2b-2，本单元不改变。
+提取统计与详情在 P-F2b-2 中立化，见下节。
+
+### P-F2b-2：提取统计与详情中立化（协议仍为 2）
+
+这是同一协议号内的破坏性字段更新；前后端必须配套升级，不提供旧字段别名。
+`lastStats`、`extractionTerminal.stats`、`extractionResult.stats` 使用下文同一完整统计 JSON；
+`extract.resultsFile` 的数组元素也同步改成完整 FileOutcome。
+已检索仓库生产调用方：Java GUI 的 `app.ipc.IpcCodec` 是完整统计/条目详情的消费者；
+`tools/ipc/client.mjs` 读取逐文件结果的 path/outcome，不消费旧 message；尚无第二个前端实现。
+仓库外消费者不在此兼容保证内。
+
+| 对象/字段 | 类型与语义 |
+|---|---|
+| `ExtractionStats.summaryKey` | string，`extract.summary`；不含渲染文本 |
+| `summaryParams` | object<string,string>；`total/success/failed/skipped/warned` 为十进制整数，`elapsed` 为原始毫秒整数；保留既有 bundle 参数名 |
+| `elapsedMillis` | integer，endTime − startTime；前端以秒、两位小数格式化 elapsed，与旧 `String.format("%.2f", millis / 1000.0)` 相同 |
+| `totalFiles/successCount/failCount/skipCount/warnCount` | integer，既有计数语义 |
+| `warnDetails` | array<WarningDetail>，保留历史生成顺序，不按文件重新分组 |
+| `WarningDetail` | `{key:string,params:object<string,string>,warning:ExtractWarning或null}`；普通警告为 `extract.fileWarned` + file + 嵌套 warning；标题标记警告使用 `extract.fileWarnedNoTitle` + file/start/end |
+| `FileOutcome` | `{path:string,outcome:string,messageKey:string或null,messageParams:object<string,string>或null,messageDetail:string或null,warnings:array<ExtractWarning>}` |
+| `ItemVm.extractMessageKey/Params/Detail` | 与 FileOutcome 对应字段同义；null 值可省略，Params 非 null 时为 string map |
+| `ItemVm.extractWarnings` | array<ExtractWarning>，始终存在；无警告为 [] |
+
+前端状态行先渲染 summaryKey，再按顺序在每条 warnDetails 前加一个 `\n`，无额外尾换行。
+普通警告的嵌套 warning 先渲染，再作为外层 `message` 参数；标题警告使用其专用外层键，保留大小写/标点差异。
+详情按非空 messageKey 渲染值、非空原始 messageDetail、逐条 warning 渲染值的顺序，
+使用当前 locale 的 `list.itemSeparator` 连接，无内容返回 null。不得解码或再次解析原始诊断。
+外部异常的 messageDetail（或预加载失败的 reason 参数）可能由异常来源本地化；这是未改写的诊断，不是 UI 文案键。
+
+`previewLoadFailed` 另追加 `detailKey:string或null`：超时为 `preview.loadTimeout` 且 detail=null；
+其余失败 detailKey=null，detail 保留原始诊断。GUI 收到超时后按自己的 locale 渲染。
 
 E19 追加 `undoKind:string或null,affected:FileRef,suggestedSelection:TargetId或null`，affected 文件为有序 TargetId 数组。
 撤销完成才提供 undoKind/选择建议，U2 参数撤销已由后端恢复 before 并恰好消耗一条记录。Q09 `cacheState` 返回
@@ -673,7 +703,7 @@ C25 后处理预解析因此不依赖下一次同步活动；未产生 wire 事�
 另有 `name` / `index`。图像使用现有预览缓存中的编码原图，客户端自行解码、缩放为缩略图；
 服务端不引入图像编码器，不改变 JavaFX 的 ARGB 缩略图链路。HTML 是 UTF-8 的原始源码文件，
 不是浏览器导出页；正文走现有 SourceParseService，图片走 PreviewService。即使图片很多，
-管道也只返回一个 manifest 描述。提取逐文件结果 `{path,outcome,message}` 同样走 `resultsFile`。
+管道也只返回一个 manifest 描述。提取逐文件结果（完整 FileOutcome，见下）同样走 `resultsFile`。
 
 客户端读取后可主动释放文件；提取完成按已有缓存生命周期清理已处理输入的预览缓存，旧的图像引用
 因而失效。EOF/正常退出/传输 IO 异常结束后删除本实例所有 bulk 文件与缓存，持久化提取产物保留。
@@ -735,12 +765,12 @@ E20 在端口适配层启用：启动命令成功返回后、worker 的宿主回
 不会投递到新 run。outputFolder 与 sessionOutputFolder 是同一冻结目录的兼容别名。
 
 stats FileRef 指向完整 UTF-8 JSON：
-`{summaryLine:string或null,failCount:integer,skipCount:integer,warnCount:integer,files:array<FileOutcome>}`。
-FileOutcome 为 `{path:string,outcome:string,message:string或null,warnings:array<ExtractWarning>}`；
+`{summaryKey:string,summaryParams:object<string,string>,elapsedMillis:integer,totalFiles:integer,successCount:integer,failCount:integer,skipCount:integer,warnCount:integer,warnDetails:array<WarningDetail>,files:array<FileOutcome>}`。
+FileOutcome 为 `{path:string,outcome:string,messageKey:string或null,messageParams:object<string,string>或null,messageDetail:string或null,warnings:array<ExtractWarning>}`；
 ExtractWarning 为 `{key:string,args:object<string,string>}`。全部字段保留，空 warnings 为 []。
-outcome 为 NONE/SUCCESS/FAILED/SKIPPED/SUCCESS_WARNED；summaryLine/message 沿用兼容诊断字符串。
+outcome 为 NONE/SUCCESS/FAILED/SKIPPED/SUCCESS_WARNED；WarningDetail 和渲染规则见 P-F2b-2 字段表。
 统计和文件结果不内联到协议帧，不传缩略图像素。stats 文件由会话签发，遵守既有 releaseFiles 与退出清理规则。
-旧 extract.resultsFile 仍是仅 path/outcome/message 的数组，与完整 stats 文件分别签发。
+旧 extract.resultsFile 改为完整 FileOutcome 的数组，与完整 stats 文件分别签发。
 统计与 importRound.plan 均采用显式完整投影，避免 native 对未注册 record 反射的依赖；文件字段保持原定义。
 
 ## 可复跑客户端与 C13 压测

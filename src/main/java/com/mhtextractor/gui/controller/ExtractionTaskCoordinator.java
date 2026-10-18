@@ -337,7 +337,7 @@ public final class ExtractionTaskCoordinator {
                     host.setStatusText(Texts.get("extract.done"));
                     ExtractionStats stats = terminal.stats();
                     if (stats != null) {
-                        host.setStatusText(stats.summaryLine());
+                        host.setStatusText(Texts.extractionSummary(stats));
                         // 满格条按结果配色（拍板 2026-09-24）：有失败/跳过 → 浅红；有警告 → 黄；否则保持绿
                         host.setProgressBarActivity(stats.failCount() + stats.skipCount() > 0
                                 ? ExtractOutcomeStyles.PROGRESS_EXTRACT_FAILED

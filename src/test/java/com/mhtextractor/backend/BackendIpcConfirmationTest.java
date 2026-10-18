@@ -140,8 +140,8 @@ class BackendIpcConfirmationTest {
                 assertEquals(direct.stats().getSkipCount(), response.path("result").path("skipCount").asInt());
                 JsonNode results = JSON.readTree(Files.readString(Path.of(response.path("result").path("resultsFile").path("path").asText())));
                 var expected = JSON.createArrayNode();
-                for (var file : direct.stats().getFileResults()) expected.addObject().put("path", file.path())
-                        .put("outcome", file.outcome().name()).put("message", file.message());
+                expected = com.mhtextractor.app.ExtractionStatsJson.outcomes(JSON,
+                        WorkspaceExtractionService.statsFrom(direct.stats()).files());
                 assertEquals(expected, results);
                 assertEquals("response", untilResponse(client, "queued-query").path("type").asText());
                 // Duplicate/late decisions cannot be delivered again.

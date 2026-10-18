@@ -74,7 +74,9 @@ public final class IpcCodec {
                 optional(n,"modifiedTime"),optional(n,"status"),optional(n,"errorKey"),optional(n,"errorDetail"),
                 n.hasNonNull("chapterEnabled") ? bool(n,"chapterEnabled") : null,
                 optional(n,"badge"),optional(n,"cachedTitle"),optional(n,"titleOverride"),
-                optional(n,"extractOutcome"),optional(n,"extractDetail"),
+                optional(n,"extractOutcome"),optional(n,"extractMessageKey"),
+                n.hasNonNull("extractMessageParams") ? map(n.path("extractMessageParams")) : null,
+                optional(n,"extractMessageDetail"), warnings(n.path("extractWarnings")),
                 reference(n.path("textFile")),reference(n.path("previewManifest")));
     }
     public GroupVm group(JsonNode n) {
@@ -187,9 +189,17 @@ public final class IpcCodec {
     private ExtractionStats stats(JsonNode ref) throws IOException {
         if (ref.isNull()) return null;
         JsonNode n = files.consumeJson(ref);
-        return new ExtractionStats(nullable(n,"summaryLine"),integer(n,"failCount"),integer(n,"skipCount"),integer(n,"warnCount"),
+        return new ExtractionStats(text(n,"summaryKey"),map(n.path("summaryParams")),number(n,"elapsedMillis"),
+                integer(n,"totalFiles"),integer(n,"successCount"),integer(n,"failCount"),integer(n,"skipCount"),integer(n,"warnCount"),
+                list(n.path("warnDetails"),d -> new ExtractionStats.WarningDetail(text(d,"key"),map(d.path("params")),
+                        d.hasNonNull("warning") ? new ExtractWarning(text(d.path("warning"),"key"),map(d.path("warning").path("args"))) : null)),
                 list(n.path("files"),f -> new ExtractionStats.FileOutcome(text(f,"path"),ExtractOutcome.valueOf(text(f,"outcome")),
-                        nullable(f,"message"),list(f.path("warnings"),w -> new ExtractWarning(text(w,"key"),map(w.path("args")))))));
+                        nullable(f,"messageKey"), f.hasNonNull("messageParams") ? map(f.path("messageParams")) : null,
+                        nullable(f,"messageDetail"),warnings(f.path("warnings")))));
+    }
+
+    private List<ExtractWarning> warnings(JsonNode values) {
+        return list(values,w -> new ExtractWarning(text(w,"key"),map(w.path("args"))));
     }
     private PortEvent.ImageFile image(JsonNode n) throws IOException {
         // previewThumbnail.path is the source ID; imagePath is the signed cache file.
@@ -252,7 +262,7 @@ public final class IpcCodec {
             case "importFinished" -> new PortEvent.ImportFinished(number(n,"generation"),strings(files.consumeJson(n.path("accumulatedPaths"))));
             case "previewLoadStateChanged" -> new PortEvent.PreviewLoadStateChanged(number(n,"generation"),text(n,"path"),bool(n,"active"));
             case "previewConfirmationRequired" -> new PortEvent.PreviewConfirmationRequired(text(n,"path"),text(n,"name"),number(n,"sizeMiB"));
-            case "previewLoadFailed" -> new PortEvent.PreviewLoadFailed(number(n,"generation"),text(n,"path"),bool(n,"fileInfo"),nullable(n,"detail"));
+            case "previewLoadFailed" -> new PortEvent.PreviewLoadFailed(number(n,"generation"),text(n,"path"),bool(n,"fileInfo"),nullable(n,"detailKey"),nullable(n,"detail"));
             case "previewThumbnail" -> {
                 var image = image(n);
                 yield new PortEvent.PreviewThumbnail(number(n,"generation"),text(n,"path"),integer(n,"index"),
