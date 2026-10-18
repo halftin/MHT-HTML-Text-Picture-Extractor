@@ -132,7 +132,7 @@ public final class WorkspaceInfoPresenter {
         host.outputNameLabel().setVisible(true);
         host.outputNameLabel().setManaged(true);
         if (host.isTextMode()) {
-            String outputName = it.displayName == null ? Texts.get("preview.parsing") : it.displayName;
+            String outputName = it.finalFileName == null ? Texts.get("preview.parsing") : it.finalFileName;
             if (params.isSeparateFiles()) {
                 host.outputNameLabel().setText(Texts.get("preview.outputFilePrefix") + outputName);
             } else {

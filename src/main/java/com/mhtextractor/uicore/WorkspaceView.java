@@ -34,6 +34,7 @@ public final class WorkspaceView {
         for(var entry:state.presentation()){
             var row=items.get(entry.path());row.cachedText=state.textBodies().get(entry.path());
             row.previewHead=entry.head();row.previewTail=entry.tail();row.displayName=entry.displayName();
+            row.finalFileName=entry.finalFileName();
             row.cachedMeta=row.previewCached?entry:null;row.cachedImages=entry.images();
         }
         var last=new HashMap<TargetId,Integer>();

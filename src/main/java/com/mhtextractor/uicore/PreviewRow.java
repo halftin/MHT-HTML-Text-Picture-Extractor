@@ -29,7 +29,7 @@ public final class PreviewRow implements ParamTargetView {
     public List<PortEvent.ImageFile> cachedImages;
     public PresentationVm cachedMeta;
     public boolean previewCached;
-    public String previewHead="",previewTail="",displayName;
+    public String previewHead="",previewTail="",displayName,finalFileName;
     private final Consumer<Boolean> check;
     private final PreviewRetention retention;
     private final List<ChangeListener> checkedListeners=new ArrayList<>();

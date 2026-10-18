@@ -87,6 +87,81 @@ public final class FeatureExercise extends FeatureExerciseSupport {
 
     private com.mhtextractor.uicore.FrontendPort frontend;
 
+    private static int countOccurrences(String text, String needle) {
+        int count = 0;
+        for (int at = 0; (at = text.indexOf(needle, at)) >= 0; at += needle.length()) count++;
+        return count;
+    }
+
+    /** Exercise the real selection listener and label, including the VM-to-row mapping. */
+    private void verifyOutputNameLabels(java.io.PrintWriter out) {
+        boolean wasText = textModeToggle().isSelected();
+        int originalUndoDepth = frontend.snapshot().workspace().undoDepth();
+        int applied = 0;
+        PreviewRow target = view.allVisibleItems().stream()
+                .filter(row -> row.parentGroup == null && row.path.contains("mht-reimport-after-remove"))
+                .findFirst().orElseThrow();
+        try {
+            for (String scenario : List.of("text-merged", "text-separate", "image-merged", "image-zip",
+                    "text-merged-parsing", "text-separate-parsing")) {
+                boolean image = scenario.startsWith("image");
+                boolean separate = scenario.contains("separate");
+                boolean parsing = scenario.endsWith("parsing");
+                AppConfig params = new AppConfig();
+                params.setSeparateFiles(separate);
+                params.setSingleOutputMode(true);
+                params.setEnableZipPackaging(scenario.equals("image-zip"));
+                if (image) imageModeToggle().setSelected(true); else textModeToggle().setSelected(true);
+                view.applyConfirmedParams(image, params);
+                applied++;
+                FxDelay.pause(200);
+                var state = frontend.snapshot();
+                String finalName = parsing ? null : image ? "Image output.zip" : "Final output (2).txt";
+                String displayName = image ? "Image output" : "Display only";
+                var presentation = new ArrayList<>(state.presentation());
+                presentation.removeIf(entry -> entry.path().equals(target.path));
+                presentation.add(new com.mhtextractor.uiport.PresentationVm(target.path, displayName, parsing,
+                        image, parsing ? "WAITING" : "READY", "", "", null, List.of(), null, null, finalName));
+                view.model().update(new com.mhtextractor.uicore.PortSnapshot(state.workspace(), state.text(),
+                        state.image(), state.cache(), state.textSchema(), state.imageSchema(), presentation,
+                        state.textBodies(), state.allUnits(), state.checkedUnits()));
+                if (!java.util.Objects.equals(finalName, target.finalFileName))
+                    throw new IllegalStateException("PresentationVm.finalFileName mapping failed");
+                listView().getSelectionModel().clearSelection();
+                listView().getSelectionModel().select(target);
+                Label label = view.refs().outputNameLabel();
+                String actual = label.getText();
+                int txtCount = countOccurrences(actual, ".txt");
+                out.println("[P-F11] locale=" + I18n.currentLocale() + " scenario=" + scenario
+                        + " finalFileName=" + finalName + " txtCount=" + txtCount + " label=" + actual);
+                out.flush();
+                if (!label.isVisible() || !label.isManaged())
+                    throw new IllegalStateException("Output label must be visible and managed");
+                if (txtCount != (!image && !parsing ? 1 : 0))
+                    throw new IllegalStateException(scenario + ": .txt count=" + txtCount);
+                String name = image ? displayName : parsing ? I18n.get("preview.parsing") : finalName;
+                String note = image ? I18n.get("preview.outputDirMergedNote") : separate ? ""
+                        : I18n.currentLocale().getLanguage().equals("zh")
+                        ? "（合并输出，所有文件共用）" : "(merged output, all files share one file)";
+                String expected = I18n.get(image ? "preview.outputDirPrefix" : "preview.outputFilePrefix")
+                        + name + note;
+                if (!expected.equals(actual) || actual.contains(".png") || actual.contains(".zip"))
+                    throw new IllegalStateException(scenario + ": expected=" + expected + " actual=" + actual);
+            }
+        } finally {
+            // Discard the synthetic presentation before restoring the original GUI parameters.
+            view.model().update(frontend.snapshot());
+            for (int n = 0; n < applied; n++) {
+                frontend.commands().undo();
+                FxDelay.pause(200);
+            }
+            if (wasText) textModeToggle().setSelected(true); else imageModeToggle().setSelected(true);
+            FxDelay.pause(200);
+            if (frontend.snapshot().workspace().undoDepth() != originalUndoDepth)
+                throw new IllegalStateException("Output label acceptance must restore its undo depth");
+        }
+    }
+
     // Source-column acceptance uses public scene nodes, with no new production access.
     private static String verifySourceColumns(ListView<?> list, String expectedSource) {
         list.getScene().getRoot().applyCss();
@@ -1240,6 +1315,11 @@ public boolean runAutomatedTests() {
             }
             out.println("[PASS] Re-import after remove restores items"); p++;
         } catch (Exception e) { out.println("[FAIL] Re-import after remove: " + e.getMessage()); f++; }
+
+        try {
+            verifyOutputNameLabels(out);
+            out.println("[PASS] P-F11 output labels: text merged/separate, image merged/ZIP, parsing"); p++;
+        } catch (Exception e) { out.println("[FAIL] P-F11 output labels: " + e.getMessage()); f++; }
 
         // A2：经主窗口端口使用生产默认配额，覆盖 IPC 确认往返、轮次计数与停止。
         try { textModeToggle().setSelected(true); FxDelay.pause(200);
