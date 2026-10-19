@@ -89,6 +89,7 @@ class ArchitectureTest {
             "com/mhtextractor/i18n",
             "com/mhtextractor/model",   // E2.1：PreviewItem / ThumbnailData 外迁至此，必须保持零 JavaFX
             "com/mhtextractor/app",     // 目标产物：E4 起建立，建立后自动纳入约束
+            "com/mhtextractor/engine",  // P-F9：预览缓存与提取执行，必须保持零 UI 框架依赖
             "com/mhtextractor/platform", // 步骤 5：与操作系统交互的基础设施（BrowserLauncher 迁出 gui.util）
             "com/mhtextractor/uicore",   // P2-1：ui-core = 框架无关的前端共用逻辑，同样零 JavaFX
             "com/mhtextractor/backend"   // P4-1：无头后端 CLI 骨架（--once / --serve），同样零 JavaFX
@@ -430,6 +431,8 @@ class ArchitectureTest {
 
     @Test
     void businessPackagesHaveNoUiFrameworkDependency() throws IOException {
+        assertTrue(BUSINESS_PACKAGES.contains("com/mhtextractor/engine"),
+                "engine 必须纳入业务包字节码扫描，不能通过删扫描范围绕过不变式");
         Map<String, Set<String>> leaks = scanJavaFxRefs();
 
         List<String> unexpected = new ArrayList<>();
@@ -571,7 +574,7 @@ class ArchitectureTest {
         String self = "ArchitectureTest.java";
 
         List<String> offenders = new ArrayList<>();
-        for (String pkg : List.of("com/mhtextractor/baseline", "com/mhtextractor/app")) {
+        for (String pkg : List.of("com/mhtextractor/baseline", "com/mhtextractor/app", "com/mhtextractor/engine")) {
             Path dir = TEST_SOURCES.resolve(pkg);
             if (!Files.isDirectory(dir)) continue;
             try (Stream<Path> walk = Files.walk(dir)) {
@@ -978,28 +981,29 @@ class ArchitectureTest {
      */
     @Test
     void applicationLayerDoesNotDependOnViewOrShell() throws IOException {
-        Path appDir = Path.of("src", "main", "java", "com", "mhtextractor", "app");
-        assertTrue(Files.isDirectory(appDir), "未找到 app 包：" + appDir);
-
         List<String> forbidden = List.of(
                 "com.mhtextractor.gui.",
                 "com.mhtextractor.logging.",
                 "com.mhtextractor.App");   // 外壳类自身（Application 子类）
 
         List<String> offenders = new ArrayList<>();
-        try (Stream<Path> walk = Files.walk(appDir)) {
-            for (Path p : walk.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
-                String rel = appDir.relativize(p).toString().replace('\\', '/');
-                String codeWithoutComments = SourceScanUtils.stripComments(Files.readString(p, StandardCharsets.UTF_8));
-                assertFalse(java.util.regex.Pattern.compile("com\\.mhtextractor\\.uicore\\.(GuiState(?:Manager)?|SessionStateService)\\b")
-                                .matcher(codeWithoutComments).find(),
-                        "app must not depend on frontend session persistence: " + rel);
-                for (String line : Files.readAllLines(p, StandardCharsets.UTF_8)) {
-                    String code = line.split("//")[0].trim();
-                    if (!code.startsWith("import ")) continue;
-                    for (String bad : forbidden) {
-                        if (code.contains(bad)) {
-                            offenders.add(rel + "  ->  " + code);
+        for (String pkg : List.of("app", "engine")) {
+            Path appDir = MAIN_SOURCES.resolve("com/mhtextractor/" + pkg);
+            assertTrue(Files.isDirectory(appDir), "未找到无头包：" + appDir);
+            try (Stream<Path> walk = Files.walk(appDir)) {
+                for (Path p : walk.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
+                    String rel = pkg + "/" + appDir.relativize(p).toString().replace('\\', '/');
+                    String codeWithoutComments = SourceScanUtils.stripComments(Files.readString(p, StandardCharsets.UTF_8));
+                    assertFalse(java.util.regex.Pattern.compile("com\\.mhtextractor\\.uicore\\.(GuiState(?:Manager)?|SessionStateService)\\b")
+                                    .matcher(codeWithoutComments).find(),
+                            pkg + " must not depend on frontend session persistence: " + rel);
+                    for (String line : Files.readAllLines(p, StandardCharsets.UTF_8)) {
+                        String code = line.split("//")[0].trim();
+                        if (!code.startsWith("import ")) continue;
+                        for (String bad : forbidden) {
+                            if (code.contains(bad)) {
+                                offenders.add(rel + "  ->  " + code);
+                            }
                         }
                     }
                 }
@@ -1007,9 +1011,9 @@ class ArchitectureTest {
         }
 
         assertTrue(offenders.isEmpty(),
-                "无头应用层（app）不得依赖视图层/外壳，否则会**传递依赖 JavaFX** 而 V1 失效：\n  "
+                "无头应用层（app/engine）不得依赖视图层/外壳，否则会**传递依赖 JavaFX** 而 V1 失效：\n  "
                         + String.join("\n  ", offenders));
-        System.out.println("[arch] app 层未依赖 gui/logging/App（V1 闭合）");
+        System.out.println("[arch] app/engine 层未依赖 gui/logging/App（V1 闭合）");
     }
 
     // ==================== 6. 分层前提：基准测试必须真的在跑 ====================

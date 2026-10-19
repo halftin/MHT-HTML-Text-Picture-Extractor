@@ -6,6 +6,8 @@ import com.mhtextractor.app.InProcessUiport;
 import com.mhtextractor.app.WorkspaceModel;
 import com.mhtextractor.app.UndoManager;
 import com.mhtextractor.app.*;
+import com.mhtextractor.engine.PreviewSession;
+import com.mhtextractor.engine.PreviewService;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.uiport.*;
 import org.junit.jupiter.api.Test;

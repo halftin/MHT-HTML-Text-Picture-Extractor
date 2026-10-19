@@ -1,4 +1,4 @@
-package com.mhtextractor.app;
+package com.mhtextractor.engine;
 
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;

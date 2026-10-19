@@ -1,5 +1,7 @@
 package com.mhtextractor.app;
 
+import com.mhtextractor.engine.PreviewSession;
+
 import com.mhtextractor.uiport.PortEvent;
 import java.util.Map;
 

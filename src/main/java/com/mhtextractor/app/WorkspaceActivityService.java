@@ -1,5 +1,7 @@
 package com.mhtextractor.app;
 
+import com.mhtextractor.engine.PreviewService;
+
 import com.mhtextractor.i18n.Texts;
 
 import com.mhtextractor.model.AppConfig;

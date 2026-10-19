@@ -1,5 +1,7 @@
 package com.mhtextractor.app;
 
+import com.mhtextractor.engine.PreviewService;
+
 import com.mhtextractor.baseline.BaselineCases;
 import com.mhtextractor.baseline.BaselineHasher;
 import com.mhtextractor.cache.PreviewCacheKey;
@@ -171,7 +173,7 @@ class StubUiAcceptanceTest {
 
         // ---------- ⑥ 预览（无头）：app 层自建缓存，桩 UI 只需"读缓存目录 + 解码" ----------
         // 这一步是步骤 2/4 的核心：预览的业务逻辑（算键/查缓存/解析+抽图+原子落盘/元数据）
-        // 已全部在 com.mhtextractor.app.PreviewService 里，**不需要任何 UI 框架**。
+        // 已全部在 com.mhtextractor.engine.PreviewService 里，**不需要任何 UI 框架**。
         // 桩 UI 拿到的只是"图片目录 + 缩略图元数据（名字）"，解码与上屏留给各 UI 自己。
         PreviewItem cnItem = items.stream()
                 .filter(i -> i.name.equals("cn-filename.mht")).findFirst().orElseThrow();

@@ -1,5 +1,17 @@
 # JSON Lines 控制协议 2（帧格式 v1）
 
+## P-F9：引擎包与过渡应用层
+
+依赖方向为 `gui → uiport/uiclient → backend/app → engine → 业务包`。
+`engine` 零 JavaFX：`PreviewService` 管预览缓存读写与命中；
+`PreviewSession` / `PreviewCacheFactory` 持有、构造引擎缓存生命周期，不承担客户端传输或前端呈现。
+`app` 暂保留 `BackendWorkspace` 装配、`InProcessUiport` 适配、`WorkspaceModel` 数据所有权及导入/参数/计划等服务。
+`WorkspaceExtractionCoordinator` 保留在 app：它构建计划/确认并发布端口事件，且 `InProcessUiport` 三处
+直接读取其包级 `RunChannel.sessionOutputFolder`；只迁包会破坏访问，本批不放宽可见性。
+P-F10 再解除该端口适配耦合，决定剩余服务和适配器落位、取消 app。
+`WorkspaceExtractionService` 的迁包还受协调器调用其包级 `outputName` 阻塞，裁决前仍在 app。
+本次只迁包，uiport 契约、协议号、产品版本和产物基线不变。
+
 ## P-F2：命名事实与表单值契约
 
 握手 `protocolVersion=2`，JSON Lines 帧格式仍为 `v=1`。**协议 2 与 3.0 不可混装**：

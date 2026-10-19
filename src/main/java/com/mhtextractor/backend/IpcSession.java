@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mhtextractor.app.*;
+import com.mhtextractor.engine.PreviewService;
+import com.mhtextractor.engine.PreviewSession;
 import com.mhtextractor.core.SourceParsers;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.ExtractionStats;

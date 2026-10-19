@@ -79,14 +79,16 @@ powershell -ExecutionPolicy Bypass -File tools\probes\run-probe.ps1 UiProbe -Loc
 
 ## 3. Architecture
 
-**依赖方向严格单向：`gui → app → 业务包`**；`app`、业务包、`model`、`platform` **零 JavaFX**
+**依赖方向严格单向：`gui → uiport/uiclient → backend/app → engine → 业务包`**；`app`、`engine`、业务包、`model`、`platform` **零 JavaFX**
 （按**字节码常量池**扫描强制，不是查 import —— 全限定名引用也能抓到）。
 
 ```
 gui          ← JavaFX 视图/控制器（唯一允许依赖 javafx.* 的层之一）
   ↓
-app          ← 无头应用层（零 JavaFX）：MhtExtractorApp / WorkspaceModel / WorkspaceParamService /
-  ↓            WorkspaceImportService / WorkspaceExtractionService / ExtractionPreconditions / PreviewService
+app          ← 过渡应用层（零 JavaFX）：WorkspaceModel 数据所有权、InProcessUiport 端口适配、
+  ↓            BackendWorkspace 装配、导入/参数/计划等剩余服务；P-F10 决定其最终落位
+engine       ← 引擎执行层（零 JavaFX）：PreviewService / PreviewSession / PreviewCacheFactory
+  ↓            WorkspaceExtractionService 迁移待包级访问约束裁决（P-F9）
 业务包        ← core / extractor / processor / output / util / cache / config / i18n
 model        ← 纯数据模型（PreviewItem / ThumbnailData / ExtractWarning），零 JavaFX，app 与 gui 共用
 platform     ← 与操作系统交互的基础设施（零 JavaFX，纳入同一条不变式扫描）
@@ -117,10 +119,20 @@ MhtExtractorApp              // 门面：importPaths/importFolder；extractText/
 WorkspaceModel               // 数据序、分组关系、撤销命令的**唯一所有者**；GUI 的 items 是它的只读投影
 WorkspaceParamService        // 参数变更/移除引起的缓存失效收口（GUI 不得直接调缓存删除规则）
 WorkspaceImportService       // 导入轮次/累计/配额计数（无 JavaFX）
-WorkspaceExtractionService   // 提取业务段；**业务统计的唯一来源**
-PreviewService               // 预览缓存读写与命中判定
+WorkspaceExtractionService   // 提取业务段；**业务统计的唯一来源**（迁包待包级访问裁决）
+WorkspaceExtractionCoordinator // 端口任务编排，与 InProcessUiport 存在包级访问耦合
 ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 ```
+
+### engine 层（P-F9：只迁包，不改行为）
+
+`PreviewService` 负责预览缓存读写、命中与重建；`WorkspaceExtractionService` 负责输出单元执行和业务统计，
+其迁包被协调器对包级 `outputName` 的访问阻塞，裁决前仍在 app。
+`PreviewSession` 持有缓存生命周期，`PreviewCacheFactory` 构造存储与生命周期，均属于引擎资源管理，
+不是 uiclient 的传输或会话呈现逻辑。`WorkspaceModel` 和 `InProcessUiport` 本批仍在 app；
+`WorkspaceExtractionCoordinator` 也保留在 app：它构建计划/确认、发送端口事件，且 `InProcessUiport`
+三处直接读取其包级 `RunChannel.sessionOutputFolder`，只迁包会破坏访问。本批不放宽可见性，
+这处端口适配耦合及 app 的最终拆除交给 P-F10。
 
 `LayerBTest`（无 JavaFX 执行）+ `StubUiAcceptanceTest` 证明"用非 JavaFX 的桩 UI 走完导入→校验→建组→参数→移除/撤销→提取"，
 并与产物基线逐字节一致。
@@ -148,7 +160,7 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 | 不变式 | 含义 |
 |---|---|
 | `businessPackagesHaveNoUiFrameworkDependency` | 业务包 + `app` + `platform` + `model` **不得依赖 `javafx.*`**（字节码常量池口径，带白名单腐化检测） |
-| `applicationLayerDoesNotDependOnViewOrShell` | `app` 不得 import `gui` / `logging` / `App` |
+| `applicationLayerDoesNotDependOnViewOrShell` | `app` / `engine` 不得 import `gui` / `logging` / `App` |
 | `mainControllerIsShrinking` | `MainController` 行数（实测 **1612**）≤ 上限 **2240**。P3-B4 的 +8 已裁决接受；**此后只减不增**（P5a-3/8 累计 −42） |
 | `reflectionAgainstMainControllerIsZero` | 测试对 `MainController` 私有成员的**反射 = 0**（改用测试源集的同包 acceptance driver） |
 | `testSupportSurfaceDoesNotGrow` | `/* test-support */` 标记 = **0**。⚠️ 该计数**只覆盖 `MainController` 文本** |

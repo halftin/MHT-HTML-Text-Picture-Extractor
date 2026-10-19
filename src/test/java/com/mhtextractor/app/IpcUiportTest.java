@@ -1,5 +1,8 @@
 package com.mhtextractor.app;
 
+import com.mhtextractor.engine.PreviewService;
+import com.mhtextractor.engine.PreviewSession;
+
 import com.mhtextractor.app.ipc.*;
 import com.mhtextractor.model.*;
 import com.mhtextractor.uiport.*;

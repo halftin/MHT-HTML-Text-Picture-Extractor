@@ -1,7 +1,10 @@
 import com.mhtextractor.app.*;
+import com.mhtextractor.engine.PreviewSession;
+import com.mhtextractor.engine.PreviewService;
 import com.mhtextractor.gui.controller.PreviewLoader;
 import com.mhtextractor.gui.controller.PreviewRenderer;
 import com.mhtextractor.i18n.I18n;
+import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.PreviewItem;
 import javafx.animation.PauseTransition;

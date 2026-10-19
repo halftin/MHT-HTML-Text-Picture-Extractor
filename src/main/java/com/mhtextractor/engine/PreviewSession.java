@@ -1,4 +1,4 @@
-package com.mhtextractor.app;
+package com.mhtextractor.engine;
 
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;
@@ -15,7 +15,7 @@ import java.util.function.IntConsumer;
  * <p>语义一律不变：创建时机、启动扫孤儿（{@link #startupCleanup()}）、10 GiB 台阶提醒 hook
  * （{@link #setSizeAlertHook(IntConsumer)}，签名与底层 Lombok setter 同型以保 gui 调用点逐字不变）、
  * 根目录（{@link #store()}）、已观测字节数（{@link #lastObservedTotalBytes()}）
- * 全部原样转发底层生命周期；缓存<b>删除规则</b>仍只经 {@link WorkspaceParamService} 收口，
+ * 全部原样转发底层生命周期；缓存<b>删除规则</b>仍只经 {@code WorkspaceParamService} 收口，
  * 本门面不新增任何删除入口。</p>
  *
  * <p><b>零 JavaFX / 零 I18n 依赖</b>：本类只依赖 {@code cache} 业务包，

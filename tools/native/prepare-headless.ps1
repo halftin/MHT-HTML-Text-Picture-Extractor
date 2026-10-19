@@ -54,7 +54,7 @@ $classes = Join-Path $inputDir 'classes'
 $libs = Join-Path $inputDir 'lib'
 $metadata = Join-Path $inputDir 'metadata'
 New-Item -ItemType Directory -Path $classes,$libs,$metadata -Force | Out-Null
-$packages = @('app','backend','cache','config','core','extractor','i18n','model',
+$packages = @('app','backend','engine','cache','config','core','extractor','i18n','model',
     'output','platform','processor','uicore','uiport','util')
 $classCount = 0
 foreach ($package in $packages) {

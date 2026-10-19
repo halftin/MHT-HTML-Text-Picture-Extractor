@@ -303,7 +303,7 @@ class BackendIpcExtractionTest {
                 return null;
             }
         };
-        var previews = com.mhtextractor.app.PreviewSession.create(tmp.resolve("held-cache"));
+        var previews = com.mhtextractor.engine.PreviewSession.create(tmp.resolve("held-cache"));
         try {
             var plans = new com.mhtextractor.app.ExtractionPlanService(new com.mhtextractor.app.ExtractionPlanService.Context() {
                 public List<Object> dataOrder() { return model.topLevel(); }
@@ -319,7 +319,7 @@ class BackendIpcExtractionTest {
                 public boolean textMode() { return true; }
                 public com.mhtextractor.model.AppConfig effectiveParams(com.mhtextractor.model.PreviewItem item) { return new com.mhtextractor.model.AppConfig(); }
                 public com.mhtextractor.model.AppConfig effectiveImageParams(com.mhtextractor.model.PreviewItem item) { return new com.mhtextractor.model.AppConfig(); }
-            }, new com.mhtextractor.app.PreviewService(previews.lifecycle()), (image, index, config) -> null, callbacks::add);
+            }, new com.mhtextractor.engine.PreviewService(previews.lifecycle()), (image, index, config) -> null, callbacks::add);
             var cache = new com.mhtextractor.app.WorkspaceParamService(previews.lifecycle());
             var clipboard = new com.mhtextractor.app.ParamClipboard(model::push, target -> com.mhtextractor.model.ParamScope.GLOBAL,
                     (target, mode, config) -> { });

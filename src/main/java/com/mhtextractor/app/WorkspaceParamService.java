@@ -1,5 +1,7 @@
 package com.mhtextractor.app;
 
+import com.mhtextractor.engine.PreviewService;
+
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.model.PreviewItem;
 
