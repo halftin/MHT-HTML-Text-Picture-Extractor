@@ -278,7 +278,15 @@ if "%PREPARE_ONLY%"=="1" ( set "STATUS=PREPARE_ONLY" & set "RC=0" & goto :done )
 REM ==================== 步骤 5/6：native-image ====================
 call :begin "5/6" "native-image 编译"
 if not exist "target\mhtExtractor-%APP_VERSION%.jar" ( call :say "[ERROR] 找不到 target\mhtExtractor-%APP_VERSION%.jar —— 先跑一次完整打包，别用 --skip-package。" & call :end 1 & set "RC=1" & set "FAILSTEP=5/6 native-image" & goto :done )
-call :say "      正在运行: native-image -jar target\mhtExtractor-%APP_VERSION%.jar"
+REM P-F10b: shared agent metadata must not root backend implementations in a GUI image.
+REM Keep all seven source files unchanged; preserve every member in the GUI/evidence partitions.
+set "GUI_METADATA=%LOG_DIR%\frontend-metadata-%RUNSTAMP%"
+set "GUI_INPUT=%LOG_DIR%\frontend-input-%RUNSTAMP%.jar"
+> "%TMPCMD%" echo @echo off
+>>"%TMPCMD%" echo powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\tools\native\prepare-frontend-metadata.ps1" -Repo "%REPO%" -OutputDir "%GUI_METADATA%" -InputJar "%REPO%\target\mhtExtractor-%APP_VERSION%.jar" -OutputJar "%GUI_INPUT%"
+call :tee
+if not "%RC%"=="0" ( call :end %RC% & set "FAILSTEP=5/6 frontend metadata" & goto :done )
+call :say "      正在运行: native-image -jar %GUI_INPUT%"
 call :say "      （首次通常 1-3 分钟；输出会实时追加到上面的日志）"
 call "%VCVARS%" >nul 2>&1
 set "JAVA_HOME=%GRAALVM_HOME%"
@@ -306,7 +314,7 @@ REM   -XX: 在构建期会被当成主类）。native-image 无 InitialHeapSize 
 call :say "      运行期堆   : MaximumHeapSizePercent=50（机器内存的 50%，动态）"
 call :say "      链接附加库  : %PRISM_COMMON_OPT%   (dynamic 配方此处为空是正常的)"
 > "%TMPCMD%" echo @echo off
->>"%TMPCMD%" echo call "%NATIVE_IMAGE%" -jar "target\mhtExtractor-%APP_VERSION%.jar" --no-fallback -H:Path="%OUTPUT_DIR%" -H:Name=MhtExtractor -H:+JNI -H:+ReportExceptionStackTraces --enable-all-security-services --enable-http --enable-https --enable-url-protocols=file,http,https --initialize-at-run-time=com.sun.glass,com.sun.prism,com.sun.scenario,com.sun.javafx.font,com.sun.javafx.iio,com.sun.media,com.sun.webkit,com.sun.javafx.tk.quantum,com.sun.marlin -Djava.library.path="target/jfx-dlls" -R:MaximumHeapSizePercent=50 -J-Xmx%NATIVE_XMX% -Ob %PRISM_COMMON_OPT%
+>>"%TMPCMD%" echo call "%NATIVE_IMAGE%" -jar "%GUI_INPUT%" --no-fallback -H:Path="%OUTPUT_DIR%" -H:Name=MhtExtractor -H:+JNI -H:+ReportExceptionStackTraces --enable-all-security-services --enable-http --enable-https --enable-url-protocols=file,http,https --initialize-at-run-time=com.sun.glass,com.sun.prism,com.sun.scenario,com.sun.javafx.font,com.sun.javafx.iio,com.sun.media,com.sun.webkit,com.sun.javafx.tk.quantum,com.sun.marlin -Djava.library.path="target/jfx-dlls" -R:MaximumHeapSizePercent=50 -J-Xmx%NATIVE_XMX% -Ob %PRISM_COMMON_OPT%
 call :tee
 if not "%RC%"=="0" ( call :say "[ERROR] native-image 构建失败，exit=%RC%" & call :end %RC% & set "FAILSTEP=5/6 native-image" & goto :done )
 call :end 0
@@ -493,6 +501,8 @@ set "NB_VSPATH=%VSPATH%"
 set "NB_XMX=%NATIVE_XMX%"
 set "NB_TARGET=%NATIVE_TARGET%"
 set "NB_HEADLESS_INPUT=%HEADLESS_INPUT%"
+set "NB_FRONTEND_METADATA=%GUI_METADATA%"
+set "NB_GUI_INPUT=%GUI_INPUT%"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\native-report.ps1" 2>&1
 
 call :say ""

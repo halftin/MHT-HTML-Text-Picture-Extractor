@@ -1,5 +1,7 @@
 package com.mhtextractor.engine;
 
+import com.mhtextractor.model.ItemStatus;
+
 import com.mhtextractor.engine.PreviewSession;
 
 import com.mhtextractor.model.AppConfig;
@@ -152,14 +154,14 @@ class OutputNameContractTest {
             s.config.setEnableNameExtraction(true);
             s.port.commands().setGlobalParams(true, s.config);
             var item = s.model.allItems().getFirst();
-            item.status = PreviewItem.Status.WAITING;
+            item.status = ItemStatus.WAITING;
             row = s.port.queries().presentation(List.of(path), runtime).getFirst();
             assertTrue(row.parsing());
             assertNull(row.displayName());
             assertNull(row.baseName());
             assertNull(row.extension());
             assertNull(row.finalFileName());
-            item.status = PreviewItem.Status.READY;
+            item.status = ItemStatus.READY;
             item.cachedTitle = "title";
             row = s.port.queries().presentation(List.of(path), runtime).getFirst();
             assertFalse(row.parsing());

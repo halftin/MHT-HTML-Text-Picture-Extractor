@@ -248,7 +248,7 @@ final class IpcSession implements AutoCloseable {
                 var groups = json.createArrayNode();
                 var snapshot = port.queries().workspace();
                 for (var group : round.createdGroups()) groups.add(codec.group(snapshot.groups().stream()
-                        .filter(vm -> vm.no() == group.getGroupNo()).findFirst().orElseThrow()));
+                        .filter(vm -> vm.no() == group.groupNo()).findFirst().orElseThrow()));
                 var data = generation(round.generation()).put("newFiles", round.newFiles()).put("newGroups", round.newGroups())
                         .put("madeListNonEmpty", round.madeListNonEmpty());
                 data.set("plan", codec.file(codec.plan(round.plan())));

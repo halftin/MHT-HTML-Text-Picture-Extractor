@@ -1,5 +1,7 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.model.ItemStatus;
+
 import com.mhtextractor.uicore.SelectionRules;
 import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.model.AppConfig;
@@ -338,19 +340,19 @@ class PreviewListCell extends ListCell<Object> implements CellIndicator {
                     : ExtractOutcomeStyles.listPaint(it.extractOutcome)));
             String detail = Texts.extractDetail(it.extractMessageKey, it.extractMessageParams, it.extractMessageDetail, it.extractWarnings);
             setTooltip(detail == null || detail.isEmpty() ? null : new Tooltip(detail));
-        } else if (it.status == PreviewRow.Status.FAILED) {
+        } else if (it.status == ItemStatus.FAILED) {
             setStyle(isSelected ? FAILED_SELECTED_ROW_STYLE : FAILED_ROW_STYLE);
             setTooltip(new Tooltip(WorkspaceInfoPresenter.errorText(it)));
         } else {
             setStyle(itemParamStyle(it, isSelected));
-            setTooltip(it.status == PreviewRow.Status.EMPTY
+            setTooltip(it.status == ItemStatus.EMPTY
                     ? new Tooltip(Texts.get("preview.emptyContent")) : null);
         }
         // 深色底需白字（-fx-text-background-color 不跨节点继承，直接设 label 填充色）：
         // 全局参数深蓝底、提取失败/跳过/警告行（Windows 错误红 #E81123 及红绿分割行）
         boolean whiteText = ExtractOutcomeStyles.usesDarkBackdrop(it.extractOutcome)
                 || (it.extractOutcome == ExtractOutcome.NONE
-                        && it.status != PreviewRow.Status.FAILED
+                        && it.status != ItemStatus.FAILED
                         && actions.effectiveStatus(it) == ParamScope.Status.GLOBAL);
         nameLabel.setStyle((inGroup ? "-fx-font-size: 12px; -fx-font-weight: bold;" : "")
                 + (whiteText ? " -fx-text-fill: #ffffff;" : ""));

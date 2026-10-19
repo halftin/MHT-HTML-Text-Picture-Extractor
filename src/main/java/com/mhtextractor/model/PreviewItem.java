@@ -30,14 +30,6 @@ import java.util.List;
  */
 public class PreviewItem {
 
-    /**
-     * 预览状态机：未解析 / 就绪 / 内容为空 / 解析失败。
-     *
-     * <p>原本是 {@code MainController} 内与 {@code PreviewItem} 平级的嵌套枚举；E2.1 一并迁入 model 包，
-     * 并归到 {@code PreviewItem} 之下（它是条目的状态，不是控制器的状态）。</p>
-     */
-    public enum Status { WAITING, READY, EMPTY, FAILED }
-
     // ==================== 身份（不可变） ====================
 
     public final String path;
@@ -48,7 +40,7 @@ public class PreviewItem {
 
     // ==================== UI 状态（普通字段，E1.3a 去 JavaFX 属性） ====================
 
-    public Status status = Status.WAITING;
+    public ItemStatus status = ItemStatus.WAITING;
     public String errorKey;
     public String errorDetail;
     public boolean chapterEnabled = true;
@@ -133,7 +125,7 @@ public class PreviewItem {
 
     /**
      * 清空预览态（E1.2 的唯一实现，生效参数切换后重新预解析）：五个内存缓存字段全部清空 +
-     * 回到 {@link Status#WAITING}。磁盘缓存由 {@code PreviewCacheLifecycle} 的四条规则管理，不在此处触碰。
+     * 回到 {@link ItemStatus#WAITING}。磁盘缓存由 {@code PreviewCacheLifecycle} 的四条规则管理，不在此处触碰。
      *
      * <p><b>字段清单只许有一份</b>：任何"清预览态"语义都必须走本方法，不得在别处再手写
      * 这五个字段的赋值（曾因 {@code ParamDomainController} 手写清单漏掉 {@code cachedMeta}
@@ -145,7 +137,7 @@ public class PreviewItem {
         cachedImages = null;
         cachedThumbs = null;
         cachedMeta = null;
-        status = Status.WAITING;
+        status = ItemStatus.WAITING;
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.mhtextractor.engine;
 
+import com.mhtextractor.model.ItemStatus;
+
 import com.mhtextractor.engine.PreviewService;
 import com.mhtextractor.engine.PreviewSession;
 
@@ -134,7 +136,7 @@ class InProcessUiportActivityTest {
         assertEquals(List.of("preview.parseFailed", "preview.unparseable"),
                 finished().subList(0, 2).stream().map(e -> e.result().errorKey()).toList());
         assertEquals("broken", finished().getFirst().result().errorDetail());
-        assertEquals(PreviewItem.Status.EMPTY, empty.status);
+        assertEquals(ItemStatus.EMPTY, empty.status);
         assertEquals("keep", bad.cachedTitle);
         assertEquals("keep", noHtml.cachedTitle);
         assertEquals(new PortEvent.PreparseProgress(1, 3, 3), events.getLast());
@@ -152,7 +154,7 @@ class InProcessUiportActivityTest {
         port.commands().cancelWorkspaceActivity();
         late.run();
         assertEquals(2, port.queries().activityGeneration());
-        assertEquals(PreviewItem.Status.WAITING, item.status);
+        assertEquals(ItemStatus.WAITING, item.status);
         assertEquals("keep", item.cachedTitle);
         assertNull(item.cachedText);
         assertTrue(finished().isEmpty());

@@ -1,6 +1,7 @@
 package com.mhtextractor.uicore;
 
 import com.mhtextractor.model.AppConfig;
+import com.mhtextractor.model.ItemStatus;
 import com.mhtextractor.model.ChangeListener;
 import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.model.ThumbnailData;
@@ -12,10 +13,9 @@ import java.util.function.Consumer;
 
 /** Stable-ID display row. These values are replaced from backend VMs, never used as a business model. */
 public final class PreviewRow implements ParamTargetView {
-    public enum Status{WAITING,READY,EMPTY,FAILED}
     public final String path,name,sourceFolder;
     public final LocalDateTime modifiedTime;
-    public Status status=Status.WAITING;
+    public ItemStatus status=ItemStatus.WAITING;
     public String errorKey,errorDetail,badge,cachedText,cachedTitle,titleOverride;
     public String extractMessageKey, extractMessageDetail;
     public java.util.Map<String, String> extractMessageParams;
@@ -43,7 +43,7 @@ public final class PreviewRow implements ParamTargetView {
     }
     void update(ItemVm vm){
         boolean changed=selected!=vm.checked();selected=vm.checked();removed=vm.removed();
-        status=vm.status()==null?Status.WAITING:Status.valueOf(vm.status());errorKey=vm.errorKey();errorDetail=vm.errorDetail();
+        status=vm.status()==null?ItemStatus.WAITING:ItemStatus.valueOf(vm.status());errorKey=vm.errorKey();errorDetail=vm.errorDetail();
         chapterEnabled=Boolean.TRUE.equals(vm.chapterEnabled());badge=vm.badge();cachedTitle=vm.cachedTitle();titleOverride=vm.titleOverride();
         boolean hadPreview=previewCached;previewCached=vm.previewManifest()!=null;
         if(hadPreview&&!previewCached){releaseImageData();cachedMeta=null;}

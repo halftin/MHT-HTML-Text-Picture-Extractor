@@ -1545,7 +1545,7 @@ public class MainController {
                 previewRenderer.resetImageArea(HINT_NEED_PARAMS, false);
                 return;
             }
-            if (it.status == PreviewRow.Status.FAILED) {
+            if (it.status == com.mhtextractor.model.ItemStatus.FAILED) {
                 refs.imageHintLabel().setText(Texts.get("preview.parseFailed") + WorkspaceInfoPresenter.errorText(it));
                 refs.imageHintLabel().setVisible(true);
                 refs.previewEffectButton().setVisible(true);

@@ -35,7 +35,7 @@ class PreviewItemPreviewStateTest {
                 new PreviewCacheMeta.Source(item.path, 1L, 2L, ""), "probe-fp", true,
                 List.of(new PreviewCacheMeta.ImageEntry("images/0001.png", "cid:x", "0001.png", "png", List.of())),
                 List.of(new ExtractWarning("w1", Map.of())));
-        item.status = PreviewItem.Status.READY;
+        item.status = ItemStatus.READY;
         return item;
     }
 
@@ -51,7 +51,7 @@ class PreviewItemPreviewStateTest {
         assertNull(item.cachedImages, "resetPreviewState 必须清 cachedImages");
         assertNull(item.cachedThumbs, "resetPreviewState 必须清 cachedThumbs");
         assertNull(item.cachedMeta, "resetPreviewState 必须清 cachedMeta（此前的缺陷：漏清）");
-        assertEquals(PreviewItem.Status.WAITING, item.status, "resetPreviewState 必须回到 WAITING");
+        assertEquals(ItemStatus.WAITING, item.status, "resetPreviewState 必须回到 WAITING");
     }
 
     /** releaseImageData 只清 cachedImages/cachedThumbs；text/title/meta/status 保持不动。 */
@@ -66,7 +66,7 @@ class PreviewItemPreviewStateTest {
         assertEquals("正文", item.cachedText, "releaseImageData 不得动 cachedText");
         assertEquals("标题", item.cachedTitle, "releaseImageData 不得动 cachedTitle");
         assertNotNull(item.cachedMeta, "releaseImageData 不得动 cachedMeta");
-        assertEquals(PreviewItem.Status.READY, item.status, "releaseImageData 不得动 status");
+        assertEquals(ItemStatus.READY, item.status, "releaseImageData 不得动 status");
     }
 
     /** 两种语义互不混淆：resetPreviewState 不含"保留文本"语义，releaseImageData 不含"回 WAITING"语义。 */
@@ -75,11 +75,11 @@ class PreviewItemPreviewStateTest {
         PreviewItem item = seededItem();
         item.resetPreviewState();
         assertNull(item.cachedText, "reset 必须清 text（不是 release 语义）");
-        assertEquals(PreviewItem.Status.WAITING, item.status, "reset 必须回 WAITING");
+        assertEquals(ItemStatus.WAITING, item.status, "reset 必须回 WAITING");
 
         PreviewItem other = seededItem();
         other.releaseImageData();
-        assertEquals(PreviewItem.Status.READY, other.status, "release 必须保留 status（不是 reset 语义）");
+        assertEquals(ItemStatus.READY, other.status, "release 必须保留 status（不是 reset 语义）");
         assertNotNull(other.cachedMeta, "release 必须保留 meta");
         assertEquals("正文", other.cachedText, "release 必须保留 text");
     }

@@ -1,5 +1,7 @@
 package com.mhtextractor.engine;
 
+import com.mhtextractor.model.ItemStatus;
+
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.PreviewItem;
 import org.junit.jupiter.api.Test;
@@ -21,7 +23,7 @@ class OutputNameServiceTest {
     /** 就绪态条目（cachedTitle 未设置，由各用例按需赋值） */
     private static PreviewItem item(String name) {
         PreviewItem it = new PreviewItem("C:/x/" + name, name, LocalDateTime.now(), "C:/x");
-        it.status = PreviewItem.Status.READY;
+        it.status = ItemStatus.READY;
         return it;
     }
 
@@ -78,7 +80,7 @@ class OutputNameServiceTest {
         AppConfig params = new AppConfig();
         params.setEnableNameExtraction(true);
         PreviewItem it = item("b.mht");
-        it.status = PreviewItem.Status.WAITING;
+        it.status = ItemStatus.WAITING;
         OutputNameService.Name n = OutputNameService.imageOutputName(it, params, null, "C:/in");
         assertTrue(n.parsing());
         assertNull(n.value());
@@ -125,7 +127,7 @@ class OutputNameServiceTest {
         params.setSingleOutputMode(true);
         params.setEnableNameExtraction(true);
         PreviewItem first = item("first.mht");
-        first.status = PreviewItem.Status.WAITING;
+        first.status = ItemStatus.WAITING;
         OutputNameService.Name n = OutputNameService.imageOutputName(item("second.mht"), params, first, "C:/in");
         assertTrue(n.parsing());
         assertNull(n.value());

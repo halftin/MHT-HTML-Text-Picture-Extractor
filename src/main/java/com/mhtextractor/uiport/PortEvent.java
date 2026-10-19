@@ -84,17 +84,17 @@ public sealed interface PortEvent {
      * @param newFiles         本轮实际落地的新条目数（已去重；跳过的批次不计）
      * @param newGroups        本轮自动新建的组数
      * @param madeListNonEmpty 本轮首个非跳过批次应用前列表为空（导入首轮选中首行的判定）
-     * @param createdGroups    本轮新建的组（模型对象，按落地顺序；前端挂接名字刷新监听）
-     * @param groupSnapshots   IPC 新建组的不可变 VM；IPC 不重造模型身份，createdGroups 留空
+     * @param createdGroups    本轮新建组的 ID（按落地顺序）
+     * @param groupSnapshots   IPC 新建组的不可变 VM；与 createdGroups 使用同一组号
      */
     record ImportRound(long generation, ImportPlanVm plan, int newFiles, int newGroups,
                        boolean madeListNonEmpty,
-                       List<com.mhtextractor.model.GroupItem<com.mhtextractor.model.PreviewItem>> createdGroups,
+                       List<TargetId> createdGroups,
                        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<GroupVm> groupSnapshots)
             implements PortEvent {
         public ImportRound(long generation, ImportPlanVm plan, int newFiles, int newGroups,
                            boolean madeListNonEmpty,
-                           List<com.mhtextractor.model.GroupItem<com.mhtextractor.model.PreviewItem>> createdGroups) {
+                           List<TargetId> createdGroups) {
             this(generation, plan, newFiles, newGroups, madeListNonEmpty, createdGroups, List.of());
         }
         public ImportRound {

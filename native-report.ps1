@@ -68,6 +68,7 @@ $jarPath = Join-Path $env:NB_REPO ("target\mhtExtractor-{0}.jar" -f $env:NB_APKV
 if ($env:NB_TARGET -eq 'headless' -and $env:NB_HEADLESS_INPUT) {
     $jarPath = Join-Path $env:NB_HEADLESS_INPUT 'backend.jar'
 }
+if ($env:NB_TARGET -eq 'javafx' -and $env:NB_GUI_INPUT) { $jarPath = $env:NB_GUI_INPUT }
 if (Test-Path -LiteralPath $jarPath) {
     $ji = Get-Item -LiteralPath $jarPath
     $jarInfo = [pscustomobject][ordered]@{
@@ -76,6 +77,7 @@ if (Test-Path -LiteralPath $jarPath) {
         sha256 = (Get-FileHash -LiteralPath $jarPath -Algorithm SHA256).Hash.ToLower()
     }
     if ($env:NB_TARGET -eq 'headless') { $jarInfo.path = $jarPath }
+    if ($env:NB_TARGET -eq 'javafx' -and $env:NB_GUI_INPUT) { $jarInfo.path = $jarPath }
 }
 
 $gitCommit = ''
@@ -100,6 +102,7 @@ $report = [pscustomobject][ordered]@{
         outputDir     = $env:NB_DIST
     }
     input       = $jarInfo
+    frontendMetadata = if ($env:NB_FRONTEND_METADATA) { @(Get-ArtifactList $env:NB_FRONTEND_METADATA) } else { @() }
     # 必须显式包成数组：PS 5.1 的 ConvertTo-Json 会把**空集合**渲染成 {}（对象），
     # 而不是 []（数组）—— 会让下游解析器读到与 schema 不符的类型。
     steps       = @($steps)

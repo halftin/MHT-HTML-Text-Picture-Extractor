@@ -1,5 +1,7 @@
 package com.mhtextractor.engine;
 
+import com.mhtextractor.model.ItemStatus;
+
 import com.mhtextractor.model.PreviewImageData;
 
 import com.mhtextractor.engine.PreviewService;
@@ -143,12 +145,12 @@ public final class WorkspaceActivityService {
                     var parsed = parser.parse(item.path, input.params(), input.textMode());
                     boolean readable = parsed.kind() != SourceParseService.Kind.UNPARSEABLE;
                     result = new PreparseResult(item.path,
-                            !readable ? PreviewItem.Status.FAILED : parsed.kind() == SourceParseService.Kind.EMPTY
-                                    ? PreviewItem.Status.EMPTY : PreviewItem.Status.READY,
+                            !readable ? ItemStatus.FAILED : parsed.kind() == SourceParseService.Kind.EMPTY
+                                    ? ItemStatus.EMPTY : ItemStatus.READY,
                             readable ? null : "preview.unparseable", "", parsed.text(),
                             readable && input.textMode(), parsed.title(), readable && parsed.titleAssigned());
                 } catch (Exception e) {
-                    result = new PreparseResult(item.path, PreviewItem.Status.FAILED,
+                    result = new PreparseResult(item.path, ItemStatus.FAILED,
                             "preview.parseFailed", e.getMessage(), null, false, null, false);
                 }
                 PreparseResult finished = result;
@@ -169,7 +171,7 @@ public final class WorkspaceActivityService {
     public synchronized void refreshPreparseProgress() {
         List<PreviewItem> visible = context.items().stream()
                 .filter(i -> !i.removed && context.effectiveParams(i) != null).toList();
-        int done = (int) visible.stream().filter(i -> i.status != PreviewItem.Status.WAITING).count();
+        int done = (int) visible.stream().filter(i -> i.status != ItemStatus.WAITING).count();
         emit(new PortEvent.PreparseProgress(generation, done, visible.size()));
     }
 
@@ -305,7 +307,7 @@ public final class WorkspaceActivityService {
         item.cachedThumbs = thumbs;
         item.cachedMeta = result.meta();
         item.cachedImages = null;
-        item.status = result.images().isEmpty() ? PreviewItem.Status.EMPTY : PreviewItem.Status.READY;
+        item.status = result.images().isEmpty() ? ItemStatus.EMPTY : ItemStatus.READY;
         finishPreview(token, item.path);
         previewNotices(token, item.path, result.meta().warnings());
     }

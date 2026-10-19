@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { under, utf8 } from './path-assertions.mjs';
 
-const roots = [(process.env.LOCALAPPDATA || '') + '/Temp', 'C:/Windows/Temp'];
+const roots = [(process.env.LOCALAPPDATA || '').replaceAll('\\', '/') + '/Temp', 'C:/Windows/Temp'];
 const projectRoot = roots[0];
 
 export function snapshot() {

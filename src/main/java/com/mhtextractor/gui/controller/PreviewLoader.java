@@ -1,5 +1,7 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.model.ItemStatus;
+
 import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.gui.component.GuiNotifications;
 import com.mhtextractor.uicore.PreviewRow;
@@ -92,7 +94,7 @@ public final class PreviewLoader {
             PreviewRow item = (PreviewRow) host.currentSelection();
             if(item.cachedThumbs==null)item.cachedThumbs=java.util.List.of();
             item.retainImageData();
-            if (item.status == PreviewRow.Status.EMPTY) host.refreshList();
+            if (item.status == ItemStatus.EMPTY) host.refreshList();
             host.updateContentArea(item);
         } else if (event instanceof PortEvent.PreviewLoadFailed failed) {
             if (!current(failed.generation(), failed.path())) return;

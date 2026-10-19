@@ -250,15 +250,18 @@ public final class IpcCodec {
             case "preparseFinished" -> {
                 JsonNode r = files.consumeJson(n.path("result"));
                 yield new PortEvent.PreparseFinished(number(n,"generation"),new PreparseResult(text(r,"path"),
-                        PreviewItem.Status.valueOf(text(r,"status")),nullable(r,"errorKey"),nullable(r,"errorDetail"),
+                        ItemStatus.valueOf(text(r,"status")),nullable(r,"errorKey"),nullable(r,"errorDetail"),
                         nullable(r,"text"),bool(r,"textAssigned"),nullable(r,"title"),bool(r,"titleAssigned")));
             }
             case "paramsChanged" -> new PortEvent.ParamStateChanged(PortEvent.ParamChangeKind.valueOf(text(n,"kind")),
                     bool(n,"imageMode"),strings(files.consumeJson(n.path("affectedPaths"))));
             case "importStateChanged" -> new PortEvent.ImportStateChanged(number(n,"generation"),bool(n,"importing"));
-            case "importRound" -> new PortEvent.ImportRound(number(n,"generation"),plan(files.consumeJson(n.path("plan"))),
-                    integer(n,"newFiles"),integer(n,"newGroups"),bool(n,"madeListNonEmpty"),List.of(),
-                    list(files.consumeJson(n.path("createdGroups")),this::group));
+            case "importRound" -> {
+                var groups = list(files.consumeJson(n.path("createdGroups")),this::group);
+                yield new PortEvent.ImportRound(number(n,"generation"),plan(files.consumeJson(n.path("plan"))),
+                        integer(n,"newFiles"),integer(n,"newGroups"),bool(n,"madeListNonEmpty"),
+                        groups.stream().map(group -> TargetId.ofGroup(group.no())).toList(),groups);
+            }
             case "importFinished" -> new PortEvent.ImportFinished(number(n,"generation"),strings(files.consumeJson(n.path("accumulatedPaths"))));
             case "previewLoadStateChanged" -> new PortEvent.PreviewLoadStateChanged(number(n,"generation"),text(n,"path"),bool(n,"active"));
             case "previewConfirmationRequired" -> new PortEvent.PreviewConfirmationRequired(text(n,"path"),text(n,"name"),number(n,"sizeMiB"));

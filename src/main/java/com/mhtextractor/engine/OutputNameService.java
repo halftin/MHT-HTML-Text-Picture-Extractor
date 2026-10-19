@@ -1,5 +1,7 @@
 package com.mhtextractor.engine;
 
+import com.mhtextractor.model.ItemStatus;
+
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.OutputName;
 import com.mhtextractor.model.PreviewItem;
@@ -52,7 +54,7 @@ public final class OutputNameService {
     public static Name imageOutputName(PreviewItem item, AppConfig params, PreviewItem firstVisible, String inputFolder) {
         if (params.isSingleOutputMode()) {
             if (params != null && params.isEnableNameExtraction() && firstVisible != null) {
-                if (firstVisible.status == PreviewItem.Status.WAITING) {
+                if (firstVisible.status == ItemStatus.WAITING) {
                     return new Name(new OutputName(null, null), true);
                 }
                 if (firstVisible.cachedTitle != null) {
@@ -62,7 +64,7 @@ public final class OutputNameService {
             return new Name(new OutputName(ImageBatchProcessor.determineDefaultFolderName(inputFolder), null), false);
         }
         if (params != null && params.isEnableNameExtraction()) {
-            if (item.status == PreviewItem.Status.WAITING) {
+            if (item.status == ItemStatus.WAITING) {
                 return new Name(new OutputName(null, null), true);
             }
             if (item.cachedTitle != null) {

@@ -1,5 +1,7 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.model.ItemStatus;
+
 import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.uicore.WorkspaceView;
 import com.mhtextractor.model.AppConfig;
@@ -345,7 +347,7 @@ public final class ParamDomainController {
             host.startPreParseFor(affected);
         }
         List<PreviewRow> interrupted = host.allVisibleItems().stream()
-                .filter(i -> i.status == PreviewRow.Status.WAITING && !affected.contains(i)).toList();
+                .filter(i -> i.status == ItemStatus.WAITING && !affected.contains(i)).toList();
         if (!interrupted.isEmpty()) {
             host.startPreParseFor(interrupted);
         }

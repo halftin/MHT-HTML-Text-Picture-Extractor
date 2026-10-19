@@ -1,8 +1,6 @@
 package com.mhtextractor.uicore;
 
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.model.PreviewItem;
-import com.mhtextractor.model.ParamScope;
 
 /**
  * 「参数目标信息栏」的<b>纯文案层</b>（R1.4）：把「目标 + 条目显示名 + 组内是否混合」拼成一行文本。
@@ -22,20 +20,13 @@ import com.mhtextractor.model.ParamScope;
  * （{@code 组{name}} vs {@code Group {name}}），Java 侧一个标点都不写。</p>
  *
  * <h2>条目显示名从哪来</h2>
- * <p>{@link ParamScope} 刻意<b>不感知</b> {@code model.PreviewItem}（它用泛型 {@code T} 接调用方条目类型），
- * 所以"文件名"不能在 {@code util} 层解析。这里采用两段式：调用方可以传现成的显示名
- * （{@code itemDisplayName}，优先）；没传时由本层按 {@code instanceof PreviewItem} 解析 ——
- * {@code gui} 层依赖 {@code model} 是允许的方向（{@code gui → app → 业务包/model}）。
- * 这样 {@code ParamFormPane} 只需转发 target，不必自己知道条目类型。</p>
+ * <p>调用方可以传现成的显示名（{@code itemDisplayName}，优先）；没传时读取
+ * {@link ParamTargetView#getName()}，空白名称回退到条目 ID 的路径末段。
+ * 本层只认识前端投影接口，不读取引擎领域对象。</p>
  */
 public final class ParamTargetText {
     public static String forViewTarget(com.mhtextractor.uicore.ParamScope.Target target, String name, boolean mixed) {
-        String base=switch(target){
-            case com.mhtextractor.uicore.ParamScope.GroupTarget g -> I18n.get("paramTarget.group","name",paren(g.group().getName()));
-            case com.mhtextractor.uicore.ParamScope.ItemTarget<?> i -> I18n.get("paramTarget.item","name",paren(name!=null?name:i.item() instanceof ParamTargetView view?view.getName():""));
-            case null, default -> I18n.get("paramTarget.global");
-        };
-        return mixed?base+" "+I18n.get("paramTarget.groupMixed"):base;
+        return forTarget(target, name, mixed);
     }
 
     private ParamTargetText() {
@@ -91,13 +82,13 @@ public final class ParamTargetText {
         if (provided != null && !provided.isBlank()) {
             return provided;
         }
-        if (item instanceof PreviewItem p) {
-            if (p.name != null && !p.name.isBlank()) {
-                return p.name;
+        if (item instanceof ParamTargetView view) {
+            if (view.getName() != null && !view.getName().isBlank()) {
+                return view.getName();
             }
-            return baseName(p.path);
+            return baseName(view.id().path());
         }
-        return item == null ? "" : String.valueOf(item);
+        return "";
     }
 
     /** 取路径末段（纯字符串切分：不用 {@code Path.of} —— 非法路径字符会抛 {@code InvalidPathException}）。 */

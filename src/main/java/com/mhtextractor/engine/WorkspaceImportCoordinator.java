@@ -180,7 +180,7 @@ public final class WorkspaceImportCoordinator {
 
         // 每轮一次刷新 / 新建组挂接 / 首行选中经事件交付（RISK-8，不是每批一次）
         emit(new PortEvent.ImportRound(generation, toVm(plan), newFiles, createdGroups.size(),
-                madeListNonEmpty, createdGroups));
+                madeListNonEmpty, createdGroups.stream().map(group -> com.mhtextractor.uiport.TargetId.ofGroup(group.getGroupNo())).toList()));
     }
 
     /**

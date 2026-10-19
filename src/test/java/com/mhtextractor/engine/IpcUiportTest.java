@@ -84,7 +84,7 @@ class IpcUiportTest {
     }
     private static Object comparable(PortEvent event) {
         if (event instanceof PortEvent.WorkspaceChanged e) return new PortEvent.WorkspaceChanged(e.kind());
-        if (event instanceof PortEvent.ImportRound e) return List.of(e.generation(),e.plan(),e.newFiles(),e.newGroups(),e.madeListNonEmpty());
+        if (event instanceof PortEvent.ImportRound e) return List.of(e.generation(),e.plan(),e.newFiles(),e.newGroups(),e.madeListNonEmpty(),e.createdGroups());
         return event;
     }
 
@@ -434,7 +434,7 @@ class IpcUiportTest {
             var local = new InProcessUiport(new WorkspaceModel(),new Cards());
             local.commands().applyImportPlan(plan(root,paths,true));
             var round = events.stream().filter(PortEvent.ImportRound.class::isInstance).map(PortEvent.ImportRound.class::cast).findFirst().orElseThrow();
-            assertTrue(round.createdGroups().isEmpty()); assertEquals(ipc.queries().workspace().groups(),round.groupSnapshots());
+            assertEquals(round.groupSnapshots().stream().map(group -> com.mhtextractor.uiport.TargetId.ofGroup(group.no())).toList(), round.createdGroups()); assertEquals(ipc.queries().workspace().groups(),round.groupSnapshots());
             assertEquals(local.queries().workspace(),ipc.queries().workspace());
             assertEquals(local.queries().workspace().groups(),round.groupSnapshots());
             assertEquals(paths,round.groupSnapshots().getFirst().members().stream().map(ItemVm::id).toList());

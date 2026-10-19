@@ -2,14 +2,16 @@ package com.mhtextractor.gui.component;
 
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.i18n.I18n;
-import com.mhtextractor.model.GroupItem;
-import com.mhtextractor.model.PreviewItem;
+import com.mhtextractor.uicore.GroupRow;
+import com.mhtextractor.uiport.GroupVm;
+import com.mhtextractor.uiport.ItemVm;
+import com.mhtextractor.uiport.UpdateKind;
+import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.uicore.ParamTargetText;
-import com.mhtextractor.model.ParamScope;
+import com.mhtextractor.uicore.ParamScope;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 
@@ -32,8 +34,8 @@ class ParamTargetTextTest {
         I18n.setLocale(null);
     }
 
-    private static PreviewItem item(String path, String name) {
-        return new PreviewItem(path, name, LocalDateTime.now(), "C:\\src");
+    private static PreviewRow item(String path, String name) {
+        return new PreviewRow(new ItemVm(path, name, false, false, null, UpdateKind.NONE), ignored -> {});
     }
 
     // ==================== 三类目标 ====================
@@ -49,7 +51,7 @@ class ParamTargetTextTest {
     @Test
     void groupTargetShowsGroupNameInsideExistingParenKeys() {
         I18n.setLocale(new Locale("zh", "CN"));
-        GroupItem<PreviewItem> group = new GroupItem<>(1, "组1");
+        GroupRow<PreviewRow> group = new GroupRow<>(new GroupVm(1, "组1", true, false, List.of()));
         String text = ParamTargetText.forTarget(new ParamScope.GroupTarget(group), null, false);
 
         assertEquals("组（组1）", text);
@@ -65,22 +67,22 @@ class ParamTargetTextTest {
     @Test
     void itemTargetUsesProvidedDisplayNameFirst() {
         I18n.setLocale(new Locale("zh", "CN"));
-        PreviewItem it = item("C:\\src\\real.mht", "real.mht");
+        PreviewRow it = item("C:\\src\\real.mht", "real.mht");
         String text = ParamTargetText.forTarget(
                 new ParamScope.ItemTarget<>(it, null, null), "覆盖名.mht", false);
         assertEquals("条目（覆盖名.mht）", text, "调用方给了显示名就用它");
     }
 
     @Test
-    void itemTargetResolvesPreviewItemNameThenPathBaseName() {
+    void itemTargetResolvesPreviewRowNameThenPathBaseName() {
         I18n.setLocale(new Locale("zh", "CN"));
 
-        PreviewItem named = item("C:\\src\\a.mht", "a.mht");
+        PreviewRow named = item("C:\\src\\a.mht", "a.mht");
         assertEquals("条目（a.mht）",
                 ParamTargetText.forTarget(new ParamScope.ItemTarget<>(named, null, null), null, false));
 
         // name 为空 → 回退到 path 末段（纯字符串切分，不碰 Path.of，避免非法路径字符抛异常）
-        PreviewItem blankName = item("C:\\src\\sub\\b.mht", "   ");
+        PreviewRow blankName = item("C:\\src\\sub\\b.mht", "   ");
         assertEquals("条目（b.mht）",
                 ParamTargetText.forTarget(new ParamScope.ItemTarget<>(blankName, null, null), null, false));
     }
@@ -90,7 +92,7 @@ class ParamTargetTextTest {
     @Test
     void groupMixedHintIsAppendedOnlyWhenMixed() {
         I18n.setLocale(new Locale("zh", "CN"));
-        GroupItem<PreviewItem> group = new GroupItem<>(1, "组1");
+        GroupRow<PreviewRow> group = new GroupRow<>(new GroupVm(1, "组1", true, false, List.of()));
         ParamScope.Target target = new ParamScope.GroupTarget(group);
 
         String clean = ParamTargetText.forTarget(target, null, false);

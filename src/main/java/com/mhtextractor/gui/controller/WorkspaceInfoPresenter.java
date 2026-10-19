@@ -1,5 +1,7 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.model.ItemStatus;
+
 import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.uicore.WorkspaceView;
@@ -103,7 +105,7 @@ public final class WorkspaceInfoPresenter {
                 && params.getTitleStartMarker() != null && !params.getTitleStartMarker().isEmpty();
         // 需求（提取标题可编辑）：showTitle 且条目已就绪（READY）时，把只读标题行换成可编辑文本框；
         // 解析中 / 无标题 / 非条目等其余情况保持原只读展示。
-        PreviewRow readyItem = item instanceof PreviewRow pi && pi.status == PreviewRow.Status.READY
+        PreviewRow readyItem = item instanceof PreviewRow pi && pi.status == ItemStatus.READY
                 ? pi : null;
         boolean editableTitle = showTitle && readyItem != null;
         host.titleEditBox().setVisible(editableTitle);
@@ -218,7 +220,7 @@ public final class WorkspaceInfoPresenter {
                 return;
             }
         }
-        if (sel instanceof PreviewRow it && it.status == PreviewRow.Status.FAILED) {
+        if (sel instanceof PreviewRow it && it.status == ItemStatus.FAILED) {
             host.extractResultBanner().setText(Texts.get("extract.parseFailed") + WorkspaceInfoPresenter.errorText(it));
             host.extractResultBanner().setVisible(true);
             host.extractResultBanner().setManaged(true);

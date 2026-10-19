@@ -2503,3 +2503,27 @@ dynamic 配方另要求 5 个 JavaFX DLL 在根）。后端的 metadata/reports 
 native 卡片冒烟产物目录由 `NATIVE_SMOKE_DIR` 覆盖，默认 `<盘>:\TEST\mht\native-card-smoke`。
 本机验证时显式设置 `JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=<盘>:\TEST\temp`，并将 `TEMP` / `TMP`、
 `OUTPUT_DIR`、`LOG_DIR` 和 `NATIVE_SMOKE_DIR` 指向 H 盘。
+
+### P-F10 分包后的构建核对（2026-10-19）
+
+`app` 包取消；启动/握手为 `com.mhtextractor.uiclient.BackendLauncher` / `BackendIdentity`，
+GUI 运行时为 `uiclient.UiportRuntime` / `IpcUiport` / `BackendSession` / `BackendExecutable`。
+后端入口仍是 `com.mhtextractor.backend.BackendCli`，命令与协议 2 不变；
+`tools/native/prepare-headless.ps1` 的输入枚举包含 `uiclient` 和 `engine`，不得继续枚举 app。
+进程内适配器只在 engine，GUI 不再有 inprocess 分支。七份 GUI 元数据中无本次旧 FQN 注册，
+保持逐字节不变；headless 仅删除失效 FormatData_en_US 注册，须重新审计及构建。
+构建后使用 `.claude-work/verify/pf6-image-scan.ps1 -Exe <GUI exe>` 核对原始字节业务标记为零；
+再用同批随包后端做握手与 native GUI 导入/预览/提取冒烟。工作与临时目录均落 H 盘。
+
+### P-F10b GUI 构建输入的元数据分组（2026-10-19）
+
+GUI 源码去掉领域对象引用后，共享元数据中的无条件业务注册仍会保留业务类；缓存 DTO 的
+构造器参数签名在条件注册副本中也仍有镜像标记。因此 GUI 构建由
+`tools/native/prepare-frontend-metadata.ps1` 生成独立输入 jar，只替换其中的
+`reflect-config.json` / `proxy-config.json` / `reachability-metadata.json` 三个条目。
+前端输入排除业务包和 jsoup 的注册；完整原条目按原位置保存在日志目录的 `business-*.json` 中。
+逐项检查前端与业务两部分合并后和原始注册完全一致，且 jar 其余条目内容哈希不变。
+七份源元数据、共享 fat jar、headless 构建输入不修改；不新增反射成员，也不移除 jar 中的业务 class。
+`preservation.json` 记录注册分组与源文件哈希，`input-jar.json` 记录输入/派生 jar 哈希，
+构建报告的 `input` 指向真正用于 GUI native-image 的派生 jar，`frontendMetadata` 记录旁证哈希。
+默认目录随 `LOG_DIR`；本机继续显式设置 H 盘目录。`-VerifyOnly` 可独立复查分组与 jar 保全。

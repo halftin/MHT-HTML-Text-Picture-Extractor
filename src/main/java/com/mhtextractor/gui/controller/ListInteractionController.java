@@ -1,5 +1,7 @@
 package com.mhtextractor.gui.controller;
 
+import com.mhtextractor.model.ItemStatus;
+
 import com.mhtextractor.uicore.SelectionRules;
 import com.mhtextractor.uicore.WorkspaceView;
 import com.mhtextractor.model.AppConfig;
@@ -416,7 +418,7 @@ public final class ListInteractionController implements MainViewActions {
         }
         AppConfig eff = host.effectiveForObject(it);
         boolean numbering = host.isTextMode() && eff != null && eff.isAddChapterNumber();
-        if (numbering && it.status == PreviewRow.Status.READY && it.chapterEnabled) {
+        if (numbering && it.status == ItemStatus.READY && it.chapterEnabled) {
             it.badge = String.valueOf(n);
             return n + 1;
         }

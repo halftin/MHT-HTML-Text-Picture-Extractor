@@ -15,6 +15,9 @@ public final class FrontendClosureScan {
     private static final String ROOT = "com/mhtextractor/";
     private static final List<String> FORBIDDEN = List.of(
             "app", "engine", "backend", "core", "extractor", "processor", "output", "cache", "util", "config");
+    // P-F10b: model remains allowed, but these engine identities reopen its business closure.
+    // Zero existing references; FROZEN_MAX stays 0 (only tightening the ratchet).
+    private static final List<String> DOMAIN_TYPES = List.of("model/PreviewItem", "model/GroupItem", "model/ParamScope");
     public static final String REPAIR = "请先执行 mvnw.cmd -q -DskipTests compile 后重跑"
             + "（本闸门依赖 target/classes 字节码，不依赖源码）";
 
@@ -41,7 +44,7 @@ public final class FrontendClosureScan {
         SortedSet<String> violations = new TreeSet<>();
         SortedSet<String> pending = new TreeSet<>();
         int scanned = 0;
-        for (String frontend : List.of("gui", "uicore")) {
+        for (String frontend : List.of("gui", "uicore", "uiport", "uiclient")) {
             Path directory = mainClasses.resolve(ROOT + frontend);
             // Both are established production packages: a missing package must not silently pass.
             if (!Files.isDirectory(directory)) {
@@ -65,6 +68,9 @@ public final class FrontendClosureScan {
                 // Same conservative byte-to-Latin1 technique as UiportSignature: literals count too.
                 String bytes = new String(Files.readAllBytes(file), StandardCharsets.ISO_8859_1);
                 for (String forbidden : FORBIDDEN) collect(bytes, ROOT + forbidden + "/", owner, violations);
+                for (String type : DOMAIN_TYPES) {
+                    if (bytes.contains(ROOT + type)) violations.add(owner + "\t" + type.replace('/', '.'));
+                }
                 collect(bytes, ROOT + "platform/", owner, pending);
             }
         }
