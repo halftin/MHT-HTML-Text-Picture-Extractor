@@ -11,6 +11,168 @@ import { exactText, golden, under, utf8 } from './path-assertions.mjs';
 import { isEventSummaryValue } from './client-guard.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
+// Shared expected hello identity: keep the protocol expectation in this table only.
+const expectedHello = { protocolVersion: 2 };
+export function expectedIdentity(identityFile) {
+  const identityText = utf8(identityFile);
+  const properties = Object.fromEntries(identityText.split(/\r?\n/).filter(line => line.includes('='))
+    .map(line => { const i = line.indexOf('='); return [line.slice(0, i).trim(), line.slice(i + 1).trim()]; }));
+  assert.ok(properties.version && properties.buildId && !identityText.includes('${'), 'Filtered build identity required');
+  return { ...expectedHello, version: properties.version, buildId: properties.buildId };
+}
+export function encodeRequest(id, method, params) {
+  assert.ok(typeof id === 'string' && id.length && typeof method === 'string' && method.length);
+  assert.ok(params && typeof params === 'object' && !Array.isArray(params));
+  return JSON.stringify({ v: 1, type: 'request', id, method, params }) + '\n';
+}
+export function decodeFrame(line) {
+  const frame = JSON.parse(line);
+  assert.equal(frame.v, 1);
+  assert.ok(['event', 'response', 'error'].includes(frame.type));
+  if (frame.type === 'event') assert.equal(typeof frame.event, 'string');
+  else assert.ok(typeof frame.id === 'string' || (frame.type === 'error' && frame.id === null));
+  if (frame.type === 'error') assert.ok(['BAD_JSON', 'INVALID_REQUEST', 'INVALID_PARAMS',
+    'UNKNOWN_METHOD', 'INTERNAL_ERROR', 'HANDSHAKE_FAILED', 'CONFIG_IO_ERROR'].includes(frame.error?.code));
+  return frame;
+}
+export function readFileRef(ref, temp) {
+  assert.deepEqual(Object.keys(ref).sort(), ['bytes', 'mediaType', 'path']);
+  assert.ok(Number.isSafeInteger(ref.bytes) && ref.bytes >= 0);
+  assert.equal(typeof ref.mediaType, 'string');
+  under(ref.path, temp);
+  under(fs.realpathSync(ref.path), fs.realpathSync(temp));
+  const bytes = fs.readFileSync(ref.path);
+  assert.equal(bytes.length, ref.bytes);
+  return bytes;
+}
+export function createIpcClient({ executable, command, work, temp, frameLimit = 10000, observeFrame }) {
+const transcript = path.join(work, 'stdout.jsonl');
+const errFile = path.join(work, 'stderr.txt');
+fs.writeFileSync(transcript, '');
+fs.writeFileSync(errFile, '');
+const requestsFile = path.join(work, 'stdin.jsonl');
+fs.writeFileSync(requestsFile, '');
+const child = spawn(executable, command, { cwd: work, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+const closed = once(child, 'close');
+const frames = [];
+const eventCounts = {};
+const pending = new Map();
+const waiters = new Set();
+let nextId = 0;
+let fatal;
+let stderrBytes = 0;
+let maxFrameBytes = 0;
+let peakRequestMs = 0;
+let peakPageMs = 0;
+let resolveReady;
+let rejectReady;
+const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
+function fail(error) {
+  fatal ??= error;
+  rejectReady(error);
+  for (const entry of pending.values()) entry.reject(error);
+  pending.clear();
+  for (const waiter of waiters) waiter.reject(error);
+  waiters.clear();
+  child.kill();
+}
+child.on('error', fail);
+child.on('close', (code, signal) => {
+  if (pending.size || waiters.size || !frames.some(frame => frame.event === 'ready')) fail(new Error(
+    `EOF before workflow completed: exit=${code} signal=${signal}\n${fs.readFileSync(errFile, 'utf8')}`));
+});
+child.stderr.on('data', bytes => {
+  stderrBytes += bytes.length;
+  fs.appendFileSync(errFile, bytes); // stderr is never parsed as protocol.
+});
+// Preserve actual wire bytes, including deliberately invalid encodings in control runs.
+child.stdout.on('data', bytes => fs.appendFileSync(transcript, bytes));
+const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
+lines.on('line', line => {
+  try {
+    maxFrameBytes = Math.max(maxFrameBytes, Buffer.byteLength(line));
+    const frame = decodeFrame(line);
+    // IPC.md:342/496/508 permits inline workspacePage results of up to 256 expanded ItemVms
+    // plus snapshot references. Responses get 256 KiB; event summaries/references keep 64 KiB.
+    const maxBytes = (frame.type === 'response' ? 256 : 64) * 1024;
+    assert.ok(Buffer.byteLength(line) <= maxBytes, `${frame.type} frames must remain <=${maxBytes / 1024} KiB`);
+    observeFrame?.(frame);
+    frames.push(frame);
+    for (const waiter of [...waiters]) if (waiter.predicate(frame)) { waiters.delete(waiter); waiter.resolve(frame); }
+    assert.ok(frames.length <= frameLimit, `Total protocol frames must remain <=${frameLimit}`);
+    if (frame.type === 'event') {
+      eventCounts[frame.event] = (eventCounts[frame.event] ?? 0) + 1;
+      assert.ok(!frame.data?.items && !frame.data?.topLevelItems && !frame.data?.paths && !frame.data?.files,
+        'Events must not push full item/path/result arrays');
+      if (frame.event !== 'ready') assert.ok(Object.entries(frame.data ?? {}).every(([key, value]) =>
+        isEventSummaryValue(value) || (frame.event === 'previewThumbnail' && key === 'dimensions'
+          && value && Object.keys(value).sort().join(',') === 'height,width'
+          && Number.isSafeInteger(value.width) && Number.isSafeInteger(value.height))),
+        'Activity events must contain only scalar summaries, exact file references, or flat string maps');
+      if (frame.event === 'ready') resolveReady(frame);
+    } else {
+      const entry = pending.get(frame.id);
+      assert.ok(entry, `Unexpected response id: ${frame.id}`);
+      pending.delete(frame.id);
+      entry.resolve(frame);
+    }
+  } catch (error) { fail(error); }
+});
+async function request(method, params, errorCode) {
+  const id = String(++nextId);
+  const started = performance.now();
+  const promise = new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+  const line = encodeRequest(id, method, params);
+  fs.appendFileSync(requestsFile, line);
+  child.stdin.write(line);
+  const frame = await promise;
+  const elapsed = performance.now() - started;
+  peakRequestMs = Math.max(peakRequestMs, elapsed);
+  if (method === 'workspacePage') peakPageMs = Math.max(peakPageMs, elapsed);
+  if (errorCode) {
+    assert.equal(frame.type, 'error');
+    assert.equal(frame.error.code, errorCode);
+  } else assert.equal(frame.type, 'response', JSON.stringify(frame));
+  return frame.result;
+}
+function readRef(ref) {
+  return readFileRef({ path: ref.path, bytes: ref.bytes, mediaType: ref.mediaType }, temp);
+}
+const timeout = setTimeout(() => fail(new Error('Workflow exceeded 180 seconds')), 180000);
+
+  return { child, closed, frames, eventCounts, ready, request, readRef,
+    waitFor(predicate, after = 0) {
+      const found = frames.slice(after).find(predicate);
+      if (found) return Promise.resolve(found);
+      if (fatal) return Promise.reject(fatal);
+      return new Promise((resolve, reject) => waiters.add({ predicate, resolve, reject }));
+    },
+    async handshake(identityFile = path.join(repo, 'target/classes/backend-build.properties')) {
+      await ready;
+      const expected = expectedIdentity(identityFile);
+      const welcome = await request('hello', expected);
+      assert.equal(welcome.kind, 'welcome');
+      for (const [key, value] of Object.entries(expected)) assert.equal(welcome[key], value, 'Handshake ' + key);
+      return welcome;
+    },
+    async finish() {
+      child.stdin.end();
+      const [code, signal] = await closed;
+      if (fatal) throw fatal;
+      assert.equal(signal, null); assert.equal(code, 0);
+    },
+    async dispose() {
+      clearTimeout(timeout); lines.close();
+      if (child.exitCode === null) { child.kill(); await closed; }
+    },
+    get fatal() { return fatal; }, get stderrBytes() { return stderrBytes; },
+    get maxFrameBytes() { return maxFrameBytes; }, get peakRequestMs() { return peakRequestMs; },
+    get peakPageMs() { return peakPageMs; }, transcript, errFile
+  };
+}
+
+async function main() {
 const argv = process.argv.slice(2);
 const scenarioIndex = argv.indexOf('--scenario-file');
 const scenario = scenarioIndex < 0 ? null : JSON.parse(utf8(argv[scenarioIndex + 1]));
@@ -61,97 +223,8 @@ const command = [ ...(scenario?.executable ? [] : ['--limit-modules', agentDir ?
   '--serve', '--locale', scenario?.locale ?? 'en' ];
 fs.writeFileSync(path.join(work, 'command.json'), JSON.stringify({ executable, command, cwd: work }, null, 2));
 console.log('COMMAND ' + JSON.stringify({ executable, command, cwd: work }));
-const transcript = path.join(work, 'stdout.jsonl');
-const errFile = path.join(work, 'stderr.txt');
-fs.writeFileSync(transcript, '');
-fs.writeFileSync(errFile, '');
-const requestsFile = path.join(work, 'stdin.jsonl');
-fs.writeFileSync(requestsFile, '');
-const child = spawn(executable, command, { cwd: work, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
-const closed = once(child, 'close');
-const frames = [];
-const eventCounts = {};
-const pending = new Map();
-let nextId = 0;
-let fatal;
-let stderrBytes = 0;
-let maxFrameBytes = 0;
-let peakRequestMs = 0;
-let peakPageMs = 0;
-let resolveReady;
-let rejectReady;
-const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
-function fail(error) {
-  fatal ??= error;
-  rejectReady(error);
-  for (const entry of pending.values()) entry.reject(error);
-  pending.clear();
-  child.kill();
-}
-child.on('error', fail);
-child.on('close', (code, signal) => {
-  if (pending.size || !frames.some(frame => frame.event === 'ready')) fail(new Error(
-    `EOF before workflow completed: exit=${code} signal=${signal}\n${fs.readFileSync(errFile, 'utf8')}`));
-});
-child.stderr.on('data', bytes => {
-  stderrBytes += bytes.length;
-  fs.appendFileSync(errFile, bytes); // stderr is never parsed as protocol.
-});
-// Preserve actual wire bytes, including deliberately invalid encodings in control runs.
-child.stdout.on('data', bytes => fs.appendFileSync(transcript, bytes));
-const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
-lines.on('line', line => {
-  try {
-    maxFrameBytes = Math.max(maxFrameBytes, Buffer.byteLength(line));
-    const frame = JSON.parse(line);
-    assert.equal(frame.v, 1);
-    assert.ok(['event', 'response', 'error'].includes(frame.type));
-    // IPC.md:342/496/508 permits inline workspacePage results of up to 256 expanded ItemVms
-    // plus snapshot references. Responses get 256 KiB; event summaries/references keep 64 KiB.
-    const maxBytes = (frame.type === 'response' ? 256 : 64) * 1024;
-    assert.ok(Buffer.byteLength(line) <= maxBytes, `${frame.type} frames must remain <=${maxBytes / 1024} KiB`);
-    frames.push(frame);
-    assert.ok(frames.length <= 256, 'Total protocol frames must remain <=256 for the 10k workflow');
-    if (frame.type === 'event') {
-      eventCounts[frame.event] = (eventCounts[frame.event] ?? 0) + 1;
-      assert.ok(!frame.data?.items && !frame.data?.topLevelItems && !frame.data?.paths && !frame.data?.files,
-        'Events must not push full item/path/result arrays');
-      if (frame.event !== 'ready') assert.ok(Object.values(frame.data ?? {}).every(isEventSummaryValue),
-        'Activity events must contain only scalar summaries, exact file references, or flat string maps');
-      if (frame.event === 'ready') resolveReady(frame);
-    } else {
-      const entry = pending.get(frame.id);
-      assert.ok(entry, `Unexpected response id: ${frame.id}`);
-      pending.delete(frame.id);
-      entry.resolve(frame);
-    }
-  } catch (error) { fail(error); }
-});
-async function request(method, params, errorCode) {
-  const id = String(++nextId);
-  const started = performance.now();
-  const promise = new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
-  const line = JSON.stringify({ v: 1, type: 'request', id, method, params }) + '\n';
-  fs.appendFileSync(requestsFile, line);
-  child.stdin.write(line);
-  const frame = await promise;
-  const elapsed = performance.now() - started;
-  peakRequestMs = Math.max(peakRequestMs, elapsed);
-  if (method === 'workspacePage') peakPageMs = Math.max(peakPageMs, elapsed);
-  if (errorCode) {
-    assert.equal(frame.type, 'error');
-    assert.equal(frame.error.code, errorCode);
-  } else assert.equal(frame.type, 'response', JSON.stringify(frame));
-  return frame.result;
-}
-function readRef(ref) {
-  under(ref.path, temp);
-  under(fs.realpathSync(ref.path), fs.realpathSync(temp));
-  const bytes = fs.readFileSync(ref.path);
-  assert.equal(bytes.length, ref.bytes);
-  return bytes;
-}
-const timeout = setTimeout(() => fail(new Error('Workflow exceeded 180 seconds')), 180000);
+const client = createIpcClient({ executable, command, work, temp, frameLimit: 256 });
+const { child, closed, frames, eventCounts, ready, request, readRef, transcript, errFile } = client;
 const started = performance.now();
 let cleanupRoot;
 try {
@@ -160,14 +233,7 @@ try {
   assert.ok(greeting.data.methods.includes('hello'), 'Backend must support startup handshake');
   // Expected identity comes from the local UI/build, never from the untrusted backend greeting.
   const identityFile = argv.indexOf('--identity-file');
-  const identityText = utf8(identityFile < 0 ? path.join(repo, 'target/classes/backend-build.properties') : argv[identityFile + 1]);
-  const identityProperties = Object.fromEntries(identityText.split(/\r?\n/).filter(line => line.includes('='))
-    .map(line => { const i = line.indexOf('='); return [line.slice(0, i).trim(), line.slice(i + 1).trim()]; }));
-  const expectedIdentity = { protocolVersion: 2, version: identityProperties.version, buildId: identityProperties.buildId };
-  assert.ok(expectedIdentity.version && expectedIdentity.buildId && !identityText.includes('${'), 'Filtered build identity required');
-  const welcome = await request('hello', expectedIdentity);
-  assert.equal(welcome.kind, 'welcome');
-  for (const [key, value] of Object.entries(expectedIdentity)) assert.equal(welcome[key], value, `Handshake ${key} mismatch`);
+  const welcome = await client.handshake(identityFile < 0 ? undefined : argv[identityFile + 1]);
   assert.ok(welcome.capabilities.includes('workspacePage'));
   assert.ok(greeting.data.methods.includes('confirmAnswer'));
   assert.ok(welcome.capabilities.includes('confirmationRoundTrip'));
@@ -261,34 +327,37 @@ try {
   if (stress) assert.ok(metrics.rawProgress > metrics.sentProgress * 10, '10k progress callbacks must be merged');
   assert.ok(metrics.callbackQueuePeak <= 256);
   assert.ok(metrics.heapPoolPeakBytes < 768 * 1024 * 1024, 'Sum of heap pool peaks must be <768 MiB');
-  assert.ok(peakPageMs < 5000, 'Peak page response must be <5s');
-  assert.ok(peakRequestMs < 120000, 'Peak command response must be <120s');
+  assert.ok(client.peakPageMs < 5000, 'Peak page response must be <5s');
+  assert.ok(client.peakRequestMs < 120000, 'Peak command response must be <120s');
   await request('releaseFiles', { paths: [preview.manifest.path, manifest.text.path, manifest.html.path, extracted.resultsFile.path] });
   assert.equal(fs.existsSync(preview.manifest.path), false);
   await request('fileInfo', { path: preview.manifest.path }, 'INVALID_PARAMS');
   child.stdin.end(); // EOF is the normal shutdown protocol.
   const [exitCode, signal] = await closed;
-  if (fatal) throw fatal;
+  if (client.fatal) throw client.fatal;
   assert.equal(signal, null);
   assert.equal(exitCode, 0);
   assert.equal(fs.existsSync(cleanupRoot), false, 'EOF must remove the session bulk/cache directory');
   utf8(transcript);
   utf8(errFile);
   const summary = { mode: stress ? 'stress' : 'smoke', inputFiles: count, totalFrames: frames.length,
-    maxFrameBytes, progressFrames: progress.length, ...metrics, peakRequestMs: +peakRequestMs.toFixed(2),
-    peakPageMs: +peakPageMs.toFixed(2), workflowMs: +(performance.now() - started).toFixed(2),
+    maxFrameBytes: client.maxFrameBytes, progressFrames: progress.length, ...metrics, peakRequestMs: +client.peakRequestMs.toFixed(2),
+    peakPageMs: +client.peakPageMs.toFixed(2), workflowMs: +(performance.now() - started).toFixed(2),
     eventCounts, outputFiles: products.length, outputBytes: products.reduce((n, file) => n + fs.statSync(file).size, 0),
-    stderrBytes, exitCode, sessionCleaned: true };
+    stderrBytes: client.stderrBytes, exitCode, sessionCleaned: true };
   fs.writeFileSync(path.join(work, 'summary.json'), JSON.stringify(summary, null, 2));
   console.log('STDOUT_PROTOCOL_SUMMARY ' + JSON.stringify(summary));
-  console.log('STDERR_SUMMARY ' + JSON.stringify({ bytes: stderrBytes,
+  console.log('STDERR_SUMMARY ' + JSON.stringify({ bytes: client.stderrBytes,
     lines: fs.readFileSync(errFile, 'utf8').trim().split(/\r?\n/).filter(Boolean) }));
   const log = path.join(work, 'logs/backend.log');
   console.log('BACKEND_LOG_SUMMARY ' + JSON.stringify({ file: log,
     tail: fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split(/\r?\n/).slice(-4) : [] }));
   console.log('CLIENT_EXIT=0');
 } finally {
-  clearTimeout(timeout);
-  lines.close();
-  if (child.exitCode === null) { child.kill(); await closed; }
+  await client.dispose();
+}
+
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
 }
