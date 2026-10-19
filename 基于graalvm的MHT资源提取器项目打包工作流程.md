@@ -3,7 +3,7 @@
 > **目标**: 将 JavaFX 25 + Maven 项目编译为 GraalVM Native Image 绿色免安装 Windows EXE。
 > **适用场景**: 从 Git 拉取代码后，在任何 Windows 设备上完成打包。
 > **最后更新**: 2026-10-09 | **已验证 JDK 版本**: Liberica NIK 25.0.3 + Oracle GraalVM 25.0.2+10.1
-> **项目版本**: 以 `pom.xml` 的 `<version>` 为**唯一来源**（当前 `3.0.0`）。所有构建脚本（`build-native.cmd` / `.ps1` / `.sh` / `run-native-image.bat`）均从 pom 动态读取，**禁止**在脚本里硬编码 jar 名（历史问题：曾写死 `mhtExtractor-2.3.1.jar` / `-2.2-SNAPSHOT.jar`，与 pom 不一致导致打包找不到 jar）。
+> **项目版本**: 以 `pom.xml` 的 `<version>` 为**唯一来源**（当前 `3.0.1`）。所有构建脚本（`build-native.cmd` / `.ps1` / `.sh` / `run-native-image.bat`）均从 pom 动态读取，**禁止**在脚本里硬编码 jar 名（历史问题：曾写死 `mhtExtractor-2.3.1.jar` / `-2.2-SNAPSHOT.jar`，与 pom 不一致导致打包找不到 jar）。
 
 > ## 📌 状态更新（2026-09-27 实测）—— **以脚本与 CLAUDE.md 为准**
 >
@@ -1660,9 +1660,9 @@ VERSION=$(grep -oP '<version>\K[^<]+' pom.xml | head -1 | sed 's/-SNAPSHOT//')
 echo "项目版本: $VERSION"
 ```
 
-输出示例: `3.0.0`
+输出示例: `3.0.1`
 
-> **注意**: 上面用于**发行版目录/文件名**时才会剥离 `-SNAPSHOT`；用于定位 Maven 产物 jar 时必须保留原始版本（产物名为 `target/mhtExtractor-<version>.jar`，例如 `mhtExtractor-3.0.0.jar`）。
+> **注意**: 上面用于**发行版目录/文件名**时才会剥离 `-SNAPSHOT`；用于定位 Maven 产物 jar 时必须保留原始版本（产物名为 `target/mhtExtractor-<version>.jar`，例如 `mhtExtractor-3.0.1.jar`）。
 
 ### 7.2 打包命令
 
@@ -2459,20 +2459,20 @@ static 配方不生成启动器（不需要）。
 
 ### 10.11 当前回归基线（2026-10-05 独立复核）
 
-> 打包前拿这张表对照；**任何一项变红都先查清再打包**。项目版本 **3.0.0**（以 `pom.xml` 为唯一来源）。
+> 打包前拿这张表对照；**任何一项变红都先查清再打包**。项目版本 **3.0.1**（以 `pom.xml` 为唯一来源）。
 
 | 项 | 命令 / 手段 | 实测 |
 |---|---|---|
-| 编译 + 全量单测 | `mvnw.cmd clean test`（不加 `-q`） | 默认 **768 / 0**、`headless-layer-b` **68 / 0**、`BUILD SUCCESS` |
-| 独立聚合（不读执行方日志） | 聚合 `target/surefire-reports/*.txt` | **768 passed / 0 failed**（75 个类汇总） |
-| 产物黄金基线 | `ProductBaselineTest` | **42 / 0**（zh+en × 21 例 × 2 遍确定性自检） |
-| 结构不变式 | `ArchitectureTest` | **17 / 0**；`MainController` **1654** 行 / 上限 **2240**；`test-support` 标记 **0**；GUI 直写 **0** / 间接写 **0** |
-| GUI 自动化 | §10.5.5 入口，zh 与 en 各跑一次 | **各 34 passed / 0 failed**；`logs/test-results.txt` 的 **mtime** 与本轮一致 |
+| 编译 + 全量单测 | `mvnw.cmd clean test`（不加 `-q`） | 默认 **1134 / 0**（1 跳过）、`headless-layer-b` **74 / 0**、`BUILD SUCCESS` |
+| 独立聚合（不读执行方日志） | 聚合 `target/surefire-reports/*.txt` | **1134 passed / 0 failed / 1 skipped** |
+| 产物黄金基线 | `ProductBaselineTest` | **46 / 0**（zh+en × 23 例 × 2 遍确定性自检） |
+| 结构不变式 | `ArchitectureTest` | **17 / 0**；`MainController` **1607** 行 / 上限 **1612**；`test-support` 标记 **0**；GUI 直写 **0** / 间接写 **0** |
+| GUI 自动化 | §10.5.5 入口，zh 与 en 各跑一次 | **各 37 passed / 0 failed**；`logs/test-results.txt` 的 **mtime** 与本轮一致 |
 | UI / 交互探针 | `tools\probes\run-probe.ps1 <Probe> [-Locale …]` | ContextMenu **121/0**、SidePanel **153/0**（+E1.2 运行时观测 6 条）、HtmlViewer **163/0**、ParamDraft **14/0**、AppCard **5/0**、NotificationAcceptance / BusyCloseProbe `ALL CHECKS PASSED`、PendingConfirmClose `PROBE DONE`；UiProbe 截断 **0**（en 屏上中文 **0**） |
-| 生产日志键 | 扫描 `I18n.get` / `I18n.msg` 字面量 | `log.*` **236 键 / 247 调用点**逐键不变；全部键调用点 **442**（E4.1 起 7 个业务警告键改产 `ExtractWarning` 码值） |
-| i18n bundle | 两份 properties 对账 | **547 / 547**，键集与占位符集合一致 |
-| native 构建 | `build-native.cmd`（默认 dynamic） | exit 0；report `status=OK`、全部步骤 exit 0（含 `[STEP SMOKE]`）；dist **22 个文件** |
-| native 产物基线 | 重建 `NativeBaselineProbe` 后运行（§10.5.2） | **42 passed / 0 failed** |
+| 生产日志键 | 扫描 `I18n.get` / `I18n.msg` 字面量 | `log.*` **249 键**（编号 243 + 具名 6） |
+| i18n bundle | 两份 properties 对账 | **585 / 585**，键集与占位符集合一致 |
+| native 构建 | `build-native.cmd`（默认 dynamic） | exit 0；report `status=OK`、全部步骤 exit 0（含 `[STEP SMOKE]`）；dist **23 个文件** |
+| native 产物基线 | 重建 `NativeBaselineProbe` 后运行（§10.5.2） | **46 passed / 0 failed** |
 | 第三方依赖 | `pom.xml` | 自基线以来**零改动**（`noNewThirdPartyDependencies` 仍绿） |
 
 **已知不在本表覆盖范围内的项**（详见根目录《遗留目标与未完成事项.md》）：

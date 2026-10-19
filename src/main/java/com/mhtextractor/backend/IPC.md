@@ -214,8 +214,8 @@ Java 端口的新细节查询需要与参数命令服务共享真实 GlobalParam
 
 ```json
 {"v":1,"type":"event","event":"ready","data":{"methods":["workspace","setChecked","importPaths","group","setParams","extract","workspacePage","previewFiles","fileInfo","releaseFiles","metrics","confirmAnswer","hello"]}}
-{"v":1,"type":"request","id":"h1","method":"hello","params":{"protocolVersion":2,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1"}}
-{"v":1,"type":"response","id":"h1","result":{"kind":"welcome","protocolVersion":2,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1","capabilities":["workspace","setChecked","workspacePage","bulkFiles","confirmationRoundTrip"],"confirmationRoundTrip":true}}
+{"v":1,"type":"request","id":"h1","method":"hello","params":{"protocolVersion":2,"version":"3.0.1","buildId":"3.0.1-p4-13-ipc1"}}
+{"v":1,"type":"response","id":"h1","result":{"kind":"welcome","protocolVersion":2,"version":"3.0.1","buildId":"3.0.1-p4-13-ipc1","capabilities":["workspace","setChecked","workspacePage","bulkFiles","confirmationRoundTrip"],"confirmationRoundTrip":true}}
 {"v":1,"type":"request","id":"q1","method":"workspace","params":{}}
 {"v":1,"type":"response","id":"q1","result":{"groups":[],"topLevelItems":[],"canUndo":false,"undoDepth":0,"selection":"NONE"}}
 {"v":1,"type":"request","id":"c1","method":"setChecked","params":{"paths":["H:/input/a.mht"],"checked":true}}
@@ -665,7 +665,7 @@ C25 后处理预解析因此不依赖下一次同步活动；未产生 wire 事�
 
 ```json
 {"v":1,"type":"event","event":"ready","data":{"methods":["workspace","setChecked","importPaths","group","setParams","extract","workspacePage","previewFiles","fileInfo","releaseFiles","metrics","confirmAnswer","hello","ungroup","renameGroup","toggleGroupExpanded","clearItems","applyDrop","removeItems","removeGroup","canUndo"],"sessionId":"session-A","revision":0}}
-{"v":1,"type":"response","id":"h","revision":0,"result":{"kind":"welcome","protocolVersion":2,"version":"3.0.0","buildId":"3.0.0-p4-13-ipc1","capabilities":["workspace","setChecked","workspacePage","bulkFiles","confirmationRoundTrip"],"confirmationRoundTrip":true,"sessionId":"session-A","bulkRoot":"H:/TEST/temp/mht-ipc-123"}}
+{"v":1,"type":"response","id":"h","revision":0,"result":{"kind":"welcome","protocolVersion":2,"version":"3.0.1","buildId":"3.0.1-p4-13-ipc1","capabilities":["workspace","setChecked","workspacePage","bulkFiles","confirmationRoundTrip"],"confirmationRoundTrip":true,"sessionId":"session-A","bulkRoot":"H:/TEST/temp/mht-ipc-123"}}
 {"v":1,"type":"request","id":"w","method":"workspace","params":{"bulk":true}}
 {"v":1,"type":"response","id":"w","revision":3,"result":{"revision":3,"manifest":{"path":"H:/TEST/temp/mht-ipc-123/bulk-1.json","bytes":230,"mediaType":"application/json"}}}
 {"v":1,"type":"request","id":"p","method":"workspacePage","params":{"offset":0,"limit":1,"revision":3}}
