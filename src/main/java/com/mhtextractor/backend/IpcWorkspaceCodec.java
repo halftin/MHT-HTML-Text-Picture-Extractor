@@ -32,9 +32,9 @@ final class IpcWorkspaceCodec {
         putOptional(result, "extractOutcome", vm.extractOutcome());
         putOptional(result, "extractMessageKey", vm.extractMessageKey());
         if (vm.extractMessageParams() != null)
-            com.mhtextractor.app.ExtractionStatsJson.params(result, "extractMessageParams", vm.extractMessageParams());
+            com.mhtextractor.engine.ExtractionStatsJson.params(result, "extractMessageParams", vm.extractMessageParams());
         putOptional(result, "extractMessageDetail", vm.extractMessageDetail());
-        result.set("extractWarnings", com.mhtextractor.app.ExtractionStatsJson.warnings(json, vm.extractWarnings()));
+        result.set("extractWarnings", com.mhtextractor.engine.ExtractionStatsJson.warnings(json, vm.extractWarnings()));
         if (vm.textFile() != null) result.set("textFile", reference(vm.textFile()));
         if (vm.previewManifest() != null) result.set("previewManifest", reference(vm.previewManifest()));
         return result;

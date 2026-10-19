@@ -28,7 +28,7 @@ import java.util.List;
  *
  * <p>宿主能力经 {@link Host} 收窄为具名方法：本类不持有 {@code MainController} / {@code MainViewRefs} /
  * FXML namespace，也不得在数据序上直写 —— 数据序唯一所有者是
- * {@link com.mhtextractor.app.WorkspaceModel}，分组/拆组的结构命令只经
+ * {@link com.mhtextractor.engine.WorkspaceModel}，分组/拆组的结构命令只经
  * {@code Host.createGroup(...)} / {@code Host.ungroupGroup(...)}（撤销记录由模型压入）。</p>
  *
  * <p>本类含 JavaFX，属 {@code gui} 层。测试源集的反射桥按字段名 {@code groupCommand} 与本类的

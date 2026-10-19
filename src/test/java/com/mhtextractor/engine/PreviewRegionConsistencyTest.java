@@ -1,6 +1,6 @@
 package com.mhtextractor.engine;
 
-import com.mhtextractor.app.WorkspaceExtractionService;
+import com.mhtextractor.engine.WorkspaceExtractionService;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.processor.BatchProcessor;

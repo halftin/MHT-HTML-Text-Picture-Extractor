@@ -2,9 +2,9 @@ package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.uicore.PreStartGate;
-import com.mhtextractor.app.WorkspaceExtractionCoordinator;
-import com.mhtextractor.app.WorkspaceExtractionService;
-import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.engine.WorkspaceExtractionCoordinator;
+import com.mhtextractor.engine.WorkspaceExtractionService;
+import com.mhtextractor.engine.WorkspaceModel;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.model.AppConfig;
@@ -151,7 +151,7 @@ class ExtractionTaskCoordinatorGateTest {
         WorkspaceExtractionCoordinator backend = new WorkspaceExtractionCoordinator(
                 new WorkspaceExtractionService(new PreviewCacheLifecycle(new PreviewCacheStore(dir.resolve("cache")))),
                 checkedOnly -> emptyRequest(dir), Platform::runLater);
-        var root = new com.mhtextractor.app.BackendWorkspace(request -> {
+        var root = new com.mhtextractor.engine.BackendWorkspace(request -> {
             throw new AssertionError("Unexpected confirmation");
         }, AppConfig::new, Runnable::run);
         roots.add(root);
@@ -170,9 +170,9 @@ class ExtractionTaskCoordinatorGateTest {
         return new Wire(c, backend);
     }
 
-    private final List<com.mhtextractor.app.BackendWorkspace> roots = new ArrayList<>();
+    private final List<com.mhtextractor.engine.BackendWorkspace> roots = new ArrayList<>();
 
-    @org.junit.jupiter.api.AfterEach void closeRoots() { roots.forEach(com.mhtextractor.app.BackendWorkspace::close); }
+    @org.junit.jupiter.api.AfterEach void closeRoots() { roots.forEach(com.mhtextractor.engine.BackendWorkspace::close); }
 
     /** 与 {@link WorkspaceExtractionCoordinatorCancelRaceTest} 同口径的 toolkit 前置。 */
     private static void requireToolkit() {

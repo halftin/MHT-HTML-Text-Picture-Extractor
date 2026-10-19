@@ -1,5 +1,7 @@
 package com.mhtextractor.gui;
-import com.mhtextractor.app.*;
+import com.mhtextractor.engine.*;
+import com.mhtextractor.uiclient.*;
+import com.mhtextractor.model.*;
 import com.mhtextractor.model.*;
 import com.mhtextractor.uicore.*;
 import javafx.application.Platform;

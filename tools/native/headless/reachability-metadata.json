@@ -701,9 +701,6 @@
       "type": "sun.text.resources.cldr.FormatData_en"
     },
     {
-      "type": "sun.text.resources.cldr.FormatData_en_US"
-    },
-    {
       "type": "sun.util.resources.cldr.CalendarData"
     },
     {

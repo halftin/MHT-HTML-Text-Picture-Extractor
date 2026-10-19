@@ -56,14 +56,14 @@ public class App extends Application {
 
         var confirmer = new com.mhtextractor.gui.component.GuiConfirmer(() ->
                 primaryStage.getScene() == null ? null : (javafx.scene.control.Label) primaryStage.getScene().lookup("#statusLabel"));
-        com.mhtextractor.app.UiportRuntime.start(I18n.currentLocale().toLanguageTag(), confirmer, Platform::runLater,
+        com.mhtextractor.uiclient.UiportRuntime.start(I18n.currentLocale().toLanguageTag(), confirmer, Platform::runLater,
                 runtime -> {
                     try { finishStart(primaryStage, runtime); }
                     catch (Exception error) { error.printStackTrace(); Platform.exit(); }
                 }, error -> { error.printStackTrace(); Platform.exit(); });
     }
 
-    private void finishStart(Stage primaryStage, com.mhtextractor.app.UiportRuntime runtime) throws Exception {
+    private void finishStart(Stage primaryStage, com.mhtextractor.uiclient.UiportRuntime runtime) throws Exception {
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/mhtextractor/gui/view/MainView.fxml"));
         // P6-B：控制器要拿"FXML 命名空间"（fx:id → MainViewRefs）来取代 42 个 @FXML 节点字段，
         // 而 namespace 只有 loader 有 —— controller factory 是把它交给控制器的入口（缺这根线就是

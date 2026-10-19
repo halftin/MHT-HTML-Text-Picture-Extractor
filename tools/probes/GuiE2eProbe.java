@@ -1,6 +1,6 @@
 import atlantafx.base.theme.NordLight;
 import com.mhtextractor.App;
-import com.mhtextractor.app.IpcUiport;
+import com.mhtextractor.uiclient.IpcUiport;
 import com.mhtextractor.gui.component.BackendEventPresenter;
 import com.mhtextractor.gui.component.GuiConfirmer;
 import com.mhtextractor.gui.component.NotificationHost;
@@ -45,6 +45,7 @@ public final class GuiE2eProbe {
     private TextArea forwarded;
     private Path work;
     private int backendLogs;
+    private PortEvent.ExtractionTerminal extraction;
     private boolean ending;
     private final String mode = System.getProperty("probe.scenario", "e2e");
 
@@ -101,6 +102,7 @@ public final class GuiE2eProbe {
         ParamSidePanel.of(scene.lookup("#statusLabel"), frontend);
         forwarded = new TextArea();
         frontend.events().subscribe(event -> {
+            if (event instanceof PortEvent.ExtractionTerminal terminal) extraction = terminal;
             if (event.getClass().getSimpleName().startsWith("Preview"))
                 System.out.println("PREVIEW_EVENT=" + event.getClass().getSimpleName());
             // fixtures 里有一个**故意**解析失败的文件：bad-charset.mht（声明的字符集不存在 → FAILED，见台账 §83.3）。
@@ -202,9 +204,30 @@ public final class GuiE2eProbe {
                                 && !view.getImage().isError() && view.getImage().getWidth() > 0), () -> {
                     if (mode.equals("purity")) await("real WARN/ERROR backendLog received and rendered",
                             () -> backendLogs > 0 && !forwarded.getText().isBlank(), this::closeWindow);
+                    else if (Boolean.getBoolean("probe.extract")) extractFixture();
                     else closeWindow();
                 });
             });
+        });
+    }
+
+    private void extractFixture() {
+        Path output = work.resolve("extracted");
+        ((TextField)scene.lookup("#outputFolderField")).setText(output.toString());
+        await("extraction start enabled", () -> !((Button)scene.lookup("#startButton")).isDisabled(), () -> {
+            ((Button)scene.lookup("#startButton")).fire();
+            await("real extraction terminal received", () -> extraction != null, () -> safely(() -> {
+                require(extraction.end() == PortEvent.ExtractionEnd.SUCCEEDED
+                        && extraction.stats() != null && extraction.stats().successCount() > 0
+                        && extraction.stats().failCount() == 0, "real extraction succeeded without failures");
+                try (var files = Files.walk(output)) {
+                    var products = files.filter(Files::isRegularFile).toList();
+                    require(!products.isEmpty(), "real extraction wrote products");
+                    for (Path product : products) require(Files.size(product) > 0, "extracted product is nonempty");
+                    System.out.println("EXTRACTED_PRODUCTS=" + products);
+                }
+                closeWindow();
+            }));
         });
     }
 

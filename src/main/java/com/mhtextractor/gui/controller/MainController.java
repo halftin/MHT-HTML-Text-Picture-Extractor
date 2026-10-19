@@ -643,7 +643,7 @@ public class MainController {
      * 拖拽路径（fromDrag=true）在盘符根目录时弹确认框（BC-8）；浏览路径不弹。
      *
      * <p>本方法只留"拦截 + 确认展示 + 日志产出"；规范化/去重/建组/累计的规则在
-     * {@link com.mhtextractor.app.WorkspaceImportService}，会话生命周期/轮次/配额确认往返/
+     * {@link com.mhtextractor.engine.WorkspaceImportService}，会话生命周期/轮次/配额确认往返/
      * 撤销压栈（BC-5）经端口命令下沉到 {@code app.WorkspaceImportCoordinator}。</p>
      */
     void importByPaths(List<String> addresses, String sourceDesc, boolean fromDrag) {

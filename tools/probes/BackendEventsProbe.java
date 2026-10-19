@@ -1,6 +1,6 @@
 import atlantafx.base.controls.Notification;
 import atlantafx.base.theme.NordLight;
-import com.mhtextractor.app.IpcUiport;
+import com.mhtextractor.uiclient.IpcUiport;
 import com.mhtextractor.gui.component.BackendEventPresenter;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.i18n.I18n;

@@ -148,7 +148,7 @@ function New-ProbeFixture([string]$Directory) {
 
 function Invoke-GuiAcquisition([string]$Kind, [string]$Scenario, [string]$BuildDir, [string]$JavaHome,
         [string]$Backend, [string]$Work, [string]$Evidence, [string]$TempRoot, [string]$Fixture,
-        [string]$Locale = 'en_US', [switch]$WrongSource) {
+        [string]$Locale = 'en_US', [switch]$WrongSource, [switch]$Extract) {
     $Work = New-ProbeDirectory $Work
     New-Item -ItemType Directory -Path (Join-Path $Work 'logs') | Out-Null
     [IO.File]::WriteAllText((Join-Path $Work 'logs\gui-state.json'),
@@ -158,7 +158,8 @@ function Invoke-GuiAcquisition([string]$Kind, [string]$Scenario, [string]$BuildD
     $properties = @("-Djava.io.tmpdir=$runtimeTemp", "-Duser.language=$($parts[0])", "-Duser.country=$($parts[1])",
         '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8',
         "-Dprobe.scenario=$Scenario", "-Dprobe.backend=$Backend", "-Dprobe.fixture=$Fixture",
-        "-Dprobe.png=$Work\probe.png", "-Dprobe.wrongSource=$($WrongSource.IsPresent.ToString().ToLowerInvariant())")
+        "-Dprobe.png=$Work\probe.png", "-Dprobe.wrongSource=$($WrongSource.IsPresent.ToString().ToLowerInvariant())",
+        "-Dprobe.extract=$($Extract.IsPresent.ToString().ToLowerInvariant())")
     $program = Join-Path $BuildDir 'GuiE2eProbe.exe'
     if ($Kind -eq 'jvm') {
         $program = Join-Path $JavaHome 'bin\java.exe'

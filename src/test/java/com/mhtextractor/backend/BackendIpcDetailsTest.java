@@ -1,11 +1,15 @@
 package com.mhtextractor.backend;
 
+import com.mhtextractor.uiclient.BackendIdentity;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.mhtextractor.app.InProcessUiport;
-import com.mhtextractor.app.WorkspaceModel;
-import com.mhtextractor.app.UndoManager;
-import com.mhtextractor.app.*;
+import com.mhtextractor.engine.InProcessUiport;
+import com.mhtextractor.engine.WorkspaceModel;
+import com.mhtextractor.engine.UndoManager;
+import com.mhtextractor.engine.*;
+import com.mhtextractor.uiclient.*;
+import com.mhtextractor.model.*;
 import com.mhtextractor.engine.PreviewSession;
 import com.mhtextractor.engine.PreviewService;
 import com.mhtextractor.model.AppConfig;

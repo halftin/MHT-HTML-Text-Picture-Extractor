@@ -1,9 +1,11 @@
 package com.mhtextractor.backend;
 
+import com.mhtextractor.uiclient.BackendIdentity;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.mhtextractor.app.InProcessUiport;
-import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.engine.InProcessUiport;
+import com.mhtextractor.engine.WorkspaceModel;
 import com.mhtextractor.uiport.PortEvent;
 import com.mhtextractor.uiport.TargetId;
 import com.mhtextractor.uiport.Uiport;

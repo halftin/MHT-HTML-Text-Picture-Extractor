@@ -177,7 +177,7 @@ public class AppConfig {
      * 副本里这 4 个字段保持 {@code null/false} 的初值。</p>
      *
      * <p><b>覆盖范围 = 提取参数全集</b>：与
-     * {@link com.mhtextractor.app.EffectiveParamsService#signatureOf} 的字段集合<b>完全相同</b>
+     * {@link com.mhtextractor.engine.EffectiveParamsService#signatureOf} 的字段集合<b>完全相同</b>
      * （{@code AppConfig} 全部字段减去该服务的 {@code runtimeOnlyFields()}）；两侧都有守护测试
      * （{@code AppConfigCopyTest}），漏一个字段会立刻红。</p>
      *

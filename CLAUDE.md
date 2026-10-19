@@ -79,23 +79,30 @@ powershell -ExecutionPolicy Bypass -File tools\probes\run-probe.ps1 UiProbe -Loc
 
 ## 3. Architecture
 
-**依赖方向严格单向：`gui → uiport/uiclient → backend/app → engine → 业务包`**；`app`、`engine`、业务包、`model`、`platform` **零 JavaFX**
-（按**字节码常量池**扫描强制，不是查 import —— 全限定名引用也能抓到）。
+**前端依赖：`gui → uiport / uiclient / uicore / model / i18n / platform`；后端依赖：`backend → engine → 业务包`。**
+`uiclient` 只持有 IPC 传输、子进程与前端运行时，不依赖 `engine` 或 `backend` 实现；
+`backend` 复用 `uiclient.BackendIdentity` 的握手身份。`app` 包已取消。
+除 JavaFX 视图/外壳外，各层保持零 JavaFX（字节码常量池扫描）。
 
 ```
-gui          ← JavaFX 视图/控制器（唯一允许依赖 javafx.* 的层之一）
+gui          ← JavaFX 视图/控制器
+uiclient     ← UiportRuntime / IpcUiport / BackendSession / BackendExecutable /
+               BackendLauncher / BackendIdentity，以及 ipc 解码、确认和文件租约
+uicore       ← 框架无关的前端投影、参数表、会话持久化与呈现逻辑
+uiport       ← 命令/查询/事件/确认协议；零 JavaFX、零 I18n、零业务类型
+backend      ← --once / --serve、IPC 服务端和无头日志
   ↓
-app          ← 过渡应用层（零 JavaFX）：WorkspaceModel 数据所有权、InProcessUiport 端口适配、
-  ↓            BackendWorkspace 装配、导入/参数/计划等剩余服务；P-F10 决定其最终落位
-engine       ← 引擎执行层（零 JavaFX）：PreviewService / PreviewSession / PreviewCacheFactory
-  ↓            WorkspaceExtractionService 迁移待包级访问约束裁决（P-F9）
-业务包        ← core / extractor / processor / output / util / cache / config / i18n
-model        ← 纯数据模型（PreviewItem / ThumbnailData / ExtractWarning），零 JavaFX，app 与 gui 共用
-platform     ← 与操作系统交互的基础设施（零 JavaFX，纳入同一条不变式扫描）
-uicore       ← 框架无关的前端共用逻辑（零 JavaFX，P2 起纳入同一条不变式扫描）
-uiport       ← 端口层（命令/查询/事件/确认往返；零 JavaFX、零 I18n、零业务类型；P3 起，uiportHasNoJavaFxDependency 强制）
-backend      ← 无头后端（P4 起）：backend-cli 入口（--once / --serve）+ 无头 logback + **启动握手（hello/welcome：协议版本/构建标识/能力集，P4-13）**；零 JavaFX（已纳入 businessPackagesHaveNoUiFrameworkDependency 扫描）
+engine       ← BackendWorkspace / InProcessUiport / WorkspaceModel；导入、参数、
+  ↓            校验、预览、提取编排和资源生命周期
+业务包        ← core / extractor / processor / output / util / cache / config
+model        ← 纯数据与参数字段映射（含 WorkspaceChange / PreviewImageData / ParamSchemaService）
+i18n         ← 文案键与渲染
+platform     ← 既有操作系统与文本基础设施；前端引用维持冻结的 15 项，不扩面
 ```
+
+P-F10 移除 `mht.uiport=inprocess` 生产分支：GUI 仅走 IPC；测试/探针可直接构造
+`engine.BackendWorkspace` 或 `engine.InProcessUiport`。`UiportRuntime` 的 JVM 启动选项仅
+通过命令行字符串启动独立 `BackendCli` 进程，不构造后端业务对象。
 
 ### 业务包
 
@@ -112,27 +119,17 @@ backend      ← 无头后端（P4 起）：backend-cli 入口（--once / --serv
 | `model` | `PreviewItem`（领域数据与 JavaFX 属性已分离）· `ThumbnailData`（持解码后 ARGB `int[]`，不用 `Image`/PNG 字节）· `ExtractWarning`（**结构化警告**：i18n 键 + 具名参数 `Map`，语言中立；E4.1）· **P3 起陆续迁入**：`GroupItem`、`ChangeListener`、`ExtractOutcome`、`ParamScope`（三态目标/生效参数解析）、`AppConfig`（参数数据模型，Jackson POJO）、`FingerprintEncoder`（指纹长度前缀编码唯一口径） |
 | `platform` | `BrowserLauncher`（`openHtml` / `openViewSource` + 三级兜底）· `SourceViewPage`（源码视图页生成）· `CdpClient`（CDP 客户端 + 调试实例管理，原生 Socket，native 安全）· `BrowserDetector` · `FileOpener`（**用系统默认程序打开文件**，含 UAC 关闭导致 UWP 文件激活被阻断的环境预判）· `HtmlTextSelection`（选择/复制语义，纯函数）· `HtmlWrapMap`（折行几何 ↔ 逻辑字符偏移，纯函数） |
 
-### app 层（**业务可脱离 UI 运行的验收物**）
+### engine 与前端运行时的边界（P-F10）
 
-```java
-MhtExtractorApp              // 门面：importPaths/importFolder；extractText/extractImages（ProgressSink / CancelToken）
-WorkspaceModel               // 数据序、分组关系、撤销命令的**唯一所有者**；GUI 的 items 是它的只读投影
-WorkspaceParamService        // 参数变更/移除引起的缓存失效收口（GUI 不得直接调缓存删除规则）
-WorkspaceImportService       // 导入轮次/累计/配额计数（无 JavaFX）
-WorkspaceExtractionService   // 提取业务段；**业务统计的唯一来源**（迁包待包级访问裁决）
-WorkspaceExtractionCoordinator // 端口任务编排，与 InProcessUiport 存在包级访问耦合
-ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
-```
+`WorkspaceModel` 独占数据序、分组关系和撤销命令；`BackendWorkspace` 装配后端状态，
+`InProcessUiport` 将引擎编排适配为端口。导入、参数、计划、预览、提取服务均位于 `engine`。
+`WorkspaceExtractionCoordinator` / `WorkspaceExtractionService` / `InProcessUiport` 同包，
+`outputName` 与 `RunChannel.sessionOutputFolder` 继续保持包级访问，不为迁包放宽可见性。
+`PreviewService` / `PreviewSession` / `PreviewCacheFactory` 负责缓存执行和资源生命周期。
 
-### engine 层（P-F9：只迁包，不改行为）
-
-`PreviewService` 负责预览缓存读写、命中与重建；`WorkspaceExtractionService` 负责输出单元执行和业务统计，
-其迁包被协调器对包级 `outputName` 的访问阻塞，裁决前仍在 app。
-`PreviewSession` 持有缓存生命周期，`PreviewCacheFactory` 构造存储与生命周期，均属于引擎资源管理，
-不是 uiclient 的传输或会话呈现逻辑。`WorkspaceModel` 和 `InProcessUiport` 本批仍在 app；
-`WorkspaceExtractionCoordinator` 也保留在 app：它构建计划/确认、发送端口事件，且 `InProcessUiport`
-三处直接读取其包级 `RunChannel.sessionOutputFolder`，只迁包会破坏访问。本批不放宽可见性，
-这处端口适配耦合及 app 的最终拆除交给 P-F10。
+`uiclient.UiportRuntime` 只装配 IPC 客户端。离线参数字段表复用 `model.ParamSchemaService`；
+该类只映射 AppConfig 与 ParamSchemaVm，不访问工作区、文件或引擎。
+`model.WorkspaceChange` 和 `PreviewImageData` 是不可变数据载体；文档链接不反向 import engine。
 
 `LayerBTest`（无 JavaFX 执行）+ `StubUiAcceptanceTest` 证明"用非 JavaFX 的桩 UI 走完导入→校验→建组→参数→移除/撤销→提取"，
 并与产物基线逐字节一致。
@@ -159,22 +156,27 @@ ExtractionPreconditions      // 提取前置校验（Level 分级 + Denial）
 
 | 不变式 | 含义 |
 |---|---|
-| `businessPackagesHaveNoUiFrameworkDependency` | 业务包 + `app` + `platform` + `model` **不得依赖 `javafx.*`**（字节码常量池口径，带白名单腐化检测） |
-| `applicationLayerDoesNotDependOnViewOrShell` | `app` / `engine` 不得 import `gui` / `logging` / `App` |
-| `mainControllerIsShrinking` | `MainController` 行数（实测 **1612**）≤ 上限 **2240**。P3-B4 的 +8 已裁决接受；**此后只减不增**（P5a-3/8 累计 −42） |
+| `businessPackagesHaveNoUiFrameworkDependency` | 业务包 + `engine` + `uiclient` + `platform` + `model` **不得依赖 `javafx.*`**（字节码常量池口径，带白名单腐化检测） |
+| `applicationLayerDoesNotDependOnViewOrShell` | `uiclient` / `engine` 不得 import `gui` / `logging` / `App` |
+| `mainControllerIsShrinking` | `MainController` 行数（实测 **1612**）≤ 上限 **1612**。P3-B4 的 +8 已裁决接受；**此后只减不增**（P5a-3/8 累计 −42） |
 | `reflectionAgainstMainControllerIsZero` | 测试对 `MainController` 私有成员的**反射 = 0**（改用测试源集的同包 acceptance driver） |
 | `testSupportSurfaceDoesNotGrow` | `/* test-support */` 标记 = **0**。⚠️ 该计数**只覆盖 `MainController` 文本** |
 | `headlessTestPackagesHaveNoJavaFx` | 无头测试包源码不得出现 UI 框架字面量 |
 | `businessLayerI18nUsageDoesNotGrow` | 业务层 `I18n.` 引用 ≤ 基线 **52**（实测 P4-1 后 **46**；P3-3b-20 后曾为 43，P4-1 的 `backend` 3 处计入；`MhtImportPlanner.Plan.summary` 随类迁出业务包扫描范围，故 45 → 43；剥掉 `log.*` 整段后再计数）。**P2-2b 起扫描范围剔除 `uicore`/`uiport`**（前端共用逻辑/端口层，不算业务层） |
 | `noNewThirdPartyDependencies` | 不得新增第三方依赖（保护 native 打包） |
 | `guiLayerDoesNotInvokeCacheRulesDirectly` | GUI 不得直接调预览缓存的删除规则（须经 `WorkspaceParamService`） |
-| `guiDoesNotMutateDataOrderDirectly` | GUI 不得直接/间接改 workspace 数据序（须经 `WorkspaceModel`）；实测 **0 / 0** |
+| `guiDoesNotMutateDataOrderDirectly` | GUI 不得直接/间接改 workspace 数据序（须经 `engine.WorkspaceModel`）；实测 **0 / 0** |
 | `testAccessSurfaceIsFrozen` | 测试访问面冻结：`src/test/resources/test-access-surface.tsv` **85** 条（direct **77** / reflect 3 / reflect-dynamic **5**；**V1-r（2026-10-16）删 2 条**〔`MainController.effectiveForObject` 的无调用者驱动转发、`SidePanelProbe.fieldDeep` 改同源端口查询〕——实测原分布是 **78**/3/6＝87（旧文写的 79/3/6 是漂移）；**P5a-3 接线切换删 1 条**（组装箱搬迁后成员消失）；S2 曾一次性上调至 124，P2-1 删 5 条 HtmlFindIndex，P3-B1 删 `MainController.ITEM_VIEW`，P3-B2 删 2，P3-B5 删 2，P3-B6 删 6（`ExtractionTaskCoordinator` 下沉接入点）——**均因下沉后成员消失**，且不变式同时校验「发现 ⊆ 清单」与「无陈旧条目」，凭空删行必然失败）**只减不增**；发现集合 ⊆ 清单、清单无陈旧条目、`com.mhtextractor.gui` 同包驱动必须登记。扫描器 `baseline.TestAccessSurface`（字节码成员库 + 驱动类常量池引用；不用反射 API） |
 | `allowlistOnlyTargetsBusinessPackages` · `baselineHarnessIsPresent` | 防白名单滥用 / 基线与夹具在位 |
-| `uiportHasNoJavaFxDependency` | **P0 新增**：`uiport` 端口层字节码常量池零 `javafx/`（字节码扫描）。**P3-2 起包已建立，实测 47 类 / 0 违规**（P3-B1…B6 新增 `OutputUnitVm`/`ParamSchemaVm`/`PreparseResult`/`TargetId`/`ImportPlanVm`/`ExtractionChannelEvent` 族等）；基线违规数 **0**，扫描器 `baseline.UiportSignature` |
+| `uiportHasNoJavaFxDependency` | **P0 新增 / P-F10 扩展**：`uiport` 与 `uiclient` 字节码常量池零 `javafx/`（字节码扫描）。**P3-2 起包已建立，实测 47 类 / 0 违规**（P3-B1…B6 新增 `OutputUnitVm`/`ParamSchemaVm`/`PreparseResult`/`TargetId`/`ImportPlanVm`/`ExtractionChannelEvent` 族等）；基线违规数 **0**，扫描器 `baseline.UiportSignature` |
 | `guiBusinessStateDoesNotGrow` | **P0 新增**：`gui` 层业务状态持有/构造点（`AppConfig` / `Map<String,AppConfig>` 字段 + 缓存/剪贴板/撤销载荷构造点（`new UndoManager.Record(...)` 含 `<>`））**只减不增**；基线 **0**（P1-3 后 a=b=c=d=0；P0 时 9 → P1-1 7 → P1-2 3 → P1-3 0，已提前达 P3 目标并保持只减不增）。扫描器 `baseline.GuiCoupling` |
 | `guiDirectBusinessPackageUsageDoesNotGrow` | **P0 新增**：`gui` 源码直连业务包 distinct (包, 类型) 数 **只减不增**；基线 **0**（业务 import 0；P0 35 → … → P3-3b-24 1 → P3-3b-25 **0 归零**），**已达 P3 目标**。扫描器 `baseline.GuiCoupling` |
 | `headlessNativeMetadataHasNoJavaFx` | **P4-3 新增（第 17 条）**：**无头 native 元数据零 JavaFX 条目**（解码 JSON + properties 文本，匹配 `javafx/` 与 `javafx.`）。后端子集在 `tools/native/headless/reachability-metadata.json`，由 `build-native.cmd` 的 `NATIVE_TARGET=headless` 使用；构建层另有 `tools/native/assert-headless-metadata.ps1` 独立断言（不满足则非零退出）。**既有七份元数据一字不动**（C-4 红线）。**唯一授权例外（P5a-8-r）**：P5a-8 把 `GuiState`/`GuiStateManager` 迁到 `uicore` 后，两份元数据里 3 处旧 `config.*` 注册必须同步为 `uicore.*`（否则前端 native 读写 `logs/gui-state.json` 会缺注册），且**只允许这 3 处**（`git diff` 仅 3 行）；该例外的红/绿 native 控制见 `tools/native/native-gui-state-smoke.ps1`。 |
+
+P-F10 元数据授权范围：七份 GUI 元数据及 headless 子集内的旧类名随实际迁包同步，
+方法/字段注册不得丢失；headless 中既有失效的 `sun.text.resources.cldr.FormatData_en_US` 注册删除。
+本次七份 GUI 元数据无旧 app/launcher/identity 注册，因而保持逐字节不变。
+前端闭包冻结 `FROZEN_MAX=0`；platform 沿用方案的保留边界，`PENDING_MAX=15`，不扩大扫描豁免。
 
 **其余硬约束**：主源集不出现 `java.awt`；不引入 `WebView`（**仅 JavaFX 前端生效**，换框架后重新评估）；不新增事件总线 / DI 容器 / 通用工作流引擎。
 

@@ -1,6 +1,6 @@
 package com.mhtextractor.output;
 
-import com.mhtextractor.app.PreviewNamingService;
+import com.mhtextractor.engine.PreviewNamingService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

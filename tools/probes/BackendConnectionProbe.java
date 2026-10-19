@@ -3,7 +3,7 @@ import atlantafx.base.controls.Notification;
 import atlantafx.base.theme.NordLight;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mhtextractor.App;
-import com.mhtextractor.app.BackendSession;
+import com.mhtextractor.uiclient.BackendSession;
 import com.mhtextractor.i18n.Texts;
 import com.mhtextractor.gui.component.BackendConnectionPresenter;
 import com.mhtextractor.gui.component.NotificationHost;

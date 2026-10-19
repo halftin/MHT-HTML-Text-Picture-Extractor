@@ -5,7 +5,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.mhtextractor.App;
-import com.mhtextractor.app.UiportRuntime;
+import com.mhtextractor.uiclient.UiportRuntime;
 import com.mhtextractor.gui.component.BackendConnectionPresenter;
 import com.mhtextractor.gui.component.NotificationHost;
 import com.mhtextractor.i18n.I18n;
@@ -77,8 +77,8 @@ public final class BackendUnavailableProbe extends Application {
             fx(()->cancelButton.fire());awaitCard(words[1]);
             fx(()->{question();System.setProperty("mht.backend.transport","jvm");button(words[4]).fire();});
             var connected=new CompletableFuture<Integer>();
-            await(()->runtime.port().implementation() instanceof com.mhtextractor.app.IpcUiport ipc
-                    &&ipc.status().state()==com.mhtextractor.app.BackendSession.State.CONNECTED,45);
+            await(()->runtime.port().implementation() instanceof com.mhtextractor.uiclient.IpcUiport ipc
+                    &&ipc.status().state()==com.mhtextractor.uiclient.BackendSession.State.CONNECTED,45);
             // Barrier behind the replacement and its complete snapshot delivery.
             fx(()->runtime.port().execute(p->p.queries().workspace().topLevelItems().size(),connected::complete));
             connected.get(35,TimeUnit.SECONDS);

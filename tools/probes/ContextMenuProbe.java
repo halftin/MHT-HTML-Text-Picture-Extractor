@@ -476,7 +476,7 @@ public class ContextMenuProbe extends Application {
 
     /** 提取参数的内容签名（与生产同一实现，不用 equals：AppConfig 是可变对象） */
     private static String effectiveSignature(AppConfig c) {
-        return com.mhtextractor.app.EffectiveParamsService.signatureOf(c);
+        return com.mhtextractor.engine.EffectiveParamsService.signatureOf(c);
     }
 
     /** 真实行上派发右键请求，经生产拾取/选中/状态刷新接线设置目标，再点击菜单项。 */

@@ -88,7 +88,7 @@ class ArchitectureTest {
             "com/mhtextractor/config",
             "com/mhtextractor/i18n",
             "com/mhtextractor/model",   // E2.1：PreviewItem / ThumbnailData 外迁至此，必须保持零 JavaFX
-            "com/mhtextractor/app",     // 目标产物：E4 起建立，建立后自动纳入约束
+            "com/mhtextractor/uiclient",     // 目标产物：E4 起建立，建立后自动纳入约束
             "com/mhtextractor/engine",  // P-F9：预览缓存与提取执行，必须保持零 UI 框架依赖
             "com/mhtextractor/platform", // 步骤 5：与操作系统交互的基础设施（BrowserLauncher 迁出 gui.util）
             "com/mhtextractor/uicore",   // P2-1：ui-core = 框架无关的前端共用逻辑，同样零 JavaFX
@@ -106,7 +106,7 @@ class ArchitectureTest {
      * 零 JavaFX 扫描<b>仍包含</b>它们（见 {@link #BUSINESS_PACKAGES}）。</p>
      */
     private static final List<String> I18N_COUNTED_PACKAGES = BUSINESS_PACKAGES.stream()
-            .filter(p -> !p.contains("uicore") && !p.contains("uiport"))
+            .filter(p -> !p.contains("uicore") && !p.contains("uiport") && !p.contains("uiclient"))
             .toList();
 
     /**
@@ -190,7 +190,7 @@ class ArchitectureTest {
      * 相继外迁为包级协作者后，实测行数从 4052 降至 <b>2215</b>；本上限收紧为
      * "当前实测 + 25 行余量"（"只减不增"方向不变，余量仅容后续小修）。</p>
      */
-    private static final int MAIN_CONTROLLER_MAX_LINES = 2240;
+    private static final int MAIN_CONTROLLER_MAX_LINES = 1612;
 
     /**
      * 留在 {@code MainController} 里的"测试支撑"暴露面（{@code /* test-support *​/} 标记数）上限 ——
@@ -370,9 +370,9 @@ class ArchitectureTest {
                 "getDeclaredConstructor", "setAccessible", "Class.forName");
         Set<String> allowlist = Set.of(
                 "com/mhtextractor/config/AppConfigCopyTest.java",
-                "com/mhtextractor/app/EffectiveParamsServiceTest.java",
-                "com/mhtextractor/app/LayerBTest.java",
-                "com/mhtextractor/app/WorkspaceModelTest.java");
+                "com/mhtextractor/engine/EffectiveParamsServiceTest.java",
+                "com/mhtextractor/engine/LayerBTest.java",
+                "com/mhtextractor/engine/WorkspaceModelTest.java");
 
         String driverCode = SourceScanUtils.stripComments(Files.readString(driver, StandardCharsets.UTF_8));
         List<String> driverHits = primitives.stream().filter(driverCode::contains).toList();
@@ -433,6 +433,9 @@ class ArchitectureTest {
     void businessPackagesHaveNoUiFrameworkDependency() throws IOException {
         assertTrue(BUSINESS_PACKAGES.contains("com/mhtextractor/engine"),
                 "engine 必须纳入业务包字节码扫描，不能通过删扫描范围绕过不变式");
+        assertTrue(BUSINESS_PACKAGES.contains("com/mhtextractor/uiclient"),
+                "uiclient must remain in the bytecode scan");
+        assertFalse(Files.isDirectory(MAIN_SOURCES.resolve("com/mhtextractor/app")), "Removed app package must not return");
         Map<String, Set<String>> leaks = scanJavaFxRefs();
 
         List<String> unexpected = new ArrayList<>();
@@ -574,7 +577,7 @@ class ArchitectureTest {
         String self = "ArchitectureTest.java";
 
         List<String> offenders = new ArrayList<>();
-        for (String pkg : List.of("com/mhtextractor/baseline", "com/mhtextractor/app", "com/mhtextractor/engine")) {
+        for (String pkg : List.of("com/mhtextractor/baseline", "com/mhtextractor/uiclient", "com/mhtextractor/engine")) {
             Path dir = TEST_SOURCES.resolve(pkg);
             if (!Files.isDirectory(dir)) continue;
             try (Stream<Path> walk = Files.walk(dir)) {
@@ -611,7 +614,7 @@ class ArchitectureTest {
         int count = 0;
         Map<String, Integer> perFile = new LinkedHashMap<>();
         for (String pkg : I18N_COUNTED_PACKAGES) {
-            if (pkg.equals("com/mhtextractor/i18n") || pkg.equals("com/mhtextractor/app")) continue;
+            if (pkg.equals("com/mhtextractor/i18n") || pkg.equals("com/mhtextractor/uiclient")) continue;
             Path dir = MAIN_SOURCES.resolve(pkg);
             if (!Files.isDirectory(dir)) continue;
             try (Stream<Path> walk = Files.walk(dir)) {
@@ -801,7 +804,7 @@ class ArchitectureTest {
 
     /**
      * E2.2 不变式：**GUI 层不得直接调用缓存规则方法**，必须经
-     * {@code com.mhtextractor.app.WorkspaceParamService} 收口。
+     * {@code com.mhtextractor.engine.WorkspaceParamService} 收口。
      *
      * <p><b>为什么值得一条断言</b>：耦合点 #11 的本质是"每条参数/移除分支自己记得调一次规则" ——
      * 这正是"分支漏调"类 bug 的温床。E2.2 把控制器里的 13 处调用收口到服务后，若日后有人图快又直接在
@@ -845,7 +848,7 @@ class ArchitectureTest {
         }
 
         assertTrue(offenders.isEmpty(),
-                "GUI 层不得直接调用缓存规则方法（须经 com.mhtextractor.app.WorkspaceParamService）：\n  "
+                "GUI 层不得直接调用缓存规则方法（须经 com.mhtextractor.engine.WorkspaceParamService）：\n  "
                         + String.join("\n  ", offenders));
         System.out.println("[arch] GUI 层未直接调用缓存规则（已收口到 WorkspaceParamService）");
     }
@@ -923,7 +926,7 @@ class ArchitectureTest {
         }
 
         assertTrue(offenders.isEmpty(),
-                "GUI 层不得直接改动 workspace 数据序（须经 com.mhtextractor.app.WorkspaceModel）：\n  "
+                "GUI 层不得直接改动 workspace 数据序（须经 com.mhtextractor.engine.WorkspaceModel）：\n  "
                         + String.join("\n  ", offenders)
                         + "\n数据序由模型独占（Q4/P3 起不再共享同一个可变列表），直写会绕过撤销记录与结构维护而静默分叉。");
 
@@ -987,7 +990,7 @@ class ArchitectureTest {
                 "com.mhtextractor.App");   // 外壳类自身（Application 子类）
 
         List<String> offenders = new ArrayList<>();
-        for (String pkg : List.of("app", "engine")) {
+        for (String pkg : List.of("uiclient", "engine")) {
             Path appDir = MAIN_SOURCES.resolve("com/mhtextractor/" + pkg);
             assertTrue(Files.isDirectory(appDir), "未找到无头包：" + appDir);
             try (Stream<Path> walk = Files.walk(appDir)) {
@@ -1011,9 +1014,9 @@ class ArchitectureTest {
         }
 
         assertTrue(offenders.isEmpty(),
-                "无头应用层（app/engine）不得依赖视图层/外壳，否则会**传递依赖 JavaFX** 而 V1 失效：\n  "
+                "无头应用层（uiclient/engine）不得依赖视图层/外壳，否则会**传递依赖 JavaFX** 而 V1 失效：\n  "
                         + String.join("\n  ", offenders));
-        System.out.println("[arch] app/engine 层未依赖 gui/logging/App（V1 闭合）");
+        System.out.println("[arch] uiclient/engine 层未依赖 gui/logging/App（V1 闭合）");
     }
 
     // ==================== 6. 分层前提：基准测试必须真的在跑 ====================
@@ -1110,7 +1113,9 @@ class ArchitectureTest {
      */
     @Test
     void uiportHasNoJavaFxDependency() throws IOException {
-        UiportSignature.Scan scan = UiportSignature.scan(MAIN_CLASSES);
+        for (String pkg : List.of("uiport", "uiclient")) {
+        assertTrue(Files.isDirectory(MAIN_CLASSES.resolve("com/mhtextractor/" + pkg)), "Missing port/client package: " + pkg);
+        UiportSignature.Scan scan = UiportSignature.scan(MAIN_CLASSES, "com/mhtextractor/" + pkg);
         List<String> violators = new ArrayList<>();
         for (UiportSignature.Violation v : scan.violations()) {
             violators.add(v.className() + "  →  " + v.descriptors());
@@ -1119,7 +1124,8 @@ class ArchitectureTest {
                 "uiport 包出现 JavaFX 依赖（它是 UI 可切换重构的端口层，必须零 JavaFX）：\n  "
                         + String.join("\n  ", violators));
         System.out.println("[arch] uiport JavaFX 闸门：扫描了 " + scan.classesScanned() + " 个类 / 违规 "
-                + scan.violations().size() + " 个（" + violators + "）");
+                + scan.violations().size() + " 个（" + violators + "） package=" + pkg);
+        }
     }
 
     /**

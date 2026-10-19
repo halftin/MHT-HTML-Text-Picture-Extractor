@@ -45,11 +45,15 @@ public final class UiportSignature {
      * 包不存在时视为 0 个类（通过）；编译产物缺失时报错（本闸门依赖字节码，不依赖源码）。
      */
     public static Scan scan(Path mainClasses) throws IOException {
+        return scan(mainClasses, UIPORT_PACKAGE_DIR);
+    }
+
+    public static Scan scan(Path mainClasses, String packageDir) throws IOException {
         if (!Files.isDirectory(mainClasses)) {
             throw new IOException("未找到编译产物 " + mainClasses.toAbsolutePath()
                     + "，请先 mvn compile（本闸门依赖字节码，不依赖源码）");
         }
-        Path uiport = mainClasses.resolve(UIPORT_PACKAGE_DIR);
+        Path uiport = mainClasses.resolve(packageDir);
         List<Path> classFiles = new ArrayList<>();
         if (Files.isDirectory(uiport)) {
             try (Stream<Path> walk = Files.walk(uiport)) {

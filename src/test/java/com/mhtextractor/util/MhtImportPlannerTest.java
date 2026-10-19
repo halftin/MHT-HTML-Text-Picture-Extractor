@@ -1,6 +1,6 @@
 package com.mhtextractor.util;
 
-import com.mhtextractor.app.MhtImportPlanner;
+import com.mhtextractor.engine.MhtImportPlanner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

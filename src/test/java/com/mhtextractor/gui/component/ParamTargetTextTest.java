@@ -108,7 +108,7 @@ class ParamTargetTextTest {
 
     @Test
     void isGroupMixedOnlyForGroupTargetsAndUsesExplicitMemberQuery() {
-        try (var root = new com.mhtextractor.app.BackendWorkspace(request -> {
+        try (var root = new com.mhtextractor.engine.BackendWorkspace(request -> {
             throw new AssertionError("Unexpected confirmation");
         }, AppConfig::new, Runnable::run);
              var frontend = new com.mhtextractor.uicore.FrontendPort(root.port(), Runnable::run, ignored -> {})) {

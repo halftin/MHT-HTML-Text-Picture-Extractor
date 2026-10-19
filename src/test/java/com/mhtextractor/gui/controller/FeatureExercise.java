@@ -1,6 +1,6 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.MhtImportPlanner;
+import com.mhtextractor.engine.MhtImportPlanner;
 import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.uicore.GuiState;
@@ -8,7 +8,7 @@ import com.mhtextractor.uicore.GuiStateManager;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.ExtractionStats;
 import com.mhtextractor.model.ChangeListener;
-import com.mhtextractor.app.DropResolver;
+import com.mhtextractor.engine.DropResolver;
 import com.mhtextractor.model.ExtractOutcome;
 import com.mhtextractor.uicore.GroupRow;
 import com.mhtextractor.util.OutputUnitPlanner;
@@ -1336,10 +1336,10 @@ public boolean runAutomatedTests() {
             java.nio.file.Path qRoot = java.nio.file.Files.createTempDirectory("mht-auto-quota");
             createSampleMht(qRoot, "top1.mht");
             createSampleMht(qRoot, "top2.mht");
-            int maxGroups = com.mhtextractor.app.MhtImportPlanner.DEFAULT_MAX_GROUPS;
+            int maxGroups = com.mhtextractor.engine.MhtImportPlanner.DEFAULT_MAX_GROUPS;
             // IpcSession 的冻结服务端配额是 200 组 / 20000 文件；进程内根沿用 planner 默认值。
             int maxFiles = "inprocess".equals(System.getProperty("mht.uiport"))
-                    ? com.mhtextractor.app.MhtImportPlanner.DEFAULT_MAX_FILES : 20000;
+                    ? com.mhtextractor.engine.MhtImportPlanner.DEFAULT_MAX_FILES : 20000;
             for (int index = 1; index <= maxGroups * 2 + 1; index++) {
                 createSampleMht(java.nio.file.Files.createDirectories(qRoot.resolve("d" + index)), "in.mht");
             }

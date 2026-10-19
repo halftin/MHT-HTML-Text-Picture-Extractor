@@ -17,7 +17,7 @@ const originals = new Map([content, processor].map(p => [p, fs.readFileSync(p)])
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const manifest = { commands: [], sourceBefore: Object.fromEntries([...originals].map(([p,b]) => [p,sha(b)])) };
 function run(label, expectedFailure) {
-  const reportPath = 'target/surefire-reports/com.mhtextractor.app.TextStructureTest.txt';
+  const reportPath = 'target/surefire-reports/com.mhtextractor.engine.TextStructureTest.txt';
   if (fs.existsSync(reportPath)) fs.unlinkSync(reportPath);
   const product = path.join(evidence,label,'real-merged.txt');
   if (fs.existsSync(product)) fs.unlinkSync(product);

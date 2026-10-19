@@ -6,7 +6,8 @@ param(
     [Parameter(Mandatory = $true)][string]$Backend,
     [string]$TempRoot = 'H:\TEST\temp',
     [string]$BuildDir = '',
-    [switch]$InjectWrongSource
+    [switch]$InjectWrongSource,
+    [switch]$Extract
 )
 . (Join-Path $PSScriptRoot 'gui-probe-support.ps1')
 try {
@@ -17,7 +18,7 @@ try {
     $fixture = Join-Path $OutDir 'fixture'
     New-ProbeFixture $fixture
     $code = Invoke-GuiAcquisition 'native' 'e2e' $BuildDir $JavaHome $Backend (Join-Path $OutDir 'work') `
-        $OutDir $TempRoot $fixture 'en_US' -WrongSource:$InjectWrongSource
+        $OutDir $TempRoot $fixture 'en_US' -WrongSource:$InjectWrongSource -Extract:$Extract
     if ($InjectWrongSource) {
         $output = [IO.File]::ReadAllText((Join-Path $OutDir 'run.stdout.log'))
         if ($code -ne 1 -or -not $output.Contains('[FAIL] source column text equals fixture directory')) {

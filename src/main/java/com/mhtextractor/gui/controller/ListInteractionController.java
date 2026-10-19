@@ -29,7 +29,7 @@ import java.util.List;
  *
  * <p>宿主能力经 {@link Host} 收窄为具名方法：本类不持有 {@code MainController} / {@code MainViewRefs} /
  * FXML namespace，也不得在数据序上直写 —— 数据序唯一所有者是
- * {@link com.mhtextractor.app.WorkspaceModel}，本类只经 {@code dataOrder()} 只读投影与
+ * {@link com.mhtextractor.engine.WorkspaceModel}，本类只经 {@code dataOrder()} 只读投影与
  * {@code applyResolvedDrop} 语义命令（见 {@code ArchitectureTest.guiDoesNotMutateDataOrderDirectly}）。</p>
  *
  * <p>本类含 JavaFX，属 {@code gui} 层。单元格渲染（{@link PreviewListCell}）经窄接口

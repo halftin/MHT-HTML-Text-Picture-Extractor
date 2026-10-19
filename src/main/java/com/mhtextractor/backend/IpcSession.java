@@ -3,7 +3,9 @@ package com.mhtextractor.backend;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.mhtextractor.app.*;
+import com.mhtextractor.engine.*;
+import com.mhtextractor.uiclient.*;
+import com.mhtextractor.model.*;
 import com.mhtextractor.engine.PreviewService;
 import com.mhtextractor.engine.PreviewSession;
 import com.mhtextractor.core.SourceParsers;
@@ -347,7 +349,7 @@ final class IpcSession implements AutoCloseable {
 
     /** Explicit full DTO encoding also works in native without registering record reflection. */
     private ObjectNode stats(ExtractionStats stats) {
-        return com.mhtextractor.app.ExtractionStatsJson.encode(json, stats);
+        return com.mhtextractor.engine.ExtractionStatsJson.encode(json, stats);
     }
 
     private void flushImportChanges() {
@@ -713,7 +715,7 @@ final class IpcSession implements AutoCloseable {
                 await(() -> terminal != null);
                 var result = terminalSummary(terminal);
                 if (terminal.stats() != null) {
-                    var outcomes = com.mhtextractor.app.ExtractionStatsJson.outcomes(json, terminal.stats().files());
+                    var outcomes = com.mhtextractor.engine.ExtractionStatsJson.outcomes(json, terminal.stats().files());
                     result.set("resultsFile", files.write(".json", json.writeValueAsBytes(outcomes), "application/json"));
                 }
                 // Use the lifecycle's batch deletion for completed inputs (same deletion semantics as rule b).

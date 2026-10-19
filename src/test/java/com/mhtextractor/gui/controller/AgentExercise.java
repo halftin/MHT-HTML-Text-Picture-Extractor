@@ -1,12 +1,12 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.MhtImportPlanner;
+import com.mhtextractor.engine.MhtImportPlanner;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.uicore.GuiState;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.uicore.GroupRow;
 import com.mhtextractor.uicore.PreviewRow;
-import com.mhtextractor.app.DropResolver;
+import com.mhtextractor.engine.DropResolver;
 import com.mhtextractor.util.OutputUnitPlanner;
 import com.mhtextractor.uicore.ParamScope;
 import com.mhtextractor.util.UnitProgressAggregator;
@@ -387,11 +387,11 @@ public void exerciseAllFeatures() throws Exception {
         FxDelay.pause(1200);
         String sessionDir = new File(System.getProperty("java.io.tmpdir"), "mht-agent-session").getPath();
         List<OutputUnitPlanner.OutputUnit> textUnits = OutputUnitPlanner.plan(
-                this.view.dataOrder(), com.mhtextractor.app.ExtractionPlanService.itemView(false), false, this.view.textParamsCache(), this.view.imageParamsCache(), sessionDir);
+                this.view.dataOrder(), com.mhtextractor.engine.ExtractionPlanService.itemView(false), false, this.view.textParamsCache(), this.view.imageParamsCache(), sessionDir);
         log.info("Agent 文本输出单元计划：{}",
                 textUnits.stream().map(u -> u.label() + "(" + u.fileCount() + ")").toList());
         List<OutputUnitPlanner.OutputUnit> imageUnits = OutputUnitPlanner.plan(
-                this.view.dataOrder(), com.mhtextractor.app.ExtractionPlanService.itemView(false), true, this.view.textParamsCache(), this.view.imageParamsCache(), sessionDir);
+                this.view.dataOrder(), com.mhtextractor.engine.ExtractionPlanService.itemView(false), true, this.view.textParamsCache(), this.view.imageParamsCache(), sessionDir);
         log.info("Agent 图片输出单元计划：{}",
                 imageUnits.stream().map(u -> u.label() + "(" + u.fileCount() + ")").toList());
         UnitProgressAggregator aggregator = new UnitProgressAggregator(

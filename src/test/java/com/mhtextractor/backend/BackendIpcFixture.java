@@ -1,7 +1,7 @@
 package com.mhtextractor.backend;
 
-import com.mhtextractor.app.InProcessUiport;
-import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.engine.InProcessUiport;
+import com.mhtextractor.engine.WorkspaceModel;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uiport.Uiport;
 

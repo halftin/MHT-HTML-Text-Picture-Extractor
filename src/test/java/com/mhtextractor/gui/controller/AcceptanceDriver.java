@@ -1,13 +1,13 @@
 package com.mhtextractor.gui.controller;
 
 import com.mhtextractor.model.ExtractionStats;
-import com.mhtextractor.app.MhtImportPlanner;
-import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.engine.MhtImportPlanner;
+import com.mhtextractor.engine.WorkspaceModel;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.uicore.GroupRow;
 import com.mhtextractor.uicore.PreviewRow;
-import com.mhtextractor.app.DropResolver;
+import com.mhtextractor.engine.DropResolver;
 import com.mhtextractor.util.OutputUnitPlanner;
 import javafx.scene.Node;
 import javafx.scene.control.Button;

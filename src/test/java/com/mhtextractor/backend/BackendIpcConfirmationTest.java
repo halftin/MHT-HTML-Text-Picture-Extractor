@@ -1,10 +1,10 @@
 package com.mhtextractor.backend;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.mhtextractor.app.ExtractionPlanService;
-import com.mhtextractor.app.WorkspaceExtractionCoordinator;
-import com.mhtextractor.app.WorkspaceExtractionService;
-import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.engine.ExtractionPlanService;
+import com.mhtextractor.engine.WorkspaceExtractionCoordinator;
+import com.mhtextractor.engine.WorkspaceExtractionService;
+import com.mhtextractor.engine.WorkspaceModel;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.PreviewItem;
 import com.mhtextractor.uiport.ConfirmRequest;
@@ -140,7 +140,7 @@ class BackendIpcConfirmationTest {
                 assertEquals(direct.stats().getSkipCount(), response.path("result").path("skipCount").asInt());
                 JsonNode results = JSON.readTree(Files.readString(Path.of(response.path("result").path("resultsFile").path("path").asText())));
                 var expected = JSON.createArrayNode();
-                expected = com.mhtextractor.app.ExtractionStatsJson.outcomes(JSON,
+                expected = com.mhtextractor.engine.ExtractionStatsJson.outcomes(JSON,
                         WorkspaceExtractionService.statsFrom(direct.stats()).files());
                 assertEquals(expected, results);
                 assertEquals("response", untilResponse(client, "queued-query").path("type").asText());

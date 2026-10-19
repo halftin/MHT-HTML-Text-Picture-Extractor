@@ -2,7 +2,7 @@ package com.mhtextractor.backend;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mhtextractor.app.SourceParseService;
+import com.mhtextractor.engine.SourceParseService;
 import com.mhtextractor.model.AppConfig;
 import org.junit.jupiter.api.Test;
 

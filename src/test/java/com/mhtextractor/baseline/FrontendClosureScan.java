@@ -14,7 +14,7 @@ import java.util.stream.Stream;
 public final class FrontendClosureScan {
     private static final String ROOT = "com/mhtextractor/";
     private static final List<String> FORBIDDEN = List.of(
-            "app", "core", "extractor", "processor", "output", "cache", "util", "config");
+            "app", "engine", "backend", "core", "extractor", "processor", "output", "cache", "util", "config");
     public static final String REPAIR = "请先执行 mvnw.cmd -q -DskipTests compile 后重跑"
             + "（本闸门依赖 target/classes 字节码，不依赖源码）";
 

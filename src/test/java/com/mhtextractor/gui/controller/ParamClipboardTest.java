@@ -12,10 +12,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.mhtextractor.app.EffectiveParamsService;
-import com.mhtextractor.app.ParamClipboard;
-import com.mhtextractor.app.InProcessUiport;
-import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.engine.EffectiveParamsService;
+import com.mhtextractor.engine.ParamClipboard;
+import com.mhtextractor.engine.InProcessUiport;
+import com.mhtextractor.engine.WorkspaceModel;
 import com.mhtextractor.uicore.ParamsInfo;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.GroupItem;
@@ -25,7 +25,7 @@ import com.mhtextractor.uiport.TargetId;
 import com.mhtextractor.uiport.TargetResolution;
 import com.mhtextractor.uiport.Uiport;
 import com.mhtextractor.model.ParamScope;
-import com.mhtextractor.app.UndoManager;
+import com.mhtextractor.engine.UndoManager;
 
 import org.junit.jupiter.api.Test;
 

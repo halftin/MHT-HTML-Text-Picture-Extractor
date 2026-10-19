@@ -16,7 +16,7 @@ import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.uicore.PreviewRow;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.uicore.GroupRow;
-import com.mhtextractor.app.MhtImportPlanner;
+import com.mhtextractor.engine.MhtImportPlanner;
 import com.mhtextractor.model.ThumbnailData;
 import com.mhtextractor.uicore.ParamScope;
 import javafx.application.Application;

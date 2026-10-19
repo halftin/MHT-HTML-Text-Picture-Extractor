@@ -1,7 +1,7 @@
 package com.mhtextractor.backend;
 
-import com.mhtextractor.app.MhtExtractorApp;
-import com.mhtextractor.app.WorkspaceModel;
+import com.mhtextractor.engine.MhtExtractorApp;
+import com.mhtextractor.engine.WorkspaceModel;
 import com.mhtextractor.i18n.I18n;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.GroupItem;
@@ -100,7 +100,7 @@ public final class OnceRunner {
             return BackendCli.EXIT_FAILURE;
         }
 
-        var stats = com.mhtextractor.app.WorkspaceExtractionService.statsFrom(result.stats());
+        var stats = com.mhtextractor.engine.WorkspaceExtractionService.statsFrom(result.stats());
         stats.files().forEach(r -> System.out.println("result: "
                 + Path.of(r.path()).getFileName() + "=" + r.outcome()));
         System.out.println("done: total=" + stats.totalFiles() + " success=" + stats.successCount()

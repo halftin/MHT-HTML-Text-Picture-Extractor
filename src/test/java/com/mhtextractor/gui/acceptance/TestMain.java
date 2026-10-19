@@ -80,14 +80,14 @@ public final class TestMain extends Application {
 
         var confirmer = new com.mhtextractor.gui.component.GuiConfirmer(() ->
                 primaryStage.getScene() == null ? null : (javafx.scene.control.Label) primaryStage.getScene().lookup("#statusLabel"));
-        com.mhtextractor.app.UiportRuntime.start(I18n.currentLocale().toLanguageTag(), confirmer, Platform::runLater,
+        com.mhtextractor.uiclient.UiportRuntime.start(I18n.currentLocale().toLanguageTag(), confirmer, Platform::runLater,
                 runtime -> {
                     try { finishStart(primaryStage, runtime); }
                     catch (Exception error) { error.printStackTrace(); Platform.exit(); }
                 }, error -> { error.printStackTrace(); Platform.exit(); });
     }
 
-    private void finishStart(Stage primaryStage, com.mhtextractor.app.UiportRuntime runtime) throws Exception {
+    private void finishStart(Stage primaryStage, com.mhtextractor.uiclient.UiportRuntime runtime) throws Exception {
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/mhtextractor/gui/view/MainView.fxml"));
         // P6-B：与 App.start() 同一行（逐行等价 —— 改一处必须改另一处，见类 javadoc）。
         // 控制器由此拿到 loader，从而能在 initialize() 里用 getNamespace() 构造 MainViewRefs。

@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.mhtextractor.baseline.AppConfigFieldContract;
 import java.util.List;
 
-import com.mhtextractor.app.EffectiveParamsService;
+import com.mhtextractor.engine.EffectiveParamsService;
 import com.mhtextractor.model.AppConfig;
 
 import org.junit.jupiter.api.Test;

@@ -1,7 +1,7 @@
 package com.mhtextractor.gui.controller;
 
-import com.mhtextractor.app.WorkspaceExtractionCoordinator;
-import com.mhtextractor.app.WorkspaceExtractionService;
+import com.mhtextractor.engine.WorkspaceExtractionCoordinator;
+import com.mhtextractor.engine.WorkspaceExtractionService;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.model.AppConfig;
@@ -59,7 +59,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * <p>本测试需要真实 FX toolkit：单独 {@code -Dtest=WorkspaceExtractionCoordinatorCancelRaceTest}
  * 运行时完整执行；全量 {@code mvn test} 中若 toolkit 已被同 JVM 的其它用例 {@code Platform.exit()}
  * （{@code WorkspaceFxAdapterTest} 末尾如此），则按假设跳过 —— 该逻辑的常开回归由无头测试
- * {@link com.mhtextractor.app.WorkspaceExtractionCoordinatorRunChannelTest} 承担。
+ * {@link com.mhtextractor.engine.WorkspaceExtractionCoordinatorRunChannelTest} 承担。
  * headless-layer-b 执行（JavaFX 已物理剔除）同样按假设跳过。</p>
  */
 class WorkspaceExtractionCoordinatorCancelRaceTest {

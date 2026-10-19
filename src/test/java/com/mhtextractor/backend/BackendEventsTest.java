@@ -1,8 +1,8 @@
 package com.mhtextractor.backend;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mhtextractor.app.ipc.IpcCodec;
-import com.mhtextractor.app.ipc.IpcFilesClient;
+import com.mhtextractor.uiclient.ipc.IpcCodec;
+import com.mhtextractor.uiclient.ipc.IpcFilesClient;
 import com.mhtextractor.cache.PreviewCacheLifecycle;
 import com.mhtextractor.cache.PreviewCacheStore;
 import com.mhtextractor.i18n.I18n;

@@ -1,4 +1,4 @@
-import com.mhtextractor.app.BackendWorkspace;
+import com.mhtextractor.engine.BackendWorkspace;
 import com.mhtextractor.gui.component.GuiConfirmer;
 import com.mhtextractor.gui.controller.MainController;
 import com.mhtextractor.model.AppConfig;

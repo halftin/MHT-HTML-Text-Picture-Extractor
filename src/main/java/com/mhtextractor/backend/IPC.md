@@ -1,16 +1,20 @@
 # JSON Lines 控制协议 2（帧格式 v1）
 
-## P-F9：引擎包与过渡应用层
+## P-F10：后端引擎与客户端分包
 
-依赖方向为 `gui → uiport/uiclient → backend/app → engine → 业务包`。
-`engine` 零 JavaFX：`PreviewService` 管预览缓存读写与命中；
-`PreviewSession` / `PreviewCacheFactory` 持有、构造引擎缓存生命周期，不承担客户端传输或前端呈现。
-`app` 暂保留 `BackendWorkspace` 装配、`InProcessUiport` 适配、`WorkspaceModel` 数据所有权及导入/参数/计划等服务。
-`WorkspaceExtractionCoordinator` 保留在 app：它构建计划/确认并发布端口事件，且 `InProcessUiport` 三处
-直接读取其包级 `RunChannel.sessionOutputFolder`；只迁包会破坏访问，本批不放宽可见性。
-P-F10 再解除该端口适配耦合，决定剩余服务和适配器落位、取消 app。
-`WorkspaceExtractionService` 的迁包还受协调器调用其包级 `outputName` 阻塞，裁决前仍在 app。
-本次只迁包，uiport 契约、协议号、产品版本和产物基线不变。
+`app` 包已取消。前端使用 `uiclient.UiportRuntime` → `uiclient.IpcUiport` →
+`uiclient.BackendSession`；可执行路径解析、启动和身份分别为 `uiclient.BackendExecutable`、
+`uiclient.BackendLauncher`、`uiclient.BackendIdentity`。客户端不依赖 backend/engine 实现。
+`backend.BackendCli` / `IpcServer` 继续提供 --once / --serve；握手 hello/welcome 仍为
+protocolVersion=2，version/buildId 精确匹配，身份资源仍从 `/backend-build.properties` 加载。
+
+`engine.BackendWorkspace` 装配工作区；`engine.InProcessUiport` 适配端口；预览、导入、参数、
+提取与顺序门服务归 engine。`WorkspaceExtractionCoordinator`、`WorkspaceExtractionService` 与
+`InProcessUiport` 同包，outputName / sessionOutputFolder 保持 package-private。
+GUI 仅走 IPC；`mht.uiport=inprocess` 已删除，进程内端口只由测试/探针显式构造。
+`model.ParamSchemaService` 是两侧共享的纯参数字段映射，离线 GUI 不加载引擎。
+platform 维持既有操作系统/文本基础设施边界，前端 15 项引用受 PENDING_MAX=15 冻结。
+本次不改 uiport 契约、协议号、产品版本或产物基线。
 
 ## P-F2：命名事实与表单值契约
 

@@ -1,7 +1,7 @@
 package com.mhtextractor.backend;
 
-import com.mhtextractor.app.PreviewImageData;
-import com.mhtextractor.app.PreviewNamingService;
+import com.mhtextractor.model.PreviewImageData;
+import com.mhtextractor.engine.PreviewNamingService;
 import com.mhtextractor.model.AppConfig;
 import com.mhtextractor.model.ThumbnailData;
 
@@ -33,6 +33,6 @@ final class IpcImages {
     // Dimensions describe the original encoded image. Zero means that its header has no
     // dimensions supported here; the client still decodes the file and reports its own failure.
     private static int[] dimensions(byte[] bytes, String extension) {
-        return com.mhtextractor.app.InProcessUiport.imageDimensions(bytes, extension);
+        return com.mhtextractor.engine.InProcessUiport.imageDimensions(bytes, extension);
     }
 }

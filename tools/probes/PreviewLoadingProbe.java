@@ -1,4 +1,6 @@
-import com.mhtextractor.app.*;
+import com.mhtextractor.engine.*;
+import com.mhtextractor.uiclient.*;
+import com.mhtextractor.model.*;
 import com.mhtextractor.engine.PreviewSession;
 import com.mhtextractor.engine.PreviewService;
 import com.mhtextractor.gui.controller.PreviewLoader;

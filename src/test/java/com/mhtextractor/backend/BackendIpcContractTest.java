@@ -1,5 +1,7 @@
 package com.mhtextractor.backend;
 
+import com.mhtextractor.uiclient.BackendIdentity;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mhtextractor.uiport.PortEvent;
 import com.mhtextractor.uiport.TriState;

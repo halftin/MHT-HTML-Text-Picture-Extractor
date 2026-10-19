@@ -1,5 +1,9 @@
 package com.mhtextractor.backend;
 
+import com.mhtextractor.uiclient.BackendIdentity;
+import com.mhtextractor.uiclient.BackendLauncher;
+import com.mhtextractor.uiclient.BackendLauncherWireFixture;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

@@ -1,5 +1,7 @@
 package com.mhtextractor.backend;
 
+import com.mhtextractor.uiclient.BackendIdentity;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
@@ -283,8 +285,8 @@ class BackendIpcExtractionTest {
     }
 
     @Test void repeatedPortCancellationDeliversTerminalWhileWorkerIsHeldThenOnePartial() throws Exception {
-        var model = new com.mhtextractor.app.WorkspaceModel();
-        var global = new com.mhtextractor.app.GlobalParameterCache();
+        var model = new com.mhtextractor.engine.WorkspaceModel();
+        var global = new com.mhtextractor.engine.GlobalParameterCache();
         Path source = deep();
         var entered = new java.util.concurrent.CountDownLatch(1);
         var release = new java.util.concurrent.CountDownLatch(1);
@@ -305,7 +307,7 @@ class BackendIpcExtractionTest {
         };
         var previews = com.mhtextractor.engine.PreviewSession.create(tmp.resolve("held-cache"));
         try {
-            var plans = new com.mhtextractor.app.ExtractionPlanService(new com.mhtextractor.app.ExtractionPlanService.Context() {
+            var plans = new com.mhtextractor.engine.ExtractionPlanService(new com.mhtextractor.engine.ExtractionPlanService.Context() {
                 public List<Object> dataOrder() { return model.topLevel(); }
                 public boolean imageMode() { return false; }
                 public com.mhtextractor.model.AppConfig textParamsCache() { return global.text(); }
@@ -314,21 +316,21 @@ class BackendIpcExtractionTest {
                 public String outputFolder() { return tmp.resolve("held-output").toString(); }
                 public boolean openFolderAfterComplete() { return false; }
             });
-            var activities = new com.mhtextractor.app.WorkspaceActivityService(new com.mhtextractor.app.WorkspaceActivityService.Context() {
+            var activities = new com.mhtextractor.engine.WorkspaceActivityService(new com.mhtextractor.engine.WorkspaceActivityService.Context() {
                 public List<com.mhtextractor.model.PreviewItem> items() { return model.allItems(); }
                 public boolean textMode() { return true; }
                 public com.mhtextractor.model.AppConfig effectiveParams(com.mhtextractor.model.PreviewItem item) { return new com.mhtextractor.model.AppConfig(); }
                 public com.mhtextractor.model.AppConfig effectiveImageParams(com.mhtextractor.model.PreviewItem item) { return new com.mhtextractor.model.AppConfig(); }
             }, new com.mhtextractor.engine.PreviewService(previews.lifecycle()), (image, index, config) -> null, callbacks::add);
-            var cache = new com.mhtextractor.app.WorkspaceParamService(previews.lifecycle());
-            var clipboard = new com.mhtextractor.app.ParamClipboard(model::push, target -> com.mhtextractor.model.ParamScope.GLOBAL,
+            var cache = new com.mhtextractor.engine.WorkspaceParamService(previews.lifecycle());
+            var clipboard = new com.mhtextractor.engine.ParamClipboard(model::push, target -> com.mhtextractor.model.ParamScope.GLOBAL,
                     (target, mode, config) -> { });
-            var params = new com.mhtextractor.app.WorkspaceParamCommandService(model, cache, global, clipboard::pushParamUndo);
-            var coordinator = new com.mhtextractor.app.WorkspaceExtractionCoordinator(
-                    new com.mhtextractor.app.WorkspaceExtractionService(previews.lifecycle()),
-                    com.mhtextractor.app.WorkspaceExtractionCoordinator.productionRequests(plans, model::allItems, confirmer), callbacks::add);
-            var port = new com.mhtextractor.app.InProcessUiport(model, confirmer, plans, activities, params,
-                    new com.mhtextractor.app.WorkspaceImportCoordinator(model, confirmer, callbacks::add), coordinator, cache);
+            var params = new com.mhtextractor.engine.WorkspaceParamCommandService(model, cache, global, clipboard::pushParamUndo);
+            var coordinator = new com.mhtextractor.engine.WorkspaceExtractionCoordinator(
+                    new com.mhtextractor.engine.WorkspaceExtractionService(previews.lifecycle()),
+                    com.mhtextractor.engine.WorkspaceExtractionCoordinator.productionRequests(plans, model::allItems, confirmer), callbacks::add);
+            var port = new com.mhtextractor.engine.InProcessUiport(model, confirmer, plans, activities, params,
+                    new com.mhtextractor.engine.WorkspaceImportCoordinator(model, confirmer, callbacks::add), coordinator, cache);
             var events = new ArrayList<com.mhtextractor.uiport.PortEvent>();
             port.events().subscribe(events::add);
             port.commands().applyImportPlan(new com.mhtextractor.uiport.ImportPlanVm(
