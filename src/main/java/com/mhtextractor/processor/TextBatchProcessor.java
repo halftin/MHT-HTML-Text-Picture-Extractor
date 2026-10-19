@@ -1,7 +1,8 @@
 package com.mhtextractor.processor;
 
 import com.mhtextractor.model.AppConfig;
-import com.mhtextractor.core.ChapterGenerator;
+import com.mhtextractor.core.ChapterHeaders;
+import com.mhtextractor.core.ChapterNumbers;
 import com.mhtextractor.core.MimeParser;
 import com.mhtextractor.core.SourceParsers;
 import com.mhtextractor.extractor.TextExtractor;
@@ -17,6 +18,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -33,7 +35,11 @@ public class TextBatchProcessor extends BatchProcessor {
     }
 
     /**
-     * 合并模式（按传入顺序处理，支持每文件覆盖项）
+     * 合并模式（仅在本输出单元内按章号稳定排序，支持每文件覆盖项）
+     * <p>排序预扫描只保留 String 键，不缓存 ParsedMht。文件名有章号时直接用文件名排序，
+     * 即使提取标题（含覆盖标题）的章号与它冲突，也以文件名为准；无章号才解析并取标题键。
+     * 既无覆盖标题、也未配置可用的标题提取时，无额外排序键可取，留到写入阶段解析。
+     * 预扫描的解析结果用完即丢弃，写入时逐文件按需重新解析。
      */
     public ProcessStats processMerged(List<MhtFileInfo> orderedFiles, String outputTxtPath,
                                       ProgressCallback callback, Map<String, PerFileOverrides> overrides) {
@@ -48,7 +54,35 @@ public class TextBatchProcessor extends BatchProcessor {
             return stats;
         }
 
-        return processFiles(orderedFiles, stats, (_, _) -> outputTxtPath, overrides);
+        Map<String, String> sortKeys = new HashMap<>();
+        for (int i = 0; i < orderedFiles.size(); i++) {
+            if (isCancelled()) break;
+            MhtFileInfo file = orderedFiles.get(i);
+            if (ChapterNumbers.resolve(null, file.getName()) > 0) {
+                sortKeys.put(file.getPath(), file.getName());
+                continue;
+            }
+            PerFileOverrides override = overrides.getOrDefault(file.getPath(), PerFileOverrides.DEFAULTS);
+            if (!override.hasTitleOverride() && (!config.isEnableTitleExtraction()
+                    || config.getTitleStartMarker() == null || config.getTitleStartMarker().isEmpty())) {
+                // No title key to scan: leave parsing and recursion confirmation to the writing loop.
+                continue;
+            }
+            int index = i + 1;
+            fireProgress(index, orderedFiles.size(), file.getName(), 0.05);
+            try {
+                MimeParser.ParsedMht parsed = SourceParsers.forPath(file.getPath())
+                        .parse(file.getPath(), true, recursionContinueCallback,
+                                stage -> fireParsingProgress(index, orderedFiles.size(), file.getName(), stage),
+                                progress -> fireProgress(index, orderedFiles.size(), file.getName(), progress));
+                sortKeys.put(file.getPath(), extractedTitle(parsed, override));
+            } catch (Exception ignored) {
+                // The writing loop retries parsing and records failures through the normal result path.
+            }
+        }
+        List<MhtFileInfo> sorted = ChapterNumbers.stableOrder(orderedFiles,
+                file -> ChapterNumbers.resolve(sortKeys.get(file.getPath()), file.getName()));
+        return processFiles(sorted, stats, (_, _) -> outputTxtPath, overrides);
     }
 
     /**
@@ -259,17 +293,16 @@ public class TextBatchProcessor extends BatchProcessor {
             }
         }
 
-        if (config.isAddChapterNumber()) {
-            String numberPart = ChapterGenerator.generateChapterName(chapterIndex - 1);
-            if (extractedTitle != null && !extractedTitle.isEmpty()) {
-                return numberPart + " " + extractedTitle;
-            }
-            return numberPart;
-        } else if (extractedTitle != null && !extractedTitle.isEmpty()) {
-            return extractedTitle;
-        }
+        return ChapterHeaders.build(extractedTitle, fileName, chapterIndex - 1,
+                config.isAddChapterNumber(), config.isEnableTitleExtraction());
+    }
 
-        return null;
+    private String extractedTitle(MimeParser.ParsedMht parsed, PerFileOverrides override) {
+        if (override.hasTitleOverride()) return override.titleOverride().trim();
+        if (!config.isEnableTitleExtraction() || config.getTitleStartMarker() == null
+                || config.getTitleStartMarker().isEmpty() || parsed.getHtmlContent() == null) return null;
+        return new TextExtractor(parsed).extractTitle(config.getTitleStartMarker(),
+                config.getTitleEndMarker(), config.isTitleUseRegex());
     }
 
     private void logConfigInfo() {

@@ -35,19 +35,12 @@ public class FileWriter {
         if (startTemplate == null) startTemplate = "";
         if (endTemplate == null) endTemplate = "";
 
+        boolean hasContent = new File(outputPath).length() > 0;
         try (BufferedWriter writer = new BufferedWriter(
                 new OutputStreamWriter(new FileOutputStream(outputPath, true), StandardCharsets.UTF_8))) {
-
-            if (chapterName != null && !chapterName.trim().isEmpty()) {
-                writer.write(chapterName);
-                writer.write("\n\n");
-            }
-
-            String startContent = processTemplate(startTemplate, sourceFileName, fileTime);
-            writer.write(startContent);
-            writer.write(text);
-            String endContent = processTemplate(endTemplate, sourceFileName, fileTime);
-            writer.write(endContent);
+            if (hasContent) writer.write("\n\n");
+            TextParts parts = composeText(text, sourceFileName, fileTime, startTemplate, endTemplate, chapterName);
+            writer.write(parts.head() + parts.body() + parts.tail());
 
             log.info(I18n.msg("log.filewriter.02", sourceFileName, chapterName != null ? " (" + chapterName + ")" : ""));
             return true;
@@ -56,6 +49,16 @@ public class FileWriter {
             log.error(I18n.msg("log.filewriter.03", sourceFileName), e);
             return false;
         }
+    }
+
+    public record TextParts(String head, String body, String tail) {}
+
+    /** The exact single-item payload, also used by the presentation port. Templates remain verbatim. */
+    public static TextParts composeText(String text, String filename, LocalDateTime time,
+                                        String start, String end, String chapter) {
+        String head = chapter == null || chapter.isBlank() ? "" : chapter.strip() + "\n\n";
+        String body = text == null ? "" : text.replaceAll("[\\r\\n]+$", "");
+        return new TextParts(head + processTemplate(start, filename, time), body, processTemplate(end, filename, time));
     }
 
     /**

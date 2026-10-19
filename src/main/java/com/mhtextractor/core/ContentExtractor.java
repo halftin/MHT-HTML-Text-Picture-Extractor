@@ -60,8 +60,7 @@ public class ContentExtractor {
 
         // HTML → 纯文本
         Document doc = Jsoup.parse(htmlContent);
-        doc.body();
-        String text = doc.body().wholeText();
+        String text = BlockTextBuilder.build(doc.body());
 
         // 乱码修复
         if (autoFixEncoding) {

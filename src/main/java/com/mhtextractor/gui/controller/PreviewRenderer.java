@@ -80,24 +80,10 @@ public final class PreviewRenderer {
     }
 
     public void renderTextPreview(PreviewRow item) {
-        AppConfig params = host.effectiveParams(item);
-        if (params == null) {
-            params = new AppConfig();
-        }
-        String startTemplate = params.isEnableTemplate() ? params.getStartTemplate() : "";
-        String endTemplate = params.isEnableTemplate() ? params.getEndTemplate() : "";
         String head = item.previewHead;
         String tail = item.previewTail;
         String text = item.cachedText == null ? "" : item.cachedText;
-        if (text.length() <= 10000) {
-            host.textPreviewArea().setText(head + text + tail);
-        } else {
-            host.textPreviewArea().setText(head
-                    + text.substring(0, 5000)
-                    + Texts.get("preview.extractedContentDivider")
-                    + text.substring(text.length() - 5000)
-                    + tail);
-        }
+        host.textPreviewArea().setText(head + text + tail);
     }
 
     /** 重置图片区：hint 为 null 时显示默认按需预览说明 */

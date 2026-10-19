@@ -15,9 +15,9 @@
     "outcomes": ["plain.html=SUCCESS", "simple-text.mht=SUCCESS"]
   },
   "products": [
-    {"path": "merged.txt", "sha256": "48a4ebaabe7bf573e13b2d9035c4bc9ef8a661a61139c957af8f229f4bef81f4"}
+    {"path": "merged.txt", "sha256": "7af46c921ea503abab984c45f04c3d571efddca0aef41a06002f329d565fb927"}
   ],
   "contentDigests": {
-    "merged.txt": "d1b6569563220baec7ecdb679a6119e8322a5e74bf9a03f9824dff2c5d738416"
+    "merged.txt": "b79670f180b43ad3b4ea702cb58a06cc887928a9d0e40ee0972a3532a88d0392"
   }
 }

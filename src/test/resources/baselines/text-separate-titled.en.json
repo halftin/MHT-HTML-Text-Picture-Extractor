@@ -15,11 +15,11 @@
     "outcomes": ["multi-image.mht=SKIPPED", "simple-text.mht=SUCCESS_WARNED", "titles.mht=SUCCESS"]
   },
   "products": [
-    {"path": "simple-text.txt", "sha256": "7073cdfd31e5c6cff0af7cf94bebfa1a1e5de968b0e0ab474f5051d6c9ff574c"},
-    {"path": "我的作品名称.txt", "sha256": "79bcf9223045fbfe3308d1b9893bef36f96d1f00651e6812f13a1bbaf225e8d1"}
+    {"path": "simple-text.txt", "sha256": "c56373d8f4de06846c14fa9e0a28ae883ba028ac254440f09c51f668fe92453b"},
+    {"path": "我的作品名称.txt", "sha256": "d9f6a585c9fcc6357aff04ac6cce10de4ef62cee3ca92f2aa7854919e1803bda"}
   ],
   "contentDigests": {
-    "simple-text.txt": "3058ecef2d9fc937057d98717fafe146872b685b39c9dd98db52f0dac5ed6c4d",
-    "我的作品名称.txt": "b01258eb9d04d3af529c91d2c008c8b18012c16150f1650fd8ed4ad575a42a74"
+    "simple-text.txt": "0012b639481171156a8f780c5e0b92a5868a1934863939670f89c7e086758d57",
+    "我的作品名称.txt": "078f4e5e826dda5d6e1ce517936e0ca3775580de525e99c8252d59a0799690d9"
   }
 }

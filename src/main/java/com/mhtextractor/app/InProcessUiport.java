@@ -571,6 +571,7 @@ public final class InProcessUiport implements Uiport {
                 var globals = confirmedContext(runtime.isImageModeEnabled());
                 var effective = new EffectiveParamsService();
                 var first = model.allItems().stream().filter(i -> !i.removed).findFirst().orElse(null);
+                Map<String, String> chapters = runtime.isImageModeEnabled() ? Map.of() : previewChapterHeaders();
                 return resolveItems(paths).stream().map(item -> {
                     var config = effective.effectiveFor(item, globals);
                     if (config == null) config = new AppConfig();
@@ -578,10 +579,11 @@ public final class InProcessUiport implements Uiport {
                             ? OutputNameService.imageOutputName(item, config, first, runtime.getInputFolder())
                             : new OutputNameService.Name(OutputNameService.textOutputName(item, config,
                                     runtime.getInputFolder() == null ? "" : runtime.getInputFolder()), false);
-                    String head = PreviewNamingService.applyTemplate(config.isEnableTemplate() ? config.getStartTemplate() : "", item.name, item.modifiedTime);
-                    String tail = PreviewNamingService.applyTemplate(config.isEnableTemplate() ? config.getEndTemplate() : "", item.name, item.modifiedTime);
+                    var parts = com.mhtextractor.output.FileWriter.composeText(item.cachedText, item.name, item.modifiedTime,
+                            config.isEnableTemplate() ? config.getStartTemplate() : "",
+                            config.isEnableTemplate() ? config.getEndTemplate() : "", chapters.get(item.path));
                     return new com.mhtextractor.uiport.PresentationVm(item.path, name.value(), name.parsing(), runtime.isImageModeEnabled(),
-                            item.status.name(), head, tail, textFile(item.cachedText), imageDescriptions(item, config),
+                            item.status.name(), parts.head(), parts.tail(), item.cachedText == null ? null : textFile(parts.body()), imageDescriptions(item, config),
                             name.name().baseName(), name.name().extension(), name.name().finalFileName());
                 }).toList();
             }
@@ -778,6 +780,34 @@ public final class InProcessUiport implements Uiport {
                 it.modifiedTime == null ? null : it.modifiedTime.toString(), it.status.name(), it.errorKey, it.errorDetail,
                 it.chapterEnabled, it.badge, it.cachedTitle, it.titleOverride, it.extractOutcome.name(),
                 it.extractMessageKey, it.extractMessageParams, it.extractMessageDetail, it.extractWarnings, textFile(it.cachedText), previewManifest(it));
+    }
+
+    private Map<String, String> previewChapterHeaders() {
+        // Use the pure planner: ExtractionPlanService.plan also fills runtime fields on shared configs.
+        var units = com.mhtextractor.util.OutputUnitPlanner.plan(model.topLevel(), ExtractionPlanService.itemView(false),
+                false, parameterGlobals.text(), parameterGlobals.image(), "");
+        var headers = new HashMap<String, String>();
+        for (var unit : units) {
+            AppConfig config = unit.getParams();
+            List<PreviewItem> members = resolveItems(unit.getPaths());
+            if (!config.isSeparateFiles()) members = com.mhtextractor.core.ChapterNumbers.stableOrder(members,
+                    m -> com.mhtextractor.core.ChapterNumbers.resolve(previewTitle(m, config), m.name));
+            int ordinal = 0;
+            for (PreviewItem item : members) {
+                String chapter = config.isAddChapterNumber() && !item.chapterEnabled ? null
+                        : com.mhtextractor.core.ChapterHeaders.build(previewTitle(item, config), item.name,
+                                ordinal, config.isAddChapterNumber(), config.isEnableTitleExtraction());
+                headers.put(item.path, chapter);
+                if (item.chapterEnabled && item.cachedText != null && !item.cachedText.isBlank()) ordinal++;
+            }
+        }
+        return headers;
+    }
+
+    private static String previewTitle(PreviewItem item, AppConfig config) {
+        if (item.titleOverride != null && !item.titleOverride.isBlank()) return item.titleOverride.strip();
+        return config.isEnableTitleExtraction() && config.getTitleStartMarker() != null
+                && !config.getTitleStartMarker().isEmpty() ? item.cachedTitle : null;
     }
 
     private com.mhtextractor.uiport.FileRef previewManifest(PreviewItem item) {

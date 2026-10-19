@@ -15,11 +15,11 @@
     "outcomes": ["multi-image.mht=SKIPPED", "simple-text.mht=SUCCESS_WARNED", "titles.mht=SUCCESS"]
   },
   "products": [
-    {"path": "simple-text.txt", "sha256": "6eaabf6b3ba99b802db75e1ffc256dc88d1e57c07d596ce6eaff3ccc0062048a"},
-    {"path": "我的作品名称.txt", "sha256": "0ffa7b1ab392ce3c605cc59ce7995b42b09595bfd7447e2420ed02d838e7483d"}
+    {"path": "simple-text.txt", "sha256": "eb010d9a673216911f00acfce219cc6c43165e94ec428f58740c62ae54182608"},
+    {"path": "我的作品名称.txt", "sha256": "94fae613d8b20b5e2bab1e56348f64da4d19a880966e4e128448737ae198492f"}
   ],
   "contentDigests": {
-    "simple-text.txt": "89b306474268c499f3c7f227fcf6269c4780f23f0ad72302f070e3af83b21872",
-    "我的作品名称.txt": "bd6e506d18f018061aceffb81b94d70694853491646a0eb10332b85ad2308f7d"
+    "simple-text.txt": "0c8a5a23082db3f5247b38392e61aada71555517565083e49dbe3cad54df8814",
+    "我的作品名称.txt": "14963c474efbef1f3e5bb99c02c7070840a7dc84f73d09c3179f1e4ca55dd0c0"
   }
 }
