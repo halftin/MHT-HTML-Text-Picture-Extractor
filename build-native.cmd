@@ -374,6 +374,24 @@ if errorlevel 1 (
     goto :done
 )
 call :say "      布局：前端 exe + DLL 在根目录；后端在 Backend\"
+REM P-F6: assert raw GUI image closure and prove the scanner sees backend business code.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\tools\verify\assert-gui-mirror-clean.ps1" -DistDir "%OUTPUT_DIR%" >> "%LOG%" 2>&1
+if errorlevel 1 (
+    call :end 1
+    set "RC=1"
+    set "FAILSTEP=6/6 GUI business markers"
+    set "STATUS=FAILED"
+    goto :done
+)
+powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\tools\verify\assert-gui-mirror-clean.ps1" -DistDir "%OUTPUT_DIR%" -Exe "Backend\MhtExtractorBackend.exe" -ExpectBusiness >> "%LOG%" 2>&1
+if errorlevel 1 (
+    call :end 1
+    set "RC=1"
+    set "FAILSTEP=6/6 backend business marker control"
+    set "STATUS=FAILED"
+    goto :done
+)
+call :say "      GUI mirror clean; backend business marker control passed."
 call :end 0
 set "STATUS=OK"
 set "RC=0"

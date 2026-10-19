@@ -2488,7 +2488,7 @@ JavaFX 类型，不能通过无头产物的零 JavaFX 断言。
 JavaFX dist 步骤从 `BACKEND_DIST_DIR` 复制后端 exe 到 **`dist\Backend\`**（P4-21 前后端分包：
 前端 `MhtExtractor.exe` 与 JavaFX/VC++ DLL 留在发行目录根，后端独立放在 `Backend\` 子目录）。
 该变量默认 `<盘>:\TEST\mht\p4-3-headless-dist`；发布时应显式指向本次、同一构建标识的无头产物目录。
-缺少后端时构建会给出警告，`Backend\` 缺失，GUI 启动后显示后端不可用并保留进程内功能。
+缺少后端时构建会给出警告，并由布局断言拒绝发行目录；GUI 运行时只走 IPC，没有进程内回退。
 构建末尾用 `tools/native/assert-dist-layout.ps1` 断言该布局（根目录不得出现后端 exe；
 dynamic 配方另要求 5 个 JavaFX DLL 在根）。后端的 metadata/reports 是验收旁证，不必复制进发行目录。
 
@@ -2512,7 +2512,7 @@ GUI 运行时为 `uiclient.UiportRuntime` / `IpcUiport` / `BackendSession` / `Ba
 `tools/native/prepare-headless.ps1` 的输入枚举包含 `uiclient` 和 `engine`，不得继续枚举 app。
 进程内适配器只在 engine，GUI 不再有 inprocess 分支。七份 GUI 元数据中无本次旧 FQN 注册，
 保持逐字节不变；headless 仅删除失效 FormatData_en_US 注册，须重新审计及构建。
-构建后使用 `.claude-work/verify/pf6-image-scan.ps1 -Exe <GUI exe>` 核对原始字节业务标记为零；
+构建后使用 `tools/verify/assert-gui-mirror-clean.ps1 -DistDir <dist>` 核对原始字节业务标记为零；
 再用同批随包后端做握手与 native GUI 导入/预览/提取冒烟。工作与临时目录均落 H 盘。
 
 ### P-F10b GUI 构建输入的元数据分组（2026-10-19）
@@ -2527,3 +2527,34 @@ GUI 源码去掉领域对象引用后，共享元数据中的无条件业务注�
 `preservation.json` 记录注册分组与源文件哈希，`input-jar.json` 记录输入/派生 jar 哈希，
 构建报告的 `input` 指向真正用于 GUI native-image 的派生 jar，`frontendMetadata` 记录旁证哈希。
 默认目录随 `LOG_DIR`；本机继续显式设置 H 盘目录。`-VerifyOnly` 可独立复查分组与 jar 保全。
+
+### P-F6 GUI 镜像业务标记闸门（2026-10-19）
+
+分发脚本为 `tools/verify/assert-gui-mirror-clean.ps1`，不依赖 `.claude-work`。
+`-DistDir` 默认 `dist`；`-Exe` 默认 `MhtExtractor.exe`，可传相对 dist 的路径或绝对路径。
+扫描原始字节，以 Latin-1 一对一解码；业务包 core/extractor/processor/output/cache/util/config/app/engine/backend
+及 org/jsoup 任一标记命中即 exit 1。输入缺失、为空或不可读为 exit 2；满足预期为 exit 0。
+允许 uiport/uiclient/uicore/model/i18n/platform；platform 保留既有 UI/OS 边界（pending 15），不扩白名单。
+输出含 IMAGE/BYTES、每种标记的完整次数、HITS（命中的标记种数）和去重片段；
+`-MaxSnippets` 默认 20、上限 100，每条片段最多为包标记加 120 个 ASCII 名字字符。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/verify/assert-gui-mirror-clean.ps1 -DistDir <dist>
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/verify/assert-gui-mirror-clean.ps1 -DistDir <dist> -Exe Backend/MhtExtractorBackend.exe -ExpectBusiness
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/verify/assert-gui-mirror-clean.ps1 -DistDir <dist> -Exe Backend/MhtExtractorBackend.exe
+node tools/verify/gui-mirror-clean-controls.mjs --dist <dist> --out <新证据目录>
+```
+
+前三条期望退出码依次为 0、0、1。后端对照证明本次扫描能检出真实业务标记；
+GUI 反用 `-ExpectBusiness` 必须为 1。控制脚本还在 GUI 副本尾部追加 BatchProcessor 类名，
+验证变红后恢复，并核对 GUI/后端及副本的前后 SHA256；逐个业务包、高位字节、NUL、允许包、
+片段去重限量和输入错误均有原始命令与输出。证据目录由参数指定，本机必须放 H 盘。
+
+`build-native.cmd` 的 GUI dist 步骤在布局断言后执行 GUI 零命中与后端 `-ExpectBusiness` 两项；
+任一失败即步骤 6 失败，构建报告记录失败步，完整输出在 native-build 日志。动态配方仍须卡片冒烟 exit 0。
+源级守卫保持冻结清单只有注释、FROZEN_MAX=0、PENDING_MAX=15；验收使用 clean test、架构 17/0、
+headless 74/0、产物基线 46 份及 GUI zh/en 各 37/0（P-F11 后现值，替代任务书旧值 36）。
+
+风险：标记只是字节串证据；业务名作为非可达字面量可能假阳性，字符串裁剪/改名可能假阴性，
+native 镜像或堆压缩会使原始串不可见而漏检。后端 teeth 证明当前配方的检出能力，不能证明所有
+代码都保留包名。须与源级闭包守卫、同批构建报告及运行冒烟合用；static/压缩配方需独立重验。
