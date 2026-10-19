@@ -1,0 +1,10 @@
+已完成第一批五项改造及 GUI、IPC、协议文档同步。协议仍为 2，未提交、未推送。
+
+- 全量测试 **1114/0**，无头 **74/0**，架构 **17/0**，产物基线 **46/46**。
+- zh/en GUI 各 **36/0**；25 个探针源码编译通过。
+- 两组红控制成立，还原后 SHA256 一致。
+- MainController 保持 **1612 行**；C 盘指定项目临时目录新增为 **0**。
+
+[交付记录与原始命令/输出](D:/JAVA/mht-resource-extractor/.claude-work/P-F2b-1-交付.md) · [50 个 record、243 字段审计](D:/JAVA/mht-resource-extractor/.claude-work/文案中立审计.md)
+
+未验证 native、完整探针运行矩阵及 C 盘整盘。提取文案留待 P-F2b-2；额外发现的预览超时 `detail` 泄漏已入台账。

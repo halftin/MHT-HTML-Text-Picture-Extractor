@@ -1,0 +1,4 @@
+2026-10-13T21:04:26.337817Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T21:18:07.101195Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T21:46:10.154899Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: peer closed connection without sending TLS close_notify: https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof, url: wss://chatgpt.com/backend-api/codex/responses
+2026-10-13T21:52:48.041364Z ERROR codex_core::session: failed to record rollout items: thread 01a13714-a160-73e1-ab8b-2164daea685d not found

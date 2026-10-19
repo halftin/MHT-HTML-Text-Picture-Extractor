@@ -1,0 +1,2 @@
+2026-10-12T01:57:01.256591Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\JAVA\mht-resource-extractor\src\main\java\com\mhtextractor\backend\IpcSession.java:
+    boolean busy() { return importing; }

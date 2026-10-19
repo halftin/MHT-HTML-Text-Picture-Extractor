@@ -1,0 +1,5 @@
+2026-10-11T19:25:52.690980Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\JAVA\mht-resource-extractor\src\main\java\com\mhtextractor\app\InProcessUiport.java:
+    private Object resolveTarget(TargetId id) {
+2026-10-11T19:26:00.873102Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\JAVA\mht-resource-extractor\src\main\java\com\mhtextractor\app\InProcessUiport.java:
+    private Object resolveTarget(TargetId id) {
+2026-10-11T20:02:13.077674Z ERROR codex_core::tools::router: error=write_stdin failed: Unknown process id 30686

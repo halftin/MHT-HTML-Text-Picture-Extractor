@@ -1,0 +1,11 @@
+{
+  "label": "native-meta-extractwarning",
+  "createdAt": "2026-10-11T11:28:11.388Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\native-metadata-extractwarning-sweep.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 1292
+}

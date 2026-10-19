@@ -1,0 +1,11 @@
+{
+  "label": "redprobes-2106",
+  "createdAt": "2026-10-16T13:06:09.522Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\fix-red-probes.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 18812
+}

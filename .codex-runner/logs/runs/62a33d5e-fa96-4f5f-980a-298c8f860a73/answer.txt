@@ -1,0 +1,12 @@
+P-F7 已完成，未提交、未推送。
+
+交付：[Node 客户端](D:/JAVA/mht-resource-extractor/tools/ipc/dual-client.mjs)、[合约测试](D:/JAVA/mht-resource-extractor/src/test/java/com/mhtextractor/backend/DualFrontendContractTest.java)、[使用说明](D:/JAVA/mht-resource-extractor/tools/ipc/DUAL-CLIENT.md)。
+
+- 自测、JVM/native 全流程通过；文本与图片产物 SHA 完全一致。
+- 四项红控制均跑红，恢复后复绿。
+- 全量 1134 项：失败 0、错误 0、跳过 1；无头 74/0；中英文 GUI 均 37/0。
+- 当前 35 个 FileRef 释放及 EOF 清理通过；C 盘项目 Temp 范围新增 0。
+
+[原始命令、输出、SHA 对照及红控制证据](H:/TEST/mht/pf7-evidence/verification.md)。
+
+未验证：native 重新构建及其他镜像差异、Node 取消/慢管道时序、新增 FileRef 字段、全量探针与截图。C 盘检查不覆盖整盘。

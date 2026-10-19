@@ -1,0 +1,11 @@
+{
+  "label": "p5a-1b-ipc-protocol-ext2",
+  "createdAt": "2026-10-12T01:50:14.051Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-1b-ipc-protocol-ext2.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 12832
+}

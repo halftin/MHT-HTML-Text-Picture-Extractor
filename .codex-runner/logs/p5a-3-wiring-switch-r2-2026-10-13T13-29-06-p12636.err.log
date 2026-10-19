@@ -1,0 +1,5 @@
+2026-10-13T13:29:11.878748Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T13:33:46.900971Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T13:48:30.467284Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\JAVA\mht-resource-extractor\.claude-work\p5a-3-report.mjs:
+${summaryRaw}
+\\`\\`\\`

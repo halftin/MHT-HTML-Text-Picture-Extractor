@@ -1,0 +1,11 @@
+{
+  "label": "p5a-0-dirs-ipcfiles",
+  "createdAt": "2026-10-11T07:00:13.472Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-0-dirs-and-ipcfiles.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 14696
+}

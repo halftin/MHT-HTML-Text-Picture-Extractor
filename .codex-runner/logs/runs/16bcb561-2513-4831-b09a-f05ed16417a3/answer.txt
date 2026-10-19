@@ -1,0 +1,10 @@
+P-F2b-2 已实现，未提交、未推送。协议仍为 2，MainController 保持 1612 行。
+
+- 全量 1117/0、headless 74/0、架构 17/0。
+- zh/en GUI 各 36/0；JVM/native 产物基线各 46/0。
+- CLI stdout 对照 8/8；双语言完整快照 SHA256 相同。
+- 四项红控制均成立，还原后 SHA256 一致。
+
+[交付记录：改动清单、原始命令与输出、风险及未验证项](D:/JAVA/mht-resource-extractor/.claude-work/P-F2b-2-交付.md)
+
+额外 native 日志路径断言在新旧镜像均失败；完整前端 native 与探针矩阵未验证。首次冒烟的 TEMP 参数问题及 H 盘补跑证据已记录。

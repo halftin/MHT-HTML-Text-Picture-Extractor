@@ -1,0 +1,11 @@
+{
+  "label": "p5a-7-resume-1549",
+  "createdAt": "2026-10-14T07:49:53.660Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-7-resume.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 16320
+}

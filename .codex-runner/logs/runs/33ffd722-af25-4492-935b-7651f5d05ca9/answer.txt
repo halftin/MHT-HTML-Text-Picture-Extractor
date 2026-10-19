@@ -1,0 +1,9 @@
+P-F9 尚未完整完成。已迁入 `engine`：`PreviewService`、`PreviewSession`、`PreviewCacheFactory`；未提交、未推送。
+
+当前验证：单测 1132 项零失败（1 跳过）、headless 74/0、架构 17/0、基线 46/0、GUI zh/en 各 37/0；native 构建、退出冒烟、协议 2 握手通过。红控制及 SHA256 还原通过。
+
+[完整交付与原始证据](H:/TEST/mht/pf9/交付.md)。未完成项包括提取侧迁移，以及 headless 元数据中 1 条既有陈旧注册。
+
+**请裁决：是否允许协调器一起迁入 engine，仅将 `RunChannel.sessionOutputFolder` 改为 public？**
+
+这是完成迁移所需的最小例外：现有包级访问与任务书 §3“仅改 package/import”、§1“适配器不迁”冲突，未获确认前未实施。

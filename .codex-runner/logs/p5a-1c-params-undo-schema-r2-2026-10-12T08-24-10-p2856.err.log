@@ -1,0 +1,2 @@
+2026-10-12T08:37:55.302197Z ERROR codex_core::tools::router: error=patch rejected: writing outside of the project; rejected by user approval settings
+2026-10-12T08:42:01.733715Z ERROR codex_core::session: failed to record rollout items: thread 01a12f2d-f14f-7993-b0b4-94c46b7fae3a not found

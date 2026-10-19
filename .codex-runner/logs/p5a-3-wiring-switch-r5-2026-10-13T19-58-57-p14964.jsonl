@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"01a13573-d847-7bc3-a770-8d79f1322765"}
+{"type":"turn.started"}
+{"type":"error","message":"Reconnecting... 2/2 (workspace routing discovery timed out)"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Falling back from WebSockets to HTTPS transport. workspace routing discovery timed out"}}
+{"type":"error","message":"Reconnecting... 1/2 (workspace routing discovery timed out)"}
+{"type":"error","message":"Reconnecting... 2/2 (workspace routing discovery timed out)"}
+{"type":"error","message":"Error running remote compact task: workspace routing discovery timed out"}
+{"type":"turn.failed","error":{"message":"Error running remote compact task: workspace routing discovery timed out"}}

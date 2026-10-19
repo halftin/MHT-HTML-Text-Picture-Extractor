@@ -1,0 +1,9 @@
+2026-10-13T17:04:20.524179Z ERROR codex_core::tools::router: error=write_stdin failed: Unknown process id 47973
+2026-10-13T17:08:36.085056Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T17:13:11.107681Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T17:22:19.029250Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T17:26:54.053692Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T17:31:29.078262Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T17:36:04.100470Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T17:40:39.118551Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T17:45:14.144428Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out

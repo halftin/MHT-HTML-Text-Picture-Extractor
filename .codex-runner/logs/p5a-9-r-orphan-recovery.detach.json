@@ -1,0 +1,11 @@
+{
+  "label": "p5a-9-r-orphan-recovery",
+  "createdAt": "2026-10-15T10:00:01.031Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-9-r-orphan-recovery.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 7560
+}

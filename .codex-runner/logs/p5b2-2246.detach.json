@@ -1,0 +1,11 @@
+{
+  "label": "p5b2-2246",
+  "createdAt": "2026-10-15T14:46:37.710Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5b2-source-column.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 4328
+}

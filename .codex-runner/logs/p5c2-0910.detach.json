@@ -1,0 +1,11 @@
+{
+  "label": "p5c2-0910",
+  "createdAt": "2026-10-16T01:10:16.337Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5c2-native-gui-verify.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 13836
+}

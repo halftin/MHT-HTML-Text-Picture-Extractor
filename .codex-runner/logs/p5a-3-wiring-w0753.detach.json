@@ -1,0 +1,11 @@
+{
+  "label": "p5a-3-wiring-w0753",
+  "createdAt": "2026-10-13T23:52:35.291Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-3-resume5.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": "01a13714-a160-73e1-ab8b-2164daea685d",
+  "driverPid": 7232
+}

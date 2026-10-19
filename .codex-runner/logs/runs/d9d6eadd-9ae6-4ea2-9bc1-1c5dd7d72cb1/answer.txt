@@ -1,0 +1,114 @@
+P-F1 已完成，未提交、未推送。冻结 **70 条**，`FROZEN_MAX = 70`；platform pending **15 条**，`PENDING_MAX = 15`。
+
+**1. 改动文件（全部新增）**
+
+- [FrontendClosureScan.java](D:/JAVA/mht-resource-extractor/src/test/java/com/mhtextractor/baseline/FrontendClosureScan.java)
+- [FrontendClosureTest.java](D:/JAVA/mht-resource-extractor/src/test/java/com/mhtextractor/baseline/FrontendClosureTest.java)
+- [frontend-closure-baseline.tsv](D:/JAVA/mht-resource-extractor/src/test/resources/frontend-closure-baseline.tsv)：由扫描器实际输出生成。
+- [前端业务引用违规台账.md](D:/JAVA/mht-resource-extractor/.claude-work/前端业务引用违规台账.md)：已确认 gitignored，逐项覆盖全部冻结键，另列源码残留及 pending。
+
+生产代码、既有守卫和访问面清单无最终改动。完整命令、原始日志摘录及哈希见 [交付证据.md](H:/TEST/mht/pf1-20261018/交付证据.md)。
+
+**2. 自测原始输出**
+
+```text
+.\mvnw.cmd -q -DskipTests compile
+Picked up JAVA_TOOL_OPTIONS: -Djava.io.tmpdir=H:/TEST/temp
+COMPILE_EXIT=0
+
+.\mvnw.cmd -Dtest=FrontendClosureTest test
+FrontendClosure: classes=109, discovered=70, pending=15
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 74, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+RESTORED_EXIT=0
+
+.\mvnw.cmd test
+FrontendClosure: classes=109, discovered=70, pending=15
+[INFO] Tests run: 1102, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 74, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+FULL_TEST_EXIT=0
+
+XML_AGGREGATE: files=127 tests=1102 failures=0 errors=0 skipped=0
+```
+
+1102 符合预期；74 是既有 headless 第二次执行。
+
+首跑全量曾为 `1102 / Failures: 2`：遗漏日志隔离参数，`SessionStateServiceTest` 目录多出 `mht-extractor.log`。采用既有验收脚本的 `-Dmht.gui.logs.root=H:/TEST/mht/pf1-20261018/gate-logs` 后，两项定向测试及完整复跑均通过。首跑对仓库 `logs` 的追加已保留并披露。
+
+**3. 控制组、红控制与还原证据**
+
+每组注入后均执行 `.\mvnw.cmd -Dtest=FrontendClosureTest test`。
+
+```text
+node H:/TEST/mht/pf1-20261018/control.mjs red-a
+
+发现但未登记（默认禁止新增；应去除引用。若获准加条目，必须同时审查 FROZEN_MAX）：
+gui.component.SingleInstanceNotice	processor.BatchProcessor
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0
+[INFO] BUILD FAILURE
+RED_A_EXIT=1
+```
+
+按题定删除一行 TSV：
+
+```text
+node H:/TEST/mht/pf1-20261018/control.mjs red-b-delete
+
+发现但未登记（默认禁止新增；应去除引用。若获准加条目，必须同时审查 FROZEN_MAX）：
+gui.component.SingleInstanceNotice	app.Texts
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0
+[INFO] BUILD FAILURE
+RED_B_DELETE_EXIT=1
+```
+
+删掉仍存在的登记只能触发“未登记”。因此补做真正的陈旧控制：保留 TSV，临时将该类改用 `i18n.I18n`。
+
+```text
+node H:/TEST/mht/pf1-20261018/control.mjs red-stale
+
+登记但已不存在（陈旧条目，请删除以下原样 TSV 行）：
+gui.component.SingleInstanceNotice	app.Texts
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0
+[INFO] BUILD FAILURE
+RED_STALE_EXIT=1
+```
+
+两个上限亦已验证跑红：
+
+```text
+frozen.size()=70 > FROZEN_MAX=69
+pending.size()=15 > PENDING_MAX=14
+[INFO] BUILD FAILURE
+RED_CAPS_EXIT=1
+```
+
+全部还原后守卫复绿。`Get-FileHash -Algorithm SHA256` 改坏前、还原后两次输出一致：
+
+```text
+SingleInstanceNotice.java
+before F77BB2615A47471BF90EB6C35300C721535A0FF0D3C29DBC46009C15EF088057
+after  F77BB2615A47471BF90EB6C35300C721535A0FF0D3C29DBC46009C15EF088057
+
+frontend-closure-baseline.tsv
+before 6A1565E5736D77116C89B33B19DF8907C3B081E1E795D4FA9D3D8980D9D6B653
+after  6A1565E5736D77116C89B33B19DF8907C3B081E1E795D4FA9D3D8980D9D6B653
+```
+
+**4. 风险披露**
+
+字节码扫描可能漏掉 javadoc、未使用 import、点分或动态拼接的反射类型名、未编译源码及传递依赖；冻结键与源码行号也会漂移，核销须重编译、重扫。pending 只限制数量，同数替换不受该数量断言限制。
+
+收尾审计原始输出：
+
+```text
+C_AUDIT_EXIT=0 projectStatus=PASS projectAdded=0 projectModified=0
+C_AUDIT_SCOPE=%LOCALAPPDATA%/Temp/mht-extractor-* and descendants
+```
+
+运行期间《遗留目标与未完成事项.md》出现外部变化，本单元未写入或覆盖；其余 254 个受保护文件与快照一致。
+
+**5. 未做、未验证项**
+
+P-F3…P-F10 核销、契约补齐和 platform 裁决未执行。未跑 `mvn clean`、GUI 自动化、探针及 native 门禁；C 盘整盘及快照之间创建后删除的文件未验证。

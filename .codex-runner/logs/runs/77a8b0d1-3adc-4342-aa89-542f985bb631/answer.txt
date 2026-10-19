@@ -1,0 +1,1 @@
+首轮定向验证通过：架构 17/0、headless 74/0，前端业务闭包 `discovered=0`，冻结上限已降到 0。platform 的既有 15 项引用暂保留原有冻结约束。完整 `clean test` 正在运行，之后将验证 GUI 双语、接缝红控制和 native 真机。

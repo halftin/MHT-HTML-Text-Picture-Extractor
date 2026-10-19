@@ -1,0 +1,1 @@
+2026-10-12T15:45:37.007164Z ERROR codex_core::tools::router: error=apply_patch verification failed: invalid patch: multiple operations target D:\JAVA\mht-resource-extractor\src\main\java\com\mhtextractor\app\IpcUiport.java

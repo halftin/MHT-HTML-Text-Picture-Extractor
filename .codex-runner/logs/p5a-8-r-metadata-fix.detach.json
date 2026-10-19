@@ -1,0 +1,11 @@
+{
+  "label": "p5a-8-r-metadata-fix",
+  "createdAt": "2026-10-15T07:47:45.716Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-8-r-metadata-fix.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 9104
+}

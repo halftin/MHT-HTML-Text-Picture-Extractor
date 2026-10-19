@@ -1,0 +1,14 @@
+2026-10-14T05:33:16.188775Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T05:34:22.699585Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when Client(HttpRequest(HttpRequest("http/request failed: error sending request for url (https://chatgpt.com/backend-api/ps/mcp)")))
+2026-10-14T05:36:02.652285Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when Client(HttpRequest(HttpRequest("http/request failed: error sending request for url (https://chatgpt.com/backend-api/ps/mcp)")))
+2026-10-14T05:41:35.183031Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\JAVA\mht-resource-extractor\src\main\resources\i18n\messages_zh_CN.properties:
+cache.sizeAlertNote=仅作提示，不影响使用；缓存会在程序退出时自动清空。
+2026-10-14T05:42:21.533029Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\JAVA\mht-resource-extractor\src\main\java\com\mhtextractor\gui\controller\MainController.java:
+    //         onWindowCloseRequest / onSizeAlertStep
+2026-10-14T05:55:58.289962Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T06:00:33.306256Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T06:09:40.071938Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T06:14:15.096343Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T06:18:50.115495Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T06:23:25.141788Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T06:28:00.159816Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out

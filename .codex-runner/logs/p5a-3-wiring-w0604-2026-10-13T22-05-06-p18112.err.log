@@ -1,0 +1,6 @@
+2026-10-13T22:05:28.848891Z ERROR codex_core::tools::router: error=write_stdin failed: Unknown process id 45798
+2026-10-13T22:27:48.831083Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T22:43:14.157271Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: tls handshake eof, url: wss://chatgpt.com/backend-api/codex/responses
+2026-10-13T23:13:07.530035Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T23:22:14.079142Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T23:31:20.478352Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out

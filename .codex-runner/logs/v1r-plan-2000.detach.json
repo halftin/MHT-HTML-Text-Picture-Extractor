@@ -1,0 +1,11 @@
+{
+  "label": "v1r-plan-2000",
+  "createdAt": "2026-10-16T12:00:24.254Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\v1r-classify-and-plan.md",
+  "model": "gpt-6.1-sol",
+  "effort": "medium",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 19340
+}

@@ -1,0 +1,11 @@
+{
+  "label": "p5b3-0219",
+  "createdAt": "2026-10-15T18:19:45.459Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5b3-column-resize.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 5980
+}

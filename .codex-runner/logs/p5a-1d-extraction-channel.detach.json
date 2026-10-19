@@ -1,0 +1,11 @@
+{
+  "label": "p5a-1d-extraction-channel",
+  "createdAt": "2026-10-12T13:20:17.751Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-1d-extraction-channel.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 3764
+}

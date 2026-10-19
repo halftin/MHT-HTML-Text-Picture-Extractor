@@ -1,0 +1,13 @@
+P-F6 已完成，未提交、未推送。
+
+[扫描脚本](D:/JAVA/mht-resource-extractor/tools/verify/assert-gui-mirror-clean.ps1)已分发并接入 native 构建，采用 UTF-8 BOM + CRLF。
+
+- 源级守卫：`225 classes / discovered=0 / pending=15`，冻结上限保持 0/15。
+- 全量测试：1132 项，失败/错误 0，既有跳过 1；架构 17/0、headless 74/0、产物基线 46 份、GUI zh/en 各 37/0。
+- 配对 native 构建及卡片冒烟均 exit=0；GUI `HITS=0`，后端 `HITS=7`，预期反转正确。
+- 22 项扫描控制、源码注入红控制通过；还原后 SHA256 一致。
+- dist：23 文件、113,674,868 字节；GUI exe 减少 4,096 字节。C Temp 项目持久新增为 0。
+
+原始命令与输出、前后 SHA256、dist 清单见[完整报告](H:/TEST/mht/pf6/report.md)。
+
+风险：字节串扫描可能假阴/假阳，镜像压缩可能漏检。未验证 static、独立 native 产物全矩阵、完整 GUI 交互/截图，以及 C 盘整盘和瞬时创建删除。

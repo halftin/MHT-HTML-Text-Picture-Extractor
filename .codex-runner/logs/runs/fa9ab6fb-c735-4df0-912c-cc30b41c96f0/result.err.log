@@ -1,0 +1,4 @@
+2026-10-18T12:50:11.322633Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\JAVA\mht-resource-extractor\src\test\java\com\mhtextractor\backend\BackendIpcConfirmationTest.java:
+                List.of("continue", "stop"), 0, "NEVER_ON_WIRE"));
+2026-10-18T13:15:27.793553Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in H:\TEST\temp\pf2b-report.py:
+ 'node tools/ipc/project-temp-audit.mjs --root H:/TEST/mht/p4-10-pf2b1 --before','node tools/ipc/project-temp-audit.mjs --root H:/TEST/mht/p4-10-pf2b1 --after','```','',

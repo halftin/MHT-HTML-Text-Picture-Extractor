@@ -1,0 +1,11 @@
+{
+  "label": "p5a-2-ipc-uiport",
+  "createdAt": "2026-10-12T15:26:53.192Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-2-ipc-uiport.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 5072
+}

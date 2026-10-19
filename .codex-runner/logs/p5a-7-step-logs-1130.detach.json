@@ -1,0 +1,11 @@
+{
+  "label": "p5a-7-step-logs-1130",
+  "createdAt": "2026-10-14T05:33:10.818Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-7-cache-step-logs-orphans.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 19760
+}

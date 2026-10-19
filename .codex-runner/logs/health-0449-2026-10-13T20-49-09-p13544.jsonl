@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"01a13706-ba9e-7012-b383-3917946a838f"}
+{"type":"turn.started"}
+{"type":"error","message":"Reconnecting... 2/5 (workspace routing discovery timed out)"}
+{"type":"error","message":"Reconnecting... 3/5 (workspace routing discovery timed out)"}
+{"type":"error","message":"Reconnecting... 4/5 (workspace routing discovery timed out)"}
+{"type":"error","message":"Reconnecting... 5/5 (workspace routing discovery timed out)"}

@@ -1,0 +1,11 @@
+{
+  "label": "p5d1-1019",
+  "createdAt": "2026-10-16T02:19:41.352Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5d1-unverified-closeout.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 988
+}

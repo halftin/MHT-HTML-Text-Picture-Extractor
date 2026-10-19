@@ -1,0 +1,2 @@
+2026-10-16T12:15:38.595546Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\JAVA\mht-resource-extractor\.claude-work\V1r-分类与最终方案.md:
+| 1 | direct | HtmlSourceViewer.plainText | HtmlFindIndexTest.java:107 | 命中区间须非负、长度为正且endCol不超过所在行原文长度；HtmlFindIndexTest:107–110。 | C | 真实token与索引互验有价值，不应复制tokenizer换掉。 | 0（保留） | 保持现状不增风险；强行替代有耦合/时序/强度成本 | 潜在可：生产目标使用限所属类内；保留有意义direct，本方案不改。 |

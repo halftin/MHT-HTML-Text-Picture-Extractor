@@ -1,0 +1,4 @@
+2026-10-13T02:05:08.096894Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\JAVA\mht-resource-extractor\src\main\java\com\mhtextractor\backend\IpcSession.java:
+    private ObjectNode image(com.mhtextractor.cache.PreviewCacheMeta meta, int index, ThumbnailData thumbnail) throws IOException {
+2026-10-13T02:15:00.595260Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\JAVA\mht-resource-extractor\src\main\java\com\mhtextractor\backend\IPC.md:
+# IPC 协议 v1

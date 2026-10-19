@@ -1,0 +1,11 @@
+{
+  "label": "p5a-1b-r-ffm-fix",
+  "createdAt": "2026-10-12T04:39:01.757Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-1b-r-ffm-fix.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 14588
+}

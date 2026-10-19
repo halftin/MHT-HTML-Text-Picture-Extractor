@@ -1,0 +1,11 @@
+{
+  "label": "p5a-1f-u2-param-undo",
+  "createdAt": "2026-10-13T16:07:44.769Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-1f-u2-param-undo.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 16952
+}

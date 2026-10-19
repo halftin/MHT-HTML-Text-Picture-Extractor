@@ -1,0 +1,1 @@
+{"seq":25,"ts":"2026-10-13T20:51:05.411Z","label":"health-0449","channel":"tool","driverPid":13544,"childPid":4044,"budgetMs":540000,"budgetSource":"cli","elapsedSec":115.2,"threadId":"01a13706-ba9e-7012-b383-3917946a838f","stdoutBytes":457,"stderrBytes":722,"items":0,"stdoutChunks":6,"lastOutAgeMs":1582,"lastEventTs":"2026-10-13T20:51:03.829Z","childAlive":true,"event":"tick"}

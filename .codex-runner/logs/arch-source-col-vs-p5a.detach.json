@@ -1,0 +1,11 @@
+{
+  "label": "arch-source-col-vs-p5a",
+  "createdAt": "2026-10-11T06:07:58.466Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\arch-source-column-vs-p5a.md",
+  "model": "gpt-6-astra",
+  "effort": "xhigh",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 14824
+}

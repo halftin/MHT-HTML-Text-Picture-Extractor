@@ -1,0 +1,11 @@
+{
+  "label": "p5a-3-wiring-switch-r2",
+  "createdAt": "2026-10-13T13:29:06.574Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-3-wiring-switch.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 12636
+}

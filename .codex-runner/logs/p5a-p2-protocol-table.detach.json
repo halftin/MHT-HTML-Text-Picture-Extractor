@@ -1,0 +1,11 @@
+{
+  "label": "p5a-p2-protocol-table",
+  "createdAt": "2026-10-11T11:08:22.321Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-p2-protocol-table.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 13708
+}

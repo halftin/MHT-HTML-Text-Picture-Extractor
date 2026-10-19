@@ -1,0 +1,11 @@
+{
+  "label": "p5b5-0420",
+  "createdAt": "2026-10-15T20:21:04.179Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5b5-screenshot-compare.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 14108
+}

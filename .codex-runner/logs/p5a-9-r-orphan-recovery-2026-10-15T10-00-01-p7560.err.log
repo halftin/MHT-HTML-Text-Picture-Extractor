@@ -1,0 +1,3 @@
+2026-10-15T10:28:08.997697Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\JAVA\mht-resource-extractor\.claude-work\p5a-9-r-write-report.mjs:
+'- [首次无预算回收的失败/中断日志](H:/TEST/mht/p5a-9-r/unbounded-interrupted.stdout.log)、[中断说明](H:/TEST/mht/p5a-9-r/unbounded-interrupted.command.json)。该轮中断退出码 1，不能作为完整回归数字；修正后以最终 clean test 为准。\n- [C 快照前](H:/TEST/mht/p5a-9-r/c-before.json)、[快照后](H:/TEST/mht/p5a-9-r/c-after.json)。\n',
+2026-10-15T11:00:44.234290Z ERROR codex_core::session: failed to record rollout items: thread 01a13f01-22fd-7b12-9376-afd0910fe888 not found

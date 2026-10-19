@@ -1,0 +1,2 @@
+2026-10-18T14:31:17.232826Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\JAVA\mht-resource-extractor\src\test\java\com\mhtextractor\gui\controller\AcceptanceDriver.java:
+        controller.listInteraction.performDrop(dragged, target, zone, null);

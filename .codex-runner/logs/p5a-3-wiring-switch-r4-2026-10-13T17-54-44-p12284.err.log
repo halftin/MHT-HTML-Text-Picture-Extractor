@@ -1,0 +1,30 @@
+2026-10-13T17:54:49.444231Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T17:55:32.477348Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: tls handshake eof, url: wss://chatgpt.com/backend-api/codex/responses
+2026-10-13T17:57:52.720899Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: tls handshake eof, url: wss://chatgpt.com/backend-api/codex/responses
+2026-10-13T17:59:24.468945Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T18:03:59.503372Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T18:08:34.521997Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T18:13:09.543834Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T18:17:44.569003Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T18:18:00.234581Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: tls handshake eof, url: wss://chatgpt.com/backend-api/codex/responses
+2026-10-13T18:22:19.589114Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T18:26:54.597083Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T18:31:29.629798Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T18:36:04.651051Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T18:40:39.679704Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T18:45:14.700899Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T18:54:21.861516Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T19:03:29.108337Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T19:08:04.126481Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T19:12:39.160303Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T19:17:14.184996Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T19:21:35.130278Z ERROR codex_core::tools::router: error=apply_patch verification failed: invalid patch: multiple operations target D:\JAVA\mht-resource-extractor\src\test\java\com\mhtextractor\gui\WorkspaceFxAdapterTest.java
+2026-10-13T19:21:49.212416Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T19:26:24.232115Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T19:30:59.251356Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T19:35:34.282643Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T19:40:09.310720Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T19:44:44.316536Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T19:49:19.335158Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T19:53:54.351074Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-13T19:58:29.385145Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out

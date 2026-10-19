@@ -1,0 +1,11 @@
+2026-10-14T03:27:31.746231Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T03:41:10.429520Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T03:50:16.868479Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T04:13:01.034993Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T04:13:26.679593Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: IO error: tls handshake eof, url: wss://chatgpt.com/backend-api/codex/responses
+2026-10-14T04:17:36.059787Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T04:22:11.077689Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T04:26:46.092447Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+2026-10-14T04:29:47.631339Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\JAVA\mht-resource-extractor\.claude-work\verify\write-p5a-4-report.mjs:
+后端请求
+2026-10-14T04:31:21.125938Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out

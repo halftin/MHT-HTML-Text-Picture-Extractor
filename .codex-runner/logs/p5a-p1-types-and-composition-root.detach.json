@@ -1,0 +1,11 @@
+{
+  "label": "p5a-p1-types-and-composition-root",
+  "createdAt": "2026-10-11T17:45:26.645Z",
+  "state": "running",
+  "promptFile": "D:\\JAVA\\mht-resource-extractor\\.claude-work\\prompts\\p5a-p1-type-classification.md",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "budgetMs": 0,
+  "resumeThread": null,
+  "driverPid": 3700
+}
